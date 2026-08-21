@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Đăng nhập - Supermarket Fly</title>
+    <link rel="stylesheet" href="login.css" />
+  </head>
+  <body>
+    <svg class="svg-library" aria-hidden="true">
+      <symbol id="i-cart" viewBox="0 0 24 24"><path d="M2.2 3.2h2.1l2.1 10.1a2 2 0 0 0 2 1.6h8.9a2 2 0 0 0 1.9-1.4L21 7H6.1M9 20a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm10 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a7 7 0 0 0-14 0h14Z"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6M9 12h11"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 2 8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></symbol>
+      <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></symbol>
+    </svg>
+
+    <main class="auth-shell">
+      <section class="auth-showcase">
+        <div class="showcase-glow glow-one"></div><div class="showcase-glow glow-two"></div>
+        <a class="showcase-brand" href="../landing/landing.html"><svg><use href="#i-cart" /></svg><span>Supermarket Fly</span></a>
+        <div class="showcase-copy">
+          <span class="showcase-kicker">HỆ THỐNG QUẢN LÝ NỘI BỘ</span>
+          <h1>Một tài khoản.<br />Mọi nghiệp vụ.</h1>
+          <p>Truy cập an toàn vào hệ thống mua hàng, bán hàng, quản lý kho, kế toán và báo cáo của siêu thị.</p>
+          <div class="showcase-benefits">
+            <article><div><svg><use href="#i-shield" /></svg></div><span><strong>Bảo mật theo vai trò</strong><small>Mỗi tài khoản chỉ truy cập đúng chức năng được cấp.</small></span></article>
+            <article><div><svg><use href="#i-database" /></svg></div><span><strong>Dữ liệu đồng bộ</strong><small>Thông tin nghiệp vụ được cập nhật tập trung và nhất quán.</small></span></article>
+          </div>
+        </div>
+        <div class="showcase-footer">© 2026 Supermarket_Fly · Phiên bản 1.0</div>
+      </section>
+
+      <section class="auth-panel">
+        <a class="back-link" href="../landing/landing.html"><svg><use href="#i-arrow" /></svg>Quay lại trang giới thiệu</a>
+        <div class="login-card">
+          <div class="mobile-brand"><svg><use href="#i-cart" /></svg><strong>Supermarket Fly</strong></div>
+          <div class="login-heading"><span>CHÀO MỪNG TRỞ LẠI</span><h2>Đăng nhập hệ thống</h2><p>Nhập tài khoản nội bộ để tiếp tục làm việc.</p></div>
+
+          <form id="loginForm" class="login-form" novalidate>
+            <div id="errorMessage" class="error-message" role="alert" hidden></div>
+            <label class="form-field" for="username"><span>Tên đăng nhập</span><div class="input-wrap"><svg><use href="#i-user" /></svg><input type="text" id="username" name="username" placeholder="Ví dụ: quanly01" autocomplete="username" required /></div></label>
+            <label class="form-field" for="password"><span>Mật khẩu</span><div class="input-wrap"><svg><use href="#i-lock" /></svg><input type="password" id="password" name="password" placeholder="Nhập mật khẩu của bạn" autocomplete="current-password" required /><button class="password-toggle" id="passwordToggle" type="button" aria-label="Hiện mật khẩu"><svg><use href="#i-eye" /></svg></button></div></label>
+            <div class="form-options"><label class="remember-option"><input type="checkbox" id="rememberUsername" /><span>Ghi nhớ tên đăng nhập</span></label><button class="forgot-button" id="forgotPasswordBtn" type="button">Quên mật khẩu?</button></div>
+            <button type="submit" class="btn-login" id="btnLogin"><span>Đăng nhập</span><svg><use href="#i-arrow" /></svg></button>
+          </form>
+
+          <div class="login-note"><svg><use href="#i-shield" /></svg><p><strong>Kết nối được bảo vệ</strong><span>Thông tin đăng nhập chỉ được gửi đến máy chủ nội bộ.</span></p></div>
+        </div>
+        <p class="support-note">Bạn chưa có tài khoản? <button id="requestAccessBtn" type="button">Liên hệ quản trị viên</button></p>
+      </section>
+    </main>
+
+    <div class="auth-toast" id="authToast" role="status" aria-live="polite"></div>
+    <script src="login.js"></script>
+  </body>
+</html>

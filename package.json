@@ -1,0 +1,13 @@
+{
+  "name": "supermarket-fly-root",
+  "version": "1.0.0",
+  "description": "Root package for Supermarket Fly",
+  "scripts": {
+    "start": "concurrently \"npm run start:server\" \"npm run start:desktop\"",
+    "start:server": "cd server && node src/app.js",
+    "start:desktop": "cd desktop && npm start"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
+}
