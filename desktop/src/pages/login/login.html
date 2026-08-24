@@ -15,20 +15,48 @@
       <symbol id="i-arrow" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6M9 12h11"/></symbol>
       <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 2 8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></symbol>
       <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></symbol>
+      <symbol id="i-box" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 7 9 5 9-5v10l-9 5-9-5V7Zm9 5v10"/></symbol>
+      <symbol id="i-pos" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h10v4H7zM7 15h2M12 15h2M17 15h.01M7 18h2M12 18h2M17 18h.01"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><path d="m4 7 5-4 6 5 6-6"/></symbol>
     </svg>
 
     <main class="auth-shell">
       <section class="auth-showcase">
-        <div class="showcase-glow glow-one"></div><div class="showcase-glow glow-two"></div>
         <a class="showcase-brand" href="../landing/landing.html"><svg><use href="#i-cart" /></svg><span>Supermarket Fly</span></a>
         <div class="showcase-copy">
-          <span class="showcase-kicker">HỆ THỐNG QUẢN LÝ NỘI BỘ</span>
-          <h1>Một tài khoản.<br />Mọi nghiệp vụ.</h1>
-          <p>Truy cập an toàn vào hệ thống mua hàng, bán hàng, quản lý kho, kế toán và báo cáo của siêu thị.</p>
-          <div class="showcase-benefits">
-            <article><div><svg><use href="#i-shield" /></svg></div><span><strong>Bảo mật theo vai trò</strong><small>Mỗi tài khoản chỉ truy cập đúng chức năng được cấp.</small></span></article>
-            <article><div><svg><use href="#i-database" /></svg></div><span><strong>Dữ liệu đồng bộ</strong><small>Thông tin nghiệp vụ được cập nhật tập trung và nhất quán.</small></span></article>
-          </div>
+          <p class="showcase-kicker">Hệ thống quản lý nội bộ</p>
+          <h1>Supermarket Fly</h1>
+          <span class="showcase-rule" aria-hidden="true"></span>
+          <p class="showcase-description">Hệ thống quản lý nội bộ giúp vận hành siêu thị<br />hiệu quả, minh bạch và chính xác.</p>
+          <svg class="showcase-illustration" viewBox="0 0 520 270" role="img" aria-label="Minh họa hệ thống quản lý kho, bán hàng tại quầy và báo cáo">
+            <g class="illustration-soft">
+              <rect x="300" y="18" width="198" height="128" rx="8" />
+              <path d="M300 45h198" />
+              <circle cx="316" cy="32" r="3" /><circle cx="328" cy="32" r="3" /><circle cx="340" cy="32" r="3" />
+              <circle cx="345" cy="82" r="24" /><path d="M345 58v24h24M345 82l16 18" />
+              <path d="M401 114V92M419 114V78M437 114V98M455 114V66M389 114h82" />
+              <path d="M392 62h72M392 75h47" />
+            </g>
+            <g class="illustration-main">
+              <path d="M24 58 42 48l160 23v140L42 225 24 216Z" />
+              <path d="M42 48v177M56 77h132v118H56zM56 112h132M56 151h132" />
+              <path d="M68 88h18v24H68zM94 83h17v29H94zM119 90h24v22h-24zM151 86h21v26h-21z" />
+              <path d="M67 124h27v27H67zM103 129h19v22h-19zM132 121h25v30h-25zM165 127h13v24h-13z" />
+              <path d="M62 166h35v29H62zM105 160h43v35h-43zM156 169h26v26h-26z" />
+              <path d="M72 208h58v43H72zM130 214h64v37h-64zM72 208l29-10 57 10M130 214l28-9 36 9" />
+              <rect x="205" y="128" width="174" height="94" rx="12" />
+              <rect x="219" y="140" width="146" height="68" rx="7" />
+              <path d="M238 157h45M238 170h32M238 183h38" />
+              <rect x="299" y="154" width="46" height="38" rx="4" /><path d="M322 154v38M299 173h46" />
+              <path d="M234 222v17h115v-17M222 239h140l16 13H205l17-13Z" />
+            </g>
+          </svg>
+          <ul class="showcase-modules" aria-label="Các nghiệp vụ chính">
+            <li><svg><use href="#i-cart" /></svg><span>Mua hàng</span></li>
+            <li><svg><use href="#i-box" /></svg><span>Quản lý kho</span></li>
+            <li><svg><use href="#i-pos" /></svg><span>Bán hàng<br />tại quầy</span></li>
+            <li><svg><use href="#i-chart" /></svg><span>Kế toán &amp;<br />báo cáo</span></li>
+          </ul>
         </div>
         <div class="showcase-footer">© 2026 Supermarket_Fly · Phiên bản 1.0</div>
       </section>
@@ -37,17 +65,17 @@
         <a class="back-link" href="../landing/landing.html"><svg><use href="#i-arrow" /></svg>Quay lại trang giới thiệu</a>
         <div class="login-card">
           <div class="mobile-brand"><svg><use href="#i-cart" /></svg><strong>Supermarket Fly</strong></div>
-          <div class="login-heading"><span>CHÀO MỪNG TRỞ LẠI</span><h2>Đăng nhập hệ thống</h2><p>Nhập tài khoản nội bộ để tiếp tục làm việc.</p></div>
+          <div class="login-heading"><h2>Đăng nhập</h2><p>Sử dụng tài khoản nội bộ đã được cấp.</p></div>
 
           <form id="loginForm" class="login-form" novalidate>
             <div id="errorMessage" class="error-message" role="alert" hidden></div>
             <label class="form-field" for="username"><span>Tên đăng nhập</span><div class="input-wrap"><svg><use href="#i-user" /></svg><input type="text" id="username" name="username" placeholder="Ví dụ: quanly01" autocomplete="username" required /></div></label>
             <label class="form-field" for="password"><span>Mật khẩu</span><div class="input-wrap"><svg><use href="#i-lock" /></svg><input type="password" id="password" name="password" placeholder="Nhập mật khẩu của bạn" autocomplete="current-password" required /><button class="password-toggle" id="passwordToggle" type="button" aria-label="Hiện mật khẩu"><svg><use href="#i-eye" /></svg></button></div></label>
             <div class="form-options"><label class="remember-option"><input type="checkbox" id="rememberUsername" /><span>Ghi nhớ tên đăng nhập</span></label><button class="forgot-button" id="forgotPasswordBtn" type="button">Quên mật khẩu?</button></div>
-            <button type="submit" class="btn-login" id="btnLogin"><span>Đăng nhập</span><svg><use href="#i-arrow" /></svg></button>
+            <button type="submit" class="btn-login" id="btnLogin"><span>Đăng nhập</span></button>
           </form>
 
-          <div class="login-note"><svg><use href="#i-shield" /></svg><p><strong>Kết nối được bảo vệ</strong><span>Thông tin đăng nhập chỉ được gửi đến máy chủ nội bộ.</span></p></div>
+          <div class="login-note"><p><strong>Kết nối máy chủ nội bộ</strong><span>Thông tin đăng nhập được sử dụng để xác thực tài khoản.</span></p></div>
         </div>
         <p class="support-note">Bạn chưa có tài khoản? <button id="requestAccessBtn" type="button">Liên hệ quản trị viên</button></p>
       </section>

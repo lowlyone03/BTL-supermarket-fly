@@ -1,0 +1,68 @@
+<div class="admin-page">
+    <div class="page-intro">
+        <div><h3>Tài khoản nội bộ</h3><p>Mỗi nhân viên có tối đa một tài khoản; vai trò luôn khớp với chức vụ.</p></div>
+        <span class="record-count" id="accCount">0 tài khoản</span>
+    </div>
+    <div class="toolbar">
+        <div class="search-group">
+            <input type="text" id="accSearch" placeholder="Tìm kiếm tài khoản...">
+            <button class="btn btn-secondary" onclick="loadAccounts()">Lọc</button>
+        </div>
+        <button class="btn btn-primary" onclick="openAccModal()">+ Tạo Tài Khoản</button>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Tên đăng nhập</th>
+                    <th>Nhân viên</th>
+                    <th>Vai trò</th>
+                    <th>Trạng thái</th>
+                    <th>Đăng nhập cuối</th>
+                    <th>Thao tác</th>
+                </tr>
+            </thead>
+            <tbody id="accTableBody">
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal Tạo TK -->
+<div class="modal-backdrop" id="accModal" style="display: none;">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Tạo tài khoản</h3>
+            <button type="button" class="close-btn" onclick="closeAccModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="accForm">
+                <div class="form-group">
+                    <label>Nhân viên chưa có tài khoản *</label>
+                    <select id="maNV_Acc" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Tên đăng nhập *</label>
+                    <input type="text" id="tenDangNhap" required>
+                </div>
+                <div class="form-group">
+                    <label>Vai trò *</label>
+                    <select id="maVaiTro" required></select>
+                    <small class="field-hint">Vai trò được chọn tự động theo chức vụ nhân viên.</small>
+                </div>
+                <div class="form-group">
+                    <p style="font-size: 13px; color: #64748b; margin-top: 10px;">
+                        <em>Mật khẩu mặc định sẽ là <strong>123</strong></em>
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeAccModal()">Hủy</button>
+                    <button type="submit" class="btn btn-primary">Tạo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="../admin/accounts.js"></script>

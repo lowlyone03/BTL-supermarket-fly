@@ -1,0 +1,89 @@
+<div class="admin-page">
+    <div class="page-intro">
+        <div><h3>Hồ sơ nhân viên</h3><p>Chức vụ được đồng bộ với vai trò tài khoản của từng nhân viên.</p></div>
+        <span class="record-count" id="empCount">0 nhân viên</span>
+    </div>
+    <div class="toolbar">
+        <div class="search-group">
+            <input type="text" id="empSearch" placeholder="Tìm kiếm nhân viên...">
+            <button class="btn btn-secondary" onclick="loadEmployees()">Tìm</button>
+        </div>
+        <button class="btn btn-primary" onclick="openEmpModal()">+ Thêm Nhân Viên</button>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Mã NV</th>
+                    <th>Tên NV</th>
+                    <th>Chức vụ</th>
+                    <th>SĐT</th>
+                    <th>Trạng thái</th>
+                    <th>Tài khoản</th>
+                    <th>Thao tác</th>
+                </tr>
+            </thead>
+            <tbody id="empTableBody">
+                <!-- Data here -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-backdrop" id="empModal" style="display: none;">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="empModalTitle">Thêm nhân viên</h3>
+            <button type="button" class="close-btn" onclick="closeEmpModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="empForm">
+                <div class="form-group">
+                    <label>Mã Nhân Viên *</label>
+                    <input type="text" id="maNV" required placeholder="VD: NV001">
+                </div>
+                <div class="form-group">
+                    <label>Tên Nhân Viên *</label>
+                    <input type="text" id="tenNV" required>
+                </div>
+                <div class="form-group">
+                    <label>Chức vụ *</label>
+                    <select id="chucVu" required>
+                        <option value="Quản lý">Quản lý</option>
+                        <option value="Nhân viên mua hàng">Nhân viên mua hàng</option>
+                        <option value="Thủ kho">Thủ kho</option>
+                        <option value="Thu ngân">Thu ngân</option>
+                        <option value="Kế toán">Kế toán</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Số điện thoại</label>
+                    <input type="text" id="sdt">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="email">
+                </div>
+                <div class="form-group">
+                    <label>Địa chỉ</label>
+                    <input type="text" id="diaChi">
+                </div>
+                <div class="form-group">
+                    <label>Trạng thái</label>
+                    <select id="trangThai">
+                        <option value="Đang làm việc">Đang làm việc</option>
+                        <option value="Nghỉ việc">Nghỉ việc</option>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeEmpModal()">Hủy</button>
+                    <button type="submit" class="btn btn-primary">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="../admin/employees.js"></script>

@@ -1,0 +1,25 @@
+<style>
+.perm-matrix { width: 100%; border-collapse: collapse; }
+.perm-matrix th, .perm-matrix td { border: 1px solid #e2e8f0; padding: 10px; text-align: center; }
+.perm-matrix th { background: #f8fafc; font-weight: 600; }
+.perm-matrix th:first-child, .perm-matrix td:first-child { text-align: left; position: sticky; left: 0; background: #fff; z-index: 5; }
+.perm-matrix th:first-child { background: #f8fafc; z-index: 15; }
+.group-header { background: #e2e8f0 !important; font-weight: bold; text-align: left !important; }
+.matrix-container { max-height: calc(100vh - 250px); overflow: auto; border: 1px solid #e2e8f0; }
+</style>
+
+<div class="admin-page">
+    <div class="page-intro">
+        <div><h3>Phân quyền theo vai trò</h3><p>Thiết lập quyền truy cập phù hợp với phạm vi công việc; các quyền điều hành cốt lõi của Quản lý được bảo vệ.</p></div>
+        <span class="record-count">29 chức năng</span>
+    </div>
+    <div class="toolbar" style="justify-content: flex-end;">
+        <button class="btn btn-primary" onclick="savePermissions()">Lưu Phân Quyền</button>
+    </div>
+
+    <div class="matrix-container" id="matrixContainer">
+        <!-- Rendered by JS -->
+    </div>
+</div>
+
+<script src="../admin/permissions.js"></script>

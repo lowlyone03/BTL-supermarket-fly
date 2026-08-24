@@ -1,0 +1,33 @@
+<div class="admin-page">
+    <div class="page-intro">
+        <div><h3>Nhật ký hệ thống</h3><p>Tra cứu người thao tác, hành động, dữ liệu liên quan và thời điểm thực hiện.</p></div>
+        <span class="record-count" id="logCount">0 bản ghi</span>
+    </div>
+    <div class="toolbar">
+        <div class="search-group">
+            <input type="text" id="logSearch" placeholder="Người dùng, hành động, nội dung...">
+            <input type="date" id="logFrom" title="Từ ngày">
+            <input type="date" id="logTo" title="Đến ngày">
+            <button class="btn btn-secondary" onclick="clearLogFilters()">Xóa lọc</button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Thời gian</th>
+                    <th>Người thao tác</th>
+                    <th>Hành động</th>
+                    <th>Bảng</th>
+                    <th>ID Bản ghi</th>
+                    <th>Nội dung chi tiết</th>
+                </tr>
+            </thead>
+            <tbody id="logTableBody">
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script src="../admin/audit-log.js"></script>

@@ -17,7 +17,7 @@ const login = async (req, res) => {
         const accResult = await pool.request()
             .input('TenDangNhap', sql.VarChar, TenDangNhap)
             .query(`
-                SELECT t.MaTK, t.MatKhau, t.MaNV, t.MaVaiTro, t.TrangThai, v.TenVaiTro, n.TenNV 
+                SELECT t.MaTK, t.MatKhauHash, t.MaNV, t.MaVaiTro, t.TrangThai, v.TenVaiTro, n.TenNV
                 FROM TaiKhoan t
                 JOIN VaiTro v ON t.MaVaiTro = v.MaVaiTro
                 JOIN NhanVien n ON t.MaNV = n.MaNV
@@ -36,7 +36,7 @@ const login = async (req, res) => {
         }
 
         // 3. So sánh mật khẩu bằng bcrypt
-        const isMatch = await bcrypt.compare(MatKhau, user.MatKhau);
+        const isMatch = await bcrypt.compare(MatKhau, user.MatKhauHash);
         if (!isMatch) {
             return res.status(401).json({ message: 'Tên đăng nhập hoặc mật khẩu không chính xác!' });
         }
@@ -64,6 +64,13 @@ const login = async (req, res) => {
             console.log('Lỗi ghi nhật ký (Có thể bảng NhatKy chưa đúng cấu trúc):', err.message);
         }
 
+        const permissionResult = await pool.request()
+            .input('MaVaiTro', sql.Int, user.MaVaiTro)
+            .query(`SELECT MaChucNang
+                    FROM VaiTro_ChucNang
+                    WHERE MaVaiTro = @MaVaiTro AND DuocPhep = 1
+                    ORDER BY MaChucNang`);
+
         // Trả về kết quả
         res.status(200).json({
             message: 'Đăng nhập thành công!',
@@ -71,7 +78,9 @@ const login = async (req, res) => {
             user: {
                 MaNV: user.MaNV,
                 TenNV: user.TenNV,
-                TenVaiTro: user.TenVaiTro
+                MaVaiTro: user.MaVaiTro,
+                TenVaiTro: user.TenVaiTro,
+                Quyen: permissionResult.recordset.map(item => item.MaChucNang)
             }
         });
 
@@ -81,6 +90,62 @@ const login = async (req, res) => {
     }
 };
 
+// Đổi mật khẩu
+const changePassword = async (req, res) => {
+    try {
+        const { MatKhauCu, MatKhauMoi } = req.body;
+        const maTK = req.user.MaTK; // lấy từ token (verifyToken middleware)
+
+        if (!MatKhauCu || !MatKhauMoi) {
+            return res.status(400).json({ message: 'Vui lòng nhập mật khẩu cũ và mới!' });
+        }
+
+        const pool = await poolPromise;
+
+        // Lấy thông tin TK hiện tại
+        const accResult = await pool.request()
+            .input('MaTK', sql.Int, maTK)
+            .query('SELECT MatKhauHash, TenDangNhap FROM TaiKhoan WHERE MaTK = @MaTK');
+
+        if (accResult.recordset.length === 0) {
+            return res.status(404).json({ message: 'Tài khoản không tồn tại!' });
+        }
+
+        const user = accResult.recordset[0];
+
+        // So sánh mật khẩu cũ
+        const isMatch = await bcrypt.compare(MatKhauCu, user.MatKhauHash);
+        if (!isMatch) {
+            return res.status(400).json({ message: 'Mật khẩu cũ không chính xác!' });
+        }
+
+        // Hash mật khẩu mới
+        const salt = await bcrypt.genSalt(10);
+        const newHashedPassword = await bcrypt.hash(MatKhauMoi, salt);
+
+        // Update DB
+        await pool.request()
+            .input('MaTK', sql.Int, maTK)
+            .input('MatKhauHash', sql.VarChar, newHashedPassword)
+            .query('UPDATE TaiKhoan SET MatKhauHash = @MatKhauHash WHERE MaTK = @MaTK');
+
+        // Ghi nhật ký
+        await pool.request()
+            .input('MaTK_Log', sql.Int, maTK)
+            .input('HanhDong', sql.NVarChar, 'Đổi mật khẩu')
+            .input('BangLienQuan', sql.NVarChar, 'TaiKhoan')
+            .input('MaBanGhi', sql.VarChar, maTK.toString())
+            .input('NoiDung', sql.NVarChar, 'Người dùng tự đổi mật khẩu')
+            .query('INSERT INTO NhatKy (MaTK, HanhDong, BangLienQuan, MaBanGhi, NoiDung, ThoiGian) VALUES (@MaTK_Log, @HanhDong, @BangLienQuan, @MaBanGhi, @NoiDung, GETDATE())');
+
+        res.json({ message: 'Đổi mật khẩu thành công!' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Lỗi server' });
+    }
+};
+
 module.exports = {
-    login
+    login,
+    changePassword
 };

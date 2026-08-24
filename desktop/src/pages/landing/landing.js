@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const modalContent = {
     features: {
-      kicker: 'TỔNG QUAN HỆ THỐNG',
+      kicker: 'Tổng quan hệ thống',
       title: 'Các chức năng nổi bật',
       content: `
         <p class="modal-intro">Các nhóm chức năng được tổng hợp theo quy trình nghiệp vụ của Supermarket Fly, từ mua hàng đến kế toán và báo cáo.</p>
@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>`
     },
     help: {
-      kicker: 'TRỢ GIÚP NHANH',
+      kicker: 'Trợ giúp nhanh',
       title: 'Bắt đầu sử dụng hệ thống',
       content: `
         <p class="modal-intro">Ba bước đơn giản để truy cập đúng chức năng theo vai trò của bạn.</p>
@@ -71,7 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <p style="margin:20px 0 0"><strong style="color:#0a2b68">Cần hỗ trợ?</strong> Liên hệ quản trị viên hệ thống hoặc quản lý cửa hàng để được cấp lại mật khẩu và phân quyền.</p>`
     },
     about: {
-      kicker: 'GIỚI THIỆU',
+      kicker: 'Giới thiệu',
       title: 'Supermarket Fly',
       content: `
         <p class="modal-intro">Nền tảng quản lý nội bộ dành cho mô hình siêu thị mini, kết nối dữ liệu giữa mua hàng, bán hàng, kho và kế toán.</p>

@@ -12,9 +12,27 @@ app.use(express.json());
 
 // Import Routes
 const authRoutes = require('./routes/authRoutes');
+const employeeRoutes = require('./routes/employeeRoutes');
+const accountRoutes = require('./routes/accountRoutes');
+const roleRoutes = require('./routes/roleRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+const warehouseRoutes = require('./routes/warehouseRoutes');
+const purchasingRoutes = require('./routes/purchasingRoutes');
+const supplierRoutes = require('./routes/supplierRoutes');
+const accountingRoutes = require('./routes/accountingRoutes');
+const cashierRoutes = require('./routes/cashierRoutes');
 
 // Định tuyến API
 app.use('/api/auth', authRoutes);
+app.use('/api/employees', employeeRoutes);
+app.use('/api/accounts', accountRoutes);
+app.use('/api/roles', roleRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/warehouse', warehouseRoutes);
+app.use('/api/purchasing', purchasingRoutes);
+app.use('/api/suppliers', supplierRoutes);
+app.use('/api/accounting', accountingRoutes);
+app.use('/api/cashier', cashierRoutes);
 
 // API Kiểm tra trạng thái Server
 app.get('/api/health', (req, res) => {

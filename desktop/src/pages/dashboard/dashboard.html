@@ -1,41 +1,160 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trang Chủ - Supermarket Fly</title>
-    <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #ecf0f1; margin: 0;}
-        .card { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center;}
-        .btn-logout { margin-top: 20px; padding: 10px 20px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer;}
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Điều hành - Supermarket Fly</title>
+  <link rel="stylesheet" href="dashboard.css">
+  <link rel="stylesheet" href="../admin/admin.css">
+  <link rel="stylesheet" href="../warehouse/warehouse.css">
 </head>
 <body>
-    <div class="card">
-        <h1>Chào mừng tới Supermarket Fly</h1>
-        <h3 id="welcomeMessage">Đang tải...</h3>
-        <button class="btn-logout" id="btnLogout">Đăng xuất</button>
+  <svg class="svg-library" aria-hidden="true">
+    <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M4 16c5.5.2 10.5-2.8 15-10-7.8.2-12.6 3.5-15 10Z"/><path d="M4 20c2.2-5 6.2-8.8 12-11.5"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7M10 20h4"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+    <symbol id="i-approve" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3.5h6V6H9zM8.5 13l2.2 2.2 4.8-5"/></symbol>
+    <symbol id="i-report" viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5zM15 3v5h5M9 17v-4M12 17V9M15 17v-2"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="M3 8v9l9 5 9-5V8M12 13v9"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="5"/><path d="m12 12 8-8M17 4h3v3M14 7l3 3"/></symbol>
+    <symbol id="i-promo" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 16 8-8M8.5 8.5h.01M15.5 15.5h.01"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 2 8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></symbol>
+    <symbol id="i-log" viewBox="0 0 24 24"><path d="M4 4h11v16H4zM15 8h5v12H9M7 8h5M7 12h5M7 16h3"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6"/></symbol>
+    <symbol id="i-store" viewBox="0 0 24 24"><path d="M3 9h18l-2-5H5L3 9Z"/><path d="M5 9v11h14V9M9 20v-6h6v6M3 9c0 2 3 2 3 0 0 2 3 2 3 0 0 2 3 2 3 0 0 2 3 2 3 0 0 2 3 2 3 0"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5"/><path d="M6.1 9a7 7 0 0 1 11.6-2.6L20 9M4 15l2.3 2.6A7 7 0 0 0 17.9 15"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></symbol>
+    <symbol id="i-user-plus" viewBox="0 0 24 24"><path d="M15 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M8.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M18 8v6M15 11h6"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3M15 3h5v18h-5"/></symbol>
+    <symbol id="i-inventory" viewBox="0 0 24 24"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9M8 5.2l8 4.5"/></symbol>
+    <symbol id="i-request" viewBox="0 0 24 24"><path d="M6 3h12v18H6z"/><path d="M9 7h6M9 11h6M9 15h3M15 14v5M12.5 16.5h5"/></symbol>
+    <symbol id="i-truck" viewBox="0 0 24 24"><path d="M3 6h11v10H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+    <symbol id="i-warning" viewBox="0 0 24 24"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></symbol>
+  </svg>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <svg class="brand-mark"><use href="#i-leaf"/></svg>
+        <div><strong>Supermarket</strong><small>FLY · QUẢN LÝ</small></div>
+      </div>
+
+      <div class="store-selector">
+        <span class="store-icon"><svg><use href="#i-store"/></svg></span>
+        <span><small>CỬA HÀNG ĐANG XEM</small><strong>Supermarket Fly · Hà Nội</strong></span>
+        <svg class="store-chevron"><use href="#i-chevron"/></svg>
+      </div>
+
+      <nav class="sidebar-nav" id="sidebarNav">
+        <div class="nav-group-title">ĐIỀU HÀNH</div>
+        <a href="#" class="nav-item active" id="managerHomeNav" data-target="home"><svg><use href="#i-grid"/></svg><span>Tổng quan</span></a>
+        <a href="#" class="nav-item" id="managerApprovalNav" data-target="manager-purchase-approvals"><svg><use href="#i-approve"/></svg><span>Trung tâm phê duyệt</span><b class="nav-badge" id="approvalNavBadge">0</b></a>
+        <a href="#" class="nav-item" id="managerPayablesNav" data-target="manager-payables"><svg><use href="#i-report"/></svg><span>Theo dõi công nợ</span></a>
+        <a href="#" class="nav-item is-coming" id="managerReportNav" data-coming-soon="Báo cáo quản trị"><svg><use href="#i-report"/></svg><span>Báo cáo</span></a>
+
+        <div class="nav-group" id="navGroupWarehouse" style="display:none">
+          <a href="#" class="nav-item" data-target="warehouse-home"><svg><use href="#i-grid"/></svg><span>Tổng quan kho</span></a>
+          <div class="nav-group-title">QUẢN LÝ KHO</div>
+          <a href="#" class="nav-item" data-target="warehouse-inventory"><svg><use href="#i-inventory"/></svg><span>Tồn kho &amp; cảnh báo</span></a>
+          <a href="#" class="nav-item" data-target="warehouse-requests"><svg><use href="#i-request"/></svg><span>Đề nghị mua hàng</span></a>
+          <div class="nav-group-title">NHẬN HÀNG</div>
+          <a href="#" class="nav-item" data-target="warehouse-receiving"><svg><use href="#i-truck"/></svg><span>Nhận &amp; kiểm tra hàng</span></a>
+          <a href="#" class="nav-item" data-target="warehouse-receipts"><svg><use href="#i-request"/></svg><span>Phiếu nhập kho</span></a>
+        </div>
+
+        <div class="nav-group" id="navGroupPurchasing" style="display:none">
+          <a href="#" class="nav-item" data-target="purchasing-inbox"><svg><use href="#i-request"/></svg><span>Đề nghị từ kho</span><b class="nav-badge" id="purchasingNavBadge">0</b></a>
+          <div class="nav-group-title">MUA HÀNG</div>
+          <a href="#" class="nav-item" data-target="purchasing-suppliers"><svg><use href="#i-store"/></svg><span>Nhà cung cấp</span></a>
+          <a href="#" class="nav-item" data-target="purchasing-orders"><svg><use href="#i-approve"/></svg><span>Đơn mua hàng</span></a>
+        </div>
+
+        <div class="nav-group" id="navGroupAccounting" style="display:none">
+          <a href="#" class="nav-item" data-target="accounting-invoices"><svg><use href="#i-approve"/></svg><span>Đối chiếu hóa đơn</span></a>
+          <div class="nav-group-title">KẾ TOÁN MUA HÀNG</div>
+          <a href="#" class="nav-item" data-target="accounting-payables"><svg><use href="#i-report"/></svg><span>Công nợ Nhà cung cấp</span></a>
+        </div>
+
+        <div class="nav-group" id="navGroupCashier" style="display:none">
+          <a href="#" class="nav-item" data-target="cashier-shifts"><svg><use href="#i-clock"/></svg><span>Ca bán hàng</span></a>
+          <div class="nav-group-title">BÁN HÀNG TẠI QUẦY</div>
+          <a href="#" class="nav-item is-coming" data-coming-soon="Màn hình bán hàng tại quầy"><svg><use href="#i-report"/></svg><span>Bán hàng</span></a>
+        </div>
+
+        <div class="nav-group" id="navGroupSystem" style="display:none">
+          <div class="nav-group-title">VẬN HÀNH CỬA HÀNG</div>
+          <a href="#" class="nav-item" data-target="../admin/products.html"><svg><use href="#i-box"/></svg><span>Sản phẩm &amp; giá</span></a>
+          <a href="#" class="nav-item" data-target="../admin/employees.html"><svg><use href="#i-users"/></svg><span>Quản lý nhân viên</span></a>
+          <a href="#" class="nav-item" data-target="../admin/accounts.html"><svg><use href="#i-key"/></svg><span>Quản lý tài khoản</span></a>
+          <a href="#" class="nav-item is-coming" data-coming-soon="Khuyến mãi"><svg><use href="#i-promo"/></svg><span>Khuyến mãi</span></a>
+
+          <div class="nav-group-title">KIỂM SOÁT</div>
+          <a href="#" class="nav-item" data-target="../admin/permissions.html"><svg><use href="#i-shield"/></svg><span>Phân quyền chức năng</span></a>
+          <a href="#" class="nav-item" data-target="../admin/audit-log.html"><svg><use href="#i-log"/></svg><span>Nhật ký hệ thống</span></a>
+          <a href="#" class="nav-item" id="btnChangePassword"><svg><use href="#i-settings"/></svg><span>Đổi mật khẩu</span></a>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="role-caption"><svg><use href="#i-shield"/></svg><span>Vai trò: <strong id="sidebarRole">Quản lý cửa hàng</strong></span></div>
+        <button id="btnLogout" class="logout-button"><svg><use href="#i-logout"/></svg>Đăng xuất</button>
+      </div>
+    </aside>
+
+    <div class="main-column">
+      <header class="topbar">
+        <form class="global-search" id="globalSearchForm">
+          <svg><use href="#i-search"/></svg>
+          <input id="globalSearch" type="search" placeholder="Tìm nhân viên, tài khoản, chức năng..." autocomplete="off">
+        </form>
+        <div class="topbar-actions">
+          <button class="notification-button" id="notificationButton" title="Thông báo"><svg><use href="#i-bell"/></svg><i id="notificationDot"></i></button>
+          <span class="topbar-divider"></span>
+          <button class="profile-button" id="profileButton">
+            <span class="avatar" id="userInitials">QL</span>
+            <span class="user-info"><strong id="userName">Đang tải...</strong><small id="userRole">...</small></span>
+            <svg class="profile-chevron"><use href="#i-chevron"/></svg>
+          </button>
+          <div class="profile-menu" id="profileMenu" hidden>
+            <button type="button" id="menuChangePassword">Đổi mật khẩu</button>
+            <button type="button" id="menuLogout">Đăng xuất</button>
+          </div>
+        </div>
+      </header>
+
+      <span id="pageTitle" hidden>Tổng quan</span>
+      <main class="content-area" id="contentArea"><div class="overview-loading">Đang tải dữ liệu điều hành...</div></main>
     </div>
+  </div>
 
-    <script>
-        // Kiểm tra xem đã đăng nhập chưa
-        const token = localStorage.getItem('fly_token');
-        const userStr = localStorage.getItem('fly_user');
+  <div class="toast" id="appToast" role="status" aria-live="polite"></div>
 
-        if (!token || !userStr) {
-            // Không có token -> Đá về trang đăng nhập
-            window.location.href = '../login/login.html';
-        } else {
-            const user = JSON.parse(userStr);
-            document.getElementById('welcomeMessage').innerText = `Xin chào ${user.TenNV} (${user.TenVaiTro})`;
-        }
+  <div class="modal-backdrop" id="pwdModal" style="display:none">
+    <div class="modal">
+      <div class="modal-header"><div><p class="module-kicker">BẢO MẬT TÀI KHOẢN</p><h3>Đổi mật khẩu</h3></div><button type="button" class="close-btn" id="closePwdModal">×</button></div>
+      <div class="modal-body"><form id="pwdForm">
+        <div class="form-group"><label>Mật khẩu hiện tại</label><input type="password" id="oldPwd" required></div>
+        <div class="form-group"><label>Mật khẩu mới</label><input type="password" id="newPwd" required></div>
+        <div class="form-group"><label>Xác nhận mật khẩu mới</label><input type="password" id="confirmPwd" required></div>
+        <div class="modal-footer"><button type="button" class="btn btn-secondary" id="cancelPwdModal">Hủy</button><button type="submit" class="btn btn-primary">Cập nhật mật khẩu</button></div>
+      </form></div>
+    </div>
+  </div>
 
-        // Xử lý Đăng xuất
-        document.getElementById('btnLogout').addEventListener('click', () => {
-            localStorage.removeItem('fly_token');
-            localStorage.removeItem('fly_user');
-            window.location.href = '../login/login.html';
-        });
-    </script>
+  <script src="../shared/print-documents.js"></script>
+  <script src="../admin/admin-page-templates.js"></script>
+  <script src="../warehouse/warehouse-pages.js"></script>
+  <script src="../warehouse/supplier-pages.js"></script>
+  <script src="../warehouse/purchase-order-pages.js"></script>
+  <script src="../warehouse/receipt-pages.js"></script>
+  <script src="../accounting/accounting-pages.js"></script>
+  <script src="../cashier/cashier-pages.js"></script>
+  <script src="dashboard.js"></script>
 </body>
 </html>

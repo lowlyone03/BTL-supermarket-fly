@@ -7,7 +7,12 @@ async function checkSchema() {
         const result = await pool.request().query(`
             SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
             FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_NAME IN ('VaiTro', 'NhanVien', 'TaiKhoan')
+            WHERE TABLE_NAME IN (
+                'VaiTro', 'NhanVien', 'TaiKhoan', 'ChucNang', 'VaiTro_ChucNang',
+                'SanPham', 'TonKho', 'Kho', 'GiaoDichKho',
+                'DeNghiMuaHang', 'ChiTietDeNghi', 'DonMuaHang', 'ChiTietDonMua',
+                'NhatKy'
+            )
             ORDER BY TABLE_NAME, ORDINAL_POSITION
         `);
         console.log(JSON.stringify(result.recordset, null, 2));

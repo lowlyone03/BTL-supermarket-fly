@@ -4,7 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node src/app.js",
+    "prepare:warehouse": "node prepare-warehouse-phase.js",
+    "test": "node --check src/app.js && node --check src/controllers/warehouseController.js && node --check src/controllers/accountingController.js && node --check src/controllers/cashierController.js",
+    "test:opening-flow": "node test-opening-flow.js",
+    "test:cashier-opening": "node test-cashier-opening.js"
   },
   "keywords": [],
   "author": "",

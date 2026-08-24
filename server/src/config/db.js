@@ -7,7 +7,10 @@ const config = {
     database: 'SupermarketFlyDB',
     options: {
         trustedConnection: true, 
-        trustServerCertificate: true 
+        trustServerCertificate: true,
+        // SQL Server lưu DATETIME theo giờ địa phương của cửa hàng (Hà Nội).
+        // Không diễn giải giá trị này như UTC vì sẽ làm giao diện cộng thêm 7 giờ.
+        useUTC: false
     }
 };
 
