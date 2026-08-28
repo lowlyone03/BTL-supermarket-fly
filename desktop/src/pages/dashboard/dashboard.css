@@ -322,7 +322,7 @@ button { color: inherit; }
 .notice-box { padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; border: 1px solid #dce7df; border-radius: 8px; color: #466055; background: var(--green-50); font-size: 10px; }
 .modal-footer { margin-top: 22px; padding-top: 18px; display: flex; justify-content: flex-end; gap: 9px; border-top: 1px solid #edf0ec; }
 
-.toast { position: fixed; right: 26px; bottom: 24px; z-index: 500; max-width: 380px; padding: 12px 17px; border-radius: 8px; color: #fff; background: #263c31; box-shadow: 0 14px 32px rgba(10,37,27,.2); opacity: 0; transform: translateY(18px); pointer-events: none; transition: .22s ease; font-size: 11px; }
+.toast { position: fixed; right: 26px; bottom: 24px; z-index: 2000; max-width: 380px; padding: 12px 17px; border-radius: 8px; color: #fff; background: #263c31; box-shadow: 0 14px 32px rgba(10,37,27,.2); opacity: 0; transform: translateY(18px); pointer-events: none; transition: .22s ease; font-size: 11px; }
 .toast.visible { opacity: 1; transform: translateY(0); }
 .toast.error { background: #a64c3a; }
 .toast.success { background: var(--green-700); }

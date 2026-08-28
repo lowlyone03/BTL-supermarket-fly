@@ -3,15 +3,19 @@
   const fmtDate = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
   const statusClass = status => ({
     'Nháp': 'draft', 'Đã gửi': 'sent', 'Đang xử lý': 'processing', 'Yêu cầu bổ sung': 'returned',
-    'Đã hủy': 'cancelled', 'Hoàn thành': 'ok', 'Đã lập đơn': 'ok'
+    'Đã hủy': 'cancelled', 'Hoàn thành': 'ok', 'Đã lập đơn': 'ok',
+    'Chờ kiểm tra': 'sent', 'Chờ duyệt': 'sent', 'Đã duyệt': 'ok', 'Từ chối': 'cancelled',
+    'Đang kiểm': 'processing', 'Chờ duyệt điều chỉnh': 'sent', 'Hoàn thành không chênh lệch': 'ok'
   }[status] || 'draft');
   const stockStatus = item => item.MucTon === 'Hết hàng' ? 'out' : ['Cần bổ sung', 'Chưa nhập lần đầu'].includes(item.MucTon) ? 'low' : 'ok';
 
   const templates = {
     'warehouse-home': '<section class="warehouse-page" id="warehouseHome"><div class="overview-loading">Đang tổng hợp tình hình kho...</div></section>',
     'warehouse-inventory': '<section class="warehouse-page" id="warehouseInventory"><div class="overview-loading">Đang tải tồn kho...</div></section>',
+    'warehouse-inventory-counts': '<section class="warehouse-page" id="warehouseInventoryCounts"><div class="overview-loading">Đang tải các đợt kiểm kê...</div></section>',
     'warehouse-requests': '<section class="warehouse-page" id="warehouseRequests"><div class="overview-loading">Đang tải đề nghị mua hàng...</div></section>',
-    'purchasing-inbox': '<section class="warehouse-page" id="purchasingInbox"><div class="overview-loading">Đang tải đề nghị từ kho...</div></section>'
+    'purchasing-inbox': '<section class="warehouse-page" id="purchasingInbox"><div class="overview-loading">Đang tải đề nghị từ kho...</div></section>',
+    'warehouse-returns': '<section class="warehouse-page" id="warehouseReturns"><div class="overview-loading">Đang tải hàng đổi trả...</div></section>'
   };
 
   const api = async (context, path, options = {}) => {
@@ -31,6 +35,124 @@
 
   const showError = (root, error) => {
     root.innerHTML = `<div class="welcome-card"><h2>Không thể tải dữ liệu</h2><p>${esc(error.message)}</p></div>`;
+  };
+
+  const inventoryCountDetail = async (context, id, onDone) => {
+    try {
+      const data = await api(context, `/warehouse/inventory-counts/${id}`);
+      const count = data.count;
+      const editable = count.TrangThai === 'Đang kiểm';
+      const overlay = document.createElement('div');
+      overlay.className = 'warehouse-modal-backdrop';
+      const resultLabel = difference => difference > 0 ? 'Thừa' : difference < 0 ? 'Thiếu' : 'Khớp';
+      const rows = data.lines.map(line => {
+        const difference = Number(line.SLThucTe) - Number(line.SLHeThong);
+        const actual = editable
+          ? `<input class="inventory-count-actual" type="number" min="0" step="1" value="${Number(line.SLThucTe)}" aria-label="Số lượng thực tế ${esc(line.TenSP)}">`
+          : `<strong>${Number(line.SLThucTe)}</strong>`;
+        const condition = editable
+          ? `<select class="inventory-count-condition"><option ${line.TinhTrangHang === 'Bình thường' ? 'selected' : ''}>Bình thường</option><option ${line.TinhTrangHang === 'Hỏng' ? 'selected' : ''}>Hỏng</option><option ${line.TinhTrangHang === 'Hết hạn' ? 'selected' : ''}>Hết hạn</option></select>`
+          : esc(line.TinhTrangHang || 'Bình thường');
+        const reason = editable
+          ? `<input class="inventory-count-reason" maxlength="200" value="${esc(line.NguyenNhan || '')}" placeholder="Bắt buộc nếu lệch">`
+          : esc(line.NguyenNhan || '—');
+        return `<tr data-product="${esc(line.MaSP)}" data-system="${Number(line.SLHeThong)}"><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)} · ${esc(line.TenDM)}</small></td><td class="num"><strong>${Number(line.SLHeThong)}</strong></td><td class="num">${actual}</td><td class="num inventory-count-difference">${difference > 0 ? '+' : ''}${difference}</td><td><span class="status-pill inventory-count-result ${difference === 0 ? 'ok' : 'sent'}">${resultLabel(difference)}</span></td><td>${condition}</td><td>${reason}</td></tr>`;
+      }).join('');
+      overlay.innerHTML = `<div class="warehouse-modal inventory-count-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">KIỂM KÊ KHO / ${esc(count.MaKK)}</p><h2>${esc(count.TenKho)}</h2><span>${fmtDate(count.NgayKiemKe)} · ${esc(count.NguoiKiemKe)} · ${esc(count.TrangThai)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="receipt-rule"><svg><use href="#i-warning"/></svg><span>Số lượng hệ thống là ảnh chụp lúc tạo đợt. Khi có chênh lệch phải ghi nguyên nhân; tồn kho chỉ thay đổi sau khi Quản lý duyệt.</span></div><div class="warehouse-field inventory-count-note"><label>Ghi chú đợt kiểm kê</label><textarea id="inventoryCountNote" maxlength="500" ${editable ? '' : 'disabled'}>${esc(count.GhiChu || '')}</textarea></div>${count.LyDoTuChoi ? `<div class="manager-readonly-note"><svg><use href="#i-warning"/></svg><div><strong>Lý do từ chối</strong><span>${esc(count.LyDoTuChoi)}</span></div></div>` : ''}<div class="warehouse-table-wrap"><table class="warehouse-table inventory-count-table"><thead><tr><th>SẢN PHẨM</th><th>HỆ THỐNG</th><th>THỰC TẾ</th><th>CHÊNH LỆCH</th><th>KẾT QUẢ</th><th>TÌNH TRẠNG</th><th>NGUYÊN NHÂN</th></tr></thead><tbody>${rows}</tbody></table></div></div><div class="warehouse-modal-actions"><div class="inventory-count-submit-hint" ${editable ? '' : 'hidden'}></div><button class="warehouse-secondary close" type="button">Đóng</button>${editable ? '<button class="warehouse-secondary save-count" type="button">Lưu kết quả đếm</button><button class="warehouse-primary submit-count" type="button"></button>' : ''}</div></div>`;
+      document.body.appendChild(overlay);
+      const close = () => overlay.remove();
+      overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+      const updateRow = row => {
+        const actual = Number(row.querySelector('.inventory-count-actual').value);
+        const system = Number(row.dataset.system);
+        const difference = Number.isFinite(actual) ? actual - system : 0;
+        row.querySelector('.inventory-count-difference').textContent = `${difference > 0 ? '+' : ''}${difference}`;
+        const badge = row.querySelector('.inventory-count-result');
+        badge.textContent = resultLabel(difference);
+        badge.className = `status-pill inventory-count-result ${difference === 0 ? 'ok' : 'sent'}`;
+      };
+      const differenceCount = () => Array.from(overlay.querySelectorAll('tbody tr[data-product]')).filter(row => {
+        const actual = Number(row.querySelector('.inventory-count-actual').value);
+        return Number.isFinite(actual) && actual !== Number(row.dataset.system);
+      }).length;
+      const updateSubmitState = () => {
+        const total = differenceCount();
+        const submitButton = overlay.querySelector('.submit-count');
+        const hint = overlay.querySelector('.inventory-count-submit-hint');
+        if (!submitButton || !hint) return;
+        if (total > 0) {
+          submitButton.textContent = `Gửi Quản lý duyệt (${total} mặt hàng)`;
+          hint.innerHTML = `<strong>Có ${total} mặt hàng chênh lệch.</strong><span>Sau khi gửi, tồn kho chưa thay đổi cho tới khi Quản lý duyệt.</span>`;
+          hint.className = 'inventory-count-submit-hint has-difference';
+        } else {
+          submitButton.textContent = 'Kết thúc kiểm kê (không cần duyệt)';
+          hint.innerHTML = '<strong>Không có chênh lệch.</strong><span>Đợt kiểm kê sẽ hoàn thành ngay và không gửi sang Quản lý.</span>';
+          hint.className = 'inventory-count-submit-hint no-difference';
+        }
+      };
+      overlay.querySelectorAll('.inventory-count-actual').forEach(input => input.addEventListener('input', () => {
+        updateRow(input.closest('tr'));
+        updateSubmitState();
+      }));
+      updateSubmitState();
+      const payload = () => ({
+        GhiChu: overlay.querySelector('#inventoryCountNote').value.trim(),
+        lines: Array.from(overlay.querySelectorAll('tbody tr[data-product]')).map(row => ({
+          MaSP: row.dataset.product,
+          SLHeThong: Number(row.dataset.system),
+          SLThucTe: Number(row.querySelector('.inventory-count-actual').value),
+          TinhTrangHang: row.querySelector('.inventory-count-condition').value,
+          NguyenNhan: row.querySelector('.inventory-count-reason').value.trim()
+        }))
+      });
+      const save = async () => api(context, `/warehouse/inventory-counts/${id}`, { method: 'PUT', body: JSON.stringify(payload()) });
+      overlay.querySelector('.save-count')?.addEventListener('click', async () => {
+        try { const result = await save(); context.showToast(result.message, 'success'); await onDone(); }
+        catch (error) { context.showToast(error.message, 'error'); }
+      });
+      overlay.querySelector('.submit-count')?.addEventListener('click', async () => {
+        try {
+          const total = differenceCount();
+          const question = total > 0
+            ? `Gửi ${total} mặt hàng chênh lệch sang Quản lý duyệt điều chỉnh tồn kho?`
+            : 'Không có mặt hàng chênh lệch. Kết thúc đợt kiểm kê này mà không gửi Quản lý duyệt?';
+          if (!window.confirm(question)) return;
+          await save();
+          const result = await api(context, `/warehouse/inventory-counts/${id}/submit`, { method: 'POST', body: '{}' });
+          context.showToast(result.message, 'success'); close(); await onDone();
+        } catch (error) { context.showToast(error.message, 'error'); }
+      });
+    } catch (error) { context.showToast(error.message, 'error'); }
+  };
+
+  const initInventoryCounts = async (root, context) => {
+    const load = async () => {
+      try {
+        const search = root.querySelector('#inventoryCountSearch')?.value || '';
+        const status = root.querySelector('#inventoryCountStatus')?.value || '';
+        const data = await api(context, `/warehouse/inventory-counts?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}`);
+        if (!root.querySelector('#inventoryCountBody')) {
+          root.innerHTML = `${heading('KHO HÀNG / KIỂM KÊ', 'Kiểm kê và xử lý chênh lệch', 'Thủ kho ghi số thực tế trên đợt kiểm kê; không lập Phiếu đề nghị điều chỉnh riêng.', '<button class="warehouse-primary" id="newInventoryCount"><svg><use href="#i-plus"/></svg>Tạo đợt kiểm kê</button>')}<article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"/></svg><input id="inventoryCountSearch" placeholder="Tìm mã kiểm kê hoặc ghi chú..."></label><div class="warehouse-toolbar-actions"><select id="inventoryCountStatus"><option value="">Tất cả trạng thái</option><option>Đang kiểm</option><option>Chờ duyệt điều chỉnh</option><option>Đã duyệt</option><option>Từ chối</option><option>Hoàn thành không chênh lệch</option></select><button class="warehouse-icon-button" id="refreshInventoryCounts" title="Làm mới"><svg><use href="#i-refresh"/></svg></button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>ĐỢT KIỂM KÊ</th><th>NGÀY KIỂM</th><th>PHẠM VI</th><th>CHÊNH LỆCH</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody id="inventoryCountBody"></tbody></table></div></article>`;
+          let timer;
+          root.querySelector('#inventoryCountSearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250); });
+          root.querySelector('#inventoryCountStatus').addEventListener('change', load);
+          root.querySelector('#refreshInventoryCounts').addEventListener('click', load);
+          root.querySelector('#newInventoryCount').addEventListener('click', async () => {
+            if (!window.confirm('Tạo đợt kiểm kê và chụp số tồn hiện tại của toàn bộ mặt hàng đang bán?')) return;
+            try {
+              const result = await api(context, '/warehouse/inventory-counts', { method: 'POST', body: '{}' });
+              context.showToast(result.message, 'success'); await load(); inventoryCountDetail(context, result.MaKK, load);
+            } catch (error) { context.showToast(error.message, 'error'); }
+          });
+          root.addEventListener('click', event => {
+            const button = event.target.closest('[data-view-inventory-count]');
+            if (button) inventoryCountDetail(context, button.dataset.viewInventoryCount, load);
+          });
+        }
+        root.querySelector('#inventoryCountBody').innerHTML = data.items.length ? data.items.map(item => `<tr><td><strong>${esc(item.MaKK)}</strong><small>${esc(item.TenKho)}</small></td><td>${fmtDate(item.NgayKiemKe)}</td><td><strong>${item.SoMatHang || 0} mặt hàng</strong><small>${item.SoMatHangChenhLech || 0} mặt hàng chênh lệch</small></td><td><strong>Thừa ${item.TongThua || 0}</strong><small>Thiếu ${item.TongThieu || 0}</small></td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span>${item.LyDoTuChoi ? `<small>${esc(item.LyDoTuChoi)}</small>` : ''}</td><td><button class="warehouse-secondary" data-view-inventory-count="${esc(item.MaKK)}">${item.TrangThai === 'Đang kiểm' ? 'Tiếp tục kiểm' : 'Xem chi tiết'}</button></td></tr>`).join('') : '<tr><td colspan="6" class="warehouse-empty">Chưa có đợt kiểm kê phù hợp.</td></tr>';
+      } catch (error) { showError(root, error); }
+    };
+    await load();
   };
 
   const initHome = async (root, context) => {
@@ -258,12 +380,44 @@
     await load();
   };
 
+  const initWarehouseReturns = async (root, context) => {
+    const inspect = async (id, onDone) => {
+      try {
+        const detail = await api(context, `/warehouse/returns/${id}`);
+        const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
+        overlay.innerHTML = `<div class="warehouse-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">KIỂM TRA HÀNG KHÁCH TRẢ</p><h2>${esc(detail.ticket.MaDT)}</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><p>Hóa đơn ${esc(detail.ticket.MaHD)} · ${esc(detail.ticket.HinhThucXuLy)} · ${esc(detail.ticket.LyDo || '')}</p><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>SẢN PHẨM</th><th>SL</th><th>THÀNH TIỀN</th></tr></thead><tbody>${detail.lines.filter(item => item.LoaiDong === 'Hàng khách trả').map(item => `<tr><td>${esc(item.TenSP)}</td><td class="num">${item.SoLuong}</td><td class="num">${Number(item.ThanhTien).toLocaleString('vi-VN')}</td></tr>`).join('')}</tbody></table></div><label class="warehouse-field"><input type="checkbox" id="restock" checked> Hàng đạt yêu cầu, được nhập lại kho</label><div class="warehouse-field"><label>Kết quả kiểm tra *</label><textarea id="inspectNote" maxlength="200" placeholder="Tình trạng bao bì, hạn dùng, lỗi sản phẩm..."></textarea></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-primary save-inspect">Ghi nhận và gửi duyệt</button></div></div>`;
+        document.body.appendChild(overlay);
+        const close = () => overlay.remove(); overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+        overlay.querySelector('.save-inspect').addEventListener('click', async () => {
+          try {
+            const result = await api(context, `/warehouse/returns/${id}/inspect`, { method: 'POST', body: JSON.stringify({ KetQuaKiemTra: overlay.querySelector('#inspectNote').value, DuocNhapLai: overlay.querySelector('#restock').checked }) });
+            context.showToast(result.message, 'success'); close(); await onDone();
+          } catch (error) { context.showToast(error.message, 'error'); }
+        });
+      } catch (error) { context.showToast(error.message, 'error'); }
+    };
+    const load = async () => {
+      try {
+        const data = await api(context, '/warehouse/returns?status=' + encodeURIComponent(root.querySelector('#returnStatus')?.value || 'Chờ kiểm tra'));
+        if (!root.querySelector('#warehouseReturnBody')) {
+          root.innerHTML = `${heading('KHO HÀNG / ĐỔI TRẢ', 'Kiểm tra hàng khách trả', 'Thủ kho chỉ ghi kết quả kiểm tra. Quản lý mới phê duyệt đổi/hoàn.', '')}<article class="warehouse-table-card"><div class="warehouse-toolbar"><select id="returnStatus"><option>Chờ kiểm tra</option><option>Chờ duyệt</option><option>Đã duyệt</option><option>Hoàn thành</option><option value="">Tất cả</option></select></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU</th><th>HÓA ĐƠN</th><th>HÌNH THỨC</th><th>TRẠNG THÁI</th><th></th></tr></thead><tbody id="warehouseReturnBody"></tbody></table></div></article>`;
+          root.querySelector('#returnStatus').addEventListener('change', load);
+        }
+        root.querySelector('#warehouseReturnBody').innerHTML = data.items.length ? data.items.map(item => `<tr><td><strong>${esc(item.MaDT)}</strong></td><td>${esc(item.MaHD)}</td><td>${esc(item.HinhThucXuLy)}</td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></td><td>${item.TrangThai === 'Chờ kiểm tra' ? `<button class="warehouse-primary" data-inspect="${esc(item.MaDT)}">Kiểm tra</button>` : '—'}</td></tr>`).join('') : '<tr><td colspan="5" class="warehouse-empty">Không có phiếu ở trạng thái này.</td></tr>';
+        root.querySelectorAll('[data-inspect]').forEach(button => button.addEventListener('click', () => inspect(button.dataset.inspect, load)));
+      } catch (error) { context.showToast(error.message, 'error'); }
+    };
+    await load();
+  };
+
   const init = async (pageName, context) => {
     const root = document.querySelector('.warehouse-page');
     if (!root) return;
     if (pageName === 'warehouse-home') return initHome(root, context);
     if (pageName === 'warehouse-inventory') return initInventory(root, context);
+    if (pageName === 'warehouse-inventory-counts') return initInventoryCounts(root, context);
     if (pageName === 'warehouse-requests') return initRequests(root, context);
+    if (pageName === 'warehouse-returns') return initWarehouseReturns(root, context);
     if (pageName === 'purchasing-inbox') return initPurchasing(root, context);
   };
 

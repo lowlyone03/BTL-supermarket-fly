@@ -109,8 +109,13 @@ const inspectRolePage = async (username, target) => {
       total:document.querySelector('#managerDebtTotal')?.textContent || '',
       remaining:document.querySelector('#managerDebtRemaining')?.textContent || '',
       rows:document.querySelectorAll('#managerDebtBody tr').length,
+      tableViewport:document.querySelector('.manager-debt-card .warehouse-table-wrap')?.clientWidth || 0,
+      tableContent:document.querySelector('.manager-debt-card .warehouse-table-wrap')?.scrollWidth || 0,
+      headerFont:document.querySelector('.manager-debt-table th') ? getComputedStyle(document.querySelector('.manager-debt-table th')).fontFamily : '',
+      bodyFont:document.querySelector('.manager-debt-table td') ? getComputedStyle(document.querySelector('.manager-debt-table td')).fontFamily : '',
       actions:[...document.querySelectorAll('[data-manager-debt]')].map(button=>({text:button.innerText,width:Math.round(button.getBoundingClientRect().width),wrapped:button.scrollHeight>button.clientHeight+1}))
     }))()`);
+    if (metrics.managerPayables.tableContent > metrics.managerPayables.tableViewport + 1) throw new Error(`manager-payables còn cuộn ngang: ${metrics.managerPayables.tableContent}/${metrics.managerPayables.tableViewport}`);
     const detailOpened = await window.webContents.executeJavaScript(`(() => { const button=document.querySelector('[data-manager-debt]'); if(!button) return false; button.click(); return true; })()`);
     if (detailOpened) {
       await new Promise(resolve => setTimeout(resolve, 500));

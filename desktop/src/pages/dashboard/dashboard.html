@@ -6,7 +6,9 @@
   <title>Điều hành - Supermarket Fly</title>
   <link rel="stylesheet" href="dashboard.css">
   <link rel="stylesheet" href="../admin/admin.css">
-  <link rel="stylesheet" href="../warehouse/warehouse.css">
+  <link rel="stylesheet" href="../warehouse/warehouse.css?v=uc28-uc09-1">
+  <link rel="stylesheet" href="../workforce/workforce.css?v=attendance-overtime-1">
+  <link rel="stylesheet" href="../cashier/cashier.css">
 </head>
 <body>
   <svg class="svg-library" aria-hidden="true">
@@ -56,19 +58,25 @@
         <a href="#" class="nav-item active" id="managerHomeNav" data-target="home"><svg><use href="#i-grid"/></svg><span>Tổng quan</span></a>
         <a href="#" class="nav-item" id="managerApprovalNav" data-target="manager-purchase-approvals"><svg><use href="#i-approve"/></svg><span>Trung tâm phê duyệt</span><b class="nav-badge" id="approvalNavBadge">0</b></a>
         <a href="#" class="nav-item" id="managerPayablesNav" data-target="manager-payables"><svg><use href="#i-report"/></svg><span>Theo dõi công nợ</span></a>
+        <a href="#" class="nav-item" id="managerWorkforceNav" data-target="manager-workforce"><svg><use href="#i-calendar"/></svg><span>Phân ca &amp; chấm công</span></a>
         <a href="#" class="nav-item is-coming" id="managerReportNav" data-coming-soon="Báo cáo quản trị"><svg><use href="#i-report"/></svg><span>Báo cáo</span></a>
 
         <div class="nav-group" id="navGroupWarehouse" style="display:none">
+          <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span>Lịch làm việc</span></a>
           <a href="#" class="nav-item" data-target="warehouse-home"><svg><use href="#i-grid"/></svg><span>Tổng quan kho</span></a>
           <div class="nav-group-title">QUẢN LÝ KHO</div>
           <a href="#" class="nav-item" data-target="warehouse-inventory"><svg><use href="#i-inventory"/></svg><span>Tồn kho &amp; cảnh báo</span></a>
+          <a href="#" class="nav-item" data-target="warehouse-inventory-counts"><svg><use href="#i-approve"/></svg><span>Kiểm kê kho</span></a>
+          <a href="#" class="nav-item" data-target="warehouse-stock-issues"><svg><use href="#i-request"/></svg><span>Phiếu xuất kho</span></a>
           <a href="#" class="nav-item" data-target="warehouse-requests"><svg><use href="#i-request"/></svg><span>Đề nghị mua hàng</span></a>
           <div class="nav-group-title">NHẬN HÀNG</div>
           <a href="#" class="nav-item" data-target="warehouse-receiving"><svg><use href="#i-truck"/></svg><span>Nhận &amp; kiểm tra hàng</span></a>
           <a href="#" class="nav-item" data-target="warehouse-receipts"><svg><use href="#i-request"/></svg><span>Phiếu nhập kho</span></a>
+          <a href="#" class="nav-item" data-target="warehouse-returns"><svg><use href="#i-refresh"/></svg><span>Kiểm tra đổi trả</span></a>
         </div>
 
         <div class="nav-group" id="navGroupPurchasing" style="display:none">
+          <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span>Lịch làm việc</span></a>
           <a href="#" class="nav-item" data-target="purchasing-inbox"><svg><use href="#i-request"/></svg><span>Đề nghị từ kho</span><b class="nav-badge" id="purchasingNavBadge">0</b></a>
           <div class="nav-group-title">MUA HÀNG</div>
           <a href="#" class="nav-item" data-target="purchasing-suppliers"><svg><use href="#i-store"/></svg><span>Nhà cung cấp</span></a>
@@ -76,15 +84,24 @@
         </div>
 
         <div class="nav-group" id="navGroupAccounting" style="display:none">
+          <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span>Lịch làm việc</span></a>
           <a href="#" class="nav-item" data-target="accounting-invoices"><svg><use href="#i-approve"/></svg><span>Đối chiếu hóa đơn</span></a>
           <div class="nav-group-title">KẾ TOÁN MUA HÀNG</div>
           <a href="#" class="nav-item" data-target="accounting-payables"><svg><use href="#i-report"/></svg><span>Công nợ Nhà cung cấp</span></a>
+          <div class="nav-group-title">ĐỐI SOÁT BÁN HÀNG</div>
+          <a href="#" class="nav-item" data-target="accounting-settlements"><svg><use href="#i-clock"/></svg><span>Ca &amp; Phiếu thu</span></a>
+          <div class="nav-group-title">NHÂN SỰ MỞ RỘNG</div>
+          <a href="#" class="nav-item" data-target="accounting-payroll"><svg><use href="#i-team"/></svg><span>Bảng lương tháng</span></a>
         </div>
 
         <div class="nav-group" id="navGroupCashier" style="display:none">
+          <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span>Lịch làm việc</span></a>
           <a href="#" class="nav-item" data-target="cashier-shifts"><svg><use href="#i-clock"/></svg><span>Ca bán hàng</span></a>
           <div class="nav-group-title">BÁN HÀNG TẠI QUẦY</div>
-          <a href="#" class="nav-item is-coming" data-coming-soon="Màn hình bán hàng tại quầy"><svg><use href="#i-report"/></svg><span>Bán hàng</span></a>
+          <a href="#" class="nav-item" data-target="cashier-pos"><svg><use href="#i-report"/></svg><span>Bán hàng</span></a>
+          <a href="#" class="nav-item" data-target="cashier-customers"><svg><use href="#i-users"/></svg><span>Khách hàng</span></a>
+          <a href="#" class="nav-item" data-target="cashier-invoices"><svg><use href="#i-approve"/></svg><span>Hóa đơn</span></a>
+          <a href="#" class="nav-item" data-target="cashier-returns"><svg><use href="#i-refresh"/></svg><span>Đổi trả</span></a>
         </div>
 
         <div class="nav-group" id="navGroupSystem" style="display:none">
@@ -92,7 +109,7 @@
           <a href="#" class="nav-item" data-target="../admin/products.html"><svg><use href="#i-box"/></svg><span>Sản phẩm &amp; giá</span></a>
           <a href="#" class="nav-item" data-target="../admin/employees.html"><svg><use href="#i-users"/></svg><span>Quản lý nhân viên</span></a>
           <a href="#" class="nav-item" data-target="../admin/accounts.html"><svg><use href="#i-key"/></svg><span>Quản lý tài khoản</span></a>
-          <a href="#" class="nav-item is-coming" data-coming-soon="Khuyến mãi"><svg><use href="#i-promo"/></svg><span>Khuyến mãi</span></a>
+          <a href="#" class="nav-item" data-target="../admin/promotions.html"><svg><use href="#i-promo"/></svg><span>Khuyến mãi</span></a>
 
           <div class="nav-group-title">KIỂM SOÁT</div>
           <a href="#" class="nav-item" data-target="../admin/permissions.html"><svg><use href="#i-shield"/></svg><span>Phân quyền chức năng</span></a>
@@ -147,14 +164,17 @@
     </div>
   </div>
 
+  <script src="../shared/escape-key.js"></script>
   <script src="../shared/print-documents.js"></script>
   <script src="../admin/admin-page-templates.js"></script>
-  <script src="../warehouse/warehouse-pages.js"></script>
+  <script src="../warehouse/warehouse-pages.js?v=inventory-count-2"></script>
   <script src="../warehouse/supplier-pages.js"></script>
-  <script src="../warehouse/purchase-order-pages.js"></script>
+  <script src="../warehouse/purchase-order-pages.js?v=uc28-uc09-1"></script>
   <script src="../warehouse/receipt-pages.js"></script>
-  <script src="../accounting/accounting-pages.js"></script>
-  <script src="../cashier/cashier-pages.js"></script>
-  <script src="dashboard.js"></script>
+  <script src="../warehouse/stock-issue-pages.js?v=uc19-uc06-1"></script>
+  <script src="../accounting/accounting-pages.js?v=uc28-uc09-1"></script>
+  <script src="../workforce/workforce-pages.js?v=attendance-overtime-1"></script>
+  <script src="../cashier/cashier-pages.js?v=pos-uc24-3"></script>
+  <script src="dashboard.js?v=shift-live-2"></script>
 </body>
 </html>

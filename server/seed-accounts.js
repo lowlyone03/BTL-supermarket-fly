@@ -1,12 +1,20 @@
 require('dotenv').config();
 const { sql, poolPromise } = require('./src/config/db');
 const bcrypt = require('bcrypt');
+const { purgeExtraCashier } = require('./purge-extra-cashier');
 
 const employees = [
     { MaNV: 'NV_QL01', TenNV: 'Nguyễn Minh Anh', ChucVu: 'Quản lý', SDT: '0901000001', Email: 'quanly@supermarket.fly', DiaChi: 'Hà Nội', TrangThai: 'Đang làm việc' },
     { MaNV: 'NV_MH01', TenNV: 'Trần Thu Hà', ChucVu: 'Nhân viên mua hàng', SDT: '0901000002', Email: 'muahang@supermarket.fly', DiaChi: 'Hà Nội', TrangThai: 'Đang làm việc' },
     { MaNV: 'NV_TK01', TenNV: 'Lê Đức Long', ChucVu: 'Thủ kho', SDT: '0901000003', Email: 'thukho@supermarket.fly', DiaChi: 'Hà Nội', TrangThai: 'Đang làm việc' },
     { MaNV: 'NV_TN01', TenNV: 'Phạm Thảo Vy', ChucVu: 'Thu ngân', SDT: '0901000004', Email: 'thungan@supermarket.fly', DiaChi: 'Hà Nội', TrangThai: 'Đang làm việc' },
+    { MaNV: 'NV_TN02', TenNV: 'Nguyễn Hoàng Nam', ChucVu: 'Thu ngân', SDT: '0901000012', Email: 'nam.nguyen@supermarket.fly', DiaChi: 'Hà Nội', TrangThai: 'Đang làm việc' },
+    { MaNV: 'NV_TN03', TenNV: 'Đỗ Khánh Linh', ChucVu: 'Thu ngân', SDT: '0901000013', Email: 'linh.do@supermarket.fly', DiaChi: 'Hà Nội', TrangThai: 'Đang làm việc' },
+    { MaNV: 'NV_TN04', TenNV: 'Vũ Minh Quân', ChucVu: 'Thu ngân', SDT: '0901000014', Email: 'quan.vu@supermarket.fly', DiaChi: 'Hà Nội', TrangThai: 'Đang làm việc' },
+    { MaNV: 'NV_TN05', TenNV: 'Bùi Ngọc Mai', ChucVu: 'Thu ngân', SDT: '0901000015', Email: 'mai.bui@supermarket.fly', DiaChi: 'Hà Nội', TrangThai: 'Đang làm việc' },
+    { MaNV: 'NV_TN06', TenNV: 'Phan Tuấn Kiệt', ChucVu: 'Thu ngân', SDT: '0901000016', Email: 'kiet.phan@supermarket.fly', DiaChi: 'Hà Nội', TrangThai: 'Đang làm việc' },
+    { MaNV: 'NV_TN07', TenNV: 'Tạ Thu Trang', ChucVu: 'Thu ngân', SDT: '0901000017', Email: 'trang.ta@supermarket.fly', DiaChi: 'Hà Nội', TrangThai: 'Đang làm việc' },
+    { MaNV: 'NV_TN08', TenNV: 'Đặng Gia Huy', ChucVu: 'Thu ngân', SDT: '0901000018', Email: 'huy.dang@supermarket.fly', DiaChi: 'Hà Nội', TrangThai: 'Đang làm việc' },
     { MaNV: 'NV_KT01', TenNV: 'Hoàng Minh Châu', ChucVu: 'Kế toán', SDT: '0901000005', Email: 'ketoan@supermarket.fly', DiaChi: 'Hà Nội', TrangThai: 'Đang làm việc' }
 ];
 
@@ -89,6 +97,13 @@ async function seedData() {
             { TenDangNhap: 'muahang', MaNV: 'NV_MH01', MaVaiTro: roleMap['nhân viên mua hàng'] },
             { TenDangNhap: 'thukho', MaNV: 'NV_TK01', MaVaiTro: roleMap['thủ kho'] },
             { TenDangNhap: 'thungan', MaNV: 'NV_TN01', MaVaiTro: roleMap['thu ngân'] },
+            { TenDangNhap: 'thungan02', MaNV: 'NV_TN02', MaVaiTro: roleMap['thu ngân'] },
+            { TenDangNhap: 'thungan03', MaNV: 'NV_TN03', MaVaiTro: roleMap['thu ngân'] },
+            { TenDangNhap: 'thungan04', MaNV: 'NV_TN04', MaVaiTro: roleMap['thu ngân'] },
+            { TenDangNhap: 'thungan05', MaNV: 'NV_TN05', MaVaiTro: roleMap['thu ngân'] },
+            { TenDangNhap: 'thungan06', MaNV: 'NV_TN06', MaVaiTro: roleMap['thu ngân'] },
+            { TenDangNhap: 'thungan07', MaNV: 'NV_TN07', MaVaiTro: roleMap['thu ngân'] },
+            { TenDangNhap: 'thungan08', MaNV: 'NV_TN08', MaVaiTro: roleMap['thu ngân'] },
             { TenDangNhap: 'ketoan', MaNV: 'NV_KT01', MaVaiTro: roleMap['kế toán'] }
         ];
 
@@ -126,6 +141,14 @@ async function seedData() {
             }
         }
 
+        await pool.request().query(`
+            IF NOT EXISTS (SELECT 1 FROM KhuyenMai WHERE MaKM='KM001')
+                INSERT INTO KhuyenMai (MaKM,TenKM,LoaiKM,GiaTri,NgayBatDau,NgayKetThuc,TrangThai)
+                VALUES ('KM001', N'Khai trương giảm 10%', N'Phần trăm', 10,
+                        CONVERT(date, GETDATE()), DATEADD(day, 90, CONVERT(date, GETDATE())), N'Hiệu lực');
+        `);
+
+        await purgeExtraCashier(pool);
         console.log('--- HOÀN TẤT TẠO DỮ LIỆU ---');
         process.exit(0);
 

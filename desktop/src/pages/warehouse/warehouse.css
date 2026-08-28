@@ -103,6 +103,11 @@
 .warehouse-search input { height: 46px; padding: 0 16px 0 43px; }
 .warehouse-search input:focus,.warehouse-field input:focus,.warehouse-field textarea:focus { border-color: #65a58d; box-shadow: 0 0 0 3px rgba(46,134,103,.1); }
 .warehouse-toolbar-actions { display: flex; align-items: center; gap: 10px; }
+.payroll-period-picker { display: flex; align-items: flex-end; gap: 10px; }
+.payroll-period-field { display: flex; flex-direction: column; gap: 5px; }
+.payroll-period-field span { color: #718078; font-size: 10px; font-weight: 850; letter-spacing: .1em; text-transform: uppercase; }
+.payroll-period-field select { min-width: 145px; height: 46px; padding: 0 38px 0 14px; border: 1px solid #d5dfd9; border-radius: 13px; background: #fff; color: #24362d; font: inherit; font-weight: 700; outline: none; }
+.payroll-period-field select:focus { border-color: #65a58d; box-shadow: 0 0 0 3px rgba(46,134,103,.1); }
 .warehouse-check { display: flex; align-items: center; gap: 8px; color: #53675d; font-size: 13px; white-space: nowrap; }
 .warehouse-check input { accent-color: #2c8565; width: 17px; height: 17px; }
 .warehouse-table-wrap { overflow: auto; }
@@ -278,6 +283,36 @@
 .warehouse-receipt-line.heading { background:#f7f8f5; color:#6d7d76; font-size:11px; font-weight:800; letter-spacing:.04em; }
 .warehouse-receipt-line input { width:100%; min-width:0; height:42px; border:1px solid #d7dfda; border-radius:11px; padding:0 10px; color:#23342d; background:#fff; }
 .warehouse-receipt-line input:focus { outline:0; border-color:#2f8a6d; box-shadow:0 0 0 3px rgba(47,138,109,.1); }
+.inventory-count-modal { width:min(1240px,96vw); }
+.inventory-count-modal .warehouse-modal-body { max-height:70vh; overflow:auto; }
+.inventory-count-note { margin:16px 0; }
+.inventory-count-table { min-width:1120px; }
+.inventory-count-table input,.inventory-count-table select { width:100%; min-width:90px; height:40px; border:1px solid #d7dfda; border-radius:10px; padding:0 9px; color:#23342d; background:#fff; font:inherit; }
+.inventory-count-table input:focus,.inventory-count-table select:focus { outline:0; border-color:#2f8a6d; box-shadow:0 0 0 3px rgba(47,138,109,.1); }
+.inventory-count-table .inventory-count-reason { min-width:190px; }
+.inventory-count-submit-hint { min-width:0; margin-right:auto; display:flex; flex-direction:column; align-items:flex-start; gap:3px; color:#5f7067; font-size:12px; line-height:1.35; }
+.inventory-count-submit-hint strong { color:#243c31; font-size:13px; }
+.inventory-count-submit-hint.has-difference strong { color:#986500; }
+.inventory-count-submit-hint.no-difference strong { color:#247457; }
+.stock-issue-modal { width:min(1260px,96vw); }
+.stock-issue-modal .warehouse-modal-body { max-height:70vh; overflow:auto; }
+.stock-issue-fields { display:grid; grid-template-columns:minmax(180px,.65fr) minmax(280px,1fr) minmax(320px,1.35fr); gap:14px; align-items:start; margin:16px 0; }
+.stock-issue-fields .warehouse-field { margin:0; }
+.stock-issue-fields textarea { min-height:78px; }
+.stock-issue-add-row { display:grid; grid-template-columns:minmax(360px,1fr) 150px auto; gap:12px; align-items:end; margin:18px 0 12px; padding:14px; border:1px solid #dce6e0; border-radius:15px; background:#f7faf8; }
+.stock-issue-add-row .warehouse-field { margin:0; }
+.stock-issue-line-table { min-width:980px; }
+.stock-issue-line-table input { width:100%; min-width:90px; height:40px; padding:0 9px; border:1px solid #d7dfda; border-radius:10px; color:#23342d; background:#fff; font:inherit; }
+.stock-issue-line-table input:focus { outline:0; border-color:#2f8a6d; box-shadow:0 0 0 3px rgba(47,138,109,.1); }
+.stock-issue-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:11px; margin:16px 0; }
+.stock-issue-summary > div { padding:13px 14px; border:1px solid #dce6e0; border-radius:14px; background:#f7faf8; }
+.stock-issue-summary span,.stock-issue-summary strong { display:block; }
+.stock-issue-summary > div > span { color:#75857d; font-size:9px; font-weight:850; letter-spacing:.09em; }
+.stock-issue-summary > div > strong { margin-top:7px; color:#263b31; font-size:13px; }
+.stock-issue-flow { display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:20px; padding:14px; border:1px solid #d8e5de; border-radius:16px; color:#728079; background:rgba(255,255,255,.82); }
+.stock-issue-flow strong { padding:8px 11px; border-radius:999px; color:#286d55; background:#edf6f1; font-size:12px; }
+.stock-issue-action-note { min-width:0; margin-right:auto; display:flex; flex-direction:column; align-items:flex-start; gap:3px; color:#687970; font-size:11px; }
+.stock-issue-action-note strong { color:#2b4739; font-size:12px; }
 .receipt-product { min-width:0; }
 .receipt-product strong,.receipt-product small { display:block; }
 .receipt-product small { margin-top:4px; color:#7a8982; }
@@ -314,19 +349,31 @@
 .manager-readonly-note > svg { width:21px; height:21px; flex:0 0 21px; fill:none; stroke:currentColor; stroke-width:1.8; }
 .manager-readonly-note strong,.manager-readonly-note span { display:block; }
 .manager-readonly-note span { margin-top:4px; color:#65796e; font-size:12px; line-height:1.5; }
+.manager-debt-stats { font-family:"Segoe UI Variable Text","Segoe UI",Arial,sans-serif; }
 .manager-debt-stats > article:nth-child(3) { border-left-color:#77b39a; }
+.manager-debt-stats > article span { font-size:11px; font-weight:700; letter-spacing:.045em; }
+.manager-debt-stats > article strong { font-size:27px; font-weight:700; letter-spacing:-.025em; }
+.manager-debt-stats > article small { font-size:12px; line-height:1.45; }
 .manager-debt-count { padding:8px 11px; border:1px solid #d5e3db; border-radius:999px; color:#567066; background:#f2f7f4; font-size:11px; font-weight:800; white-space:nowrap; }
-.manager-debt-table { min-width:1300px; table-layout:fixed; }
-.manager-debt-table th:nth-child(1) { width:13%; }
-.manager-debt-table th:nth-child(2) { width:17%; }
+.manager-debt-card { font-family:"Segoe UI Variable Text","Segoe UI",Arial,sans-serif; }
+.manager-debt-card .warehouse-table-wrap { width:100%; overflow-x:hidden; }
+.manager-debt-table { width:100%; min-width:0; table-layout:fixed; }
+.manager-debt-table th,.manager-debt-table td { padding-right:12px; padding-left:12px; }
+.manager-debt-table th { font-size:11px; font-weight:700; line-height:1.3; letter-spacing:.035em; white-space:nowrap; }
+.manager-debt-table td { overflow:hidden; font-size:13px; line-height:1.45; text-overflow:ellipsis; }
+.manager-debt-table td strong { overflow:hidden; margin-bottom:3px; font-size:13px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+.manager-debt-table td small { display:block; overflow:hidden; font-size:11px; line-height:1.45; text-overflow:ellipsis; white-space:nowrap; }
+.manager-debt-table th:nth-child(1) { width:11%; }
+.manager-debt-table th:nth-child(2) { width:16%; }
 .manager-debt-table th:nth-child(3) { width:18%; }
-.manager-debt-table th:nth-child(4) { width:13%; }
+.manager-debt-table th:nth-child(4) { width:12%; }
 .manager-debt-table th:nth-child(5) { width:14%; }
 .manager-debt-table th:nth-child(6) { width:11%; }
-.manager-debt-table th:nth-child(7) { width:8%; }
-.manager-debt-table th:nth-child(8) { width:10%; text-align:right; }
-.manager-debt-table td:last-child { text-align:right; }
-.manager-debt-detail { min-height:38px; padding:0 12px; white-space:nowrap; }
+.manager-debt-table th:nth-child(7) { width:9%; }
+.manager-debt-table th:nth-child(8) { width:9%; text-align:right; }
+.manager-debt-table th:last-child,.manager-debt-table td:last-child { padding-right:10px; padding-left:8px; text-align:right; }
+.manager-debt-table td:nth-child(7) { overflow:visible; }
+.manager-debt-detail { min-width:0; min-height:38px; padding:0 9px; font-size:11px; font-weight:700; white-space:nowrap; }
 .manager-payable-modal { width:min(1320px,96vw); }
 .manager-payable-modal .manager-readonly-note { margin:0 0 17px; }
 .manager-debt-amounts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:0 0 18px; }
@@ -339,6 +386,29 @@
 .approval-center-note strong { white-space:nowrap; }
 .approval-center-note span { color:#65796e; line-height:1.5; }
 .approval-queue { margin-top:18px; }
+.payment-voucher-modal { width:min(1040px,96vw); }
+.payment-result-modal { width:min(820px,96vw); }
+.payment-voucher-approval-modal { width:min(1260px,96vw); }
+.payment-voucher-source { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:11px; margin-bottom:17px; }
+.payment-voucher-source > div { min-width:0; padding:13px 14px; border:1px solid #dbe5df; border-radius:14px; background:#f7faf8; }
+.payment-voucher-source span,.payment-voucher-source strong { display:block; }
+.payment-voucher-source span { color:#74857c; font-size:9px; font-weight:850; letter-spacing:.08em; }
+.payment-voucher-source strong { overflow:hidden; margin-top:7px; color:#263d32; font-size:13px; line-height:1.45; text-overflow:ellipsis; }
+.payment-voucher-amount { margin:15px 0; padding:18px; border:1px solid #cce3d7; border-left:5px solid #2d8967; border-radius:15px; background:#eef8f3; }
+.payment-voucher-amount span,.payment-voucher-amount strong,.payment-voucher-amount small { display:block; }
+.payment-voucher-amount span { color:#608072; font-size:9px; font-weight:850; letter-spacing:.09em; }
+.payment-voucher-amount strong { margin:7px 0 4px; color:#1f523f; font-size:24px; }
+.payment-voucher-amount small { color:#71847a; }
+.payment-voucher-fields { margin-top:16px; }
+.payment-voucher-fields .full { grid-column:1/-1; }
+.payment-voucher-fields input,.payment-voucher-fields select,.payment-voucher-fields textarea { width:100%; box-sizing:border-box; }
+.payment-voucher-rejection { margin:15px 0 0; padding:13px 15px; border:1px solid #efc8ba; border-radius:13px; color:#9e4330; background:#fff2ed; }
+.payment-voucher-stats { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.payment-voucher-table { min-width:1180px; }
+.payment-voucher-table td small { display:block; margin-top:4px; color:#7a8981; font-size:11px; }
+.payment-voucher-table td .status-pill { display:inline-flex; margin-top:6px; }
+.payment-voucher-wait { display:inline-flex; min-height:36px; align-items:center; color:#718078; font-size:11px; font-weight:750; }
+.bank-code-field[hidden] { display:none; }
 .cashier-open-shift,.cashier-active-shift { min-height:270px; margin-bottom:20px; padding:30px 34px; overflow:hidden; border:1px solid #cfe0d7; border-radius:22px; background:linear-gradient(120deg,rgba(255,255,255,.97),rgba(234,245,238,.94)); box-shadow:0 16px 36px rgba(31,64,51,.075); }
 .cashier-open-shift { display:grid; grid-template-columns:minmax(260px,.85fr) minmax(420px,1.15fr); align-items:center; gap:42px; }
 .cashier-open-visual { min-height:170px; display:flex; align-items:center; justify-content:center; gap:12px; border-radius:18px; background:linear-gradient(135deg,#e4f2e9,#f8f3e5); }
@@ -352,7 +422,7 @@
 .cashier-live i { width:8px; height:8px; border-radius:50%; background:#2c8b67; box-shadow:0 0 0 5px rgba(44,139,103,.12); }
 .cashier-shift-copy h2 { margin:15px 0 7px; font-size:32px; }
 .cashier-shift-copy > p { color:#687a71; }
-.cashier-shift-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:25px; }
+.cashier-shift-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:25px; }
 .cashier-shift-metrics div { padding:15px; border:1px solid #d7e5de; border-radius:14px; background:rgba(255,255,255,.78); }
 .cashier-shift-metrics span,.cashier-shift-metrics strong { display:block; }
 .cashier-shift-metrics span { color:#76877e; font-size:9px; font-weight:850; letter-spacing:.08em; }
@@ -396,6 +466,10 @@
   .purchasing-flow { justify-content:flex-start; }
   .cashier-open-shift,.cashier-active-shift { grid-template-columns:1fr; }
   .manager-debt-amounts { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .stock-issue-fields { grid-template-columns:1fr 1fr; }
+  .stock-issue-note { grid-column:1/-1; }
+  .stock-issue-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .payment-voucher-source { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media (max-width: 760px) {
   .warehouse-page { padding: 18px 6px 28px; }
@@ -409,4 +483,7 @@
   .purchasing-flow em { width:1px; height:14px; margin:4px 0 4px 14px; }
   .accounting-intake-choice,.accounting-document-strip,.approval-center-summary,.cashier-shift-metrics { grid-template-columns:1fr; }
   .manager-debt-amounts { grid-template-columns:1fr; }
+  .stock-issue-fields,.stock-issue-summary,.stock-issue-add-row { grid-template-columns:1fr; }
+  .stock-issue-flow { align-items:flex-start; flex-direction:column; }
+  .payment-voucher-source,.payment-voucher-stats { grid-template-columns:1fr; }
 }

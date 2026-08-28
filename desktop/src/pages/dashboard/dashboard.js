@@ -71,6 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const enhanceSelect = select => {
     if (!(select instanceof HTMLSelectElement) || select.dataset.uiEnhanced === 'true') return;
+    if (select.closest('.cashier-payment-modal')) return;
     select.dataset.uiEnhanced = 'true';
     const wrapper = document.createElement('div');
     wrapper.className = 'custom-select-control';
@@ -136,6 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('managerHomeNav').style.display = isManager ? '' : 'none';
   document.getElementById('managerApprovalNav').style.display = isManager ? '' : 'none';
   document.getElementById('managerPayablesNav').style.display = isManager ? '' : 'none';
+  document.getElementById('managerWorkforceNav').style.display = isManager ? '' : 'none';
   document.getElementById('managerReportNav').style.display = isManager ? '' : 'none';
   if (isManager) document.getElementById('navGroupSystem').style.display = 'block';
   if (isWarehouse) document.getElementById('navGroupWarehouse').style.display = 'block';
@@ -232,8 +234,8 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
 
           <div class="stat-grid">
-            <article class="stat-card"><div><span>NHÂN VIÊN ĐANG LÀM VIỆC</span><i><svg><use href="#i-users"/></svg></i></div><strong>${summary.NhanVienDangLam}</strong><small><b>${summary.TongNhanVien}</b> hồ sơ nhân sự</small></article>
-            <article class="stat-card"><div><span>TÀI KHOẢN HỆ THỐNG</span><i><svg><use href="#i-key"/></svg></i></div><strong>${summary.TongTaiKhoan}</strong><small><b>${summary.TongTaiKhoan - summary.TaiKhoanBiKhoa}</b> tài khoản hoạt động</small></article>
+            <article class="stat-card"><div><span>CA POS ĐANG MỞ</span><i><svg><use href="#i-clock"/></svg></i></div><strong>${summary.CaDangMo || 0}</strong><small>Thu ngân chưa đóng ca bán hàng</small></article>
+            <article class="stat-card"><div><span>HỒ SƠ NHÂN SỰ</span><i><svg><use href="#i-users"/></svg></i></div><strong>${summary.NhanVienDangLam}</strong><small>Đang làm việc = còn hợp đồng, không phải đang trong ca</small></article>
             <article class="stat-card ${summary.ChuaCoTaiKhoan ? 'attention' : ''}"><div><span>CHƯA CÓ TÀI KHOẢN</span><i><svg><use href="#i-user-plus"/></svg></i></div><strong>${summary.ChuaCoTaiKhoan}</strong><small><b>${summary.ChuaCoTaiKhoan}</b> nhân viên chưa được cấp tài khoản</small></article>
             <article class="stat-card ${summary.TaiKhoanBiKhoa ? 'attention' : ''}"><div><span>TÀI KHOẢN BỊ KHÓA</span><i><svg><use href="#i-lock"/></svg></i></div><strong>${summary.TaiKhoanBiKhoa}</strong><small><b>${summary.ThaoTacHomNay}</b> thao tác hôm nay</small></article>
           </div>
@@ -376,11 +378,15 @@ document.addEventListener('DOMContentLoaded', () => {
     event.preventDefault();
     const query = document.getElementById('globalSearch').value.trim();
     if (!query) return;
-    const destination = isWarehouse ? 'warehouse-inventory' : isPurchasing ? 'purchasing-inbox' : '../admin/employees.html';
+    const destination = isWarehouse ? 'warehouse-inventory'
+      : isPurchasing ? 'purchasing-inbox'
+      : isCashier ? 'cashier-invoices'
+      : isAccounting ? 'accounting-invoices'
+      : '../admin/employees.html';
     const destinationNav = pageNavItems.find(item => item.dataset.target === destination);
     if (!destinationNav) return;
     await openPage(destinationNav);
-    const search = document.getElementById(isWarehouse ? 'inventorySearch' : isPurchasing ? 'purchasingSearch' : 'empSearch');
+    const search = document.getElementById(isWarehouse ? 'inventorySearch' : isPurchasing ? 'purchasingSearch' : isCashier ? 'invoiceQuery' : isAccounting ? 'invoiceSearch' : 'empSearch');
     if (search) {
       search.value = query;
       search.dispatchEvent(new Event('input'));
@@ -412,7 +418,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const firstTarget = isWarehouse ? 'warehouse-home'
       : isPurchasing ? 'purchasing-inbox'
         : isAccounting ? 'accounting-invoices'
-          : isCashier ? 'cashier-shifts' : null;
+          : isCashier ? 'cashier-schedule' : null;
     const firstNav = pageNavItems.find(item => item.dataset.target === firstTarget);
     if (firstNav) openPage(firstNav);
     else loadOverview();

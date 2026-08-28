@@ -5,10 +5,17 @@
   "main": "index.js",
   "scripts": {
     "start": "node src/app.js",
+    "migrate:next": "node apply-migration.js SupermarketFly_Migration_20260825_WorkforceScheduling.sql && node apply-migration.js SupermarketFly_Migration_20260825_SalesAndWorkforceV2.sql && node apply-migration.js SupermarketFly_Migration_20260825_OfficeHours.sql",
     "prepare:warehouse": "node prepare-warehouse-phase.js",
-    "test": "node --check src/app.js && node --check src/controllers/warehouseController.js && node --check src/controllers/accountingController.js && node --check src/controllers/cashierController.js",
+    "cleanup:demo-products": "node remove-demo-products.js",
+    "cleanup:extra-cashier": "node purge-extra-cashier.js",
+    "seed:accounts": "node seed-accounts.js",
+    "seed:permissions": "node seed-permissions.js",
+    "test": "node --check src/app.js && node --check src/controllers/warehouseController.js && node --check src/controllers/inventoryCountController.js && node --check src/controllers/stockIssueController.js && node --check src/controllers/accountingController.js && node --check src/controllers/paymentVoucherController.js && node --check src/controllers/cashierController.js && node --check src/controllers/workforceController.js && node --check src/controllers/salesController.js && node --check src/controllers/settlementController.js && node --check src/controllers/payrollController.js && node --check src/controllers/returnsController.js && node --check src/controllers/catalogController.js && node --check ../desktop/src/pages/workforce/workforce-pages.js && node --check ../desktop/src/pages/cashier/cashier-pages.js && node --check ../desktop/src/pages/accounting/accounting-pages.js && node --check ../desktop/src/pages/warehouse/warehouse-pages.js && node --check ../desktop/src/pages/warehouse/stock-issue-pages.js && node --check ../desktop/src/pages/warehouse/purchase-order-pages.js && node --check ../desktop/src/pages/admin/promotions.js",
     "test:opening-flow": "node test-opening-flow.js",
-    "test:cashier-opening": "node test-cashier-opening.js"
+    "test:cashier-opening": "node test-cashier-opening.js",
+    "test:scheduler": "node test-shift-scheduler.js",
+    "test:sales-flow": "node test-sales-flow.js"
   },
   "keywords": [],
   "author": "",

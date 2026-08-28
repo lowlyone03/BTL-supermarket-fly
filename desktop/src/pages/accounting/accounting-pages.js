@@ -3,11 +3,35 @@
   const templates = {
     'accounting-invoices': '<section class="warehouse-page"><div class="overview-loading">Đang tải hồ sơ hóa đơn...</div></section>',
     'accounting-payables': '<section class="warehouse-page"><div class="overview-loading">Đang tải công nợ phải trả...</div></section>',
+    'accounting-settlements': '<section class="warehouse-page accounting-settlements"><div class="overview-loading">Đang tải ca chờ đối soát...</div></section>',
+    'accounting-payroll': '<section class="warehouse-page accounting-payroll"><div class="overview-loading">Đang tải bảng lương...</div></section>',
     'manager-payables': '<section class="warehouse-page"><div class="overview-loading">Đang tổng hợp công nợ toàn hệ thống...</div></section>'
   };
   const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
   const money = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
   const fmtDate = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
+  const fmtDateTime = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
+  const payrollPeriodLabel = value => {
+    const [year, month] = String(value || '').split('-');
+    return year && month ? `tháng ${month}/${year}` : String(value || '');
+  };
+  const payrollPeriodPicker = value => {
+    const [selectedYearText, selectedMonthText] = String(value || '').split('-');
+    const selectedYear = Number(selectedYearText) || new Date().getFullYear();
+    const selectedMonth = Number(selectedMonthText) || new Date().getMonth() + 1;
+    const currentYear = new Date().getFullYear();
+    const years = Array.from(new Set([
+      ...Array.from({ length: 13 }, (_, index) => currentYear - 10 + index),
+      selectedYear
+    ])).sort((left, right) => left - right);
+    return `<div class="payroll-period-picker" aria-label="Chọn kỳ lương">
+      <label class="payroll-period-field"><span>Tháng</span><select id="payrollMonthSelect">${Array.from({ length: 12 }, (_, index) => {
+        const number = index + 1;
+        return `<option value="${String(number).padStart(2, '0')}" ${number === selectedMonth ? 'selected' : ''}>Tháng ${number}</option>`;
+      }).join('')}</select></label>
+      <label class="payroll-period-field"><span>Năm</span><select id="payrollYearSelect">${years.map(year => `<option value="${year}" ${year === selectedYear ? 'selected' : ''}>${year}</option>`).join('')}</select></label>
+    </div>`;
+  };
   const api = async (context, path, options = {}) => {
     const response = await fetch(`${context.apiBase}${path}`, {
       ...options,
@@ -20,6 +44,9 @@
   const heading = (kicker, title, subtitle, action = '') => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(kicker)}</p><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div>${action}</header>`;
   const matchClass = status => status === 'Đã khớp' ? 'ok' : status === 'Chênh lệch' ? 'cancelled' : 'draft';
   const debtClass = status => status === 'Đã thanh toán' ? 'ok' : status === 'Quá hạn' ? 'cancelled' : 'sent';
+  const voucherClass = status => status === 'Thanh toán thành công' ? 'ok'
+    : status === 'Từ chối' || status === 'Thanh toán thất bại' ? 'cancelled'
+      : status === 'Đã duyệt' ? 'ok' : status === 'Chờ duyệt' ? 'sent' : 'draft';
 
   const managerPayableDetail = async (context, id) => {
     try {
@@ -273,15 +300,115 @@
     await load();
   };
 
-  const initPayables = async (root, context) => {
+  const paymentVoucherForm = async (context, debtId, onDone, resubmit = false) => {
     try {
-      const data = await api(context, '/accounting/purchase-invoices?match=Đã khớp');
-      const debts = data.items.filter(item => item.MaCNPTra);
-      const total = debts.reduce((sum, item) => sum + Number(item.SoTienConLai || 0), 0);
-      root.innerHTML = `${heading('KẾ TOÁN / CÔNG NỢ', 'Công nợ Nhà cung cấp', 'Nghĩa vụ thanh toán chỉ phát sinh từ hóa đơn đã đối chiếu khớp.', '<button class="warehouse-secondary" id="backInvoices">Mở hồ sơ đối chiếu</button>')}<div class="warehouse-stats"><article><span>TỔNG CÔNG NỢ CÒN LẠI</span><strong>${money(total)}</strong><small>${debts.length} khoản phải trả</small></article><article><span>NGUYÊN TẮC GHI NHẬN</span><strong>3 bên</strong><small>Đơn mua · Phiếu nhập · Hóa đơn</small></article></div><article class="warehouse-table-card"><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>MÃ CÔNG NỢ</th><th>NHÀ CUNG CẤP</th><th>HÓA ĐƠN</th><th>HẠN THANH TOÁN</th><th>CÒN PHẢI TRẢ</th><th>TRẠNG THÁI</th></tr></thead><tbody>${debts.length ? debts.map(item => `<tr><td><strong>${esc(item.MaCNPTra)}</strong></td><td>${esc(item.TenNCC)}</td><td><button class="warehouse-link" data-invoice="${esc(item.MaHDMH)}">${esc(item.SoHoaDon)}</button></td><td>${fmtDate(item.HanThanhToan)}</td><td class="num"><strong>${money(item.SoTienConLai)}</strong></td><td><span class="status-pill ${item.TrangThaiCongNo === 'Quá hạn' ? 'cancelled' : 'sent'}">${esc(item.TrangThaiCongNo)}</span></td></tr>`).join('') : '<tr><td colspan="6" class="warehouse-empty">Chưa phát sinh công nợ phải trả.</td></tr>'}</tbody></table></div></article>`;
-      root.querySelector('#backInvoices').addEventListener('click', () => context.navigate('accounting-invoices'));
-      root.addEventListener('click', event => { const button = event.target.closest('[data-invoice]'); if (button) invoiceDetail(context, button.dataset.invoice); });
+      const data = await api(context, `/accounting/payables/${debtId}`);
+      const debt = data.payable;
+      const overlay = document.createElement('div');
+      overlay.className = 'warehouse-modal-backdrop';
+      const defaultContent = debt.NoiDung || `Thanh toán toàn bộ công nợ ${debt.MaCNPTra} theo Hóa đơn ${debt.SoHoaDon}`;
+      overlay.innerHTML = `<div class="warehouse-modal payment-voucher-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">UC28 · PHIẾU CHI NHÀ CUNG CẤP</p><h2>${resubmit ? `Chỉnh sửa ${esc(debt.MaPhieu)}` : `Lập Phiếu chi cho ${esc(debt.MaCNPTra)}`}</h2><span>${esc(debt.TenNCC)} · Hạn ${fmtDate(debt.HanThanhToan)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="payment-voucher-source"><div><span>ĐƠN MUA</span><strong>${esc(debt.MaPO)}</strong></div><div><span>PHIẾU NHẬP</span><strong>${esc(debt.MaPN)}</strong></div><div><span>HÓA ĐƠN NCC</span><strong>${esc(debt.SoHoaDon)}</strong></div><div><span>ĐỐI CHIẾU</span><strong><i class="status-pill ${matchClass(debt.TrangThaiDoiChieu)}">${esc(debt.TrangThaiDoiChieu)}</i></strong></div></div><div class="manager-readonly-note"><svg><use href="#i-shield"></use></svg><div><strong>Số tiền Phiếu chi được khóa theo toàn bộ công nợ còn lại</strong><span>Không trả trước, không thanh toán từng phần. Sau khi gửi, Quản lý duyệt cũng chưa làm giảm công nợ.</span></div></div><div class="payment-voucher-amount"><span>SỐ TIỀN CHI</span><strong>${money(debt.SoTienConLai)}</strong><small>${esc(debt.MaCNPTra)} · ${esc(debt.TrangThaiCongNo)}</small></div><div class="warehouse-form-grid payment-voucher-fields"><div class="warehouse-field"><label>Phương thức *</label><select id="voucherMethod"><option ${debt.PhuongThuc === 'Tiền mặt' ? 'selected' : ''}>Tiền mặt</option><option ${debt.PhuongThuc === 'Chuyển khoản' || !debt.PhuongThuc ? 'selected' : ''}>Chuyển khoản</option></select></div><div class="warehouse-field"><label>Nội dung chi *</label><input id="voucherContent" maxlength="500" value="${esc(defaultContent)}"></div><div class="warehouse-field full"><label>Ghi chú</label><textarea id="voucherNote" maxlength="500" rows="3" placeholder="Thông tin bổ sung cho Quản lý kiểm tra">${esc(debt.GhiChu || '')}</textarea></div></div>${resubmit ? `<p class="payment-voucher-rejection"><strong>Lý do bị từ chối:</strong> ${esc(debt.LyDoTuChoi || '—')}</p>` : ''}</div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Hủy</button><button class="warehouse-primary submit-voucher" type="button">${resubmit ? 'Chỉnh sửa và gửi lại' : 'Lập và gửi Quản lý duyệt'}</button></div></div>`;
+      document.body.appendChild(overlay);
+      const close = () => overlay.remove();
+      overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+      overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+      overlay.querySelector('.submit-voucher').addEventListener('click', async event => {
+        const payload = {
+          PhuongThuc: overlay.querySelector('#voucherMethod').value,
+          NoiDung: overlay.querySelector('#voucherContent').value.trim(),
+          GhiChu: overlay.querySelector('#voucherNote').value.trim()
+        };
+        if (!payload.NoiDung) return context.showToast('Vui lòng nhập nội dung chi.', 'error');
+        event.currentTarget.disabled = true;
+        try {
+          const result = await api(context, resubmit ? `/accounting/payment-vouchers/${debt.MaPhieu}/resubmit` : `/accounting/payables/${debt.MaCNPTra}/payment-voucher`, {
+            method: 'POST', body: JSON.stringify(payload)
+          });
+          context.showToast(result.message, 'success'); close(); await onDone();
+        } catch (error) { context.showToast(error.message, 'error'); event.currentTarget.disabled = false; }
+      });
     } catch (error) { context.showToast(error.message, 'error'); }
+  };
+
+  const paymentResultForm = async (context, debtId, onDone) => {
+    try {
+      const data = await api(context, `/accounting/payables/${debtId}`);
+      const debt = data.payable;
+      const overlay = document.createElement('div');
+      overlay.className = 'warehouse-modal-backdrop';
+      overlay.innerHTML = `<div class="warehouse-modal payment-result-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">THỰC HIỆN THANH TOÁN PHIẾU CHI</p><h2>${esc(debt.MaPhieu)}</h2><span>${esc(debt.TenNCC)} · ${money(debt.SoTienPhieuChi)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="manager-readonly-note"><svg><use href="#i-warning"></use></svg><div><strong>Đây là bước duy nhất được phép giảm công nợ</strong><span>Thanh toán thất bại chỉ ghi nhận kết quả và nguyên nhân; số tiền công nợ vẫn giữ nguyên để Kế toán thực hiện lại.</span></div></div><div class="payment-voucher-source"><div><span>PHƯƠNG THỨC</span><strong>${esc(debt.PhuongThuc)}</strong></div><div><span>CÔNG NỢ</span><strong>${esc(debt.MaCNPTra)}</strong></div><div><span>CÒN PHẢI TRẢ</span><strong>${money(debt.SoTienConLai)}</strong></div><div><span>QUẢN LÝ DUYỆT</span><strong>${esc(debt.NguoiDuyet || '—')}</strong></div></div><div class="warehouse-form-grid payment-voucher-fields"><div class="warehouse-field"><label>Kết quả giao dịch *</label><select id="paymentResult"><option value="success">Thanh toán thành công</option><option value="failed">Thanh toán thất bại</option></select></div><div class="warehouse-field bank-code-field"><label>Mã giao dịch/ủy nhiệm chi *</label><input id="paymentBankCode" maxlength="50" value="${esc(debt.MaGiaoDichNganHang || '')}" placeholder="Nhập mã giao dịch ngân hàng"></div><div class="warehouse-field full"><label id="paymentNoteLabel">Ghi chú thanh toán</label><textarea id="paymentNote" maxlength="500" rows="3" placeholder="Khi thất bại, bắt buộc ghi nguyên nhân để thực hiện lại"></textarea></div></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Hủy</button><button class="warehouse-primary submit-payment-result" type="button">Ghi nhận kết quả</button></div></div>`;
+      document.body.appendChild(overlay);
+      const close = () => overlay.remove();
+      const resultSelect = overlay.querySelector('#paymentResult');
+      const bankField = overlay.querySelector('.bank-code-field');
+      const sync = () => {
+        const failed = resultSelect.value === 'failed';
+        bankField.hidden = debt.PhuongThuc !== 'Chuyển khoản';
+        overlay.querySelector('#paymentNoteLabel').textContent = failed ? 'Nguyên nhân thất bại *' : 'Ghi chú thanh toán';
+      };
+      resultSelect.addEventListener('change', sync); sync();
+      overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+      overlay.querySelector('.submit-payment-result').addEventListener('click', async event => {
+        const success = resultSelect.value === 'success';
+        const bankCode = overlay.querySelector('#paymentBankCode').value.trim();
+        const note = overlay.querySelector('#paymentNote').value.trim();
+        if (success && debt.PhuongThuc === 'Chuyển khoản' && !bankCode) return context.showToast('Vui lòng nhập mã giao dịch ngân hàng.', 'error');
+        if (!success && !note) return context.showToast('Thanh toán thất bại phải ghi nguyên nhân.', 'error');
+        if (success && !window.confirm(`Xác nhận đã thanh toán thành công ${money(debt.SoTienPhieuChi)}? Công nợ sẽ chuyển sang Đã tất toán.`)) return;
+        event.currentTarget.disabled = true;
+        try {
+          const result = await api(context, `/accounting/payment-vouchers/${debt.MaPhieu}/pay`, {
+            method: 'POST', body: JSON.stringify({ ThanhCong: success, MaGiaoDichNganHang: bankCode, GhiChuThanhToan: note })
+          });
+          context.showToast(result.message, success ? 'success' : 'error'); close(); await onDone();
+        } catch (error) { context.showToast(error.message, 'error'); event.currentTarget.disabled = false; }
+      });
+    } catch (error) { context.showToast(error.message, 'error'); }
+  };
+
+  const initPayables = async (root, context) => {
+    let items = [];
+    const render = () => {
+      root.querySelector('#accountingPayableBody').innerHTML = items.length ? items.map(item => {
+        const due = Number(item.SoNgayConLai) <= 0;
+        let action = `<span class="payment-voucher-wait">Còn ${item.SoNgayConLai} ngày</span>`;
+        if (!item.MaPhieu && due && Number(item.SoTienConLai) > 0) action = `<button class="warehouse-primary" data-create-voucher="${esc(item.MaCNPTra)}">Lập Phiếu chi</button>`;
+        else if (item.TrangThaiPhieuChi === 'Từ chối') action = `<button class="warehouse-secondary" data-resubmit-voucher="${esc(item.MaCNPTra)}">Sửa &amp; gửi lại</button>`;
+        else if (['Đã duyệt', 'Thanh toán thất bại'].includes(item.TrangThaiPhieuChi)) action = `<button class="warehouse-primary" data-pay-voucher="${esc(item.MaCNPTra)}">${item.TrangThaiPhieuChi === 'Thanh toán thất bại' ? 'Thực hiện lại' : 'Thanh toán'}</button>`;
+        else if (item.TrangThaiPhieuChi === 'Chờ duyệt') action = '<span class="payment-voucher-wait">Chờ Quản lý</span>';
+        else if (item.TrangThaiPhieuChi === 'Thanh toán thành công') action = '<span class="status-pill ok">Đã tất toán</span>';
+        return `<tr><td><strong>${esc(item.MaCNPTra)}</strong><small>Phát sinh ${fmtDate(item.NgayPhatSinh)}</small></td><td><strong>${esc(item.TenNCC)}</strong><small>${esc(item.MaNCC)}</small></td><td><button class="warehouse-link" data-invoice="${esc(item.MaHDMH)}">HĐ ${esc(item.SoHoaDon)}</button><small>${esc(item.MaPO)} · ${esc(item.MaPN)}</small></td><td><strong>${fmtDate(item.HanThanhToan)}</strong><small>${Number(item.SoNgayConLai) < 0 ? `Quá ${Math.abs(item.SoNgayConLai)} ngày` : Number(item.SoNgayConLai) === 0 ? 'Đến hạn hôm nay' : `Còn ${item.SoNgayConLai} ngày`}</small></td><td class="num"><strong>${money(item.SoTienConLai)}</strong><small>Gốc ${money(item.SoTienNo)}</small></td><td>${item.MaPhieu ? `<strong>${esc(item.MaPhieu)}</strong><small>${esc(item.PhuongThuc)}</small><span class="status-pill ${voucherClass(item.TrangThaiPhieuChi)}">${esc(item.TrangThaiPhieuChi)}</span>` : '<span class="status-pill draft">Chưa lập Phiếu chi</span>'}</td><td>${action}</td></tr>`;
+      }).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có công nợ phù hợp.</td></tr>';
+    };
+    const load = async () => {
+      try {
+        const search = root.querySelector('#accountingPayableSearch').value;
+        const status = root.querySelector('#accountingVoucherStatus').value;
+        const data = await api(context, `/accounting/payables?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}`);
+        items = data.items; render();
+        root.querySelector('#payableRemaining').textContent = money(data.summary.TongConLai);
+        root.querySelector('#payableCount').textContent = `${data.summary.TongKhoan} khoản`;
+        root.querySelector('#voucherWaiting').textContent = data.summary.ChoDuyet;
+        root.querySelector('#voucherReady').textContent = data.summary.ChoThanhToan;
+      } catch (error) { context.showToast(error.message, 'error'); }
+    };
+    root.innerHTML = `${heading('KẾ TOÁN / UC28', 'Công nợ và Phiếu chi Nhà cung cấp', 'Lập đúng một Phiếu chi cho toàn bộ công nợ đến hạn; chỉ thanh toán thành công mới làm giảm công nợ.', '<button class="warehouse-secondary" id="backInvoices">Mở hồ sơ đối chiếu</button>')}<div class="accounting-flow"><span>Đối chiếu ba bên đã khớp</span><i>→</i><span>Công nợ đến hạn</span><i>→</i><strong>Lập Phiếu chi</strong><i>→</i><strong>Quản lý duyệt</strong><i>→</i><strong>Thanh toán thành công</strong></div><div class="warehouse-stats payment-voucher-stats"><article><span>CÒN PHẢI TRẢ</span><strong id="payableRemaining">0 đ</strong><small id="payableCount">0 khoản</small></article><article><span>CHỜ QUẢN LÝ DUYỆT</span><strong id="voucherWaiting">0</strong><small>Phê duyệt chưa giảm công nợ</small></article><article><span>SẴN SÀNG THANH TOÁN</span><strong id="voucherReady">0</strong><small>Đã duyệt hoặc cần thực hiện lại</small></article></div><article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"></use></svg><input id="accountingPayableSearch" placeholder="Tìm công nợ, Nhà cung cấp, hóa đơn hoặc Phiếu chi..."></label><div class="warehouse-toolbar-actions"><select id="accountingVoucherStatus"><option value="">Tất cả Phiếu chi</option><option>Chưa lập Phiếu chi</option><option>Chờ duyệt</option><option>Đã duyệt</option><option>Thanh toán thất bại</option><option>Thanh toán thành công</option><option>Từ chối</option></select><button class="warehouse-icon-button" id="refreshPayables"><svg><use href="#i-refresh"></use></svg></button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table payment-voucher-table"><thead><tr><th>CÔNG NỢ</th><th>NHÀ CUNG CẤP</th><th>BỘ CHỨNG TỪ</th><th>HẠN THANH TOÁN</th><th>CÒN LẠI</th><th>PHIẾU CHI</th><th>THAO TÁC</th></tr></thead><tbody id="accountingPayableBody"></tbody></table></div></article>`;
+    let timer;
+    root.querySelector('#accountingPayableSearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250); });
+    root.querySelector('#accountingVoucherStatus').addEventListener('change', load);
+    root.querySelector('#refreshPayables').addEventListener('click', load);
+    root.querySelector('#backInvoices').addEventListener('click', () => context.navigate('accounting-invoices'));
+    root.addEventListener('click', event => {
+      const invoice = event.target.closest('[data-invoice]');
+      if (invoice) return invoiceDetail(context, invoice.dataset.invoice);
+      const create = event.target.closest('[data-create-voucher]');
+      if (create) return paymentVoucherForm(context, create.dataset.createVoucher, load);
+      const resubmit = event.target.closest('[data-resubmit-voucher]');
+      if (resubmit) return paymentVoucherForm(context, resubmit.dataset.resubmitVoucher, load, true);
+      const pay = event.target.closest('[data-pay-voucher]');
+      if (pay) return paymentResultForm(context, pay.dataset.payVoucher, load);
+    });
+    await load();
   };
 
   const initManagerPayables = async (root, context) => {
@@ -354,11 +481,142 @@
     await load();
   };
 
+  const printShiftReceipt = (detail, receiptId, status) => window.FLY_PRINT?.show({
+    title: 'PHIẾU THU TIỀN MẶT BÀN GIAO CA', number: receiptId,
+    documentDate: new Date(), status,
+    fields: [
+      { label: 'Mã ca', value: detail.shift.MaCa }, { label: 'Thu ngân', value: detail.shift.TenNV },
+      { label: 'Quầy', value: detail.shift.TenQuay || '—' }, { label: 'Kết thúc', value: detail.shift.ThoiGianKetThuc, format: 'date' }
+    ],
+    columns: [
+      { label: 'Phương thức', key: 'PhuongThuc' }, { label: 'Mã giao dịch', key: 'MaGiaoDich' },
+      { label: 'Số tiền', key: 'SoTien', format: 'money', align: 'right' }, { label: 'Trạng thái', key: 'TrangThai' }
+    ], rows: detail.payments,
+    totals: [
+      { label: 'Doanh thu / thực thu ca', value: detail.invoices.filter(row => row.TrangThai === 'Hoàn thành').reduce((sum, row) => sum + Number(row.TongThanhToan || 0), 0), format: 'money' },
+      { label: 'Tiền mặt theo hệ thống', value: detail.shift.TienMatHeThong, format: 'money' },
+      { label: 'Tiền thực nộp', value: detail.shift.TienThucNop, format: 'money' },
+      { label: 'Chênh lệch', value: Number(detail.shift.TienThucNop) - Number(detail.shift.TienMatHeThong), format: 'money' }
+    ], signatures: ['Thu ngân bàn giao', 'Kế toán nhận']
+  });
+
+  const askDifferenceReason = difference => new Promise(resolve => {
+    const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
+    overlay.innerHTML = `<div class="warehouse-modal" style="width:min(560px,95vw)"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">CHÊNH LỆCH TIỀN MẶT</p><h2>${money(difference)}</h2></div><button type="button" class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><p class="receipt-rule">Theo bài trình / Chương 6: lệch phải ghi lý do trực tiếp trên Phiếu thu, không lập biên bản riêng. Chỉ xác nhận sau khi Thu ngân giải trình.</p><div class="warehouse-field"><label>Lý do chênh lệch *</label><textarea id="settlementReason" maxlength="500" rows="4"></textarea></div></div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Hủy</button><button type="button" class="warehouse-primary save">Lưu lý do</button></div></div>`;
+    document.body.appendChild(overlay);
+    const close = value => { overlay.remove(); resolve(value); };
+    overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', () => close(null)));
+    overlay.querySelector('.save').addEventListener('click', () => {
+      const reason = overlay.querySelector('#settlementReason').value.trim();
+      if (!reason) return;
+      close(reason);
+    });
+  });
+
+  const openSettlementDetail = async (context, maCa, onDone) => {
+    const detail = await api(context, `/accounting/shift-settlements/${maCa}`);
+    const shift = detail.shift;
+    const revenue = detail.invoices.filter(row => row.TrangThai === 'Hoàn thành').reduce((sum, row) => sum + Number(row.TongThanhToan || 0), 0);
+    const difference = Number(shift.TienThucNop) - Number(shift.TienMatHeThong);
+    const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
+    overlay.innerHTML = `<div class="warehouse-modal order-detail-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">ĐỐI SOÁT DOANH THU THEO CA</p><h2>${esc(shift.MaCa)}</h2></div><button type="button" class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body">
+      <div class="warehouse-stats"><article><span>THỰC THU / DOANH THU CA</span><strong>${money(revenue)}</strong><small>${detail.invoices.filter(row => row.TrangThai === 'Hoàn thành').length} hóa đơn hoàn thành</small></article><article><span>TIỀN MẶT THU</span><strong>${money(shift.TongTienMat)}</strong></article><article><span>CHUYỂN KHOẢN</span><strong>${money(shift.TongTienChuyenKhoan)}</strong></article><article><span>QR</span><strong>${money(shift.TongTienQR)}</strong></article><article><span>THẺ</span><strong>${money(shift.TongTienThe)}</strong></article><article><span>HOÀN TIỀN MẶT</span><strong>${money(shift.TongTienHoanMat)}</strong></article></div>
+      <p class="receipt-rule">Thực thu = tổng hóa đơn Hoàn thành. Tiền mặt phải bàn giao = TM thành công − hoàn TM (không gồm quỹ đầu ca, QR/thẻ/CK). Phiếu thu không ghi doanh thu lần hai.</p>
+      <div class="warehouse-detail-grid"><div><span>THU NGÂN</span><strong>${esc(shift.TenNV)}</strong></div><div><span>QUẦY</span><strong>${esc(shift.TenQuay || '—')}</strong></div><div><span>BẮT ĐẦU</span><strong>${fmtDateTime(shift.ThoiGianBatDau)}</strong></div><div><span>KẾT THÚC</span><strong>${fmtDateTime(shift.ThoiGianKetThuc)}</strong></div><div><span>TM HỆ THỐNG</span><strong>${money(shift.TienMatHeThong)}</strong></div><div><span>THỰC NỘP</span><strong>${money(shift.TienThucNop)}</strong></div><div><span>CHÊNH LỆCH</span><strong>${money(difference)}</strong></div><div><span>PHIẾU THU</span><strong>${esc(shift.MaPT || 'Chưa lập')}</strong></div></div>
+      <div class="warehouse-table-wrap warehouse-form-lines"><table class="warehouse-table"><thead><tr><th>HÓA ĐƠN</th><th>THỜI ĐIỂM</th><th>TỔNG THANH TOÁN</th><th>TRẠNG THÁI</th></tr></thead><tbody>${detail.invoices.length ? detail.invoices.map(row => `<tr><td><strong>${esc(row.MaHD)}</strong></td><td>${fmtDateTime(row.NgayLap)}</td><td class="num">${money(row.TongThanhToan)}</td><td>${esc(row.TrangThai)}</td></tr>`).join('') : '<tr><td colspan="4" class="warehouse-empty">Không có hóa đơn.</td></tr>'}</tbody></table></div>
+    </div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Đóng</button>${shift.TrangThaiPhieuThu === 'Đã xác nhận' ? '<button type="button" class="warehouse-primary print-receipt">In Phiếu thu</button>' : shift.MaPT ? '<button type="button" class="warehouse-primary confirm-receipt">Xác nhận Phiếu thu</button>' : '<button type="button" class="warehouse-primary create-receipt">Lập Phiếu thu</button>'}</div></div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+    overlay.querySelector('.print-receipt')?.addEventListener('click', () => printShiftReceipt(detail, shift.MaPT, 'Đã xác nhận'));
+    overlay.querySelector('.create-receipt')?.addEventListener('click', async () => {
+      try {
+        let reason = '';
+        if (difference) {
+          reason = await askDifferenceReason(difference);
+          if (!reason) return;
+        }
+        const created = await api(context, `/accounting/shift-settlements/${maCa}/receipt`, { method: 'POST', body: JSON.stringify({ LyDoChenhLech: reason }) });
+        context.showToast(created.message, 'success'); close(); await onDone();
+        await openSettlementDetail(context, maCa, onDone);
+      } catch (error) { context.showToast(error.message, 'error'); }
+    });
+    overlay.querySelector('.confirm-receipt')?.addEventListener('click', async () => {
+      try {
+        const result = await api(context, `/accounting/shift-receipts/${shift.MaPT}/confirm`, { method: 'POST' });
+        context.showToast(result.message, 'success');
+        printShiftReceipt(detail, shift.MaPT, 'Đã xác nhận');
+        close(); await onDone();
+      } catch (error) { context.showToast(error.message, 'error'); }
+    });
+  };
+
+  const initSettlements = async (root, context) => {
+    const load = async () => {
+      try {
+        const data = await api(context, '/accounting/shift-settlements');
+        const items = data.items || [];
+        const summary = data.summary || {};
+        root.innerHTML = `${heading('KẾ TOÁN / ĐỐI SOÁT BÁN LẺ', 'Doanh thu theo ca và Phiếu thu', 'Thực thu = tổng hóa đơn hoàn thành của ca. Phiếu thu chỉ đối soát tiền mặt bàn giao, không ghi doanh thu lần hai.')}
+          <div class="warehouse-stats"><article><span>THỰC THU CÁC CA ĐÃ CHỐT</span><strong>${money(summary.DoanhThu)}</strong><small>${items.length} ca đã đóng</small></article><article><span>TIỀN MẶT HỆ THỐNG</span><strong>${money(summary.TienMatHeThong)}</strong><small>TM thành công − hoàn TM</small></article><article><span>THỰC NỘP</span><strong>${money(summary.TienThucNop)}</strong><small>Tiền mặt thu ngân bàn giao</small></article><article><span>ĐIỆN TỬ (CK + QR + THẺ)</span><strong>${money(Number(summary.TongTienChuyenKhoan || 0) + Number(summary.TongTienQR || 0) + Number(summary.TongTienThe || 0))}</strong><small>Đối chiếu sao kê, không vào két</small></article></div>
+          <article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>CA ĐÃ ĐÓNG</p><h2>Hàng đợi đối soát doanh thu và tiền mặt</h2></div><button class="warehouse-secondary" id="refreshSettlements"><svg><use href="#i-refresh"/></svg>Làm mới</button></div>
+          <div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>CA / THU NGÂN</th><th>KẾT THÚC</th><th>THỰC THU</th><th>TM / CK / QR / THẺ</th><th>TM HỆ THỐNG</th><th>THỰC NỘP</th><th>CHÊNH LỆCH</th><th>ĐỐI SOÁT</th><th>THAO TÁC</th></tr></thead><tbody>${items.length ? items.map(item => `<tr><td><strong>${esc(item.MaCa)}</strong><small>${esc(item.TenNV)} · ${esc(item.TenQuay || '—')}</small></td><td>${fmtDateTime(item.ThoiGianKetThuc)}</td><td class="num"><strong>${money(item.DoanhThu)}</strong><small>${item.SoHoaDon || 0} HĐ</small></td><td class="num"><small>TM ${money(item.TongTienMat)}<br>CK ${money(item.TongTienChuyenKhoan)}<br>QR ${money(item.TongTienQR)} · Thẻ ${money(item.TongTienThe)}</small></td><td class="num">${money(item.TienMatHeThong)}</td><td class="num">${money(item.TienThucNop)}</td><td class="num"><strong>${money(item.ChenhLech)}</strong></td><td><span class="status-pill ${item.TrangThaiDoiSoat === 'Đã đối soát' ? 'ok' : 'sent'}">${esc(item.TrangThaiDoiSoat)}</span></td><td><button class="warehouse-primary settlement-action" data-ca="${item.MaCa}">Xem thực thu</button></td></tr>`).join('') : '<tr><td colspan="9" class="warehouse-empty">Chưa có ca đã đóng. Thu ngân phải đóng ca bán hàng trước.</td></tr>'}</tbody></table></div></article>`;
+        root.querySelector('#refreshSettlements').addEventListener('click', load);
+        root.querySelectorAll('.settlement-action').forEach(button => button.addEventListener('click', async () => {
+          try { await openSettlementDetail(context, button.dataset.ca, load); }
+          catch (error) { context.showToast(error.message, 'error'); }
+        }));
+      } catch (error) {
+        root.innerHTML = `<div class="welcome-card"><h2>Không thể tải đối soát ca</h2><p>${esc(error.message)}</p></div>`;
+      }
+    };
+    await load();
+  };
+
+  const initPayroll = async (root, context) => {
+    let month = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
+    const load = async () => {
+      try {
+        const data = await api(context, `/accounting/payroll/${month}`);
+        root.innerHTML = `${heading('KẾ TOÁN / LƯƠNG', `Bảng lương ${payrollPeriodLabel(month)}`, 'Chỉ sử dụng lượt công đã được Quản lý duyệt; ca đêm được tách theo từng phút.')}
+          <article class="warehouse-table-card"><div class="warehouse-toolbar">${payrollPeriodPicker(month)}<div class="warehouse-toolbar-actions"><button class="warehouse-secondary" id="buildPayroll">Lập / tính lại</button><button class="warehouse-primary" id="lockPayroll" ${data.period?.TrangThai === 'Kế toán đã lập' ? '' : 'disabled'}>Khóa kỳ lương</button></div></div>
+          <div class="warehouse-panel-title"><div><p>TRẠNG THÁI KỲ</p><h2>${esc(data.period?.TrangThai || 'Chưa lập')}</h2></div><span class="status-pill ${data.period?.TrangThai === 'Đã thanh toán' ? 'ok' : 'sent'}">${data.items.length} nhân viên</span></div>
+          <div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NHÂN VIÊN</th><th>GIỜ NGÀY</th><th>GIỜ ĐÊM</th><th>LƯƠNG NGÀY</th><th>LƯƠNG ĐÊM</th><th>TỔNG LƯƠNG</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><strong>${esc(item.TenNV)}</strong><small>${esc(item.MaNV)}</small></td><td class="num">${(item.PhutNgay / 60).toFixed(2)}</td><td class="num">${(item.PhutDem / 60).toFixed(2)}</td><td class="num">${money(item.LuongCoBan)}</td><td class="num">${money(item.LuongBanDem)}</td><td class="num"><strong>${money(item.TongLuong)}</strong></td><td><span class="status-pill ${item.TrangThai === 'Đã thanh toán' ? 'ok' : 'draft'}">${esc(item.TrangThai)}</span></td><td>${item.TrangThai === 'Đã khóa' ? `<button class="warehouse-secondary pay-salary" data-employee="${item.MaNV}">Ghi nhận trả lương</button>` : item.MaGiaoDich ? esc(item.MaGiaoDich) : '—'}</td></tr>`).join('') : '<tr><td colspan="8" class="warehouse-empty">Chưa có bảng lương. Hãy duyệt công trước rồi chọn “Lập / tính lại”.</td></tr>'}</tbody></table></div></article>`;
+        const changePeriod = () => {
+          month = `${root.querySelector('#payrollYearSelect').value}-${root.querySelector('#payrollMonthSelect').value}`;
+          load();
+        };
+        root.querySelector('#payrollMonthSelect').addEventListener('change', changePeriod);
+        root.querySelector('#payrollYearSelect').addEventListener('change', changePeriod);
+        root.querySelector('#buildPayroll').addEventListener('click', async () => {
+          try { const result = await api(context, `/accounting/payroll/${month}/build`, { method: 'POST' }); context.showToast(result.message, 'success'); await load(); }
+          catch (error) { context.showToast(error.message, 'error'); }
+        });
+        root.querySelector('#lockPayroll').addEventListener('click', async () => {
+          if (!window.confirm(`Khóa kỳ lương ${month}? Sau khi khóa không thể tính lại.`)) return;
+          try { const result = await api(context, `/accounting/payroll/${month}/lock`, { method: 'POST' }); context.showToast(result.message, 'success'); await load(); }
+          catch (error) { context.showToast(error.message, 'error'); }
+        });
+        root.querySelectorAll('.pay-salary').forEach(button => button.addEventListener('click', async () => {
+          const code = window.prompt(`Nhập mã giao dịch trả lương cho ${button.dataset.employee}:`);
+          if (!code) return;
+          try { const result = await api(context, `/accounting/payroll/${month}/${button.dataset.employee}/pay`, { method: 'POST', body: JSON.stringify({ MaGiaoDich: code }) }); context.showToast(result.message, 'success'); await load(); }
+          catch (error) { context.showToast(error.message, 'error'); }
+        }));
+      } catch (error) {
+        root.innerHTML = `<div class="welcome-card"><h2>Không thể tải bảng lương</h2><p>${esc(error.message)}</p></div>`;
+      }
+    };
+    await load();
+  };
+
   window.FLY_ROLE_PAGES = {
     templates: { ...(previous?.templates || {}), ...templates },
     init: async (pageName, context) => {
       if (pageName === 'accounting-invoices') return initInvoices(document.querySelector('.warehouse-page'), context);
       if (pageName === 'accounting-payables') return initPayables(document.querySelector('.warehouse-page'), context);
+      if (pageName === 'accounting-settlements') return initSettlements(document.querySelector('.accounting-settlements'), context);
+      if (pageName === 'accounting-payroll') return initPayroll(document.querySelector('.accounting-payroll'), context);
       if (pageName === 'manager-payables') return initManagerPayables(document.querySelector('.warehouse-page'), context);
       return previous?.init?.(pageName, context);
     }

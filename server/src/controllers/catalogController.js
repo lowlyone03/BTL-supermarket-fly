@@ -235,7 +235,79 @@ const setProductStatus = async (req, res) => {
     }
 };
 
+const getPromotions = async (req, res) => {
+    try {
+        const search = text(req.query.search, 100, '');
+        const pool = await poolPromise;
+        const result = await pool.request().input('Search', sql.NVarChar, `%${search}%`).query(`
+            SELECT MaKM,TenKM,LoaiKM,GiaTri,NgayBatDau,NgayKetThuc,TrangThai,
+                   CASE WHEN TrangThai=N'Hiệu lực' AND CONVERT(date,GETDATE()) BETWEEN NgayBatDau AND NgayKetThuc
+                        THEN 1 ELSE 0 END AS DangApDung
+            FROM KhuyenMai
+            WHERE @Search=N'%%' OR MaKM LIKE @Search OR TenKM LIKE @Search
+            ORDER BY NgayBatDau DESC`);
+        res.json({ items: result.recordset });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Không thể tải chương trình khuyến mãi.' });
+    }
+};
+
+const savePromotion = async (req, res) => {
+    try {
+        const MaKM = text(req.params.id || req.body.MaKM, 20);
+        const TenKM = text(req.body.TenKM, 150);
+        const LoaiKM = text(req.body.LoaiKM, 20);
+        const GiaTri = number(req.body.GiaTri, 'Giá trị khuyến mãi');
+        const NgayBatDau = text(req.body.NgayBatDau, 10);
+        const NgayKetThuc = text(req.body.NgayKetThuc, 10);
+        const TrangThai = req.body.TrangThai === 'Ngừng' ? 'Ngừng' : 'Hiệu lực';
+        if (!MaKM || !TenKM || !NgayBatDau || !NgayKetThuc) throw new Error('Mã, tên và thời hạn khuyến mãi là bắt buộc.');
+        if (!['Phần trăm', 'Số tiền'].includes(LoaiKM)) throw new Error('Loại khuyến mãi chỉ nhận Phần trăm hoặc Số tiền.');
+        if (LoaiKM === 'Phần trăm' && GiaTri > 100) throw new Error('Khuyến mãi phần trăm không vượt 100%.');
+        if (NgayKetThuc < NgayBatDau) throw new Error('Ngày kết thúc phải sau hoặc bằng ngày bắt đầu.');
+        const pool = await poolPromise;
+        const exists = await pool.request().input('MaKM', sql.VarChar, MaKM)
+            .query('SELECT MaKM FROM KhuyenMai WHERE MaKM=@MaKM');
+        const isUpdate = Boolean(req.params.id);
+        if (isUpdate && !exists.recordset.length) return res.status(404).json({ message: 'Không tìm thấy chương trình khuyến mãi.' });
+        if (!isUpdate && exists.recordset.length) throw new Error('Mã khuyến mãi đã tồn tại.');
+        await pool.request()
+            .input('MaKM', sql.VarChar, MaKM).input('TenKM', sql.NVarChar, TenKM)
+            .input('LoaiKM', sql.NVarChar, LoaiKM).input('GiaTri', sql.Decimal(18, 2), GiaTri)
+            .input('NgayBatDau', sql.Date, NgayBatDau).input('NgayKetThuc', sql.Date, NgayKetThuc)
+            .input('TrangThai', sql.NVarChar, TrangThai).query(isUpdate
+                ? `UPDATE KhuyenMai SET TenKM=@TenKM,LoaiKM=@LoaiKM,GiaTri=@GiaTri,
+                       NgayBatDau=@NgayBatDau,NgayKetThuc=@NgayKetThuc,TrangThai=@TrangThai
+                   WHERE MaKM=@MaKM`
+                : `INSERT KhuyenMai(MaKM,TenKM,LoaiKM,GiaTri,NgayBatDau,NgayKetThuc,TrangThai)
+                   VALUES(@MaKM,@TenKM,@LoaiKM,@GiaTri,@NgayBatDau,@NgayKetThuc,@TrangThai)`);
+        await writeAudit(pool.request(), req.user, isUpdate ? 'Cập nhật khuyến mãi' : 'Tạo khuyến mãi',
+            'KhuyenMai', MaKM, `${TenKM} · ${LoaiKM} ${GiaTri}`);
+        res.status(isUpdate ? 200 : 201).json({ message: isUpdate ? 'Đã cập nhật chương trình khuyến mãi.' : 'Đã tạo chương trình khuyến mãi.', MaKM });
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
+
+const setPromotionStatus = async (req, res) => {
+    try {
+        const status = req.body.TrangThai === 'Hiệu lực' ? 'Hiệu lực' : 'Ngừng';
+        const pool = await poolPromise;
+        const result = await pool.request().input('MaKM', sql.VarChar, req.params.id)
+            .input('TrangThai', sql.NVarChar, status)
+            .query('UPDATE KhuyenMai SET TrangThai=@TrangThai OUTPUT inserted.MaKM WHERE MaKM=@MaKM');
+        if (!result.recordset.length) return res.status(404).json({ message: 'Không tìm thấy chương trình khuyến mãi.' });
+        await writeAudit(pool.request(), req.user, status === 'Ngừng' ? 'Ngừng khuyến mãi' : 'Kích hoạt khuyến mãi',
+            'KhuyenMai', req.params.id, `Chuyển trạng thái sang ${status}`);
+        res.json({ message: `Đã chuyển khuyến mãi sang trạng thái ${status}.` });
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
+
 module.exports = {
     getCategories, createCategory, updateCategory, setCategoryStatus,
-    getProducts, createProduct, updateProduct, setProductStatus
+    getProducts, createProduct, updateProduct, setProductStatus,
+    getPromotions, savePromotion, setPromotionStatus
 };

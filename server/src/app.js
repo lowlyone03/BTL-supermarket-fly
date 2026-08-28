@@ -50,6 +50,10 @@ app.get('/api/test-db', async (req, res) => {
     }
 });
 
+app.use('/api', (req, res) => {
+    res.status(404).json({ message: `Không tìm thấy ${req.method} ${req.originalUrl}. Hãy đóng ứng dụng và chạy lại npm start.` });
+});
+
 // Start Server
 app.listen(PORT, () => {
     console.log(`🚀 Server đang chạy tại http://localhost:${PORT}`);

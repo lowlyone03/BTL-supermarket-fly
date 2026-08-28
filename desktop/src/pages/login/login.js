@@ -1,15 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const DESIGN_WIDTH = 1920;
-  const DESIGN_HEIGHT = 1000;
-  const fitDesignToViewport = () => {
-    const scale = Math.min(window.innerWidth / DESIGN_WIDTH, window.innerHeight / DESIGN_HEIGHT, 1);
-    document.body.style.left = `${Math.max(0, Math.round((window.innerWidth - DESIGN_WIDTH * scale) / 2))}px`;
-    document.body.style.top = `${Math.max(0, Math.round((window.innerHeight - DESIGN_HEIGHT * scale) / 2))}px`;
-    document.body.style.transform = `scale(${scale})`;
-  };
-  fitDesignToViewport();
-  window.addEventListener('resize', fitDesignToViewport);
-
   const form = document.getElementById('loginForm');
   const username = document.getElementById('username');
   const password = document.getElementById('password');

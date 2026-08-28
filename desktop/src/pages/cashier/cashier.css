@@ -1,0 +1,233 @@
+.cashier-pos-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(360px, .8fr);
+  gap: 18px;
+}
+
+.cashier-product-panel,
+.cashier-cart-panel {
+  min-height: 620px;
+}
+
+.cashier-product-panel .warehouse-panel-title input {
+  width: min(340px, 48%);
+  padding: 11px 14px;
+  border: 1px solid #d7dfda;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.cashier-product-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.cashier-product {
+  display: flex;
+  min-height: 126px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid #dce5df;
+  border-radius: 12px;
+  background: #fff;
+  color: #1c2d24;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cashier-product:hover {
+  border-color: #2d7a58;
+  background: #f5faf7;
+}
+
+.cashier-product:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.cashier-product span {
+  color: #1b6b4b;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.cashier-product small,
+.cashier-customer-row small,
+.cashier-cart-line small {
+  display: block;
+  color: #728078;
+}
+
+.cashier-customer-row,
+.cashier-cart-line,
+.cashier-cart-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e4e9e6;
+}
+
+.cashier-cart-lines {
+  max-height: 390px;
+  overflow: auto;
+}
+
+.cashier-cart-line > div:first-child {
+  min-width: 0;
+  flex: 1;
+}
+
+.cashier-cart-qty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cashier-cart-qty button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d7dfda;
+  border-radius: 7px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.cashier-cart-total {
+  margin-top: auto;
+  border-top: 2px solid #dce5df;
+  border-bottom: 0;
+}
+
+.cashier-cart-total strong {
+  color: #17694e;
+  font-size: 24px;
+}
+
+.cashier-checkout {
+  margin: 0 16px 16px;
+}
+
+.cashier-payment-modal {
+  width: min(760px, calc(100vw - 40px));
+}
+
+.cashier-payment-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 1.2fr 130px 38px;
+  gap: 9px;
+  margin-bottom: 9px;
+}
+
+.cashier-payment-head {
+  display: grid;
+  grid-template-columns: 140px 1fr 1.2fr 130px 38px;
+  gap: 9px;
+  margin-bottom: 8px;
+  color: #6f7d75;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cashier-search-empty {
+  padding: 0 16px 16px;
+  color: #8a3b2d;
+  font-size: 13px;
+}
+
+.cashier-payment-row select,
+.cashier-payment-row input {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #d7dfda;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.cashier-payment-help {
+  margin: 12px 0 0;
+  color: #6f7d75;
+  font-size: 12px;
+}
+
+.cashier-pos-extras {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e4e9e6;
+}
+
+.cashier-pos-extras label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #5d6b64;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cashier-pos-extras select,
+.cashier-pos-extras input {
+  padding: 8px 10px;
+  border: 1px solid #d7dfda;
+  border-radius: 8px;
+}
+
+.cashier-pos-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
+.cashier-pos-actions .cashier-checkout {
+  margin: 0;
+  flex: 1;
+}
+
+.cashier-quote-break {
+  display: block;
+  padding: 0 16px 10px;
+  color: #6f7d75;
+}
+
+.cashier-customer-results {
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.cashier-customer-hit,
+.cashier-return-line {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #dce5df;
+  border-radius: 10px;
+  background: #fff;
+  text-align: left;
+}
+
+.cashier-payment-row-full {
+  grid-template-columns: 130px 1fr 1fr 130px 38px;
+}
+
+@media (max-width: 1180px) {
+  .cashier-pos-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .cashier-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

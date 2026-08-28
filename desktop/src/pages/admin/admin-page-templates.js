@@ -26,6 +26,28 @@
       <div class="modal-backdrop" id="categoryModal" style="display:none"><div class="modal modal-wide"><div class="modal-header"><div><p class="module-kicker">NHÓM HÀNG</p><h3>Danh mục sản phẩm</h3></div><button class="close-btn" onclick="closeCategoryModal()">×</button></div><div class="modal-body"><form id="categoryForm"><div class="form-grid"><div class="form-group"><label>Mã danh mục *</label><input id="categoryCode" maxlength="20" required></div><div class="form-group"><label>Tên danh mục *</label><input id="categoryName" maxlength="100" required></div><div class="form-group form-span-2"><label>Mô tả</label><input id="categoryDescription" maxlength="255"></div></div><div class="modal-footer"><button class="btn btn-primary" type="submit">Thêm danh mục</button></div></form><div class="category-list" id="categoryList"></div></div></div></div>
       <script src="../admin/products.js"></script>`,
 
+    'promotions.html': `
+      <section class="admin-module">
+        <header class="module-heading">
+          <div><p class="module-kicker">UC04 / KHUYẾN MÃI</p><h1>Chương trình khuyến mãi</h1><p>Tạo, cập nhật hoặc ngừng chương trình. Thu ngân chỉ áp dụng KM đang hiệu lực trong hạn.</p></div>
+          <div class="heading-actions"><span class="record-count" id="promoCount">0 chương trình</span><button class="btn btn-primary" onclick="openPromoModal()"><svg aria-hidden="true"><use href="#i-plus"/></svg> Thêm khuyến mãi</button></div>
+        </header>
+        <article class="surface-card data-surface">
+          <div class="table-toolbar"><label class="filter-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="promoSearch" placeholder="Tìm mã hoặc tên chương trình..."></label><button class="icon-button" onclick="loadPromotions()" aria-label="Tải lại"><svg><use href="#i-refresh"/></svg></button></div>
+          <div class="table-container"><table><thead><tr><th>Chương trình</th><th>Loại / giá trị</th><th>Thời hạn</th><th>Trạng thái</th><th class="align-right">Thao tác</th></tr></thead><tbody id="promoTableBody"></tbody></table></div>
+        </article>
+      </section>
+      <div class="modal-backdrop" id="promoModal" style="display:none"><div class="modal"><div class="modal-header"><div><p class="module-kicker">CHƯƠNG TRÌNH</p><h3 id="promoModalTitle">Thêm khuyến mãi</h3></div><button class="close-btn" onclick="closePromoModal()">×</button></div><div class="modal-body"><form id="promoForm"><div class="form-grid">
+        <div class="form-group"><label>Mã KM *</label><input id="promoCode" maxlength="20" required></div>
+        <div class="form-group"><label>Loại *</label><select id="promoType"><option>Phần trăm</option><option>Số tiền</option></select></div>
+        <div class="form-group form-span-2"><label>Tên chương trình *</label><input id="promoName" maxlength="150" required></div>
+        <div class="form-group"><label>Giá trị *</label><input id="promoValue" type="number" min="0" step="1" required></div>
+        <div class="form-group"><label>Trạng thái</label><select id="promoStatus"><option>Hiệu lực</option><option>Ngừng</option></select></div>
+        <div class="form-group"><label>Ngày bắt đầu *</label><input id="promoStart" type="date" required></div>
+        <div class="form-group"><label>Ngày kết thúc *</label><input id="promoEnd" type="date" required></div>
+      </div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closePromoModal()">Hủy</button><button class="btn btn-primary" type="submit">Lưu</button></div></form></div></div></div>
+      <script src="../admin/promotions.js"></script>`,
+
     'employees.html': `
       <section class="admin-module">
         <header class="module-heading">

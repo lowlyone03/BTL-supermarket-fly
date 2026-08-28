@@ -1,10 +1,12 @@
 const { sql, poolPromise } = require('../config/db');
+const { closeOpenAttendance } = require('../services/attendanceSync');
 
 const clean = (value, max = 120) => String(value ?? '').trim().slice(0, max);
 
 const getDashboard = async (req, res) => {
     try {
         const pool = await poolPromise;
+        await closeOpenAttendance(pool).catch(() => {});
         const [summaryResult, rolesResult, pendingResult, logsResult] = await Promise.all([
             pool.request().query(`
                 SELECT
@@ -14,7 +16,8 @@ const getDashboard = async (req, res) => {
                         AND NOT EXISTS (SELECT 1 FROM TaiKhoan t WHERE t.MaNV = n.MaNV)) AS ChuaCoTaiKhoan,
                     (SELECT COUNT(*) FROM TaiKhoan) AS TongTaiKhoan,
                     (SELECT COUNT(*) FROM TaiKhoan WHERE TrangThai = 0) AS TaiKhoanBiKhoa,
-                    (SELECT COUNT(*) FROM NhatKy WHERE CONVERT(date, ThoiGian) = CONVERT(date, GETDATE())) AS ThaoTacHomNay
+                    (SELECT COUNT(*) FROM NhatKy WHERE CONVERT(date, ThoiGian) = CONVERT(date, GETDATE())) AS ThaoTacHomNay,
+                    (SELECT COUNT(*) FROM CaLamViec WHERE TrangThai = N'Đang mở' AND ThoiGianKetThuc IS NULL) AS CaDangMo
             `),
             pool.request().query(`
                 SELECT v.TenVaiTro, COUNT(n.MaNV) AS SoNhanVien
@@ -178,4 +181,35 @@ const getPayableDetail = async (req, res) => {
     }
 };
 
-module.exports = { getDashboard, getApprovalQueues, getPayablesOverview, getPayableDetail };
+const getSalesShifts = async (req, res) => {
+    try {
+        const from = clean(req.query.from, 10);
+        const to = clean(req.query.to, 10);
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('From', sql.Date, from || null)
+            .input('To', sql.Date, to || null)
+            .query(`
+                SELECT ca.MaCa,ca.MaNV,nv.TenNV,ca.MaQuay,q.TenQuay,
+                       ca.ThoiGianBatDau,ca.ThoiGianKetThuc,ca.TienDauCa,ca.TienCuoiCa,
+                       ca.TongTienMat,ca.TongTienQR,ca.TongTienThe,ca.TongTienChuyenKhoan,
+                       ca.TongTienHoanMat,ca.TienMatHeThong,ca.TienThucNop,
+                       ca.TienThucNop-ca.TienMatHeThong ChenhLech,
+                       ca.TrangThai,ca.TrangThaiDoiSoat,
+                       (SELECT COUNT(*) FROM HoaDon hd WHERE hd.MaCa=ca.MaCa AND hd.TrangThai=N'Hoàn thành') SoHoaDon,
+                       (SELECT COALESCE(SUM(hd.TongThanhToan),0) FROM HoaDon hd
+                        WHERE hd.MaCa=ca.MaCa AND hd.TrangThai=N'Hoàn thành') DoanhThu
+                FROM CaLamViec ca
+                JOIN NhanVien nv ON nv.MaNV=ca.MaNV
+                LEFT JOIN QuayBanHang q ON q.MaQuay=ca.MaQuay
+                WHERE (@From IS NULL OR CONVERT(date,ca.ThoiGianBatDau)>=@From)
+                  AND (@To IS NULL OR CONVERT(date,ca.ThoiGianBatDau)<=@To)
+                ORDER BY ca.ThoiGianBatDau DESC`);
+        res.json({ items: result.recordset });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Không thể tải báo cáo ca bán hàng.' });
+    }
+};
+
+module.exports = { getDashboard, getApprovalQueues, getPayablesOverview, getPayableDetail, getSalesShifts };

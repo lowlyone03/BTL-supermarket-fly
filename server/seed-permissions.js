@@ -30,7 +30,11 @@ const functions = [
     { MaChucNang: 'UC26', TenChucNang: 'Tiếp nhận và xử lý yêu cầu đổi trả', Nhom: 'Bán hàng' },
     { MaChucNang: 'UC27', TenChucNang: 'Quản lý HĐ mua hàng và đối chiếu', Nhom: 'Kế toán' },
     { MaChucNang: 'UC28', TenChucNang: 'Theo dõi và thanh toán công nợ NCC', Nhom: 'Kế toán' },
-    { MaChucNang: 'UC29', TenChucNang: 'Đối soát doanh thu, lập Phiếu thu', Nhom: 'Kế toán' }
+    { MaChucNang: 'UC29', TenChucNang: 'Đối soát doanh thu, lập Phiếu thu', Nhom: 'Kế toán' },
+    { MaChucNang: 'UC30', TenChucNang: 'Phân công ca và giám sát chấm công', Nhom: 'Nhân sự mở rộng' },
+    { MaChucNang: 'UC31', TenChucNang: 'Xem lịch và chấm công cá nhân', Nhom: 'Nhân sự mở rộng' },
+    { MaChucNang: 'UC32', TenChucNang: 'Duyệt công và tổng hợp lương tạm tính', Nhom: 'Nhân sự mở rộng' },
+    { MaChucNang: 'UC33', TenChucNang: 'Lập, khóa và thanh toán bảng lương', Nhom: 'Nhân sự mở rộng' }
 ];
 
 async function seedPermissions() {
@@ -72,15 +76,15 @@ async function seedPermissions() {
                             WHERE MaChucNang = @MaChucNang`);
             }
         }
-        console.log('+ Đã seed bảng ChucNang (29 Use Cases)');
+        console.log('+ Đã seed 29 Use Case gốc và 4 quyền nhân sự mở rộng');
 
         // Map VaiTro -> Array of MaChucNang
         const permissions = {
-            'quản lý': ['UC01', 'UC02', 'UC03', 'UC04', 'UC05', 'UC06', 'UC07', 'UC08', 'UC09', 'UC10'],
-            'nhân viên mua hàng': ['UC01', 'UC11', 'UC12', 'UC13', 'UC14'],
-            'thủ kho': ['UC01', 'UC15', 'UC16', 'UC17', 'UC18', 'UC19', 'UC20', 'UC21'],
-            'thu ngân': ['UC01', 'UC22', 'UC23', 'UC24', 'UC25', 'UC26'],
-            'kế toán': ['UC01', 'UC27', 'UC28', 'UC29']
+            'quản lý': ['UC01', 'UC02', 'UC03', 'UC04', 'UC05', 'UC06', 'UC07', 'UC08', 'UC09', 'UC10', 'UC30', 'UC32'],
+            'nhân viên mua hàng': ['UC01', 'UC11', 'UC12', 'UC13', 'UC14', 'UC31'],
+            'thủ kho': ['UC01', 'UC15', 'UC16', 'UC17', 'UC18', 'UC19', 'UC20', 'UC21', 'UC31'],
+            'thu ngân': ['UC01', 'UC22', 'UC23', 'UC24', 'UC25', 'UC26', 'UC31'],
+            'kế toán': ['UC01', 'UC27', 'UC28', 'UC29', 'UC31', 'UC33']
         };
 
         // Clear VaiTro_ChucNang

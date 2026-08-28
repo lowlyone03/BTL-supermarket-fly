@@ -1,12 +1,28 @@
 const express = require('express');
 const controller = require('../controllers/warehouseController');
 const receiptController = require('../controllers/receiptController');
+const returnsController = require('../controllers/returnsController');
+const inventoryCountController = require('../controllers/inventoryCountController');
+const stockIssueController = require('../controllers/stockIssueController');
 const { verifyToken, requirePermission } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
 router.use(verifyToken);
 router.get('/dashboard', requirePermission('UC15'), controller.getDashboard);
 router.get('/inventory', requirePermission('UC15'), controller.getInventory);
+router.get('/inventory-counts', requirePermission('UC20'), inventoryCountController.listCounts);
+router.post('/inventory-counts', requirePermission('UC20'), inventoryCountController.createCount);
+router.get('/inventory-counts/:id', requirePermission('UC20'), inventoryCountController.getWarehouseCountDetail);
+router.put('/inventory-counts/:id', requirePermission('UC20'), inventoryCountController.saveCount);
+router.post('/inventory-counts/:id/submit', requirePermission('UC20'), inventoryCountController.submitCount);
+router.get('/stock-issues/options', requirePermission('UC19'), stockIssueController.getOptions);
+router.get('/stock-issues/source-receipts/:id', requirePermission('UC19'), stockIssueController.getSourceReceipt);
+router.get('/stock-issues', requirePermission('UC19'), stockIssueController.listIssues);
+router.post('/stock-issues', requirePermission('UC19'), stockIssueController.createIssue);
+router.get('/stock-issues/:id', requirePermission('UC19'), stockIssueController.getWarehouseIssueDetail);
+router.put('/stock-issues/:id', requirePermission('UC19'), stockIssueController.updateIssue);
+router.post('/stock-issues/:id/submit', requirePermission('UC19'), stockIssueController.submitIssue);
+router.post('/stock-issues/:id/confirm', requirePermission('UC19'), stockIssueController.confirmIssue);
 router.get('/purchase-requests', requirePermission('UC16'), controller.listWarehouseRequests);
 router.get('/purchase-requests/:id', requirePermission('UC16'), controller.getWarehouseRequestDetail);
 router.post('/purchase-requests', requirePermission('UC16'), controller.createRequest);
@@ -20,5 +36,8 @@ router.get('/receipts', requirePermission('UC17'), receiptController.listReceipt
 router.get('/receipts/:id', requirePermission('UC17'), receiptController.getReceiptDetail);
 router.post('/receipts', requirePermission('UC17'), receiptController.createReceipt);
 router.post('/receipts/:id/confirm', requirePermission('UC18'), receiptController.confirmReceipt);
+router.get('/returns', requirePermission('UC21'), returnsController.listReturns);
+router.get('/returns/:id', requirePermission('UC21'), returnsController.getReturn);
+router.post('/returns/:id/inspect', requirePermission('UC21'), returnsController.inspectReturn);
 
 module.exports = router;

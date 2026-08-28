@@ -211,6 +211,94 @@
     root.querySelector('#refreshApprovals').addEventListener('click', load); root.addEventListener('click', event => { const review = event.target.closest('[data-review-order]'); if (review) orderDetailModal(context, review.dataset.reviewOrder, true, load); }); await load();
   };
 
+  const inventoryCountApprovalModal = async (context, id, onDone) => {
+    try {
+      const data = await api(context, `/admin/approvals/inventory-counts/${id}`);
+      const count = data.count;
+      const differences = data.lines.filter(line => Number(line.ChenhLech) !== 0);
+      const overlay = document.createElement('div');
+      overlay.className = 'warehouse-modal-backdrop';
+      overlay.innerHTML = `<div class="warehouse-modal inventory-count-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">PHÊ DUYỆT ĐIỀU CHỈNH TỒN / ${esc(count.MaKK)}</p><h2>${esc(count.TenKho)}</h2><span>${fmtDate(count.NgayKiemKe)} · Thủ kho ${esc(count.NguoiKiemKe)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="manager-readonly-note"><svg><use href="#i-warning"/></svg><div><strong>Phê duyệt sẽ cập nhật tồn kho</strong><span>Hệ thống chỉ sửa tồn cho các dòng chênh lệch và đồng thời tạo Giao dịch kho loại Điều chỉnh. Từ chối sẽ giữ nguyên tồn.</span></div></div><div class="warehouse-stats"><article><span>TỔNG MẶT HÀNG</span><strong>${data.lines.length}</strong><small>Trong đợt kiểm kê</small></article><article class="attention"><span>CÓ CHÊNH LỆCH</span><strong>${differences.length}</strong><small>Cần xem nguyên nhân</small></article><article><span>TỔNG THỪA</span><strong>${differences.reduce((sum, line) => sum + Math.max(0, Number(line.ChenhLech)), 0)}</strong><small>Đơn vị hàng</small></article><article><span>TỔNG THIẾU</span><strong>${differences.reduce((sum, line) => sum + Math.max(0, -Number(line.ChenhLech)), 0)}</strong><small>Đơn vị hàng</small></article></div><div class="warehouse-table-wrap"><table class="warehouse-table inventory-count-table"><thead><tr><th>SẢN PHẨM</th><th>HỆ THỐNG</th><th>THỰC TẾ</th><th>CHÊNH LỆCH</th><th>KẾT QUẢ</th><th>TÌNH TRẠNG</th><th>NGUYÊN NHÂN</th></tr></thead><tbody>${data.lines.map(line => `<tr><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)}</small></td><td class="num">${line.SLHeThong}</td><td class="num"><strong>${line.SLThucTe}</strong></td><td class="num"><strong>${Number(line.ChenhLech) > 0 ? '+' : ''}${line.ChenhLech}</strong></td><td><span class="status-pill ${Number(line.ChenhLech) === 0 ? 'ok' : 'sent'}">${esc(line.KetQuaDoiChieu)}</span></td><td>${esc(line.TinhTrangHang || 'Bình thường')}</td><td>${esc(line.NguyenNhan || '—')}</td></tr>`).join('')}</tbody></table></div>${count.GhiChu ? `<div class="receipt-rule"><svg><use href="#i-report"/></svg><span>${esc(count.GhiChu)}</span></div>` : ''}</div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Đóng</button><button class="warehouse-danger reject-count" type="button">Từ chối</button><button class="warehouse-primary approve-count" type="button">Duyệt và điều chỉnh tồn</button></div></div>`;
+      document.body.appendChild(overlay);
+      const close = () => overlay.remove();
+      overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+      overlay.querySelector('.approve-count').addEventListener('click', async () => {
+        if (!window.confirm(`Duyệt ${id} và cập nhật tồn cho ${differences.length} mặt hàng chênh lệch?`)) return;
+        try {
+          const result = await api(context, `/admin/approvals/inventory-counts/${id}/approve`, { method: 'POST', body: '{}' });
+          context.showToast(result.message, 'success'); close(); await onDone();
+        } catch (error) { context.showToast(error.message, 'error'); }
+      });
+      overlay.querySelector('.reject-count').addEventListener('click', async () => {
+        const reason = window.prompt(`Nhập lý do từ chối điều chỉnh tồn cho ${id}:`);
+        if (reason == null) return;
+        if (!reason.trim()) return context.showToast('Vui lòng nhập lý do từ chối.', 'error');
+        try {
+          const result = await api(context, `/admin/approvals/inventory-counts/${id}/reject`, { method: 'POST', body: JSON.stringify({ LyDo: reason.trim() }) });
+          context.showToast(result.message, 'success'); close(); await onDone();
+        } catch (error) { context.showToast(error.message, 'error'); }
+      });
+    } catch (error) { context.showToast(error.message, 'error'); }
+  };
+
+  const stockIssueApprovalModal = async (context, id, onDone) => {
+    try {
+      const data = await api(context, `/admin/approvals/stock-issues/${id}`);
+      const issue = data.issue;
+      const overlay = document.createElement('div');
+      overlay.className = 'warehouse-modal-backdrop';
+      overlay.innerHTML = `<div class="warehouse-modal stock-issue-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">PHÊ DUYỆT PHIẾU XUẤT / ${esc(issue.MaPX)}</p><h2>${esc(issue.LoaiXuat)}</h2><span>${fmtDate(issue.NgayXuat)} · Thủ kho ${esc(issue.NguoiLap)} · ${esc(issue.TenKho)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="manager-readonly-note"><svg><use href="#i-warning"></use></svg><div><strong>Phê duyệt chưa làm giảm tồn kho</strong><span>Sau khi duyệt, Phiếu xuất chuyển sang “Đã duyệt”. Thủ kho phải thực hiện và xác nhận xuất thì hệ thống mới giảm tồn và tạo Giao dịch kho loại Xuất.</span></div></div><div class="stock-issue-summary"><div><span>LOẠI XUẤT</span><strong>${esc(issue.LoaiXuat)}</strong></div><div><span>PHIẾU NHẬP NGUỒN</span><strong>${esc(issue.MaPN || 'Không áp dụng')}</strong></div><div><span>NHÀ CUNG CẤP</span><strong>${esc(issue.TenNCC || 'Không áp dụng')}</strong></div><div><span>SỐ MẶT HÀNG</span><strong>${data.lines.length}</strong></div></div><div class="manager-readonly-note"><svg><use href="#i-request"></use></svg><div><strong>Lý do/Ghi chú xuất kho</strong><span>${esc(issue.GhiChu || '—')}</span></div></div><div class="warehouse-table-wrap"><table class="warehouse-table stock-issue-line-table"><thead><tr><th>SẢN PHẨM</th><th>TỒN HIỆN TẠI</th><th>SỐ LƯỢNG XUẤT</th><th>GIÁ VỐN THAM CHIẾU</th><th>GHI CHÚ DÒNG</th></tr></thead><tbody>${data.lines.map(line => `<tr><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)} · ${esc(line.TenDM)}</small></td><td class="num">${line.SLTonHienTai}</td><td class="num"><strong>${line.SoLuong}</strong></td><td class="num">${money(line.DonGia)}</td><td>${esc(line.GhiChu || '—')}</td></tr>`).join('')}</tbody></table></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Đóng</button><button class="warehouse-danger reject-stock-issue" type="button">Từ chối</button><button class="warehouse-primary approve-stock-issue" type="button">Phê duyệt Phiếu xuất</button></div></div>`;
+      document.body.appendChild(overlay);
+      const close = () => overlay.remove();
+      overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+      overlay.querySelector('.approve-stock-issue').addEventListener('click', async () => {
+        if (!window.confirm(`Phê duyệt ${id}? Tồn kho vẫn giữ nguyên cho tới khi Thủ kho xác nhận xuất.`)) return;
+        try {
+          const result = await api(context, `/admin/approvals/stock-issues/${id}/approve`, { method: 'POST', body: '{}' });
+          context.showToast(result.message, 'success'); close(); await onDone();
+        } catch (error) { context.showToast(error.message, 'error'); }
+      });
+      overlay.querySelector('.reject-stock-issue').addEventListener('click', async () => {
+        const reason = window.prompt(`Nhập lý do từ chối Phiếu xuất ${id}:`);
+        if (reason == null) return;
+        if (!reason.trim()) return context.showToast('Vui lòng nhập lý do từ chối.', 'error');
+        try {
+          const result = await api(context, `/admin/approvals/stock-issues/${id}/reject`, { method: 'POST', body: JSON.stringify({ LyDo: reason.trim() }) });
+          context.showToast(result.message, 'success'); close(); await onDone();
+        } catch (error) { context.showToast(error.message, 'error'); }
+      });
+    } catch (error) { context.showToast(error.message, 'error'); }
+  };
+
+  const paymentVoucherApprovalModal = async (context, id, onDone) => {
+    try {
+      const data = await api(context, `/admin/approvals/payment-vouchers/${id}`);
+      const voucher = data.voucher;
+      const overlay = document.createElement('div');
+      overlay.className = 'warehouse-modal-backdrop';
+      overlay.innerHTML = `<div class="warehouse-modal payment-voucher-approval-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">UC09 · PHÊ DUYỆT PHIẾU CHI</p><h2>${esc(voucher.MaPhieu)}</h2><span>${esc(voucher.TenNCC)} · ${money(voucher.SoTienPhieuChi)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="manager-readonly-note"><svg><use href="#i-shield"></use></svg><div><strong>Phê duyệt chỉ cho phép Kế toán thực hiện thanh toán</strong><span>Công nợ vẫn giữ nguyên ${money(voucher.SoTienConLai)}. Chỉ giao dịch thanh toán thành công ở bước Kế toán mới chuyển công nợ sang Đã tất toán.</span></div></div><div class="payment-voucher-source"><div><span>CÔNG NỢ</span><strong>${esc(voucher.MaCNPTra)}</strong></div><div><span>HẠN THANH TOÁN</span><strong>${fmtDate(voucher.HanThanhToan)}</strong></div><div><span>HÓA ĐƠN NCC</span><strong>${esc(voucher.SoHoaDon)}</strong></div><div><span>ĐỐI CHIẾU BA BÊN</span><strong><i class="status-pill ${voucher.TrangThaiDoiChieu === 'Đã khớp' ? 'ok' : 'cancelled'}">${esc(voucher.TrangThaiDoiChieu)}</i></strong></div><div><span>ĐƠN MUA</span><strong>${esc(voucher.MaPO)}</strong></div><div><span>PHIẾU NHẬP</span><strong>${esc(voucher.MaPN)}</strong></div><div><span>PHƯƠNG THỨC</span><strong>${esc(voucher.PhuongThuc)}</strong></div><div><span>NGƯỜI LẬP</span><strong>${esc(voucher.NguoiLap)}</strong></div></div><div class="payment-voucher-amount"><span>SỐ TIỀN PHIẾU CHI / CÔNG NỢ CÒN LẠI</span><strong>${money(voucher.SoTienPhieuChi)} / ${money(voucher.SoTienConLai)}</strong><small>Hai số tiền bắt buộc phải bằng nhau và thanh toán toàn bộ một lần.</small></div><div class="manager-readonly-note"><svg><use href="#i-request"></use></svg><div><strong>Nội dung chi</strong><span>${esc(voucher.NoiDung)}</span>${voucher.GhiChu ? `<small>${esc(voucher.GhiChu)}</small>` : ''}</div></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>MẶT HÀNG HÓA ĐƠN</th><th>SỐ LƯỢNG</th><th>ĐƠN GIÁ</th><th>THUẾ</th><th>THÀNH TIỀN</th></tr></thead><tbody>${data.lines.map(line => `<tr><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)}</small></td><td class="num">${line.SoLuong}</td><td class="num">${money(line.DonGia)}</td><td class="num">${line.ThueSuat}%</td><td class="num"><strong>${money(line.ThanhTien)}</strong></td></tr>`).join('')}</tbody></table></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Đóng</button><button class="warehouse-danger reject-payment-voucher" type="button">Từ chối</button><button class="warehouse-primary approve-payment-voucher" type="button">Phê duyệt Phiếu chi</button></div></div>`;
+      document.body.appendChild(overlay);
+      const close = () => overlay.remove();
+      overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+      overlay.querySelector('.approve-payment-voucher').addEventListener('click', async () => {
+        if (!window.confirm(`Phê duyệt ${id}? Công nợ chưa giảm cho đến khi Kế toán thanh toán thành công.`)) return;
+        try {
+          const result = await api(context, `/admin/approvals/payment-vouchers/${id}/approve`, { method: 'POST', body: '{}' });
+          context.showToast(result.message, 'success'); close(); await onDone();
+        } catch (error) { context.showToast(error.message, 'error'); }
+      });
+      overlay.querySelector('.reject-payment-voucher').addEventListener('click', async () => {
+        const reason = window.prompt(`Nhập lý do từ chối Phiếu chi ${id}:`);
+        if (reason == null) return;
+        if (!reason.trim()) return context.showToast('Vui lòng nhập lý do từ chối.', 'error');
+        try {
+          const result = await api(context, `/admin/approvals/payment-vouchers/${id}/reject`, { method: 'POST', body: JSON.stringify({ LyDo: reason.trim() }) });
+          context.showToast(result.message, 'success'); close(); await onDone();
+        } catch (error) { context.showToast(error.message, 'error'); }
+      });
+    } catch (error) { context.showToast(error.message, 'error'); }
+  };
+
   const initApprovalCenter = async (root, context) => {
     const empty = (cols, text) => `<tr><td colspan="${cols}" class="warehouse-empty">${esc(text)}</td></tr>`;
     const load = async () => {
@@ -227,11 +315,11 @@
           <article class="warehouse-stat warn"><span>CHỨNG TỪ KHO</span><strong>${queues.warehouse.length}</strong><small>Phiếu xuất và điều chỉnh sau kiểm kê</small></article>
           <article class="warehouse-stat"><span>TÀI CHÍNH &amp; ĐỔI TRẢ</span><strong>${queues.finance.length}</strong><small>Phiếu chi và hồ sơ đổi trả đã kiểm tra</small></article>`;
         root.querySelector('#purchaseApprovalBody').innerHTML = orders.items.length ? orders.items.map(item => `<tr><td><strong>${esc(item.MaPO)}</strong><small>Nguồn ${esc(item.MaDN)}</small></td><td><strong>${esc(item.TenNCC)}</strong><small>Người lập: ${esc(item.NguoiLap)}</small></td><td>${item.SoMatHang} mặt hàng</td><td>${fmtDate(item.NgayGiaoDuKien)}</td><td>${item.SoNgayThanhToan} ngày</td><td class="num"><strong>${money(item.TongTien)}</strong></td><td><button class="warehouse-primary" data-review-order="${esc(item.MaPO)}">Xem và quyết định</button></td></tr>`).join('') : empty(7, 'Không có Đơn mua hàng chờ phê duyệt.');
-        root.querySelector('#warehouseApprovalBody').innerHTML = queues.warehouse.length ? queues.warehouse.map(item => `<tr><td><strong>${esc(item.MaHoSo)}</strong><small>${esc(item.LoaiHoSo)}</small></td><td>${esc(item.NguoiLap)}</td><td>${fmtDate(item.NgayLap)}</td><td>${esc(item.NoiDung || '—')}</td><td><span class="status-pill sent">${esc(item.TrangThai)}</span></td></tr>`).join('') : empty(5, 'Chưa có chứng từ kho do Thủ kho gửi duyệt.');
-        root.querySelector('#financeApprovalBody').innerHTML = queues.finance.length ? queues.finance.map(item => `<tr><td><strong>${esc(item.MaHoSo)}</strong><small>${esc(item.LoaiHoSo)}</small></td><td>${esc(item.NguoiLap)}</td><td>${fmtDate(item.NgayLap)}</td><td>${esc(item.NoiDung || '—')}</td><td class="num">${money(item.SoTien)}</td><td><span class="status-pill sent">${esc(item.TrangThai)}</span></td></tr>`).join('') : empty(6, 'Chưa có Phiếu chi hoặc hồ sơ đổi trả được gửi duyệt. Hóa đơn chờ đối chiếu và công nợ không nằm trong hàng phê duyệt này.');
+        root.querySelector('#warehouseApprovalBody').innerHTML = queues.warehouse.length ? queues.warehouse.map(item => `<tr><td><strong>${esc(item.MaHoSo)}</strong><small>${esc(item.LoaiHoSo)}</small></td><td>${esc(item.NguoiLap)}</td><td>${fmtDate(item.NgayLap)}</td><td>${esc(item.NoiDung || '—')}</td><td><span class="status-pill sent">${esc(item.TrangThai)}</span></td><td>${item.LoaiHoSo === 'Điều chỉnh kiểm kê' ? `<button class="warehouse-primary" data-review-inventory-count="${esc(item.MaHoSo)}">Xem và quyết định</button>` : item.LoaiHoSo === 'Phiếu xuất kho' ? `<button class="warehouse-primary" data-review-stock-issue="${esc(item.MaHoSo)}">Xem và quyết định</button>` : '—'}</td></tr>`).join('') : empty(6, 'Chưa có chứng từ kho do Thủ kho gửi duyệt.');
+        root.querySelector('#financeApprovalBody').innerHTML = queues.finance.length ? queues.finance.map(item => `<tr><td><strong>${esc(item.MaHoSo)}</strong><small>${esc(item.LoaiHoSo)}</small></td><td>${esc(item.NguoiLap)}</td><td>${fmtDate(item.NgayLap)}</td><td>${esc(item.NoiDung || '—')}</td><td class="num">${money(item.SoTien)}</td><td><span class="status-pill sent">${esc(item.TrangThai)}</span></td><td>${item.LoaiHoSo === 'Phiếu chi Nhà cung cấp' ? `<button class="warehouse-primary" data-review-payment-voucher="${esc(item.MaHoSo)}">Xem và quyết định</button>` : item.LoaiHoSo === 'Đổi trả khách hàng' ? `<button class="warehouse-primary" data-approve-return="${esc(item.MaHoSo)}">Duyệt</button><button class="warehouse-danger" data-reject-return="${esc(item.MaHoSo)}">Từ chối</button>` : '—'}</td></tr>`).join('') : empty(7, 'Chưa có Phiếu chi hoặc hồ sơ đổi trả được gửi duyệt. Hóa đơn chờ đối chiếu và công nợ không nằm trong hàng phê duyệt này.');
       } catch (error) { context.showToast(error.message, 'error'); }
     };
-    root.innerHTML = `${heading('ĐIỀU HÀNH / PHÊ DUYỆT', 'Trung tâm phê duyệt', 'Mỗi hồ sơ chỉ xuất hiện sau khi actor nghiệp vụ lập và gửi đúng bước; phê duyệt không tự làm tăng hoặc giảm tồn kho.', '<button class="warehouse-secondary" id="refreshApprovalCenter"><svg><use href="#i-refresh"/></svg>Làm mới</button>')}<div class="warehouse-stats approval-center-summary" id="approvalSummary"></div><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC05 · MUA HÀNG</p><h2>Đơn mua hàng chờ quyết định</h2></div><span class="warehouse-chip">Nhân viên mua hàng gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>ĐƠN MUA</th><th>NHÀ CUNG CẤP</th><th>QUY MÔ</th><th>NGÀY GIAO</th><th>THANH TOÁN</th><th>TỔNG TIỀN</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="purchaseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC06–UC07 · KHO</p><h2>Chứng từ kho chờ phê duyệt</h2></div><span class="warehouse-chip">Thủ kho gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>TRẠNG THÁI</th></tr></thead><tbody id="warehouseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC08–UC09 · TÀI CHÍNH</p><h2>Đề nghị thanh toán và đổi trả</h2></div><span class="warehouse-chip">Kế toán/Thu ngân gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>SỐ TIỀN</th><th>TRẠNG THÁI</th></tr></thead><tbody id="financeApprovalBody"></tbody></table></div></article>`;
+    root.innerHTML = `${heading('ĐIỀU HÀNH / PHÊ DUYỆT', 'Trung tâm phê duyệt', 'Hồ sơ chỉ xuất hiện sau khi bộ phận phụ trách gửi đúng bước. Riêng duyệt kiểm kê có chênh lệch sẽ cập nhật tồn và ghi Giao dịch kho Điều chỉnh.', '<button class="warehouse-secondary" id="refreshApprovalCenter"><svg><use href="#i-refresh"/></svg>Làm mới</button>')}<div class="warehouse-stats approval-center-summary" id="approvalSummary"></div><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC05 · MUA HÀNG</p><h2>Đơn mua hàng chờ quyết định</h2></div><span class="warehouse-chip">Nhân viên mua hàng gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>ĐƠN MUA</th><th>NHÀ CUNG CẤP</th><th>QUY MÔ</th><th>NGÀY GIAO</th><th>THANH TOÁN</th><th>TỔNG TIỀN</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="purchaseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC06–UC07 · KHO</p><h2>Chứng từ kho chờ phê duyệt</h2></div><span class="warehouse-chip">Thủ kho gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>TRẠNG THÁI</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="warehouseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC08–UC09 · TÀI CHÍNH</p><h2>Đề nghị thanh toán và đổi trả</h2></div><span class="warehouse-chip">Kế toán/Thu ngân gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>SỐ TIỀN</th><th>TRẠNG THÁI</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="financeApprovalBody"></tbody></table></div></article>`;
     root.innerHTML = root.innerHTML
       .replace('actor nghiệp vụ', 'bộ phận phụ trách')
       .replace('UC05 · ', '')
@@ -239,9 +327,38 @@
       .replace('UC08–UC09 · ', '');
     root.querySelector('#approvalSummary').insertAdjacentHTML('beforebegin', '<div class="approval-center-note"><strong>Chưa có bộ phận gửi hồ sơ thì danh sách sẽ trống.</strong><span>Kế toán lưu hoặc đối chiếu hóa đơn không cần Quản lý duyệt. Chỉ Phiếu chi thanh toán hoặc hồ sơ đổi trả đã được lập và gửi mới xuất hiện ở nhóm Tài chính.</span></div>');
     root.querySelector('#refreshApprovalCenter').addEventListener('click', load);
-    root.addEventListener('click', event => {
+    root.addEventListener('click', async event => {
       const review = event.target.closest('[data-review-order]');
-      if (review) orderDetailModal(context, review.dataset.reviewOrder, true, load);
+      if (review) return orderDetailModal(context, review.dataset.reviewOrder, true, load);
+      const reviewInventoryCount = event.target.closest('[data-review-inventory-count]');
+      if (reviewInventoryCount) return inventoryCountApprovalModal(context, reviewInventoryCount.dataset.reviewInventoryCount, load);
+      const reviewStockIssue = event.target.closest('[data-review-stock-issue]');
+      if (reviewStockIssue) return stockIssueApprovalModal(context, reviewStockIssue.dataset.reviewStockIssue, load);
+      const reviewPaymentVoucher = event.target.closest('[data-review-payment-voucher]');
+      if (reviewPaymentVoucher) return paymentVoucherApprovalModal(context, reviewPaymentVoucher.dataset.reviewPaymentVoucher, load);
+      const approveReturn = event.target.closest('[data-approve-return]');
+      if (approveReturn) {
+        try {
+          const result = await api(context, `/admin/approvals/returns/${approveReturn.dataset.approveReturn}/approve`, { method: 'POST', body: JSON.stringify({}) });
+          context.showToast(result.message, 'success'); await load();
+        } catch (error) { context.showToast(error.message, 'error'); }
+        return;
+      }
+      const rejectReturn = event.target.closest('[data-reject-return]');
+      if (rejectReturn) {
+        const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
+        overlay.innerHTML = `<div class="warehouse-modal" style="width:min(620px,95vw)"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">TỪ CHỐI ĐỔI TRẢ</p><h2>${esc(rejectReturn.dataset.rejectReturn)}</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="warehouse-field"><label>Lý do *</label><textarea id="returnRejectReason" maxlength="500"></textarea></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-primary submit-decision">Xác nhận</button></div></div>`;
+        document.body.appendChild(overlay);
+        const close = () => overlay.remove(); overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+        overlay.querySelector('.submit-decision').addEventListener('click', async () => {
+          const LyDo = overlay.querySelector('#returnRejectReason').value.trim();
+          if (!LyDo) return context.showToast('Vui lòng nhập lý do.', 'error');
+          try {
+            const result = await api(context, `/admin/approvals/returns/${rejectReturn.dataset.rejectReturn}/reject`, { method: 'POST', body: JSON.stringify({ LyDo }) });
+            context.showToast(result.message, 'success'); close(); await load();
+          } catch (error) { context.showToast(error.message, 'error'); }
+        });
+      }
     });
     await load();
   };

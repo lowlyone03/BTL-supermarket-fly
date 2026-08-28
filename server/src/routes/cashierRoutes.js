@@ -1,10 +1,35 @@
 const express = require('express');
 const controller = require('../controllers/cashierController');
+const sales = require('../controllers/salesController');
+const returns = require('../controllers/returnsController');
 const { verifyToken, requirePermission } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
-router.use(verifyToken, requirePermission('UC22'));
-router.get('/shifts', controller.getShifts);
-router.post('/shifts/open', controller.openShift);
+router.use(verifyToken);
+router.get('/schedule', requirePermission('UC31'), controller.getMySchedule);
+router.post('/attendance/check-in', requirePermission('UC31'), controller.checkIn);
+router.post('/attendance/check-out', requirePermission('UC31'), controller.checkOut);
+router.get('/shifts', requirePermission('UC22'), controller.getShifts);
+router.post('/shifts/open', requirePermission('UC22'), controller.openShift);
+router.get('/shifts/current/summary', requirePermission('UC22'), controller.getCurrentShiftSummary);
+router.post('/shifts/close', requirePermission('UC22'), controller.closeShift);
+router.get('/customers', requirePermission('UC23'), sales.listCustomers);
+router.post('/customers', requirePermission('UC23'), sales.saveCustomer);
+router.put('/customers/:id', requirePermission('UC23'), sales.updateCustomer);
+router.get('/pos/catalog', requirePermission('UC24'), sales.getCatalog);
+router.post('/invoices/quote', requirePermission('UC24'), sales.quoteInvoice);
+router.get('/invoices', requirePermission('UC24'), sales.listInvoices);
+router.post('/invoices', requirePermission('UC24'), sales.createInvoice);
+router.get('/invoices/:id', requirePermission('UC24'), sales.getInvoice);
+router.post('/invoices/:id/cancel', requirePermission('UC24'), sales.cancelInvoice);
+router.post('/invoices/:id/payments', requirePermission('UC25'), sales.addPayment);
+router.post('/invoices/:id/complete', requirePermission('UC25'), sales.completeInvoice);
+router.get('/returns/search-invoices', requirePermission('UC26'), returns.searchInvoices);
+router.get('/returns/source/:id', requirePermission('UC26'), returns.getInvoiceForReturn);
+router.get('/returns', requirePermission('UC26'), returns.listReturns);
+router.get('/returns/:id', requirePermission('UC26'), returns.getReturn);
+router.post('/returns', requirePermission('UC26'), returns.createReturn);
+router.post('/returns/:id/submit', requirePermission('UC26'), returns.submitReturn);
+router.post('/returns/:id/complete', requirePermission('UC26'), returns.completeReturn);
 
 module.exports = router;
