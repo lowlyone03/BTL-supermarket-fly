@@ -1,4 +1,5 @@
 const { sql, poolPromise } = require('../config/db');
+const { storedPathFor, deleteUploadedProductImage } = require('../middlewares/productImageUpload');
 
 const text = (value, max, fallback = null) => {
     const normalized = String(value ?? '').trim().slice(0, max);
@@ -118,6 +119,7 @@ const getProducts = async (req, res) => {
             .input('TrangThai', sql.NVarChar, status)
             .query(`
                 SELECT sp.MaSP,sp.MaDM,sp.TenSP,sp.DonViTinh,sp.MaVach,sp.GiaNhap,sp.GiaBan,
+                       sp.DuongDanAnh,
                        sp.TonKhoToiThieu,sp.TrangThai,dm.TenDM,
                        ISNULL(SUM(tk.SLTon),0) AS SLTon,ISNULL(SUM(tk.SLDatMua),0) AS SLDatMua,
                        CASE WHEN EXISTS (SELECT 1 FROM GiaoDichKho gd WHERE gd.MaSP=sp.MaSP AND gd.LoaiGD=N'Nhập')
@@ -125,10 +127,10 @@ const getProducts = async (req, res) => {
                 FROM SanPham sp
                 JOIN DanhMuc dm ON dm.MaDM=sp.MaDM
                 LEFT JOIN TonKho tk ON tk.MaSP=sp.MaSP
-                WHERE (@TuKhoa=N'' OR sp.MaSP LIKE @Mau OR sp.TenSP LIKE @Mau OR ISNULL(sp.MaVach,'') LIKE @Mau)
+                WHERE (@TuKhoa=N'' OR sp.MaSP LIKE @Mau COLLATE Latin1_General_100_CI_AI OR sp.TenSP LIKE @Mau COLLATE Latin1_General_100_CI_AI OR ISNULL(sp.MaVach,'') LIKE @Mau COLLATE Latin1_General_100_CI_AI)
                   AND (@MaDM='' OR sp.MaDM=@MaDM)
                   AND (@TrangThai=N'' OR sp.TrangThai=@TrangThai)
-                GROUP BY sp.MaSP,sp.MaDM,sp.TenSP,sp.DonViTinh,sp.MaVach,sp.GiaNhap,sp.GiaBan,
+                GROUP BY sp.MaSP,sp.MaDM,sp.TenSP,sp.DonViTinh,sp.MaVach,sp.GiaNhap,sp.GiaBan,sp.DuongDanAnh,
                          sp.TonKhoToiThieu,sp.TrangThai,dm.TenDM
                 ORDER BY CASE WHEN sp.TrangThai=N'Đang bán' THEN 0 ELSE 1 END,dm.TenDM,sp.TenSP`);
         const items = result.recordset;
@@ -157,6 +159,7 @@ const normalizeProduct = body => {
         GiaNhap: number(body.GiaNhap, 'Giá nhập'),
         GiaBan: number(body.GiaBan, 'Giá bán'),
         TonKhoToiThieu: number(body.TonKhoToiThieu, 'Tồn kho tối thiểu', { integer: true }),
+        DuongDanAnh: text(body.DuongDanAnh, 500),
         TrangThai: body.TrangThai === 'Ngừng bán' ? 'Ngừng bán' : 'Đang bán'
     };
     if (!product.MaSP || !product.MaDM || !product.TenSP || !product.DonViTinh) {
@@ -175,25 +178,31 @@ const bindProduct = (request, product, includeCode = true) => {
         .input('GiaNhap', sql.Decimal(18, 2), product.GiaNhap)
         .input('GiaBan', sql.Decimal(18, 2), product.GiaBan)
         .input('TonKhoToiThieu', sql.Int, product.TonKhoToiThieu)
+        .input('DuongDanAnh', sql.NVarChar(500), product.DuongDanAnh)
         .input('TrangThai', sql.NVarChar, product.TrangThai);
 };
 
 const createProduct = async (req, res) => {
     const transaction = new sql.Transaction(await poolPromise);
+    const uploadedPath = storedPathFor(req.file);
+    let transactionStarted = false;
     try {
-        const product = normalizeProduct(req.body);
+        if (!uploadedPath) throw new Error('Ảnh sản phẩm là bắt buộc khi thêm sản phẩm mới.');
+        const product = normalizeProduct({ ...req.body, DuongDanAnh: uploadedPath });
         await transaction.begin();
+        transactionStarted = true;
         await bindProduct(new sql.Request(transaction), product).query(`
-            INSERT INTO SanPham (MaSP,MaDM,TenSP,DonViTinh,MaVach,GiaNhap,GiaBan,TonKhoToiThieu,TrangThai)
-            VALUES (@MaSP,@MaDM,@TenSP,@DonViTinh,@MaVach,@GiaNhap,@GiaBan,@TonKhoToiThieu,@TrangThai)`);
+            INSERT INTO SanPham (MaSP,MaDM,TenSP,DonViTinh,MaVach,GiaNhap,GiaBan,TonKhoToiThieu,DuongDanAnh,TrangThai)
+            VALUES (@MaSP,@MaDM,@TenSP,@DonViTinh,@MaVach,@GiaNhap,@GiaBan,@TonKhoToiThieu,@DuongDanAnh,@TrangThai)`);
         await new sql.Request(transaction).input('MaSP', sql.VarChar, product.MaSP).query(`
             INSERT INTO TonKho (MaKho,MaSP,SLTon,SLDatMua,DonGiaBinhQuan,GiaTriTon,NgayCapNhat)
             SELECT MaKho,@MaSP,0,0,0,0,GETDATE() FROM Kho WHERE TrangThai=1`);
         await writeAudit(new sql.Request(transaction), req.user, 'Thêm sản phẩm', 'SanPham', product.MaSP, `Tạo sản phẩm ${product.TenSP}`);
         await transaction.commit();
-        res.status(201).json({ message: 'Đã thêm sản phẩm và khởi tạo tồn kho bằng 0.', MaSP: product.MaSP });
+        res.status(201).json({ message: 'Đã thêm sản phẩm, lưu ảnh và khởi tạo tồn kho bằng 0.', MaSP: product.MaSP, DuongDanAnh: uploadedPath });
     } catch (error) {
-        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        if (transactionStarted && transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        await deleteUploadedProductImage(uploadedPath);
         console.error(error);
         const duplicate = error.number === 2627 || error.number === 2601;
         res.status(duplicate ? 409 : 400).json({ message: duplicate ? 'Mã sản phẩm hoặc mã vạch đã tồn tại.' : error.message });
@@ -201,17 +210,35 @@ const createProduct = async (req, res) => {
 };
 
 const updateProduct = async (req, res) => {
+    const uploadedPath = storedPathFor(req.file);
     try {
-        const product = normalizeProduct({ ...req.body, MaSP: req.params.id });
         const pool = await poolPromise;
+        const existingResult = await pool.request()
+            .input('MaSP', sql.VarChar, req.params.id)
+            .query('SELECT MaSP,DuongDanAnh FROM SanPham WHERE MaSP=@MaSP');
+        const existing = existingResult.recordset[0];
+        if (!existing) {
+            await deleteUploadedProductImage(uploadedPath);
+            return res.status(404).json({ message: 'Không tìm thấy sản phẩm.' });
+        }
+        const product = normalizeProduct({
+            ...req.body,
+            MaSP: req.params.id,
+            DuongDanAnh: uploadedPath || existing.DuongDanAnh
+        });
         const result = await bindProduct(pool.request(), product).query(`
             UPDATE SanPham SET MaDM=@MaDM,TenSP=@TenSP,DonViTinh=@DonViTinh,MaVach=@MaVach,
-                   GiaNhap=@GiaNhap,GiaBan=@GiaBan,TonKhoToiThieu=@TonKhoToiThieu,TrangThai=@TrangThai
+                   GiaNhap=@GiaNhap,GiaBan=@GiaBan,TonKhoToiThieu=@TonKhoToiThieu,
+                   DuongDanAnh=@DuongDanAnh,TrangThai=@TrangThai
             OUTPUT inserted.MaSP WHERE MaSP=@MaSP`);
         if (!result.recordset.length) return res.status(404).json({ message: 'Không tìm thấy sản phẩm.' });
         await writeAudit(pool.request(), req.user, 'Cập nhật sản phẩm', 'SanPham', product.MaSP, `Cập nhật thông tin ${product.TenSP}`);
-        res.json({ message: 'Đã cập nhật sản phẩm.' });
+        if (uploadedPath && existing.DuongDanAnh !== uploadedPath) {
+            await deleteUploadedProductImage(existing.DuongDanAnh);
+        }
+        res.json({ message: uploadedPath ? 'Đã cập nhật sản phẩm và thay ảnh mới.' : 'Đã cập nhật sản phẩm.' });
     } catch (error) {
+        await deleteUploadedProductImage(uploadedPath);
         console.error(error);
         const duplicate = error.number === 2627 || error.number === 2601;
         res.status(duplicate ? 409 : 400).json({ message: duplicate ? 'Mã vạch đã được sử dụng cho sản phẩm khác.' : error.message });
@@ -244,7 +271,7 @@ const getPromotions = async (req, res) => {
                    CASE WHEN TrangThai=N'Hiệu lực' AND CONVERT(date,GETDATE()) BETWEEN NgayBatDau AND NgayKetThuc
                         THEN 1 ELSE 0 END AS DangApDung
             FROM KhuyenMai
-            WHERE @Search=N'%%' OR MaKM LIKE @Search OR TenKM LIKE @Search
+            WHERE @Search=N'%%' OR MaKM LIKE @Search COLLATE Latin1_General_100_CI_AI OR TenKM LIKE @Search COLLATE Latin1_General_100_CI_AI
             ORDER BY NgayBatDau DESC`);
         res.json({ items: result.recordset });
     } catch (error) {

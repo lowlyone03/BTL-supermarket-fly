@@ -129,7 +129,7 @@ const listReceipts = async (req, res) => {
                 FROM PhieuNhap pn JOIN NhaCungCap ncc ON ncc.MaNCC=pn.MaNCC JOIN Kho k ON k.MaKho=pn.MaKho
                 JOIN ChiTietPhieuNhap ct ON ct.MaPN=pn.MaPN
                 WHERE (@TrangThai=N'' OR pn.TrangThai=@TrangThai)
-                  AND (@TuKhoa=N'' OR pn.MaPN LIKE @Mau OR pn.MaPO LIKE @Mau OR ncc.TenNCC LIKE @Mau)
+                  AND (@TuKhoa=N'' OR pn.MaPN LIKE @Mau COLLATE Latin1_General_100_CI_AI OR pn.MaPO LIKE @Mau COLLATE Latin1_General_100_CI_AI OR ncc.TenNCC LIKE @Mau COLLATE Latin1_General_100_CI_AI)
                 GROUP BY pn.MaPN,pn.MaPO,pn.MaNCC,ncc.TenNCC,pn.MaKho,k.TenKho,pn.NgayNhap,pn.NgayXacNhan,pn.TongTien,pn.TrangThai
                 ORDER BY pn.NgayNhap DESC`);
         res.json({ items: result.recordset });

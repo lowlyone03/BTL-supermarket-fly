@@ -35,7 +35,7 @@ const getWarehouse = async pool => {
 };
 
 const inventoryQuery = `
-    SELECT sp.MaSP, sp.TenSP, sp.MaVach, sp.DonViTinh, dm.TenDM,
+    SELECT sp.MaSP, sp.TenSP, sp.MaVach, sp.DonViTinh, sp.DuongDanAnh, dm.TenDM,
            sp.TonKhoToiThieu, ISNULL(tk.SLTon, 0) AS SLTon,
            ISNULL(tk.SLDatMua, 0) AS SLDatMua, tk.NgayCapNhat,
            CASE
@@ -54,7 +54,7 @@ const inventoryQuery = `
     JOIN DanhMuc dm ON dm.MaDM = sp.MaDM
     LEFT JOIN TonKho tk ON tk.MaSP = sp.MaSP AND tk.MaKho = @MaKho
     WHERE sp.TrangThai = N'Đang bán'
-      AND (@TuKhoa = N'' OR sp.MaSP LIKE @Mau OR sp.TenSP LIKE @Mau OR sp.MaVach LIKE @Mau)
+      AND (@TuKhoa = N'' OR sp.MaSP LIKE @Mau COLLATE Latin1_General_100_CI_AI OR sp.TenSP LIKE @Mau COLLATE Latin1_General_100_CI_AI OR sp.MaVach LIKE @Mau COLLATE Latin1_General_100_CI_AI)
       AND (@CanBoSung = 0 OR ISNULL(tk.SLTon, 0) <= sp.TonKhoToiThieu)
     ORDER BY CASE WHEN ISNULL(tk.SLTon, 0) <= sp.TonKhoToiThieu THEN 0 ELSE 1 END,
              ThieuSoVoiDinhMuc DESC, sp.TenSP`;
@@ -98,7 +98,7 @@ const getDashboard = async (req, res) => {
                 ) gd ON gd.MaKho=@MaKho AND gd.MaSP=sp.MaSP
                 WHERE sp.TrangThai=N'Đang bán'`),
             pool.request().input('MaKho', sql.VarChar, warehouse.MaKho).query(`
-                SELECT TOP 6 sp.MaSP, sp.TenSP, sp.DonViTinh, sp.TonKhoToiThieu,
+                SELECT TOP 6 sp.MaSP, sp.TenSP, sp.DonViTinh, sp.DuongDanAnh, sp.TonKhoToiThieu,
                        ISNULL(tk.SLTon,0) SLTon, ISNULL(tk.SLDatMua,0) SLDatMua,
                        CASE WHEN NOT EXISTS (
                            SELECT 1 FROM GiaoDichKho gd
@@ -138,7 +138,7 @@ const requestListQuery = `
     WHERE (@ChiCuaToi=0 OR dn.MaNV_Lap=@MaNV)
       AND (@AnNhap=0 OR dn.TrangThai<>N'Nháp')
       AND (@TrangThai=N'' OR dn.TrangThai=@TrangThai)
-      AND (@TuKhoa=N'' OR dn.MaDN LIKE @Mau OR nv.TenNV LIKE @Mau OR dn.LyDo LIKE @Mau)
+      AND (@TuKhoa=N'' OR dn.MaDN LIKE @Mau COLLATE Latin1_General_100_CI_AI OR nv.TenNV LIKE @Mau COLLATE Latin1_General_100_CI_AI OR dn.LyDo LIKE @Mau COLLATE Latin1_General_100_CI_AI)
     GROUP BY dn.MaDN,dn.MaNV_Lap,nv.TenNV,dn.NgayLap,dn.NgayGui,dn.LyDo,dn.TrangThai,dn.GhiChu,dn.MaNV_TiepNhan
     ORDER BY dn.NgayLap DESC`;
 

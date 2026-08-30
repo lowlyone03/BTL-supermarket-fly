@@ -5,16 +5,19 @@
   "main": "index.js",
   "scripts": {
     "start": "node src/app.js",
-    "migrate:next": "node apply-migration.js SupermarketFly_Migration_20260825_WorkforceScheduling.sql && node apply-migration.js SupermarketFly_Migration_20260825_SalesAndWorkforceV2.sql && node apply-migration.js SupermarketFly_Migration_20260825_OfficeHours.sql",
+    "migrate:next": "node apply-migration.js SupermarketFly_Migration_20260825_WorkforceScheduling.sql && node apply-migration.js SupermarketFly_Migration_20260825_SalesAndWorkforceV2.sql && node apply-migration.js SupermarketFly_Migration_20260825_OfficeHours.sql && node apply-migration.js SupermarketFly_Migration_20260830_ProductImages.sql",
     "prepare:warehouse": "node prepare-warehouse-phase.js",
     "cleanup:demo-products": "node remove-demo-products.js",
     "cleanup:extra-cashier": "node purge-extra-cashier.js",
     "seed:accounts": "node seed-accounts.js",
     "seed:permissions": "node seed-permissions.js",
-    "test": "node --check src/app.js && node --check src/controllers/warehouseController.js && node --check src/controllers/inventoryCountController.js && node --check src/controllers/stockIssueController.js && node --check src/controllers/accountingController.js && node --check src/controllers/reportController.js && node --check src/controllers/paymentVoucherController.js && node --check src/controllers/cashierController.js && node --check src/controllers/workforceController.js && node --check src/controllers/salesController.js && node --check src/controllers/settlementController.js && node --check src/controllers/payrollController.js && node --check src/controllers/returnsController.js && node --check src/controllers/catalogController.js && node --check src/services/financialRules.js && node --check src/services/reportingPeriod.js && node --check ../desktop/src/pages/dashboard/dashboard.js && node --check ../desktop/src/pages/workforce/workforce-pages.js && node --check ../desktop/src/pages/cashier/cashier-pages.js && node --check ../desktop/src/pages/accounting/accounting-pages.js && node --check ../desktop/src/pages/warehouse/warehouse-pages.js && node --check ../desktop/src/pages/warehouse/stock-issue-pages.js && node --check ../desktop/src/pages/warehouse/purchase-order-pages.js && node --check ../desktop/src/pages/shared/role-reports.js && node --check ../desktop/src/pages/shared/report-charts.js && node --check ../desktop/src/pages/shared/report-layout.js && node --check ../desktop/src/pages/shared/print-documents.js && node --check ../desktop/src/pages/shared/product-images.js && node --check ../desktop/src/pages/shared/locale-ui.js && node --check ../desktop/src/pages/admin/promotions.js && node --check ../desktop/src/pages/admin/products.js",
+    "test": "node --check src/app.js && node --check src/controllers/warehouseController.js && node --check src/controllers/inventoryCountController.js && node --check src/controllers/stockIssueController.js && node --check src/controllers/accountingController.js && node --check src/controllers/reportController.js && node --check src/controllers/paymentVoucherController.js && node --check src/controllers/cashierController.js && node --check src/controllers/workforceController.js && node --check src/controllers/salesController.js && node --check src/controllers/settlementController.js && node --check src/controllers/payrollController.js && node --check src/controllers/returnsController.js && node --check src/controllers/catalogController.js && node --check src/middlewares/productImageUpload.js && node --check src/services/financialRules.js && node --check src/services/reportingPeriod.js && node --check ../desktop/src/pages/dashboard/dashboard.js && node --check ../desktop/src/pages/workforce/workforce-pages.js && node --check ../desktop/src/pages/cashier/cashier-pages.js && node --check ../desktop/src/pages/accounting/accounting-pages.js && node --check ../desktop/src/pages/warehouse/warehouse-pages.js && node --check ../desktop/src/pages/warehouse/stock-issue-pages.js && node --check ../desktop/src/pages/warehouse/purchase-order-pages.js && node --check ../desktop/src/pages/shared/role-reports.js && node --check ../desktop/src/pages/shared/report-charts.js && node --check ../desktop/src/pages/shared/report-layout.js && node --check ../desktop/src/pages/shared/print-documents.js && node --check ../desktop/src/pages/shared/product-images.js && node --check ../desktop/src/pages/shared/search-tools.js && node --check ../desktop/src/pages/shared/locale-ui.js && node --check ../desktop/src/pages/admin/promotions.js && node --check ../desktop/src/pages/admin/products.js",
     "test:business": "node test-business-rules.js",
     "test:print-report": "node test-print-report.js",
     "test:product-images": "node test-product-images.js",
+    "test:product-upload": "node test-product-upload.js",
+    "test:product-image-api": "node test-product-image-api.js",
+    "test:search": "node test-search-tools.js",
     "test:opening-flow": "node test-opening-flow.js",
     "test:cashier-opening": "node test-cashier-opening.js",
     "test:scheduler": "node test-shift-scheduler.js",
@@ -31,6 +34,7 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "msnodesqlv8": "^5.2.3",
-    "mssql": "^12.7.0"
+    "mssql": "^12.7.0",
+    "multer": "^2.3.0"
   }
 }

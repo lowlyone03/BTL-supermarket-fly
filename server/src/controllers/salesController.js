@@ -28,14 +28,14 @@ const getCatalog = async (req, res) => {
         const pool = await poolPromise;
         const [products, promotions] = await Promise.all([
             pool.request().input('Search', sql.NVarChar, `%${search}%`).query(`
-                SELECT sp.MaSP,sp.TenSP,sp.MaVach,sp.DonViTinh,sp.GiaBan,sp.TrangThai,
+                SELECT sp.MaSP,sp.TenSP,sp.MaVach,sp.DonViTinh,sp.GiaBan,sp.DuongDanAnh,sp.TrangThai,
                        dm.MaDM,dm.TenDM,tk.MaKho,tk.SLTon,tk.DonGiaBinhQuan
                 FROM SanPham sp
                 JOIN DanhMuc dm ON dm.MaDM=sp.MaDM
                 JOIN TonKho tk ON tk.MaSP=sp.MaSP
                 JOIN Kho k ON k.MaKho=tk.MaKho AND k.TrangThai=1
                 WHERE sp.TrangThai IN (N'Đang bán',N'Đang kinh doanh')
-                  AND (@Search=N'%%' OR sp.MaSP LIKE @Search OR sp.MaVach LIKE @Search OR sp.TenSP LIKE @Search)
+                  AND (@Search=N'%%' OR sp.MaSP LIKE @Search COLLATE Latin1_General_100_CI_AI OR sp.MaVach LIKE @Search COLLATE Latin1_General_100_CI_AI OR sp.TenSP LIKE @Search COLLATE Latin1_General_100_CI_AI)
                 ORDER BY sp.TenSP`),
             pool.request().query(`
                 SELECT MaKM,TenKM,LoaiKM,GiaTri,NgayBatDau,NgayKetThuc
@@ -57,7 +57,7 @@ const listCustomers = async (req, res) => {
         const result = await pool.request().input('Search', sql.NVarChar, `%${search}%`).query(`
             SELECT TOP 50 MaKH,TenKH,SDT,Email,DiaChi,NgaySinh,DiemTichLuy,HangThanhVien
             FROM KhachHang
-            WHERE @Search=N'%%' OR MaKH LIKE @Search OR TenKH LIKE @Search OR SDT LIKE @Search
+            WHERE @Search=N'%%' OR MaKH LIKE @Search COLLATE Latin1_General_100_CI_AI OR TenKH LIKE @Search COLLATE Latin1_General_100_CI_AI OR SDT LIKE @Search COLLATE Latin1_General_100_CI_AI
             ORDER BY TenKH`);
         res.json({ items: result.recordset });
     } catch (error) {
@@ -129,7 +129,7 @@ const listInvoices = async (req, res) => {
             LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
             WHERE hd.MaNV=@MaNV
               AND (@TrangThai=N'' OR hd.TrangThai=@TrangThai)
-              AND (@Search=N'%%' OR hd.MaHD LIKE @Search OR kh.TenKH LIKE @Search OR kh.SDT LIKE @Search)
+              AND (@Search=N'%%' OR hd.MaHD LIKE @Search COLLATE Latin1_General_100_CI_AI OR kh.TenKH LIKE @Search COLLATE Latin1_General_100_CI_AI OR kh.SDT LIKE @Search COLLATE Latin1_General_100_CI_AI)
             ORDER BY hd.NgayLap DESC`);
         res.json({ items: result.recordset });
     } catch (error) {
@@ -176,7 +176,7 @@ const calculateInvoice = async (source, lines, maKM, diemSuDung, maKH) => {
         if (seen.has(maSP)) throw new Error(`Sản phẩm ${maSP} bị lặp.`);
         seen.add(maSP);
         const product = await queryFrom(source).input(`SP${normalized.length}`, sql.VarChar, maSP).query(`
-            SELECT sp.MaSP,sp.TenSP,sp.DonViTinh,sp.GiaBan,tk.MaKho,tk.SLTon
+            SELECT sp.MaSP,sp.TenSP,sp.DonViTinh,sp.GiaBan,sp.DuongDanAnh,tk.MaKho,tk.SLTon
             FROM SanPham sp JOIN TonKho tk ON tk.MaSP=sp.MaSP
             JOIN Kho k ON k.MaKho=tk.MaKho AND k.TrangThai=1
             WHERE sp.MaSP=@SP${normalized.length} AND sp.TrangThai IN (N'Đang bán',N'Đang kinh doanh')`);

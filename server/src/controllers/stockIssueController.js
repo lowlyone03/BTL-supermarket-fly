@@ -133,8 +133,8 @@ const listIssues = async (req, res) => {
                     LEFT JOIN NhaCungCap ncc ON ncc.MaNCC=px.MaNCC
                     LEFT JOIN ChiTietPhieuXuat ct ON ct.MaPX=px.MaPX
                     WHERE px.MaNV=@MaNV AND (@TrangThai=N'' OR px.TrangThai=@TrangThai)
-                      AND (@TuKhoa=N'' OR px.MaPX LIKE @Mau OR px.LoaiXuat LIKE @Mau
-                           OR px.MaPN LIKE @Mau OR px.GhiChu LIKE @Mau OR ncc.TenNCC LIKE @Mau)
+                      AND (@TuKhoa=N'' OR px.MaPX LIKE @Mau COLLATE Latin1_General_100_CI_AI OR px.LoaiXuat LIKE @Mau COLLATE Latin1_General_100_CI_AI
+                           OR px.MaPN LIKE @Mau COLLATE Latin1_General_100_CI_AI OR px.GhiChu LIKE @Mau COLLATE Latin1_General_100_CI_AI OR ncc.TenNCC LIKE @Mau COLLATE Latin1_General_100_CI_AI)
                     GROUP BY px.MaPX,px.LoaiXuat,px.MaPN,px.NgayXuat,px.TrangThai,px.GhiChu,
                              px.LyDoTuChoi,k.TenKho,ncc.TenNCC
                     ORDER BY px.NgayXuat DESC`);

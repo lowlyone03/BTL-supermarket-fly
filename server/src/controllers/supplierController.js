@@ -60,8 +60,8 @@ const list = async (req, res) => {
                     FROM NhaCungCap ncc
                     LEFT JOIN DonMuaHang po ON po.MaNCC=ncc.MaNCC
                     WHERE (@TrangThai=N'' OR ncc.TrangThai=@TrangThai)
-                      AND (@TuKhoa=N'' OR ncc.MaNCC LIKE @Mau OR ncc.TenNCC LIKE @Mau
-                           OR ncc.MaSoThue LIKE @Mau OR ISNULL(ncc.SDT,'') LIKE @Mau)
+                      AND (@TuKhoa=N'' OR ncc.MaNCC LIKE @Mau COLLATE Latin1_General_100_CI_AI OR ncc.TenNCC LIKE @Mau COLLATE Latin1_General_100_CI_AI
+                           OR ncc.MaSoThue LIKE @Mau COLLATE Latin1_General_100_CI_AI OR ISNULL(ncc.SDT,'') LIKE @Mau COLLATE Latin1_General_100_CI_AI)
                     GROUP BY ncc.MaNCC,ncc.TenNCC,ncc.MaSoThue,ncc.SDT,ncc.Email,ncc.DiaChi,ncc.NguoiLienHe,ncc.TrangThai
                     ORDER BY CASE WHEN ncc.TrangThai=N'Đang hợp tác' THEN 0 ELSE 1 END,ncc.TenNCC`);
         const items = result.recordset;

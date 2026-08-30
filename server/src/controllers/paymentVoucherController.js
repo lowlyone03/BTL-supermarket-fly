@@ -53,8 +53,8 @@ const listPayables = async (req, res) => {
             .input('Pattern', sql.NVarChar, `%${keyword}%`)
             .input('Status', sql.NVarChar, status)
             .query(`${payableSelect}
-                WHERE (@Keyword=N'' OR cn.MaCNPTra LIKE @Pattern OR ncc.TenNCC LIKE @Pattern
-                       OR hd.SoHoaDon LIKE @Pattern OR hd.MaPO LIKE @Pattern OR pc.MaPhieu LIKE @Pattern)
+                WHERE (@Keyword=N'' OR cn.MaCNPTra LIKE @Pattern COLLATE Latin1_General_100_CI_AI OR ncc.TenNCC LIKE @Pattern COLLATE Latin1_General_100_CI_AI
+                       OR hd.SoHoaDon LIKE @Pattern COLLATE Latin1_General_100_CI_AI OR hd.MaPO LIKE @Pattern COLLATE Latin1_General_100_CI_AI OR pc.MaPhieu LIKE @Pattern COLLATE Latin1_General_100_CI_AI)
                   AND (@Status=N'' OR pc.TrangThai=@Status
                        OR (@Status=N'Chưa lập Phiếu chi' AND pc.MaPhieu IS NULL))
                 ORDER BY CASE WHEN cn.SoTienConLai>0 AND cn.HanThanhToan<=CONVERT(date,GETDATE()) THEN 0 ELSE 1 END,

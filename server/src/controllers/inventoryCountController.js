@@ -77,7 +77,7 @@ const listCounts = async (req, res) => {
                     LEFT JOIN NhanVien nvd ON nvd.MaNV=kk.MaNV_Duyet
                     WHERE kk.MaNV=@MaNV
                       AND (@TrangThai=N'' OR kk.TrangThai=@TrangThai)
-                      AND (@TuKhoa=N'' OR kk.MaKK LIKE @Mau OR k.TenKho LIKE @Mau OR kk.GhiChu LIKE @Mau)
+                      AND (@TuKhoa=N'' OR kk.MaKK LIKE @Mau COLLATE Latin1_General_100_CI_AI OR k.TenKho LIKE @Mau COLLATE Latin1_General_100_CI_AI OR kk.GhiChu LIKE @Mau COLLATE Latin1_General_100_CI_AI)
                     GROUP BY kk.MaKK,kk.MaKho,k.TenKho,kk.NgayKiemKe,kk.TrangThai,
                              kk.GhiChu,kk.LyDoTuChoi,kk.NgayDuyet,nvd.TenNV
                     ORDER BY kk.NgayKiemKe DESC`);

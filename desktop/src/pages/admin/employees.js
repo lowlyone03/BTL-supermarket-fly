@@ -13,12 +13,13 @@
         .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
 
     const renderEmployees = () => {
-        const search = searchInput.value.trim().toLocaleLowerCase('vi-VN');
+        const normalizeSearch = window.FLY_SEARCH?.normalize || (value => String(value ?? '').trim().toLocaleLowerCase('vi-VN'));
+        const search = normalizeSearch(searchInput.value);
         const selectedRole = roleFilter.value;
         const selectedStatus = statusFilter.value;
         const filtered = employees.filter(emp =>
             [emp.TenNV, emp.MaNV, emp.ChucVu, emp.SDT, emp.Email]
-                .some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(search))
+                .some(value => normalizeSearch(value).includes(search))
             && (!selectedRole || emp.ChucVu === selectedRole)
             && (!selectedStatus || emp.TrangThai === selectedStatus)
         );

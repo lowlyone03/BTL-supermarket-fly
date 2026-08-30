@@ -119,7 +119,7 @@ const list = async (req, res) => {
                 LEFT JOIN DeNghiMuaHang dn ON dn.MaDN=po.MaDN
                 JOIN ChiTietDonMua ct ON ct.MaPO=po.MaPO
                 WHERE (@TrangThai=N'' OR po.TrangThai=@TrangThai)
-                  AND (@TuKhoa=N'' OR po.MaPO LIKE @Mau OR po.MaDN LIKE @Mau OR ncc.TenNCC LIKE @Mau)
+                  AND (@TuKhoa=N'' OR po.MaPO LIKE @Mau COLLATE Latin1_General_100_CI_AI OR po.MaDN LIKE @Mau COLLATE Latin1_General_100_CI_AI OR ncc.TenNCC LIKE @Mau COLLATE Latin1_General_100_CI_AI)
                 GROUP BY po.MaPO,po.MaDN,po.MaNCC,ncc.TenNCC,po.MaNV_Lap,nv.TenNV,po.NgayLap,
                          po.NgayGiaoDuKien,po.SoNgayThanhToan,po.TongTien,po.TrangThai,dn.TrangThai
                 ORDER BY po.NgayLap DESC`);

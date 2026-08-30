@@ -14,12 +14,13 @@
         .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
 
     const renderAccounts = () => {
-        const search = searchInput.value.trim().toLocaleLowerCase('vi-VN');
+        const normalizeSearch = window.FLY_SEARCH?.normalize || (value => String(value ?? '').trim().toLocaleLowerCase('vi-VN'));
+        const search = normalizeSearch(searchInput.value);
         const selectedRole = roleFilter.value;
         const selectedStatus = statusFilter.value;
         const filtered = accounts.filter(account =>
             [account.TenDangNhap, account.TenNV, account.ChucVu, account.TenVaiTro]
-                .some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(search))
+                .some(value => normalizeSearch(value).includes(search))
             && (!selectedRole || String(account.MaVaiTro) === selectedRole)
             && (selectedStatus === '' || String(account.TrangThai) === selectedStatus)
         );

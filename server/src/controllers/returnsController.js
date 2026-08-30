@@ -52,8 +52,8 @@ const searchInvoices = async (req, res) => {
             JOIN NhanVien nv ON nv.MaNV=hd.MaNV
             LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
             WHERE hd.TrangThai=N'Hoàn thành'
-              AND (hd.MaHD LIKE @Search OR kh.TenKH LIKE @Search OR kh.SDT LIKE @Search
-                   OR nv.TenNV LIKE @Search OR hd.MaCa LIKE @Search)
+              AND (hd.MaHD LIKE @Search COLLATE Latin1_General_100_CI_AI OR kh.TenKH LIKE @Search COLLATE Latin1_General_100_CI_AI OR kh.SDT LIKE @Search COLLATE Latin1_General_100_CI_AI
+                   OR nv.TenNV LIKE @Search COLLATE Latin1_General_100_CI_AI OR hd.MaCa LIKE @Search COLLATE Latin1_General_100_CI_AI)
             ORDER BY hd.NgayLap DESC`);
         res.json({ items: result.recordset });
     } catch (error) {

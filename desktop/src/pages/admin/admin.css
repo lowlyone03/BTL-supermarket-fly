@@ -75,6 +75,16 @@ td small { display: block; margin-top: 4px; color: #7f8b84; font-size: 9px; line
 .status-badge.active { color: #26704f; background: #e7f2eb; }
 .status-badge.locked { color: #aa4c39; background: #fbe9e5; }
 .product-editor-modal { width: min(820px,100%); }
+.product-image-field { margin-bottom: 2px; }
+.product-image-uploader { min-height: 112px; padding: 12px; display: flex; align-items: center; gap: 16px; border: 1px dashed #b9ccc1; border-radius: 16px; background: linear-gradient(135deg,#f8fbf9,#f0f6f2); }
+.product-image-preview { width: 100px; height: 88px; flex: 0 0 100px; display: grid; overflow: hidden; place-items: center; border: 1px solid #dce7e0; border-radius: 14px; color: #3b765e; background: #fff; font-size: 11px; font-weight: 800; }
+.product-image-preview img { width: 100%; height: 100%; object-fit: contain; }
+.product-image-preview.is-empty { background: radial-gradient(circle at 50% 38%,#dcebe3 0 18px,transparent 19px),#fff; }
+.product-image-preview.is-empty span { padding-top: 50px; }
+.product-image-copy { min-width: 0; display: flex; flex: 1; flex-direction: column; align-items: flex-start; gap: 5px; }
+.product-image-copy strong { color: #243a30; font-size: 12px; }
+.product-image-copy > span { max-width: 100%; overflow: hidden; color: #708077; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.product-image-button { min-height: 34px; margin-top: 4px; display: inline-flex; align-items: center; cursor: pointer; }
 .modal-description { max-width: 670px; margin: 7px 0 0; color: #718078; font-size: 10px; line-height: 1.55; }
 .input-with-action { width: 100%; display: flex; align-items: stretch; gap: 7px; }
 .input-with-action input { min-width: 0; flex: 1; }

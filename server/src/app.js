@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('node:path');
 require('dotenv').config();
 const { poolPromise } = require('./config/db'); // Đảm bảo gọi file db.js để khởi tạo kết nối
 
@@ -9,6 +10,10 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.resolve(__dirname, '..', 'uploads'), {
+    maxAge: '7d',
+    fallthrough: false
+}));
 
 // Import Routes
 const authRoutes = require('./routes/authRoutes');

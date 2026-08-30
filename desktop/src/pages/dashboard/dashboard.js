@@ -1,4 +1,5 @@
 const API_BASE = 'http://localhost:3000/api';
+window.FLY_API_BASE = API_BASE;
 const HANOI_TIME_ZONE = 'Asia/Ho_Chi_Minh';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -218,7 +219,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ? 'Đơn mua hàng, chứng từ kho, đề nghị đổi trả và thanh toán đang chờ Quản lý xem xét.'
         : 'Các công việc chờ phê duyệt đã được xử lý. Hãy tiếp tục kiểm tra nhân sự, tài khoản và hoạt động hệ thống.';
       const featuredProducts = (catalog.items || [])
-        .filter(item => item.TrangThai === 'Đang bán' && window.FLY_PRODUCT_IMAGES?.hasBundledImage(item.MaSP))
+        .filter(item => item.TrangThai === 'Đang bán' && window.FLY_PRODUCT_IMAGES?.hasImage(item))
         .sort((left, right) => {
           const leftRisk = Number(left.SLTon || 0) - Number(left.TonKhoToiThieu || 0);
           const rightRisk = Number(right.SLTon || 0) - Number(right.TonKhoToiThieu || 0);
@@ -402,6 +403,18 @@ document.addEventListener('DOMContentLoaded', () => {
     event.preventDefault();
     const query = document.getElementById('globalSearch').value.trim();
     if (!query) return;
+    const normalizeSearch = window.FLY_SEARCH?.normalize || (value => String(value ?? '').trim().toLocaleLowerCase('vi-VN'));
+    const normalizedQuery = normalizeSearch(query);
+    const matchingNavigation = pageNavItems.find(item => {
+      if (item.offsetParent === null) return false;
+      const label = normalizeSearch(item.textContent);
+      return label && (label.includes(normalizedQuery) || normalizedQuery.includes(label));
+    });
+    if (matchingNavigation) {
+      await openPage(matchingNavigation);
+      window.showToast(`Đã mở ${matchingNavigation.textContent.trim()}.`, 'success');
+      return;
+    }
     const destination = isWarehouse ? 'warehouse-inventory'
       : isPurchasing ? 'purchasing-inbox'
       : isCashier ? 'cashier-invoices'
@@ -413,7 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const search = document.getElementById(isWarehouse ? 'inventorySearch' : isPurchasing ? 'purchasingSearch' : isCashier ? 'invoiceQuery' : isAccounting ? 'invoiceSearch' : 'empSearch');
     if (search) {
       search.value = query;
-      search.dispatchEvent(new Event('input'));
+      search.dispatchEvent(new Event('input', { bubbles: true }));
       search.focus();
     }
   });

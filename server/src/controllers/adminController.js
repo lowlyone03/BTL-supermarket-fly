@@ -123,8 +123,8 @@ const getPayablesOverview = async (req, res) => {
                     )
                     SELECT * FROM DuLieuCongNo
                     WHERE (@TrangThai=N'' OR TrangThaiHienTai=@TrangThai)
-                      AND (@TuKhoa=N'' OR MaCNPTra LIKE @Mau OR TenNCC LIKE @Mau
-                           OR SoHoaDon LIKE @Mau OR MaPO LIKE @Mau OR MaPN LIKE @Mau)
+                      AND (@TuKhoa=N'' OR MaCNPTra LIKE @Mau COLLATE Latin1_General_100_CI_AI OR TenNCC LIKE @Mau COLLATE Latin1_General_100_CI_AI
+                           OR SoHoaDon LIKE @Mau COLLATE Latin1_General_100_CI_AI OR MaPO LIKE @Mau COLLATE Latin1_General_100_CI_AI OR MaPN LIKE @Mau COLLATE Latin1_General_100_CI_AI)
                     ORDER BY CASE WHEN TrangThaiHienTai=N'Quá hạn' THEN 0
                                   WHEN TrangThaiHienTai=N'Đang nợ' THEN 1 ELSE 2 END,
                              HanThanhToan,NgayPhatSinh DESC`),

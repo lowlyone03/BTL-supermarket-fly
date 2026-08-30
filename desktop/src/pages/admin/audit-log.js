@@ -22,12 +22,13 @@
     };
 
     const renderLogs = () => {
-        const search = document.getElementById('logSearch').value.trim().toLocaleLowerCase('vi-VN');
+        const normalizeSearch = window.FLY_SEARCH?.normalize || (value => String(value ?? '').trim().toLocaleLowerCase('vi-VN'));
+        const search = normalizeSearch(document.getElementById('logSearch').value);
         const from = document.getElementById('logFrom').value;
         const to = document.getElementById('logTo').value;
         const filtered = logs.filter(log => {
             const text = [log.HanhDong, log.NoiDung, log.TenNV, log.TenDangNhap, log.BangLienQuan, log.MaBanGhi]
-                .map(value => String(value || '').toLocaleLowerCase('vi-VN')).join(' ');
+                .map(normalizeSearch).join(' ');
             const dateKey = hanoiDateKey(log.ThoiGian);
             return text.includes(search) && (!from || dateKey >= from) && (!to || dateKey <= to);
         });

@@ -6,16 +6,34 @@
   let categories = [];
   let editingCode = null;
   let editingCategoryCode = null;
+  let imagePreviewUrl = null;
 
   const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
   const money = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
   const productPhoto = (item, className = '') => window.FLY_PRODUCT_IMAGES?.markup(item, { className }) || '';
   const normalizeCode = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const api = async (path, options = {}) => {
-    const response = await fetch(`${API}${path}`, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(options.headers || {}) } });
+    const headers = { Authorization: `Bearer ${token}`, ...(options.headers || {}) };
+    if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
+    const response = await fetch(`${API}${path}`, { ...options, headers });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.message || 'Không thể xử lý yêu cầu.');
     return data;
+  };
+
+  const clearImagePreviewUrl = () => {
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    imagePreviewUrl = null;
+  };
+
+  const renderImagePreview = (source = '', label = '') => {
+    const preview = document.getElementById('productImagePreview');
+    if (!preview) return;
+    preview.classList.toggle('is-empty', !source);
+    preview.innerHTML = source
+      ? `<img src="${esc(source)}" alt="Xem trước ảnh sản phẩm">`
+      : '<span>Ảnh</span>';
+    document.getElementById('productImageName').textContent = label || 'JPG, PNG hoặc WebP · tối đa 5 MB';
   };
 
   const fallbackProductPrefix = category => {
@@ -65,8 +83,9 @@
   const renderCategories = () => {
     const list = document.getElementById('categoryList');
     if (!list) return;
-    const keyword = String(document.getElementById('categorySearch')?.value || '').trim().toLocaleLowerCase('vi');
-    const visible = categories.filter(item => !keyword || `${item.MaDM} ${item.TenDM} ${item.MoTa || ''}`.toLocaleLowerCase('vi').includes(keyword));
+    const normalizeSearch = window.FLY_SEARCH?.normalize || (value => String(value ?? '').trim().toLocaleLowerCase('vi'));
+    const keyword = normalizeSearch(document.getElementById('categorySearch')?.value || '');
+    const visible = categories.filter(item => !keyword || normalizeSearch(`${item.MaDM} ${item.TenDM} ${item.MoTa || ''}`).includes(keyword));
     document.getElementById('categoryTotalCount').textContent = categories.length;
     document.getElementById('categoryActiveCount').textContent = categories.filter(item => Number(item.TrangThai) === 1).length;
     list.innerHTML = visible.length ? visible.map(item => {
@@ -159,6 +178,17 @@
     document.getElementById('productMinimum').value = item?.TonKhoToiThieu ?? 0;
     document.getElementById('productStatusInput').value = item?.TrangThai || 'Đang bán';
     document.getElementById('productCodeHelp').textContent = isEditing ? 'Mã sản phẩm không thể đổi sau khi tạo.' : 'Mã duy nhất, không thể đổi sau khi tạo.';
+    const imageInput = document.getElementById('productImage');
+    imageInput.value = '';
+    imageInput.required = false;
+    document.getElementById('productImageRequiredMark').hidden = isEditing;
+    document.getElementById('productImageTitle').textContent = isEditing ? 'Thay ảnh sản phẩm' : 'Chọn ảnh sản phẩm';
+    document.getElementById('productImageHelp').textContent = isEditing
+      ? 'Không chọn tệp nếu muốn giữ ảnh hiện tại. Ảnh mới sẽ thay ảnh đã tải trước đó.'
+      : 'Bắt buộc khi thêm mới; ảnh được dùng tại quản lý sản phẩm, kho và POS.';
+    clearImagePreviewUrl();
+    const currentImage = isEditing ? window.FLY_PRODUCT_IMAGES?.resolve(item) || '' : '';
+    renderImagePreview(currentImage, currentImage ? `Ảnh hiện tại của ${item.MaSP}` : 'JPG, PNG hoặc WebP · tối đa 5 MB');
     document.getElementById('productModal').style.display = 'flex';
     if (!isEditing) await window.suggestProductCode();
     document.getElementById(isEditing ? 'productName' : 'productCode').focus();
@@ -167,6 +197,8 @@
   window.closeProductModal = () => {
     document.getElementById('productModal').style.display = 'none';
     document.getElementById('productForm').reset();
+    clearImagePreviewUrl();
+    renderImagePreview();
     editingCode = null;
   };
 
@@ -215,6 +247,12 @@
 
   document.getElementById('productForm')?.addEventListener('submit', async event => {
     event.preventDefault();
+    const imageInput = document.getElementById('productImage');
+    if (!editingCode && !imageInput.files?.length) {
+      return window.showToast('Ảnh sản phẩm là bắt buộc khi thêm mới.', 'error');
+    }
+    const wasEditing = Boolean(editingCode);
+    const productCode = editingCode;
     const payload = {
       MaSP: document.getElementById('productCode').value,
       MaDM: document.getElementById('productCategoryInput').value,
@@ -226,12 +264,22 @@
       TonKhoToiThieu: Number(document.getElementById('productMinimum').value),
       TrangThai: document.getElementById('productStatusInput').value
     };
+    const formData = new FormData();
+    Object.entries(payload).forEach(([key, value]) => formData.append(key, String(value ?? '')));
+    if (imageInput.files?.[0]) formData.append('AnhSanPham', imageInput.files[0]);
+    const submitButton = document.getElementById('productSubmitButton');
     try {
-      const data = await api(`/products${editingCode ? `/${encodeURIComponent(editingCode)}` : ''}`, { method: editingCode ? 'PUT' : 'POST', body: JSON.stringify(payload) });
+      submitButton.disabled = true;
+      submitButton.textContent = wasEditing ? 'Đang lưu...' : 'Đang thêm...';
+      const data = await api(`/products${productCode ? `/${encodeURIComponent(productCode)}` : ''}`, { method: wasEditing ? 'PUT' : 'POST', body: formData });
       window.showToast(data.message, 'success');
       window.closeProductModal();
       await Promise.all([window.loadProducts(), loadAllProducts()]);
     } catch (error) { window.showToast(error.message, 'error'); }
+    finally {
+      submitButton.disabled = false;
+      submitButton.textContent = wasEditing ? 'Lưu thay đổi' : 'Thêm sản phẩm';
+    }
   });
 
   document.getElementById('categoryForm')?.addEventListener('submit', async event => {
@@ -265,6 +313,28 @@
   document.getElementById('categorySearch')?.addEventListener('input', renderCategories);
   document.getElementById('productCategoryInput')?.addEventListener('change', () => {
     if (!editingCode) window.suggestProductCode();
+  });
+  document.getElementById('productImage')?.addEventListener('change', event => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    clearImagePreviewUrl();
+    if (!file) {
+      const item = allProducts.find(product => product.MaSP === editingCode) || products.find(product => product.MaSP === editingCode);
+      const currentImage = item ? window.FLY_PRODUCT_IMAGES?.resolve(item) || '' : '';
+      return renderImagePreview(currentImage, currentImage ? `Ảnh hiện tại của ${item.MaSP}` : 'JPG, PNG hoặc WebP · tối đa 5 MB');
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      input.value = '';
+      renderImagePreview();
+      return window.showToast('Ảnh sản phẩm chỉ chấp nhận JPG, PNG hoặc WebP.', 'error');
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      input.value = '';
+      renderImagePreview();
+      return window.showToast('Ảnh sản phẩm không được lớn hơn 5 MB.', 'error');
+    }
+    imagePreviewUrl = URL.createObjectURL(file);
+    renderImagePreview(imagePreviewUrl, `${file.name} · ${(file.size / 1024).toLocaleString('vi-VN', { maximumFractionDigits: 0 })} KB`);
   });
   document.getElementById('productSearch')?.addEventListener('input', (() => { let timer; return () => { clearTimeout(timer); timer = setTimeout(window.loadProducts, 250); }; })());
   document.getElementById('productCategory')?.addEventListener('change', window.loadProducts);

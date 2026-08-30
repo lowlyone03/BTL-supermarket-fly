@@ -159,10 +159,20 @@
       const renderList = items => {
         overlay.querySelector('#customerResults').innerHTML = items.length ? items.map(item => `<button type="button" class="cashier-customer-hit" data-id="${esc(item.MaKH)}">${avatar(item.TenKH)}<span><strong>${esc(item.TenKH)}</strong><small>${esc(item.SDT || '—')} · ${esc(item.HangThanhVien)} · ${item.DiemTichLuy} điểm</small></span></button>`).join('') : '<div class="warehouse-empty">Không tìm thấy. Có thể tạo thành viên mới.</div>';
       };
-      overlay.querySelector('#customerSearch').addEventListener('input', async event => {
+      let customerSearchVersion = 0;
+      const runCustomerSearch = (window.FLY_SEARCH?.debounce || ((handler, delay) => { let timer; return (...args) => { clearTimeout(timer); timer = setTimeout(() => handler(...args), delay); }; }))(async (query, version) => {
+        try {
+          const items = (await api(context, `/cashier/customers?search=${encodeURIComponent(query)}`)).items;
+          if (version === customerSearchVersion && overlay.isConnected) renderList(items);
+        } catch (error) {
+          if (version === customerSearchVersion) context.showToast(error.message, 'error');
+        }
+      }, 250);
+      overlay.querySelector('#customerSearch').addEventListener('input', event => {
         const query = event.target.value.trim();
+        const version = ++customerSearchVersion;
         if (!query) return renderList([]);
-        try { renderList((await api(context, `/cashier/customers?search=${encodeURIComponent(query)}`)).items); } catch (error) { context.showToast(error.message, 'error'); }
+        runCustomerSearch(query, version);
       });
       overlay.addEventListener('click', async event => {
         const hit = event.target.closest('[data-id]');
@@ -523,16 +533,19 @@
       };
       try { showHits((await api(context, '/cashier/returns/recent-invoices')).items); }
       catch (error) { context.showToast(error.message, 'error'); }
-      let timer = 0;
+      let returnSearchVersion = 0;
+      const runReturnSearch = (window.FLY_SEARCH?.debounce || ((handler, delay) => { let timer; return (...args) => { clearTimeout(timer); timer = setTimeout(() => handler(...args), delay); }; }))(async (query, version) => {
+        try {
+          const path = query.length < 2 ? '/cashier/returns/recent-invoices' : `/cashier/returns/search-invoices?search=${encodeURIComponent(query)}`;
+          const items = (await api(context, path)).items;
+          if (version === returnSearchVersion && overlay.isConnected) showHits(items);
+        } catch (error) {
+          if (version === returnSearchVersion) context.showToast(error.message, 'error');
+        }
+      }, 250);
       overlay.querySelector('#returnSearch').addEventListener('input', event => {
-        clearTimeout(timer);
         const query = event.target.value.trim();
-        timer = setTimeout(async () => {
-          try {
-            if (query.length < 2) return showHits((await api(context, '/cashier/returns/recent-invoices')).items);
-            showHits((await api(context, `/cashier/returns/search-invoices?search=${encodeURIComponent(query)}`)).items);
-          } catch (error) { context.showToast(error.message, 'error'); }
-        }, 250);
+        runReturnSearch(query, ++returnSearchVersion);
       });
       overlay.addEventListener('click', async event => {
         const hit = event.target.closest('[data-hd]');
@@ -569,13 +582,21 @@
             ? `Hàng mới thấp hơn ${money(Math.abs(diff))}. Hãy hoàn hàng cũ và lập hóa đơn bán mới; không giao qua phiếu này.`
             : 'Đã ngang giá, có thể hoàn tất giao đổi.';
       };
-      overlay.querySelector('#exchangeSearch')?.addEventListener('input', async event => {
-        const query = event.target.value.trim();
-        if (query.length < 2) { overlay.querySelector('#exchangeHits').innerHTML = ''; return; }
+      let exchangeSearchVersion = 0;
+      const runExchangeSearch = (window.FLY_SEARCH?.debounce || ((handler, delay) => { let timer; return (...args) => { clearTimeout(timer); timer = setTimeout(() => handler(...args), delay); }; }))(async (query, version) => {
         try {
           const catalog = await api(context, `/cashier/returns/catalog?search=${encodeURIComponent(query)}`);
+          if (version !== exchangeSearchVersion || !overlay.isConnected) return;
           overlay.querySelector('#exchangeHits').innerHTML = (catalog.products || []).slice(0, 12).map(item => `<button type="button" class="cashier-invoice-hit" data-ex="${esc(item.MaSP)}" data-name="${esc(item.TenSP)}" data-price="${Number(item.GiaBan)}" data-stock="${Number(item.SLTon)}"><div><strong>${esc(item.TenSP)}</strong><small>${esc(item.MaSP)} · tồn ${item.SLTon} · ${money(item.GiaBan)}</small></div></button>`).join('') || '<p class="cashier-payment-help">Không có sản phẩm phù hợp.</p>';
-        } catch (error) { context.showToast(error.message, 'error'); }
+        } catch (error) {
+          if (version === exchangeSearchVersion) context.showToast(error.message, 'error');
+        }
+      }, 250);
+      overlay.querySelector('#exchangeSearch')?.addEventListener('input', event => {
+        const query = event.target.value.trim();
+        const version = ++exchangeSearchVersion;
+        if (query.length < 2) { overlay.querySelector('#exchangeHits').innerHTML = ''; return; }
+        runExchangeSearch(query, version);
       });
       overlay.addEventListener('click', event => {
         const hit = event.target.closest('[data-ex]');

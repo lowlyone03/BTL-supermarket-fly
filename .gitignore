@@ -93,3 +93,6 @@ out/
 
 # Local UI smoke-test captures
 desktop/.visual-smoke/
+
+# Runtime product uploads (database stores the relative path)
+server/uploads/

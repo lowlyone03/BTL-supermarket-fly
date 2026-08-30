@@ -90,14 +90,15 @@ Kỳ vọng:
 
 - Kiểm tra cú pháp toàn bộ controller và mã giao diện đạt.
 - 16/16 kiểm thử quy tắc lãi gộp, đổi ngang giá và UC27 đạt.
-- Kiểm thử ảnh sản phẩm, mẫu in và bộ lập lịch đạt.
+- Kiểm thử ảnh đóng gói/ảnh tải lên, tìm kiếm tiếng Việt, mẫu in và bộ lập lịch đạt.
 - Không có dòng lỗi hoặc tiến trình kết thúc khác mã 0.
 
 Kết quả nền đã xác minh khi lập tài liệu ngày 30/08/2026:
 
 - npm run test:next kết thúc với mã 0.
 - 16/16 quy tắc nghiệp vụ đạt.
-- 36/36 ảnh sản phẩm hợp lệ và có placeholder cho sản phẩm mới.
+- 36/36 ảnh đóng gói hợp lệ; ảnh tải lên được kiểm tra chữ ký JPG/PNG/WebP và có placeholder an toàn.
+- Tìm kiếm dùng được cả tiếng Việt có dấu/không dấu và chỉ gửi yêu cầu cuối sau khi người dùng ngừng gõ.
 - Mẫu in báo cáo A4 có thương hiệu, KPI, SVG xu hướng và bảng chi tiết đạt.
 - Bộ lập lịch ca chính/tăng cường và lịch hành chính đạt.
 
@@ -111,6 +112,14 @@ Khởi động hệ thống:
 Kỳ vọng:
 
 - Server chạy tại http://localhost:3000.
+
+Kiểm tra tích hợp ảnh bằng API thật (chỉ chạy khi server đang mở ở một cửa sổ khác):
+
+  cd D:\UDTHTKT\BTL\supermarket-fly\server
+  npm run test:product-image-api
+
+Kỳ vọng: hiện dòng "API PRODUCT IMAGE PASS". Script tự tạo sản phẩm TEST, kiểm tra giữ/thay ảnh,
+tìm không dấu, chặn tệp giả ảnh rồi xóa sạch sản phẩm, tồn kho, nhật ký và ảnh TEST.
 - Ứng dụng desktop mở và kết nối SQL Server thành công.
 - Không chạy thêm một bản server trùng cổng 3000.
 
@@ -268,6 +277,22 @@ Bước: đang ở màn danh sách thì dừng server; thử tải/lưu; sau đ�
 Kỳ vọng: báo lỗi kết nối, không báo lưu thành công giả; không nhân đôi dữ liệu; sau khi server
 trở lại có thể tải lại và tiếp tục.
 
+[GEN-08] Tìm kiếm chung toàn hệ thống
+Actor: lần lượt admin, muahang, thukho, thungan, ketoan.
+Bước:
+1. Tại ô tìm trên thanh trên cùng, nhập đúng tên một chức năng (ví dụ "báo cáo", "sản phẩm",
+   "công nợ") rồi Enter.
+2. Tại từng màn danh sách, tìm cùng một bản ghi bằng mã; tên có dấu; tên không dấu; một phần tên;
+   số điện thoại hoặc mã vạch nếu màn đó hỗ trợ.
+3. Gõ nhanh liên tiếp 5–10 ký tự rồi dừng; sau đó đổi ngay sang từ khóa khác.
+4. Nhấn Escape trong ô tìm; thử Ctrl+K tại dashboard.
+Kỳ vọng:
+- Tìm chức năng mở đúng menu được cấp quyền; từ khóa nghiệp vụ được chuyển sang đúng màn danh sách.
+- Có dấu và không dấu cho cùng kết quả; không phân biệt chữ hoa/thường; không cần nhập cả tên.
+- Chỉ kết quả của từ khóa mới nhất được giữ lại, không nhấp nháy về kết quả cũ.
+- Escape xóa từ khóa và trả danh sách đầy đủ; Ctrl+K đưa con trỏ vào ô tìm chung.
+- Không tìm thấy thì hiện trạng thái rỗng rõ ràng; không treo, không báo lỗi giả, không đổi dữ liệu.
+
 [SEC-01] Menu theo vai trò
 Bước: dùng từng actor đối chiếu menu với mục 3.
 Kỳ vọng: không có menu nghiệp vụ ngoài quyền; báo cáo và lịch đúng vai trò.
@@ -377,9 +402,10 @@ Kỳ vọng: chặn; không tạo dòng trùng.
 Kỳ vọng: bị chặn; sản phẩm không mất liên kết.
 
 [MGR-22] Tạo sản phẩm hợp lệ
-Bước: nhập mã, danh mục, tên, đơn vị, giá mua/bán/tồn tối thiểu hợp lệ; lưu.
-Kỳ vọng: sản phẩm mới có tồn ban đầu 0; ảnh đúng ánh xạ hoặc ảnh dự phòng; tìm được theo mã,
-tên và mã vạch.
+Bước: nhập mã, danh mục, tên, đơn vị, giá mua/bán/tồn tối thiểu hợp lệ; chọn một ảnh JPG,
+PNG hoặc WebP dưới 5 MB; lưu.
+Kỳ vọng: sản phẩm mới có tồn ban đầu 0; ảnh đã chọn hiện ở Quản lý sản phẩm, Tổng quan,
+Tồn kho và POS; tìm được theo mã, tên có dấu/không dấu và mã vạch.
 
 [MGR-23] Sản phẩm trùng mã/mã vạch
 Kỳ vọng: chặn; không ghi đè sản phẩm cũ.
@@ -392,8 +418,17 @@ Kỳ vọng: chặn đúng trường; tồn và giá cũ không đổi.
 Kỳ vọng: sản phẩm lịch sử vẫn hiện trong chứng từ cũ nhưng không được thêm vào chứng từ mới.
 
 [MGR-26] Ảnh sản phẩm
-Bước: kiểm tra lưới sản phẩm/POS/tồn kho với tất cả sản phẩm hiện có.
-Kỳ vọng: ảnh không méo, không vỡ đường dẫn; ảnh dự phòng thống nhất; tên/giá không bị che.
+Bước:
+1. Mở form thêm mới nhưng không chọn ảnh rồi bấm Thêm sản phẩm.
+2. Lần lượt thử tệp .txt đổi đuôi .png, ảnh lớn hơn 5 MB và định dạng ngoài JPG/PNG/WebP.
+3. Tạo bằng ảnh hợp lệ; mở lại form sửa nhưng không chọn ảnh mới rồi lưu.
+4. Mở lại lần nữa, chọn ảnh hợp lệ khác và lưu.
+5. Kiểm tra sản phẩm ở Quản lý sản phẩm, Tổng quan, Tồn kho và POS.
+Kỳ vọng:
+- Không có ảnh thì không tạo; giao diện và API đều báo rõ ảnh là bắt buộc.
+- Tệp giả ảnh, sai định dạng hoặc quá 5 MB bị chặn và không để lại sản phẩm/tệp rác.
+- Sửa không chọn tệp giữ nguyên ảnh; chọn tệp mới thay ảnh và dọn ảnh tải lên cũ.
+- Ảnh không méo/vỡ; ảnh dự phòng chỉ dùng cho dữ liệu cũ chưa có ảnh; tên/giá không bị che.
 
 [MGR-27] Tạo khuyến mãi phần trăm
 Bước: mã/tên, loại %, giá trị 10, khoảng ngày đang hiệu lực, chọn phạm vi phù hợp.
@@ -407,7 +442,10 @@ Thử % >100, ngày kết thúc trước ngày bắt đầu, thiếu mã/tên, t
 Kỳ vọng: chặn; POS không áp khuyến mãi chưa hợp lệ/hết hạn/chưa đến ngày.
 
 [MGR-30] Tìm kiếm/lọc dữ liệu nền
-Kỳ vọng: tìm mã/tên/điện thoại/mã vạch đúng; xóa từ khóa trả đủ danh sách; không phân trang trùng.
+Bước: tại Nhân viên, Tài khoản, Sản phẩm, Danh mục, Khuyến mãi, Nhà cung cấp và Nhật ký,
+tìm bằng mã/tên có dấu/tên không dấu/điện thoại/mã vạch phù hợp từng màn; gõ nhanh rồi xóa bằng Escape.
+Kỳ vọng: kết quả đúng, không phân biệt dấu/hoa thường; chỉ tải sau khoảng dừng gõ ngắn; xóa từ khóa
+trả đủ danh sách; bộ lọc trạng thái kết hợp đúng; không có kết quả cũ ghi đè hoặc phân trang trùng.
 
 ================================================================================
 8. C — PHÂN CA, LỊCH CÁ NHÂN, CHẤM CÔNG (UC30–UC32)

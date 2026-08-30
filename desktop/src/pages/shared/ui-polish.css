@@ -46,6 +46,16 @@
   box-shadow: 0 3px 12px rgba(30, 62, 49, .025);
 }
 
+input[type="search"]::-webkit-search-cancel-button {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  opacity: .48;
+  transition: opacity .16s ease;
+}
+input[type="search"]:focus::-webkit-search-cancel-button,
+input[type="search"]:hover::-webkit-search-cancel-button { opacity: .78; }
+
 .profile-button { min-height: 44px; }
 
 .content-area {

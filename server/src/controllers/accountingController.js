@@ -175,7 +175,7 @@ const listInvoices = async (req, res) => {
                 FROM HoaDonMuaHang hd JOIN NhaCungCap ncc ON ncc.MaNCC=hd.MaNCC
                 LEFT JOIN CongNoPhaiTra cn ON cn.MaHDMH=hd.MaHDMH
                 WHERE (@DoiChieu=N'' OR hd.TrangThaiDoiChieu=@DoiChieu)
-                  AND (@TuKhoa=N'' OR hd.SoHoaDon LIKE @Mau OR hd.MaHDMH LIKE @Mau OR hd.MaPO LIKE @Mau OR ncc.TenNCC LIKE @Mau)
+                  AND (@TuKhoa=N'' OR hd.SoHoaDon LIKE @Mau COLLATE Latin1_General_100_CI_AI OR hd.MaHDMH LIKE @Mau COLLATE Latin1_General_100_CI_AI OR hd.MaPO LIKE @Mau COLLATE Latin1_General_100_CI_AI OR ncc.TenNCC LIKE @Mau COLLATE Latin1_General_100_CI_AI)
                 ORDER BY hd.NgayTiepNhan DESC`);
         res.json({ items: result.recordset });
     } catch (error) {

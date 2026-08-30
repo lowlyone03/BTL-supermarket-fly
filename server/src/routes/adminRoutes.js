@@ -9,6 +9,7 @@ const stockIssueController = require('../controllers/stockIssueController');
 const paymentVoucherController = require('../controllers/paymentVoucherController');
 const reportController = require('../controllers/reportController');
 const { verifyToken, requireRole, requirePermission } = require('../middlewares/authMiddleware');
+const { uploadProductImage } = require('../middlewares/productImageUpload');
 
 const router = express.Router();
 
@@ -26,8 +27,8 @@ router.post('/catalog/categories', requirePermission('UC04'), catalogController.
 router.put('/catalog/categories/:id', requirePermission('UC04'), catalogController.updateCategory);
 router.patch('/catalog/categories/:id/status', requirePermission('UC04'), catalogController.setCategoryStatus);
 router.get('/catalog/products', requirePermission('UC04'), catalogController.getProducts);
-router.post('/catalog/products', requirePermission('UC04'), catalogController.createProduct);
-router.put('/catalog/products/:id', requirePermission('UC04'), catalogController.updateProduct);
+router.post('/catalog/products', requirePermission('UC04'), uploadProductImage, catalogController.createProduct);
+router.put('/catalog/products/:id', requirePermission('UC04'), uploadProductImage, catalogController.updateProduct);
 router.patch('/catalog/products/:id/status', requirePermission('UC04'), catalogController.setProductStatus);
 router.get('/catalog/promotions', requirePermission('UC04'), catalogController.getPromotions);
 router.post('/catalog/promotions', requirePermission('UC04'), catalogController.savePromotion);

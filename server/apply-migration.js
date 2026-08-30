@@ -4,11 +4,15 @@ const path = require('node:path');
 const { poolPromise } = require('./src/config/db');
 
 const migrationName = process.argv[2] || 'SupermarketFly_Migration_20260825_SalesAndWorkforceV2.sql';
-const migrationPath = path.resolve(__dirname, '..', '..', migrationName);
+const migrationCandidates = [
+    path.resolve(__dirname, 'migrations', migrationName),
+    path.resolve(__dirname, '..', '..', migrationName)
+];
+const migrationPath = migrationCandidates.find(candidate => fs.existsSync(candidate));
 
 async function run() {
-    if (!fs.existsSync(migrationPath)) {
-        throw new Error(`Không tìm thấy migration: ${migrationPath}`);
+    if (!migrationPath) {
+        throw new Error(`Không tìm thấy migration: ${migrationName}`);
     }
     const sqlText = fs.readFileSync(migrationPath, 'utf8');
     const batches = sqlText

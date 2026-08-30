@@ -47,7 +47,10 @@
   };
   window.closePromoModal = () => { document.getElementById('promoModal').style.display = 'none'; document.getElementById('promoForm').reset(); editingCode = null; };
 
-  document.getElementById('promoSearch')?.addEventListener('input', () => { window.loadPromotions(); });
+  const searchPromotions = window.FLY_SEARCH?.debounce
+    ? window.FLY_SEARCH.debounce(window.loadPromotions, 250)
+    : (() => { let timer; return () => { clearTimeout(timer); timer = setTimeout(window.loadPromotions, 250); }; })();
+  document.getElementById('promoSearch')?.addEventListener('input', searchPromotions);
   document.getElementById('promoTableBody')?.addEventListener('click', async event => {
     const edit = event.target.closest('[data-edit-promo]');
     if (edit) return window.openPromoModal(edit.dataset.editPromo);
