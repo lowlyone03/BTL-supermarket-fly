@@ -2,6 +2,9 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('node:path');
 const adminPageTemplates = require('./pages/admin/admin-page-templates');
 
+app.commandLine.appendSwitch('lang', 'vi-VN');
+app.commandLine.appendSwitch('accept-lang', 'vi-VN,vi');
+
 if (require('electron-squirrel-startup')) {
   app.quit();
 }

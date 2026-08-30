@@ -7,6 +7,7 @@ const returnsController = require('../controllers/returnsController');
 const inventoryCountController = require('../controllers/inventoryCountController');
 const stockIssueController = require('../controllers/stockIssueController');
 const paymentVoucherController = require('../controllers/paymentVoucherController');
+const reportController = require('../controllers/reportController');
 const { verifyToken, requireRole, requirePermission } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
@@ -18,6 +19,8 @@ router.get('/approvals/queues', requirePermission('UC05'), adminController.getAp
 router.get('/finance/payables', requirePermission('UC10'), adminController.getPayablesOverview);
 router.get('/finance/payables/:id', requirePermission('UC10'), adminController.getPayableDetail);
 router.get('/finance/sales-shifts', requirePermission('UC10'), adminController.getSalesShifts);
+router.get('/reports/financial-summary', requirePermission('UC10'), reportController.getFinancialReport);
+router.get('/reports/store-operations', requirePermission('UC10'), reportController.getStoreOperationsReport);
 router.get('/catalog/categories', requirePermission('UC04'), catalogController.getCategories);
 router.post('/catalog/categories', requirePermission('UC04'), catalogController.createCategory);
 router.put('/catalog/categories/:id', requirePermission('UC04'), catalogController.updateCategory);

@@ -49,6 +49,9 @@ td small { display: block; margin-top: 4px; color: #7f8b84; font-size: 9px; line
 .person-cell { display: flex; align-items: center; gap: 10px; }
 .person-avatar { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; border-radius: 50%; color: var(--green-700); background: var(--green-100); font-size: 9px; font-weight: 800; }
 .person-cell > span { min-width: 0; }
+.product-table-main { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.product-table-main > div { min-width: 0; }
+.product-table-main:hover .product-photo img { transform: scale(1.05); }
 .contact-cell span { display: block; color: #46564e; }
 .role-select { width: 100%; max-width: 160px; min-width: 0; height: 36px; padding: 0 10px; border: 1px solid #dce1dc; border-radius: 11px; color: #3e4e46; background: #fff; font-size: 10px; }
 .role-select-control { width: 100%; max-width: 160px; }

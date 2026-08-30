@@ -7,7 +7,7 @@
     "start:server": "cd server && node src/app.js",
     "start:desktop": "cd desktop && npm start",
     "setup:next": "cd server && npm run migrate:next && npm run seed:permissions && npm run seed:accounts && npm run cleanup:demo-products && npm run cleanup:extra-cashier && npm run prepare:warehouse",
-    "test:next": "cd server && npm test && npm run test:scheduler"
+    "test:next": "cd server && npm test && npm run test:business && npm run test:product-images && npm run test:print-report && npm run test:scheduler"
   },
   "devDependencies": {
     "concurrently": "^10.0.5"

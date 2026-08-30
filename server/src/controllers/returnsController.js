@@ -1,4 +1,5 @@
 const { sql, poolPromise } = require('../config/db');
+const { isRestockAccepted, isEqualValueExchange, roundMoney } = require('../services/financialRules');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 
@@ -20,11 +21,13 @@ const writeAudit = async (request, user, action, recordId, content) => {
 
 const loadDetail = async (pool, maDT) => {
     const header = await pool.request().input('MaDT', sql.VarChar, maDT).query(`
-        SELECT dt.*, hd.NgayLap NgayHoaDon, hd.TongThanhToan, hd.MaKH, kh.TenKH, kh.SDT,
-               nv.TenNV NguoiLap, nvk.TenNV NguoiKiemTra, nvd.TenNV NguoiDuyet
+        SELECT dt.*, hd.NgayLap NgayHoaDon, hd.TongThanhToan, hd.MaKH, hd.MaCa MaCaGoc,
+               kh.TenKH, kh.SDT, nv.TenNV NguoiLap, nvk.TenNV NguoiKiemTra, nvd.TenNV NguoiDuyet,
+               ban.TenNV ThuNganGoc
         FROM PhieuDoiTra dt
         JOIN HoaDon hd ON hd.MaHD=dt.MaHD
         JOIN NhanVien nv ON nv.MaNV=dt.MaNV_Lap
+        JOIN NhanVien ban ON ban.MaNV=hd.MaNV
         LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
         LEFT JOIN NhanVien nvk ON nvk.MaNV=dt.MaNV_KiemTra
         LEFT JOIN NhanVien nvd ON nvd.MaNV=dt.MaNV_Duyet
@@ -43,12 +46,14 @@ const searchInvoices = async (req, res) => {
         if (search.length < 2) return res.json({ items: [] });
         const pool = await poolPromise;
         const result = await pool.request().input('Search', sql.NVarChar, `%${search}%`).query(`
-            SELECT TOP 30 hd.MaHD, hd.NgayLap, hd.TongThanhToan, hd.MaKH, kh.TenKH, kh.SDT, nv.TenNV
+            SELECT TOP 30 hd.MaHD, hd.NgayLap, hd.TongThanhToan, hd.MaKH, hd.MaCa, hd.MaNV,
+                   kh.TenKH, kh.SDT, nv.TenNV
             FROM HoaDon hd
             JOIN NhanVien nv ON nv.MaNV=hd.MaNV
             LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
             WHERE hd.TrangThai=N'Hoàn thành'
-              AND (hd.MaHD LIKE @Search OR kh.TenKH LIKE @Search OR kh.SDT LIKE @Search)
+              AND (hd.MaHD LIKE @Search OR kh.TenKH LIKE @Search OR kh.SDT LIKE @Search
+                   OR nv.TenNV LIKE @Search OR hd.MaCa LIKE @Search)
             ORDER BY hd.NgayLap DESC`);
         res.json({ items: result.recordset });
     } catch (error) {
@@ -60,7 +65,8 @@ const getInvoiceForReturn = async (req, res) => {
     try {
         const pool = await poolPromise;
         const header = await pool.request().input('MaHD', sql.VarChar, clean(req.params.id, 20)).query(`
-            SELECT hd.MaHD, hd.NgayLap, hd.TongThanhToan, hd.MaKH, kh.TenKH, kh.SDT, nv.TenNV, hd.MaKho
+            SELECT hd.MaHD, hd.NgayLap, hd.TongThanhToan, hd.MaKH, hd.MaCa, hd.MaNV, hd.MaKho,
+                   kh.TenKH, kh.SDT, nv.TenNV
             FROM HoaDon hd JOIN NhanVien nv ON nv.MaNV=hd.MaNV
             LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
             WHERE hd.MaHD=@MaHD AND hd.TrangThai=N'Hoàn thành'`);
@@ -90,10 +96,11 @@ const listReturns = async (req, res) => {
             .input('Status', sql.NVarChar, status)
             .input('MaNV', sql.VarChar, req.user.MaNV).query(`
             SELECT dt.MaDT, dt.MaHD, dt.NgayLap, dt.HinhThucXuLy, dt.SoTienHoan, dt.TrangThai,
-                   dt.LyDo, nv.TenNV NguoiLap, kh.TenKH
+                   dt.LyDo, dt.MaCaHoan, nv.TenNV NguoiLap, kh.TenKH, hd.MaCa MaCaGoc, ban.TenNV ThuNganGoc
             FROM PhieuDoiTra dt
             JOIN NhanVien nv ON nv.MaNV=dt.MaNV_Lap
             JOIN HoaDon hd ON hd.MaHD=dt.MaHD
+            JOIN NhanVien ban ON ban.MaNV=hd.MaNV
             LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
             WHERE (@Status=N'' OR dt.TrangThai=@Status)
               AND (${scope === 'mine' ? 'dt.MaNV_Lap=@MaNV' : '1=1'})
@@ -101,6 +108,23 @@ const listReturns = async (req, res) => {
         res.json({ items: result.recordset });
     } catch (error) {
         res.status(500).json({ message: 'Không thể tải danh sách đổi trả.' });
+    }
+};
+
+const listRecentInvoices = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const result = await pool.request().query(`
+            SELECT TOP 12 hd.MaHD, hd.NgayLap, hd.TongThanhToan, hd.MaKH, hd.MaCa, hd.MaNV,
+                   kh.TenKH, kh.SDT, nv.TenNV
+            FROM HoaDon hd
+            JOIN NhanVien nv ON nv.MaNV=hd.MaNV
+            LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
+            WHERE hd.TrangThai=N'Hoàn thành'
+            ORDER BY hd.NgayLap DESC`);
+        res.json({ items: result.recordset });
+    } catch (error) {
+        res.status(500).json({ message: 'Không thể tải hóa đơn gần đây.' });
     }
 };
 
@@ -249,9 +273,53 @@ const completeReturn = async (req, res) => {
         const ticket = header.recordset[0];
         if (ticket.MaNV_Lap !== req.user.MaNV) throw new Error('Chỉ thu ngân lập phiếu mới hoàn tất đổi trả.');
         if (ticket.TrangThai !== 'Đã duyệt') throw new Error('Chỉ phiếu đã được Quản lý duyệt mới hoàn tất được.');
-        const restock = /được nhập lại kho/i.test(String(ticket.KetQuaKiemTra || ''));
+        const shift = await new sql.Request(transaction).input('MaNV', sql.VarChar, req.user.MaNV).query(`
+            SELECT TOP 1 MaCa FROM CaLamViec WITH(UPDLOCK,HOLDLOCK)
+            WHERE MaNV=@MaNV AND TrangThai=N'Đang mở' AND ThoiGianKetThuc IS NULL`);
+        if (!shift.recordset.length) throw new Error('Phải mở ca bán hàng của bạn trước khi hoàn tiền hoặc giao hàng đổi. Không mở lại ca nhân viên đã đóng.');
+        const maCaHoan = shift.recordset[0].MaCa;
+        const restock = isRestockAccepted(ticket.KetQuaKiemTra);
         const returned = await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT).query(`
             SELECT * FROM ChiTietDoiTra WITH(UPDLOCK,HOLDLOCK) WHERE MaDT=@MaDT AND LoaiDong=N'Hàng khách trả'`);
+        let refund = null;
+        let preparedExchange = [];
+        if (ticket.HinhThucXuLy === 'Hoàn tiền') {
+            const method = clean(req.body.PhuongThucHoan, 30);
+            const code = clean(req.body.MaGiaoDichHoan, 50) || null;
+            if (!['Tiền mặt', 'QR', 'Thẻ', 'Chuyển khoản'].includes(method)) throw new Error('Phương thức hoàn tiền không hợp lệ.');
+            if (method !== 'Tiền mặt' && !code) throw new Error('Hoàn tiền điện tử phải có mã giao dịch.');
+            refund = { method, code };
+        } else if (ticket.HinhThucXuLy === 'Đổi hàng') {
+            const exchange = Array.isArray(req.body.exchange) ? req.body.exchange : [];
+            if (!exchange.length) throw new Error('Đổi hàng phải chọn sản phẩm giao cho khách.');
+            const exchangedProducts = new Set();
+            let exchangeValue = 0;
+            for (const raw of exchange) {
+                const maSP = clean(raw.MaSP, 20);
+                const qty = Number(raw.SoLuong);
+                if (!maSP || !Number.isInteger(qty) || qty <= 0) throw new Error('Dòng hàng giao đổi không hợp lệ.');
+                if (exchangedProducts.has(maSP)) throw new Error(`Sản phẩm ${maSP} bị lặp trong danh sách hàng giao đổi.`);
+                exchangedProducts.add(maSP);
+                const stock = await new sql.Request(transaction).input('MaKho', sql.VarChar, ticket.MaKho)
+                    .input('MaSP', sql.VarChar, maSP).query(`
+                        SELECT sp.TenSP, sp.GiaBan, tk.SLTon, tk.DonGiaBinhQuan
+                        FROM SanPham sp JOIN TonKho tk WITH(UPDLOCK,HOLDLOCK)
+                          ON tk.MaSP=sp.MaSP AND tk.MaKho=@MaKho
+                        WHERE sp.MaSP=@MaSP AND sp.TrangThai IN (N'Đang bán', N'Đang kinh doanh')`);
+                if (!stock.recordset.length) throw new Error(`Sản phẩm ${maSP} không còn kinh doanh.`);
+                if (Number(stock.recordset[0].SLTon) < qty) throw new Error(`${stock.recordset[0].TenSP} không đủ tồn để giao đổi.`);
+                const price = Number(stock.recordset[0].GiaBan);
+                const cost = Number(stock.recordset[0].DonGiaBinhQuan || 0);
+                exchangeValue = roundMoney(exchangeValue + price * qty);
+                preparedExchange.push({ maSP, qty, price, cost });
+            }
+            const returnedValue = roundMoney(returned.recordset.reduce((sum, line) => sum + Number(line.ThanhTien || 0), 0));
+            if (!isEqualValueExchange(returnedValue, exchangeValue)) {
+                throw new Error(`Đổi trực tiếp chỉ áp dụng hàng ngang giá (${returnedValue.toLocaleString('vi-VN')} đ). Nếu khác giá, hãy hoàn hàng cũ và lập hóa đơn bán mới.`);
+            }
+        } else {
+            throw new Error('Hình thức xử lý đổi trả không hợp lệ.');
+        }
         if (restock) {
             for (let index = 0; index < returned.recordset.length; index += 1) {
                 const line = returned.recordset[index];
@@ -276,40 +344,15 @@ const completeReturn = async (req, res) => {
                         VALUES(@MaGD,@MaKho,@MaSP,@MaNV,N'Nhập',@SoLuong,@DonGiaVon,@ThanhTienVon,N'DoiTra',@MaDT,GETDATE(),N'Nhập lại hàng khách trả đạt yêu cầu')`);
             }
         }
-        let maCaHoan = null;
         if (ticket.HinhThucXuLy === 'Hoàn tiền') {
-            const method = clean(req.body.PhuongThucHoan, 30);
-            const code = clean(req.body.MaGiaoDichHoan, 50) || null;
-            if (!['Tiền mặt', 'QR', 'Thẻ', 'Chuyển khoản'].includes(method)) throw new Error('Phương thức hoàn tiền không hợp lệ.');
-            if (method !== 'Tiền mặt' && !code) throw new Error('Hoàn tiền điện tử phải có mã giao dịch.');
-            const shift = await new sql.Request(transaction).input('MaNV', sql.VarChar, req.user.MaNV).query(`
-                SELECT TOP 1 MaCa FROM CaLamViec WITH(UPDLOCK,HOLDLOCK)
-                WHERE MaNV=@MaNV AND TrangThai=N'Đang mở' AND ThoiGianKetThuc IS NULL`);
-            if (!shift.recordset.length) throw new Error('Phải mở ca bán hàng trước khi hoàn tiền mặt hoặc ghi nhận hoàn tiền.');
-            maCaHoan = shift.recordset[0].MaCa;
             await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT)
-                .input('PhuongThuc', sql.NVarChar, method).input('MaGD', sql.VarChar, code)
+                .input('PhuongThuc', sql.NVarChar, refund.method).input('MaGD', sql.VarChar, refund.code)
                 .input('MaCa', sql.VarChar, maCaHoan).query(`
                     UPDATE PhieuDoiTra SET PhuongThucHoan=@PhuongThuc, MaGiaoDichHoan=@MaGD,
                         NgayHoan=GETDATE(), MaCaHoan=@MaCa
                     WHERE MaDT=@MaDT`);
         } else {
-            const exchange = Array.isArray(req.body.exchange) ? req.body.exchange : [];
-            if (!exchange.length) throw new Error('Đổi hàng phải chọn sản phẩm giao cho khách.');
-            for (const raw of exchange) {
-                const maSP = clean(raw.MaSP, 20);
-                const qty = Number(raw.SoLuong);
-                if (!maSP || !Number.isInteger(qty) || qty <= 0) throw new Error('Dòng hàng giao đổi không hợp lệ.');
-                const stock = await new sql.Request(transaction).input('MaKho', sql.VarChar, ticket.MaKho)
-                    .input('MaSP', sql.VarChar, maSP).query(`
-                        SELECT sp.TenSP, sp.GiaBan, tk.SLTon, tk.DonGiaBinhQuan
-                        FROM SanPham sp JOIN TonKho tk WITH(UPDLOCK,HOLDLOCK)
-                          ON tk.MaSP=sp.MaSP AND tk.MaKho=@MaKho
-                        WHERE sp.MaSP=@MaSP AND sp.TrangThai IN (N'Đang bán', N'Đang kinh doanh')`);
-                if (!stock.recordset.length) throw new Error(`Sản phẩm ${maSP} không còn kinh doanh.`);
-                if (Number(stock.recordset[0].SLTon) < qty) throw new Error(`${stock.recordset[0].TenSP} không đủ tồn để giao đổi.`);
-                const price = Number(stock.recordset[0].GiaBan);
-                const cost = Number(stock.recordset[0].DonGiaBinhQuan || 0);
+            for (const { maSP, qty, price, cost } of preparedExchange) {
                 await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT).input('MaSP', sql.VarChar, maSP)
                     .input('SoLuong', sql.Int, qty).input('DonGia', sql.Decimal(18, 2), price)
                     .input('ThanhTien', sql.Decimal(18, 2), price * qty)
@@ -333,7 +376,10 @@ const completeReturn = async (req, res) => {
             }
         }
         await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT)
-            .query(`UPDATE PhieuDoiTra SET TrangThai=N'Hoàn thành' WHERE MaDT=@MaDT`);
+            .input('MaCa', sql.VarChar, maCaHoan).query(`
+                UPDATE PhieuDoiTra SET TrangThai=N'Hoàn thành',
+                    NgayHoan=COALESCE(NgayHoan, GETDATE()), MaCaHoan=COALESCE(MaCaHoan, @MaCa)
+                WHERE MaDT=@MaDT`);
         await writeAudit(new sql.Request(transaction), req.user, 'Hoàn thành đổi trả', maDT, ticket.HinhThucXuLy);
         await transaction.commit();
         res.json({ message: `Đã hoàn thành phiếu đổi trả ${maDT}.`, MaDT: maDT, MaCaHoan: maCaHoan });
@@ -344,6 +390,6 @@ const completeReturn = async (req, res) => {
 };
 
 module.exports = {
-    searchInvoices, getInvoiceForReturn, listReturns, getReturn,
+    searchInvoices, listRecentInvoices, getInvoiceForReturn, listReturns, getReturn,
     createReturn, submitReturn, inspectReturn, decideReturn, completeReturn
 };

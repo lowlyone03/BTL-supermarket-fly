@@ -29,8 +29,9 @@ const getCatalog = async (req, res) => {
         const [products, promotions] = await Promise.all([
             pool.request().input('Search', sql.NVarChar, `%${search}%`).query(`
                 SELECT sp.MaSP,sp.TenSP,sp.MaVach,sp.DonViTinh,sp.GiaBan,sp.TrangThai,
-                       tk.MaKho,tk.SLTon,tk.DonGiaBinhQuan
+                       dm.MaDM,dm.TenDM,tk.MaKho,tk.SLTon,tk.DonGiaBinhQuan
                 FROM SanPham sp
+                JOIN DanhMuc dm ON dm.MaDM=sp.MaDM
                 JOIN TonKho tk ON tk.MaSP=sp.MaSP
                 JOIN Kho k ON k.MaKho=tk.MaKho AND k.TrangThai=1
                 WHERE sp.TrangThai IN (N'Đang bán',N'Đang kinh doanh')

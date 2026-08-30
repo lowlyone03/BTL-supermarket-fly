@@ -1,0 +1,369 @@
+/*
+ * Shared visual refinement layer.
+ * Loaded after the module styles so every actor keeps the same density,
+ * typography, focus states and report layout without changing business logic.
+ */
+
+:root {
+  --ui-radius-sm: 10px;
+  --ui-radius-md: 14px;
+  --ui-radius-lg: 17px;
+  --ui-line: #dbe4de;
+  --ui-line-strong: #cdd9d2;
+  --ui-surface: rgba(255, 255, 255, .97);
+  --ui-surface-soft: #f6f9f7;
+  --ui-shadow: 0 10px 28px rgba(27, 62, 48, .055);
+  --ui-shadow-hover: 0 14px 34px rgba(27, 62, 48, .085);
+}
+
+/* App frame: slightly denser, calmer and more useful on common laptop screens. */
+.sidebar {
+  width: 248px;
+  flex-basis: 248px;
+  background: linear-gradient(180deg, #174b3d 0%, #143d33 100%);
+}
+
+.brand-block { height: 78px; padding-inline: 24px; }
+.store-selector { margin-top: 16px; border-radius: var(--ui-radius-md); }
+.sidebar-nav { padding-inline: 10px; }
+.nav-group-title { margin-top: 14px; }
+.nav-item { min-height: 39px; border-radius: 10px; }
+.nav-item.active { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07); }
+
+.topbar {
+  height: 78px;
+  flex-basis: 78px;
+  padding-inline: 32px;
+  background: rgba(249, 248, 244, .975);
+  backdrop-filter: blur(12px);
+}
+
+.global-search {
+  width: min(440px, 43vw);
+  height: 44px;
+  border-color: var(--ui-line-strong);
+  border-radius: var(--ui-radius-md);
+  box-shadow: 0 3px 12px rgba(30, 62, 49, .025);
+}
+
+.profile-button { min-height: 44px; }
+
+.content-area {
+  padding: 12px 14px 20px;
+  background-color: #f7f5ef;
+  background-image:
+    linear-gradient(rgba(43, 125, 96, .026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(43, 125, 96, .026) 1px, transparent 1px);
+  background-size: 112px 112px;
+}
+
+/* Clear keyboard focus across both native and custom controls. */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+.custom-select-trigger:focus-visible {
+  outline: 3px solid rgba(44, 133, 101, .22);
+  outline-offset: 2px;
+}
+
+/* Shared page hierarchy. */
+.warehouse-page {
+  padding: 16px 10px 34px;
+}
+
+.warehouse-heading {
+  align-items: flex-end;
+  margin-bottom: 18px;
+}
+
+.warehouse-heading h1 {
+  max-width: 980px;
+  margin: 4px 0 6px;
+  font-size: clamp(28px, 2.15vw, 36px);
+  font-weight: 720;
+  line-height: 1.08;
+  letter-spacing: -.042em;
+}
+
+.warehouse-heading > div > p:last-child {
+  max-width: 1040px;
+  color: #68786f;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.warehouse-kicker {
+  color: #6d8076;
+  font-size: 10px;
+  letter-spacing: .13em;
+}
+
+.warehouse-chip {
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+/* Controls use one rhythm and retain comfortable 40px targets. */
+.warehouse-primary,
+.warehouse-secondary,
+.warehouse-danger,
+.warehouse-icon-button,
+.btn {
+  min-height: 40px;
+  border-radius: 11px;
+}
+
+.warehouse-primary,
+.warehouse-secondary,
+.warehouse-danger { padding-inline: 15px; }
+.warehouse-icon-button { width: 40px; }
+.custom-select-trigger { height: 40px; border-radius: 11px; }
+
+.warehouse-primary:not(:disabled):hover,
+.warehouse-secondary:not(:disabled):hover,
+.warehouse-danger:not(:disabled):hover,
+.warehouse-icon-button:not(:disabled):hover {
+  box-shadow: 0 8px 18px rgba(32, 79, 59, .10);
+}
+
+/* Cards are quieter, with consistent border and elevation. */
+.warehouse-table-card,
+.warehouse-panel,
+.surface-card,
+.overview-panel,
+.fly-kpi,
+.warehouse-stats > article,
+.warehouse-stat {
+  border-color: var(--ui-line);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
+}
+
+.warehouse-table-card,
+.warehouse-panel,
+.fly-kpi,
+.warehouse-stats > article,
+.warehouse-stat {
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.fly-kpi:hover,
+.warehouse-stats > article:hover,
+.warehouse-stat:hover {
+  border-color: var(--ui-line-strong);
+  box-shadow: var(--ui-shadow-hover);
+  transform: translateY(-1px);
+}
+
+/* Reports: keep the complete filter and first KPI row above the fold. */
+.financial-report-filter { margin-bottom: 14px; }
+.financial-report-filter .warehouse-toolbar {
+  min-height: 88px;
+  padding: 13px 16px;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.report-period-fields {
+  flex: 1;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.report-period-fields label {
+  min-width: 150px;
+  gap: 5px;
+}
+
+.report-period-fields label > span {
+  color: #687b71;
+  font-size: 9px;
+  letter-spacing: .095em;
+}
+
+.report-period-fields label[data-period-field="day"] { min-width: 340px; }
+.report-period-fields label[data-period-field="month"] { min-width: 250px; }
+.report-period-fields label[data-period-field="quarter"] { min-width: 190px; }
+.report-period-fields label[data-period-field="year"] { min-width: 160px; }
+
+.report-period-input .fly-vi-date {
+  display: grid;
+  width: 100%;
+  flex-wrap: nowrap;
+  gap: 7px;
+}
+
+.report-period-input[data-period-field="day"] .fly-vi-date {
+  grid-template-columns: repeat(3, minmax(92px, 1fr));
+}
+
+.report-period-input[data-period-field="month"] .fly-vi-date {
+  grid-template-columns: repeat(2, minmax(112px, 1fr));
+}
+
+.report-period-input .custom-select-control { width: auto; }
+.financial-report-filter .warehouse-toolbar-actions { flex: 0 0 auto; }
+
+.financial-report-title {
+  margin: 0 0 12px;
+  padding-inline: 1px;
+}
+
+.financial-report-title h2 {
+  margin-top: 3px;
+  font-size: 20px;
+  letter-spacing: -.025em;
+}
+
+.financial-report-title div > span { font-size: 11px; }
+.financial-report-kpis,
+.fly-kpi-grid { margin-bottom: 14px; }
+
+.fly-kpi-grid { gap: 12px; }
+.fly-kpi {
+  min-height: 96px;
+  padding: 14px;
+  gap: 11px;
+}
+
+.fly-kpi-icon {
+  width: 40px;
+  height: 40px;
+  flex-basis: 40px;
+  border-radius: 11px;
+  align-self: center;
+  display: grid;
+  place-items: center;
+  line-height: 0;
+}
+
+.fly-kpi-icon svg { display: block; width: 20px; height: 20px; margin: auto; }
+.fly-kpi > div { min-width: 0; }
+.fly-kpi > div > span { font-size: 9px; }
+.fly-kpi strong {
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+  font-size: clamp(19px, 1.35vw, 22px);
+  font-variant-numeric: tabular-nums;
+}
+.fly-kpi small { margin-top: 3px; font-size: 11px; }
+
+.fly-report-split { gap: 14px; margin-bottom: 14px; }
+.fly-bars { gap: 9px; }
+.fly-bar-track { height: 8px; }
+
+/* Data tables: stronger scan line, sticky headings and restrained row height. */
+.warehouse-toolbar { padding: 13px 15px; }
+.warehouse-search input { height: 42px; }
+.warehouse-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 12px 15px;
+  background: #f5f8f6;
+  box-shadow: inset 0 -1px 0 #dfe6e2;
+}
+.warehouse-table td { padding: 13px 15px; }
+.warehouse-table tbody tr { transition: background .14s ease; }
+.warehouse-table tbody tr:hover { background: #f8fbf9; }
+.warehouse-empty { padding-block: 38px !important; }
+
+.warehouse-panel-title,
+.panel-title { min-height: 62px; padding: 15px 18px; }
+.warehouse-panel-title h2 { font-size: 17px; }
+
+.gross-profit-equation,
+.gross-profit-steps {
+  margin-bottom: 14px;
+  border-radius: var(--ui-radius-md);
+}
+
+.financial-report-sections { gap: 12px; margin-bottom: 14px; }
+.report-metric-list { padding: 0 16px 14px; }
+.report-metric-list > div { padding-block: 10px; }
+
+/* Keep long accounting flows readable instead of squeezing each step. */
+.accounting-flow {
+  justify-content: flex-start;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.accounting-flow > * { flex: 0 0 auto; }
+
+/* Modals use the same compact surface language as pages and remain usable on short screens. */
+.warehouse-modal {
+  border-radius: 18px;
+  background: #fcfdfc;
+  box-shadow: 0 26px 72px rgba(12, 43, 32, .22);
+}
+
+.warehouse-modal-heading { padding: 17px 20px; }
+.warehouse-modal-heading h2 { font-size: 21px; }
+.warehouse-modal-body { padding: 19px 20px; }
+.warehouse-modal-actions { padding: 13px 20px; }
+
+/* Accessible disabled state without making text illegible. */
+button:disabled,
+select:disabled,
+.custom-select-trigger:disabled {
+  opacity: .58;
+  filter: saturate(.72);
+}
+
+@media (max-width: 1280px) {
+  .sidebar { width: 228px; flex-basis: 228px; }
+  .topbar { padding-inline: 24px; }
+  .warehouse-heading h1 { font-size: clamp(27px, 2.5vw, 34px); }
+  .financial-report-filter .warehouse-toolbar {
+    align-items: flex-end;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .report-period-fields { min-width: min(620px, 100%); }
+  .financial-report-filter .warehouse-toolbar-actions {
+    justify-content: flex-end;
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 980px) {
+  .financial-report-filter .warehouse-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .financial-report-filter .warehouse-toolbar-actions { margin-left: 0; }
+}
+
+@media (max-width: 900px) {
+  .sidebar { width: 210px; flex-basis: 210px; }
+  .content-area { padding-inline: 10px; }
+  .warehouse-page { padding-inline: 6px; }
+  .report-period-fields { display: grid; grid-template-columns: 150px minmax(0, 1fr); }
+  .report-period-fields label[data-period-field] { min-width: 0; }
+}
+
+@media (max-width: 720px) {
+  .warehouse-heading { align-items: flex-start; flex-direction: column; }
+  .report-period-fields { grid-template-columns: 1fr; width: 100%; }
+  .report-period-input[data-period-field="day"] .fly-vi-date,
+  .report-period-input[data-period-field="month"] .fly-vi-date { grid-template-columns: 1fr; }
+  .financial-report-filter .warehouse-toolbar-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .financial-report-filter .warehouse-toolbar-actions > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

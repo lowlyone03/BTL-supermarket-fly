@@ -20,6 +20,9 @@
 .warehouse-heading { margin-bottom: 24px; }
 .warehouse-heading h1 { margin: 4px 0 7px; font-size: clamp(30px, 2.6vw, 42px); letter-spacing: -.045em; }
 .warehouse-heading > div > p:last-child { margin: 0; color: #75827b; font-size: 15px; }
+.warehouse-product-cell { min-width: 0; display: flex; align-items: center; gap: 11px; }
+.warehouse-product-cell > div { min-width: 0; }
+.warehouse-product-cell:hover .product-photo img { transform: scale(1.05); }
 .warehouse-kicker { margin: 0; color: #73847b; font-size: 11px; font-weight: 800; letter-spacing: .14em; }
 .warehouse-chip { border: 1px solid #cfe1d8; background: #edf7f2; color: #237458; border-radius: 999px; padding: 10px 15px; font-weight: 750; white-space: nowrap; }
 
@@ -278,7 +281,7 @@
 .receipt-rule { display:flex; align-items:center; gap:10px; margin:16px 0; padding:12px 14px; color:#285d4d; background:#edf6f1; border:1px solid #d4e8de; border-radius:14px; }
 .receipt-rule svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8; flex:none; }
 .warehouse-receipt-lines { min-width:1260px; overflow:auto; border:1px solid #e1e6e2; border-radius:16px; }
-.warehouse-receipt-line { display:grid; grid-template-columns:minmax(210px,1.5fr) repeat(4,minmax(90px,.65fr)) minmax(110px,.8fr) minmax(125px,.9fr) minmax(110px,.8fr) minmax(190px,1.25fr); align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid #edf0ed; }
+.warehouse-receipt-line { display:grid; grid-template-columns:minmax(210px,1.5fr) repeat(4,minmax(90px,.65fr)) minmax(110px,.8fr) minmax(230px,1.2fr) minmax(110px,.8fr) minmax(190px,1.25fr); align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid #edf0ed; }
 .warehouse-receipt-line:last-child { border-bottom:0; }
 .warehouse-receipt-line.heading { background:#f7f8f5; color:#6d7d76; font-size:11px; font-weight:800; letter-spacing:.04em; }
 .warehouse-receipt-line input { width:100%; min-width:0; height:42px; border:1px solid #d7dfda; border-radius:11px; padding:0 10px; color:#23342d; background:#fff; }
@@ -339,12 +342,60 @@
 .accounting-document-strip strong { margin:7px 0 4px; color:#213b2f; font-size:16px; }
 .accounting-document-strip small { color:#77877f; }
 .accounting-reconcile-table { max-height:390px; border:1px solid #dfe7e2; border-radius:15px; }
-.accounting-reconcile-table table { min-width:1080px; }
+.accounting-reconcile-table table { min-width:1480px; }
+.accounting-reconcile-totals { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:14px; }
+.accounting-reconcile-totals > div { padding:13px 15px; border:1px solid #dfe7e2; border-radius:13px; background:#f8faf9; }
+.accounting-reconcile-totals span,.accounting-reconcile-totals strong,.accounting-reconcile-totals small { display:block; }
+.accounting-reconcile-totals span { color:#74857c; font-size:9px; font-weight:850; letter-spacing:.07em; }
+.accounting-reconcile-totals strong { margin-top:6px; color:#213b2f; font-size:15px; }
+.accounting-reconcile-totals small { margin-top:3px; color:#78877f; }
 .accounting-reconcile-result { margin-top:16px; padding:15px 17px; border-radius:15px; }
 .accounting-reconcile-result strong,.accounting-reconcile-result p { display:block; }
 .accounting-reconcile-result p { margin:5px 0 0; font-size:12px; line-height:1.55; }
 .accounting-reconcile-result.matched { color:#216b50; border:1px solid #c8e3d6; background:#edf8f2; }
 .accounting-reconcile-result.different { color:#a34934; border:1px solid #efcabc; background:#fff2ed; }
+.financial-report-filter { margin-bottom:18px; }
+.report-period-fields { display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; }
+.report-period-fields label { display:flex; min-width:130px; flex-direction:column; gap:6px; }
+.report-period-fields label > span { color:#74857c; font-size:9px; font-weight:850; letter-spacing:.08em; }
+.report-period-input { display:none !important; }
+.report-period-input.active { display:flex !important; }
+.report-period-fields input,.report-period-fields select { min-height:39px; padding:0 12px; border:1px solid #d7e2dc; border-radius:10px; color:#294237; background:#fff; }
+.financial-report-title { display:flex; align-items:center; justify-content:space-between; margin:2px 0 14px; }
+.financial-report-title p,.financial-report-title h2,.financial-report-title span { margin:0; }
+.financial-report-title p { color:#698076; font-size:9px; font-weight:850; letter-spacing:.09em; }
+.financial-report-title h2 { margin-top:4px; color:#1e392d; font-size:22px; }
+.financial-report-title div > span { color:#75877e; font-size:12px; }
+.financial-report-kpis { margin-bottom:14px; }
+.gross-profit-equation { display:grid; grid-template-columns:repeat(5,minmax(125px,1fr) 22px) minmax(150px,1.15fr); align-items:stretch; gap:6px; margin-bottom:18px; padding:14px; overflow-x:auto; border:1px solid #d7e4dd; border-radius:17px; background:#f5f9f7; }
+.gross-profit-equation > div { min-width:125px; padding:12px; border-radius:12px; background:#fff; }
+.gross-profit-equation > b { align-self:center; justify-self:center; color:#6f8379; font-size:18px; }
+.gross-profit-equation span,.gross-profit-equation strong { display:block; }
+.gross-profit-equation span { color:#74857c; font-size:8px; font-weight:850; letter-spacing:.06em; }
+.gross-profit-equation strong { margin-top:6px; color:#243f33; font-size:14px; white-space:nowrap; }
+.gross-profit-equation .result { color:#fff; background:#2f765b; }
+.gross-profit-equation .result span,.gross-profit-equation .result strong { color:#fff; }
+.gross-profit-steps { display:grid; gap:8px; margin:16px 0 18px; padding:12px; overflow-x:auto; border:1px solid #d7e4dd; border-radius:17px; background:#f5f9f7; }
+.gross-profit-steps .step { display:flex; align-items:stretch; gap:8px; min-width:720px; }
+.gross-profit-steps .step > div { flex:1; min-width:120px; padding:11px 12px; border-radius:12px; background:#fff; }
+.gross-profit-steps .step > b { align-self:center; color:#6f8379; font-size:18px; }
+.gross-profit-steps span,.gross-profit-steps strong { display:block; }
+.gross-profit-steps span { color:#74857c; font-size:8px; font-weight:850; letter-spacing:.06em; }
+.gross-profit-steps strong { margin-top:5px; color:#243f33; font-size:14px; white-space:nowrap; }
+.gross-profit-steps .mid { background:#eef6f2; }
+.gross-profit-steps .result { color:#fff; background:#2f765b; }
+.gross-profit-steps .result span,.gross-profit-steps .result strong { color:#fff; }
+.cashier-shift-metrics small { display:block; margin-top:4px; color:#839088; font-size:11px; }
+.financial-report-sections { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:18px; }
+.financial-report-sections > article { margin:0; }
+.report-metric-list { padding:0 18px 17px; }
+.report-metric-list > div { display:flex; align-items:flex-start; justify-content:space-between; gap:15px; padding:11px 0; border-top:1px solid #edf1ef; }
+.report-metric-list span { color:#677c72; font-size:11px; }
+.report-metric-list strong { color:#263f34; font-size:12px; text-align:right; }
+@media (max-width:1100px) {
+  .financial-report-sections { grid-template-columns:1fr; }
+  .financial-report-filter .warehouse-toolbar { align-items:flex-start; flex-direction:column; }
+}
 .manager-readonly-note { display:flex; align-items:flex-start; gap:12px; margin:-7px 0 20px; padding:15px 17px; border:1px solid #cfe3d8; border-radius:16px; color:#26694f; background:rgba(237,247,242,.94); }
 .manager-readonly-note > svg { width:21px; height:21px; flex:0 0 21px; fill:none; stroke:currentColor; stroke-width:1.8; }
 .manager-readonly-note strong,.manager-readonly-note span { display:block; }
@@ -470,6 +521,48 @@
   .stock-issue-note { grid-column:1/-1; }
   .stock-issue-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .payment-voucher-source { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+.return-workflow-hint,
+.return-inspect-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 13px 15px;
+  border-radius: 14px;
+}
+.return-workflow-hint { border: 1px solid #cfe3d8; color: #26694f; background: rgba(237, 247, 242, .94); }
+.return-inspect-warn { border: 1px solid #efcabc; color: #8a4030; background: #fff6f2; }
+.return-workflow-hint > svg,
+.return-inspect-warn > svg { width: 21px; height: 21px; flex: 0 0 21px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.return-workflow-hint strong,
+.return-inspect-warn strong,
+.return-workflow-hint p,
+.return-inspect-warn span { display: block; }
+.return-workflow-hint p,
+.return-inspect-warn span { margin: 4px 0 0; color: #65796e; font-size: 12px; line-height: 1.5; }
+.return-inspect-warn span { color: #8d5a4e; }
+.return-source-card {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.return-source-card > div {
+  padding: 11px 13px;
+  border: 1px solid #dfe7e2;
+  border-radius: 12px;
+  background: #f8faf9;
+}
+.return-source-card span,
+.return-source-card strong,
+.return-source-card small { display: block; }
+.return-source-card span { color: #74857c; font-size: 9px; font-weight: 850; letter-spacing: .07em; }
+.return-source-card strong { margin-top: 5px; color: #213b2f; font-size: 14px; }
+.return-source-card small { margin-top: 3px; color: #78877f; }
+.return-restock-field { display: flex; align-items: center; gap: 8px; font-weight: 650; }
+@media (max-width: 1100px) {
+  .return-source-card { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
   .warehouse-page { padding: 18px 6px 28px; }

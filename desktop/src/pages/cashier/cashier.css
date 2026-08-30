@@ -26,15 +26,15 @@
 
 .cashier-product {
   display: flex;
-  min-height: 126px;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 14px;
+  min-height: 148px;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 13px;
+  padding: 11px;
   border: 1px solid #dce5df;
-  border-radius: 12px;
-  background: #fff;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #fff, #fafcfb);
   color: #1c2d24;
   text-align: left;
   cursor: pointer;
@@ -43,11 +43,23 @@
 .cashier-product:hover {
   border-color: #2d7a58;
   background: #f5faf7;
+  box-shadow: 0 12px 28px rgba(24,72,52,.09);
+  transform: translateY(-2px);
 }
+.cashier-product:hover .product-photo img { transform: scale(1.06); }
+.cashier-product-copy { min-width: 0; display: flex; flex: 1; flex-direction: column; justify-content: center; }
+.cashier-product-copy > strong { font-size: 12px; line-height: 1.4; }
 
 .cashier-product:disabled {
   cursor: not-allowed;
   opacity: .5;
+}
+
+.cashier-customer-who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .cashier-product span {
@@ -204,8 +216,7 @@
   overflow: auto;
 }
 
-.cashier-customer-hit,
-.cashier-return-line {
+.cashier-customer-hit {
   display: flex;
   width: 100%;
   align-items: center;
@@ -216,6 +227,122 @@
   border-radius: 10px;
   background: #fff;
   text-align: left;
+}
+
+.cashier-invoice-hits {
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  overflow: auto;
+  margin: 8px 0 14px;
+}
+
+.cashier-invoice-hit {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 1px solid #dce5df;
+  border-radius: 12px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cashier-invoice-hit:hover { border-color: #9ec9b4; background: #f4faf7; }
+
+.cashier-invoice-hit strong, .cashier-invoice-hit small { display: block; }
+
+.cashier-invoice-hit small { margin-top: 3px; color: #6f7d75; }
+
+.cashier-invoice-hit-meta {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  color: #5f7268;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.cashier-reason-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cashier-reason-chip {
+  padding: 7px 11px;
+  border: 1px solid #d5e3db;
+  border-radius: 999px;
+  background: #f7fbf9;
+  color: #2a4638;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.cashier-reason-chip.active {
+  border-color: #3d8a6a;
+  background: #e7f5ee;
+  color: #1d5c44;
+}
+
+.cashier-return-forms {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.cashier-return-forms label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid #d7e2dc;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.cashier-return-forms span { color: #6f7d75; font-size: 12px; }
+
+.cashier-return-shift-note {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #d5eadc;
+  border-radius: 12px;
+  background: #f3faf6;
+  color: #35584a;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.cashier-return-total {
+  margin: 12px 0 4px;
+  text-align: right;
+  color: #35584a;
+}
+
+.cashier-exchange-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid #dce5df;
+  border-radius: 10px;
+}
+
+.cashier-exchange-row input { width: 88px; }
+
+.return-form-actions { margin-top: 16px; padding-top: 8px; }
+
+@media (max-width: 720px) {
+  .cashier-return-forms { grid-template-columns: 1fr; }
+  .cashier-invoice-hit { flex-direction: column; align-items: flex-start; }
 }
 
 .cashier-payment-row-full {

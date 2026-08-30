@@ -63,6 +63,8 @@
         document.getElementById('logSearch').value = '';
         document.getElementById('logFrom').value = '';
         document.getElementById('logTo').value = '';
+        window.FLY_VI_DATE?.refresh(document.getElementById('logFrom'));
+        window.FLY_VI_DATE?.refresh(document.getElementById('logTo'));
         renderLogs();
     };
 

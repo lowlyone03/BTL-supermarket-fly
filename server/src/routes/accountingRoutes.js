@@ -3,6 +3,7 @@ const controller = require('../controllers/accountingController');
 const settlement = require('../controllers/settlementController');
 const payroll = require('../controllers/payrollController');
 const paymentVoucher = require('../controllers/paymentVoucherController');
+const reportController = require('../controllers/reportController');
 const { verifyToken, requirePermission } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
@@ -25,6 +26,7 @@ router.get('/shift-settlements', requirePermission('UC29'), settlement.listShift
 router.get('/shift-settlements/:id', requirePermission('UC29'), settlement.getShift);
 router.post('/shift-settlements/:id/receipt', requirePermission('UC29'), settlement.createReceipt);
 router.post('/shift-receipts/:id/confirm', requirePermission('UC29'), settlement.confirmReceipt);
+router.get('/reports/financial-summary', requirePermission('UC29'), reportController.getFinancialReport);
 router.get('/payroll/:month', requirePermission('UC33'), payroll.get);
 router.post('/payroll/:month/build', requirePermission('UC33'), payroll.build);
 router.post('/payroll/:month/lock', requirePermission('UC33'), payroll.lock);

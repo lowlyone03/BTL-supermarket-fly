@@ -12,6 +12,9 @@
   const unaccent = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
   const fmtTime = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
   const heading = (kicker, title, subtitle, action = '') => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(kicker)}</p><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div>${action}</header>`;
+  const avatar = text => window.FLY_UI?.avatar(text) || '';
+  const productPhoto = (item, className = '') => window.FLY_PRODUCT_IMAGES?.markup(item, { className }) || avatar(item?.TenSP || item?.MaSP || 'SP');
+  const person = (name, sub = '') => window.FLY_UI?.person(name, sub) || `<strong>${esc(name)}</strong>${sub ? `<small>${esc(sub)}</small>` : ''}`;
   const api = async (context, path, options = {}) => {
     const response = await fetch(`${context.apiBase}${path}`, {
       ...options,
@@ -113,18 +116,18 @@
         const current = data.current;
         const live = current ? await api(context, '/cashier/shifts/current/summary').catch(() => current) : null;
         const s = live || current;
-        root.innerHTML = `${heading('THU NGÂN / CA BÁN HÀNG', 'Mở ca và sẵn sàng tại quầy', 'Phải chấm công vào theo lịch đã công bố, rồi mở ca cá nhân trước khi lập hóa đơn.')}${current ? `<article class="cashier-active-shift"><div class="cashier-shift-copy"><span class="cashier-live"><i></i> CA ĐANG MỞ</span><h2>${esc(current.MaCa)}</h2><p>Ca của <strong>${esc(current.TenNV)}</strong> bắt đầu lúc ${fmtTime(current.ThoiGianBatDau)}.</p><div class="cashier-shift-metrics"><div><span>QUỸ ĐẦU CA</span><strong>${money(s.TienDauCa)}</strong></div><div><span>TIỀN MẶT THU</span><strong>${money(s.TongTienMat)}</strong></div><div><span>CHUYỂN KHOẢN</span><strong>${money(s.TongTienChuyenKhoan)}</strong></div><div><span>QR / THẺ</span><strong>${money(Number(s.TongTienQR || 0) + Number(s.TongTienThe || 0))}</strong></div><div><span>KÉT DỰ KIẾN</span><strong>${money(s.TienMatTrongKet)}</strong></div><div><span>DOANH THU</span><strong>${money(s.DoanhThu)}</strong></div><div><span>GIÁ VỐN</span><strong>${money(s.GiaVon)}</strong></div><div><span>LÃI GỘP CA</span><strong>${money(s.LoiNhuanGop)}</strong></div></div></div><div class="cashier-next-step"><strong>Đã sẵn sàng bán hàng</strong><p>Tiền mặt cộng vào két (quỹ đầu ca + thu TM − hoàn TM). CK/QR/thẻ không vào két. Hóa đơn nháp phải hoàn thành hoặc hủy trước khi đóng ca.</p><button type="button" class="warehouse-primary" id="goPos">Vào màn hình bán hàng</button><button type="button" class="warehouse-secondary" id="closeShift">Đóng ca &amp; bàn giao</button></div></article>` : `<article class="cashier-open-shift"><div><p class="warehouse-kicker">BƯỚC 1 · TRƯỚC KHI BÁN HÀNG</p><h2>Chưa có ca bán hàng đang mở</h2><p>Nếu không mở được ca: kiểm tra Lịch làm việc — hôm nay phải có ca chính 8 giờ và đã chấm công vào.</p><button type="button" class="warehouse-primary" id="openShift">Mở ca bán hàng</button></div></article>`}<article class="warehouse-table-card cashier-history"><div class="warehouse-panel-title"><div><p>LỊCH SỬ CÁ NHÂN</p><h2>Các ca gần đây</h2></div><button type="button" class="warehouse-secondary" id="refreshShifts">Làm mới</button></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>MÃ CA</th><th>BẮT ĐẦU</th><th>KẾT THÚC</th><th>QUỸ ĐẦU CA</th><th>HÓA ĐƠN</th><th>DOANH THU</th><th>TRẠNG THÁI</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><strong>${esc(item.MaCa)}</strong></td><td>${fmtTime(item.ThoiGianBatDau)}</td><td>${fmtTime(item.ThoiGianKetThuc)}</td><td class="num">${money(item.TienDauCa)}</td><td class="num">${item.SoHoaDon}</td><td class="num"><strong>${money(item.DoanhThu)}</strong></td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có lịch sử ca bán hàng.</td></tr>'}</tbody></table></div></article>`;
+        root.innerHTML = `${heading('THU NGÂN / CA BÁN HÀNG', 'Mở ca và sẵn sàng tại quầy', 'Phải chấm công vào theo lịch đã công bố, rồi mở ca cá nhân trước khi lập hóa đơn.')}${current ? `<article class="cashier-active-shift"><div class="cashier-shift-copy"><span class="cashier-live"><i></i> CA ĐANG MỞ</span><h2>${esc(current.MaCa)}</h2><p>Ca của <strong>${esc(current.TenNV)}</strong> bắt đầu lúc ${fmtTime(current.ThoiGianBatDau)}.</p><div class="cashier-shift-metrics"><div><span>QUỸ ĐẦU CA</span><strong>${money(s.TienDauCa)}</strong></div><div><span>TIỀN MẶT THU</span><strong>${money(s.TongTienMat)}</strong></div><div><span>CHUYỂN KHOẢN</span><strong>${money(s.TongTienChuyenKhoan)}</strong></div><div><span>QR / THẺ</span><strong>${money(Number(s.TongTienQR || 0) + Number(s.TongTienThe || 0))}</strong></div><div><span>KÉT DỰ KIẾN</span><strong>${money(s.TienMatTrongKet)}</strong></div><div><span>DOANH THU HÓA ĐƠN</span><strong>${money(s.DoanhThuHoaDon)}</strong></div><div><span>TIỀN HOÀN</span><strong>${money(s.TienHoan)}</strong></div><div><span>LÃI GỘP CA</span><strong>${money(s.LoiNhuanGop)}</strong></div></div><div class="gross-profit-steps"><div class="step"><div><span>DOANH THU HÓA ĐƠN</span><strong>${money(s.DoanhThuHoaDon)}</strong></div><b>−</b><div><span>TIỀN HOÀN</span><strong>${money(s.TienHoan)}</strong></div><b>=</b><div class="mid"><span>DOANH THU THUẦN</span><strong>${money(s.DoanhThuThuan)}</strong></div></div><div class="step"><div><span>GIÁ VỐN HÓA ĐƠN</span><strong>${money(s.GiaVonHoaDon)}</strong></div><b>−</b><div><span>GV HÀNG TRẢ NHẬP LẠI</span><strong>${money(s.GiaVonHangTraNhapLai)}</strong></div><b>+</b><div><span>GV HÀNG GIAO ĐỔI</span><strong>${money(s.GiaVonHangGiaoDoi)}</strong></div><b>=</b><div class="mid"><span>GIÁ VỐN THUẦN</span><strong>${money(s.GiaVonHangBanThuan)}</strong></div></div><div class="step"><div class="mid"><span>DOANH THU THUẦN</span><strong>${money(s.DoanhThuThuan)}</strong></div><b>−</b><div class="mid"><span>GIÁ VỐN THUẦN</span><strong>${money(s.GiaVonHangBanThuan)}</strong></div><b>=</b><div class="result"><span>LỢI NHUẬN GỘP</span><strong>${money(s.LoiNhuanGop)}</strong></div></div></div></div><div class="cashier-next-step"><strong>Đã sẵn sàng bán hàng</strong><p>Tiền mặt cộng vào két (quỹ đầu ca + thu TM − hoàn TM). CK/QR/thẻ không vào két. Lãi gộp = doanh thu thuần − giá vốn thuần, đã trừ hoàn tiền và điều chỉnh giá vốn đổi trả. Hóa đơn nháp phải hoàn thành hoặc hủy trước khi đóng ca.</p><button type="button" class="warehouse-primary" id="goPos">Vào màn hình bán hàng</button><button type="button" class="warehouse-secondary" id="closeShift">Đóng ca &amp; bàn giao</button></div></article>` : `<article class="cashier-open-shift"><div><p class="warehouse-kicker">BƯỚC 1 · TRƯỚC KHI BÁN HÀNG</p><h2>Chưa có ca bán hàng đang mở</h2><p>Nếu không mở được ca: kiểm tra Lịch làm việc — hôm nay phải có ca chính 8 giờ và đã chấm công vào.</p><button type="button" class="warehouse-primary" id="openShift">Mở ca bán hàng</button></div></article>`}<article class="warehouse-table-card cashier-history"><div class="warehouse-panel-title"><div><p>LỊCH SỬ CÁ NHÂN</p><h2>Các ca gần đây</h2></div><button type="button" class="warehouse-secondary" id="refreshShifts">Làm mới</button></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>MÃ CA</th><th>BẮT ĐẦU</th><th>KẾT THÚC</th><th>QUỸ ĐẦU CA</th><th>HÓA ĐƠN</th><th>DOANH THU</th><th>TRẠNG THÁI</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><strong>${esc(item.MaCa)}</strong></td><td>${fmtTime(item.ThoiGianBatDau)}</td><td>${fmtTime(item.ThoiGianKetThuc)}</td><td class="num">${money(item.TienDauCa)}</td><td class="num">${item.SoHoaDon}</td><td class="num"><strong>${money(item.DoanhThu)}</strong></td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có lịch sử ca bán hàng.</td></tr>'}</tbody></table></div></article>`;
         root.querySelector('#openShift')?.addEventListener('click', () => openShiftModal(context, load));
         root.querySelector('#goPos')?.addEventListener('click', () => context.navigate('cashier-pos'));
         root.querySelector('#closeShift')?.addEventListener('click', () => closeShiftModal(context, load));
         root.querySelector('#refreshShifts').addEventListener('click', load);
-      } catch (error) { context.showToast(error.message, 'error'); }
+      } catch (error) { context.showToast(error.message, 'error'); root.innerHTML = `<div class="welcome-card"><h2>Không tải được ca bán hàng</h2><p>${esc(error.message)}</p></div>`; }
     };
     await load();
   };
 
   const initPos = async (root, context) => {
-    let catalog; let currentShift = null; let customer = null; let cart = new Map(); let maKM = ''; let diemSuDung = 0; let quote = null; let draftId = null; let searchQuery = '';
+    let catalog; let currentShift = null; let customer = null; let cart = new Map(); let maKM = ''; let diemSuDung = 0; let quote = null; let draftId = null; let searchQuery = ''; let categoryFilter = '';
     try {
       const [catalogData, shiftData] = await Promise.all([api(context, '/cashier/pos/catalog'), api(context, '/cashier/shifts')]);
       if (!shiftData.current) throw new Error('Bạn phải mở ca bán hàng trước khi vào POS.');
@@ -154,7 +157,7 @@
       const close = () => overlay.remove();
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
       const renderList = items => {
-        overlay.querySelector('#customerResults').innerHTML = items.length ? items.map(item => `<button type="button" class="cashier-customer-hit" data-id="${esc(item.MaKH)}"><strong>${esc(item.TenKH)}</strong><small>${esc(item.SDT || '—')} · ${esc(item.HangThanhVien)} · ${item.DiemTichLuy} điểm</small></button>`).join('') : '<div class="warehouse-empty">Không tìm thấy. Có thể tạo thành viên mới.</div>';
+        overlay.querySelector('#customerResults').innerHTML = items.length ? items.map(item => `<button type="button" class="cashier-customer-hit" data-id="${esc(item.MaKH)}">${avatar(item.TenKH)}<span><strong>${esc(item.TenKH)}</strong><small>${esc(item.SDT || '—')} · ${esc(item.HangThanhVien)} · ${item.DiemTichLuy} điểm</small></span></button>`).join('') : '<div class="warehouse-empty">Không tìm thấy. Có thể tạo thành viên mới.</div>';
       };
       overlay.querySelector('#customerSearch').addEventListener('input', async event => {
         const query = event.target.value.trim();
@@ -179,22 +182,23 @@
     const render = () => {
       const products = catalog.products;
       const payable = payableAmount();
-      root.innerHTML = `${heading('BÁN HÀNG TẠI QUẦY', 'Lập hóa đơn và thanh toán', 'Hóa đơn chỉ hoàn thành và trừ tồn sau khi thanh toán đủ. Không mua chịu.', '<button class="warehouse-secondary" id="backShift">Quay lại ca</button>')}
+      root.innerHTML = `${heading('BÁN HÀNG TẠI QUẦY', 'Lập hóa đơn và thanh toán', 'Chọn danh mục, quét mã hoặc bấm sản phẩm. Hóa đơn chỉ hoàn thành sau khi thanh toán đủ.', '<button class="warehouse-secondary" id="backShift">Quay lại ca</button>')}
         <section class="cashier-pos-layout">
           <article class="warehouse-table-card cashier-product-panel">
             <div class="warehouse-panel-title"><div><p>SẢN PHẨM</p><h2>Quét mã hoặc tìm kiếm</h2></div><input id="posSearch" type="search" value="${esc(searchQuery)}" placeholder="Mã vạch, mã hoặc tên sản phẩm"></div>
-            <div class="cashier-product-grid">${products.map(item => `<button type="button" class="cashier-product" data-id="${esc(item.MaSP)}" data-search="${esc(unaccent(`${item.MaSP} ${item.MaVach || ''} ${item.TenSP}`))}" ${Number(item.SLTon) <= 0 ? 'disabled' : ''}><strong>${esc(item.TenSP)}</strong><span>${money(item.GiaBan)}</span><small>${esc(item.MaSP)} · Còn ${item.SLTon} ${esc(item.DonViTinh)}</small></button>`).join('')}</div>
+            <div class="pos-category-bar"><button type="button" class="pos-chip ${categoryFilter ? '' : 'active'}" data-cat="">Tất cả</button>${[...new Set(products.map(item => item.TenDM).filter(Boolean))].map(name => `<button type="button" class="pos-chip ${categoryFilter === name ? 'active' : ''}" data-cat="${esc(name)}">${esc(name)}</button>`).join('')}</div>
+            <div class="cashier-product-grid">${products.map(item => `<button type="button" class="cashier-product" data-id="${esc(item.MaSP)}" data-cat="${esc(item.TenDM || '')}" data-search="${esc(unaccent(`${item.MaSP} ${item.MaVach || ''} ${item.TenSP} ${item.TenDM || ''}`))}" ${Number(item.SLTon) <= 0 ? 'disabled' : ''}>${productPhoto(item, 'pos-product-photo')}<div class="cashier-product-copy"><strong>${esc(item.TenSP)}</strong><span>${money(item.GiaBan)}</span><small>${esc(item.TenDM || item.MaSP)} · còn ${item.SLTon} ${esc(item.DonViTinh)}</small><div class="pos-stock ${Number(item.SLTon) <= 5 ? 'low' : ''}"><i style="width:${Math.max(8, Math.min(100, Number(item.SLTon) * 5))}%"></i></div></div></button>`).join('')}</div>
             <p class="cashier-search-empty" id="posEmpty" hidden>Không tìm thấy sản phẩm khớp. Thử mã vạch, mã SP hoặc một phần tên (không cần dấu).</p>
           </article>
           <article class="warehouse-table-card cashier-cart-panel">
             <div class="warehouse-panel-title"><div><p>${draftId ? `NHÁP ${esc(draftId)}` : 'HÓA ĐƠN NHÁP'}</p><h2>Giỏ hàng</h2></div><span class="status-pill draft">${cart.size} mặt hàng</span></div>
-            <div class="cashier-customer-row"><div><strong>${customer ? esc(customer.TenKH) : 'Khách vãng lai'}</strong><small>${customer ? `${esc(customer.SDT || '')} · ${esc(customer.HangThanhVien)} · ${customer.DiemTichLuy} điểm` : 'Không tích điểm'}</small></div><button class="warehouse-secondary" id="selectCustomer">Chọn khách</button></div>
+            <div class="cashier-customer-row"><div class="cashier-customer-who">${avatar(customer?.TenKH || 'K')}<div><strong>${customer ? esc(customer.TenKH) : 'Khách vãng lai'}</strong><small>${customer ? `${esc(customer.SDT || '')} · ${esc(customer.HangThanhVien)} · ${customer.DiemTichLuy} điểm` : 'Không tích điểm'}</small></div></div><button class="warehouse-secondary" id="selectCustomer">Chọn khách</button></div>
             <div class="cashier-pos-extras"><label>Khuyến mãi<select id="promoSelect"><option value="">Không áp dụng</option>${(catalog.promotions || []).map(item => `<option value="${esc(item.MaKM)}" ${maKM === item.MaKM ? 'selected' : ''}>${esc(item.TenKM)}</option>`).join('')}</select></label>${customer ? `<label>Dùng điểm<input id="pointInput" type="number" min="0" max="${customer.DiemTichLuy}" value="${diemSuDung}"></label>` : ''}</div>
             ${(catalog.promotions || []).length ? '' : '<small class="cashier-quote-break">Chưa có KM hiệu lực. Quản lý tạo/ngừng chương trình ở menu Khuyến mãi (UC04).</small>'}
-            <div class="cashier-cart-lines">${cart.size ? [...cart.values()].map(line => `<div class="cashier-cart-line"><div><strong>${esc(line.TenSP)}</strong><small>${money(line.GiaBan)} × ${line.SoLuong}</small></div><div class="cashier-cart-qty"><button data-action="minus" data-id="${line.MaSP}">−</button><span>${line.SoLuong}</span><button data-action="plus" data-id="${line.MaSP}">+</button></div><strong>${money(Number(line.GiaBan) * line.SoLuong)}</strong></div>`).join('') : '<div class="warehouse-empty">Quét hoặc chọn sản phẩm để bắt đầu.</div>'}</div>
+            <div class="cashier-cart-lines">${cart.size ? [...cart.values()].map(line => `<div class="cashier-cart-line">${productPhoto(line, 'cart-product-photo')}<div><strong>${esc(line.TenSP)}</strong><small>${money(line.GiaBan)} × ${line.SoLuong}</small></div><div class="cashier-cart-qty"><button data-action="minus" data-id="${line.MaSP}">−</button><span>${line.SoLuong}</span><button data-action="plus" data-id="${line.MaSP}">+</button></div><strong>${money(Number(line.GiaBan) * line.SoLuong)}</strong></div>`).join('') : '<div class="warehouse-empty">Quét hoặc chọn sản phẩm để bắt đầu.</div>'}</div>
             <div class="cashier-cart-total"><span>PHẢI THANH TOÁN</span><strong>${money(payable)}</strong></div>
             ${quote ? `<small class="cashier-quote-break">Tiền hàng ${money(quote.TongTienHang)} · Giảm ${money(quote.TienGiamGia)} · Điểm ${money(quote.TienDiemQuyDoi)}</small>` : ''}
-            <div class="cashier-pos-actions"><button type="button" class="warehouse-secondary" id="saveDraft" ${cart.size ? '' : 'disabled'}>Lưu nháp</button>${draftId ? '<button type="button" class="warehouse-danger" id="cancelDraft">Hủy nháp</button>' : ''}<button type="button" class="warehouse-primary cashier-checkout" id="checkout" ${cart.size ? '' : 'disabled'}>Thanh toán</button></div>
+            <div class="cashier-pos-actions"><button type="button" class="warehouse-secondary" id="saveDraft" ${cart.size ? '' : 'disabled'}>Lưu nháp</button>${draftId ? '<button type="button" class="warehouse-danger" id="cancelDraft">Hủy nháp</button>' : ''}<button type="button" class="warehouse-primary cashier-checkout" id="checkout" ${cart.size ? '' : 'disabled'}><svg><use href="#i-cash"/></svg>Thanh toán</button></div>
           </article>
         </section>`;
       const addProduct = async product => {
@@ -207,7 +211,7 @@
         const query = unaccent(searchQuery);
         let visible = 0;
         root.querySelectorAll('.cashier-product').forEach(button => {
-          const show = !query || button.dataset.search.includes(query);
+          const show = (!query || button.dataset.search.includes(query)) && (!categoryFilter || button.dataset.cat === categoryFilter);
           button.hidden = !show;
           if (show) visible += 1;
         });
@@ -216,6 +220,11 @@
       };
       root.querySelector('#backShift').addEventListener('click', () => context.navigate('cashier-shifts'));
       root.querySelectorAll('.cashier-product').forEach(button => button.addEventListener('click', () => addProduct(products.find(item => item.MaSP === button.dataset.id))));
+      root.querySelectorAll('.pos-chip').forEach(chip => chip.addEventListener('click', () => {
+        categoryFilter = chip.dataset.cat || '';
+        root.querySelectorAll('.pos-chip').forEach(item => item.classList.toggle('active', item === chip));
+        applySearch();
+      }));
       const searchBox = root.querySelector('#posSearch');
       searchBox.addEventListener('input', event => { searchQuery = event.target.value; applySearch(); });
       searchBox.addEventListener('keydown', async event => {
@@ -281,7 +290,7 @@
       const payable = payableAmount();
       if (payable <= 0) return context.showToast('Số tiền phải thanh toán không hợp lệ.', 'error');
       const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
-      overlay.innerHTML = `<div class="warehouse-modal cashier-payment-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">THANH TOÁN ĐỦ · NHIỀU PHƯƠNG THỨC</p><h2>${money(payable)}</h2></div><button type="button" class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="cashier-payment-head"><span>Phương thức</span><span>Số tiền</span><span>Mã giao dịch điện tử</span><span>Kết quả</span><span></span></div><div id="paymentRows"></div><button type="button" class="warehouse-secondary" id="addPaymentRow">+ Thêm phương thức (tiền mặt + CK/QR/thẻ)</button><p id="paymentRemain" class="cashier-payment-help"></p></div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Hủy</button><button type="button" class="warehouse-primary" id="confirmPayment">Hoàn thành &amp; in hóa đơn</button></div></div>`;
+      overlay.innerHTML = `<div class="warehouse-modal cashier-payment-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">THANH TOÁN ĐỦ · NHIỀU PHƯƠNG THỨC</p><h2>${money(payable)}</h2></div><button type="button" class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="pay-method-grid"><button type="button" class="pay-method active" data-method="Tiền mặt"><svg><use href="#i-cash"/></svg><small>Tiền mặt</small></button><button type="button" class="pay-method" data-method="QR"><svg><use href="#i-qr"/></svg><small>QR</small></button><button type="button" class="pay-method" data-method="Thẻ"><svg><use href="#i-card"/></svg><small>Thẻ</small></button><button type="button" class="pay-method" data-method="Chuyển khoản"><svg><use href="#i-bank"/></svg><small>Chuyển khoản</small></button></div><div class="cashier-payment-head"><span>Phương thức</span><span>Số tiền</span><span>Mã giao dịch điện tử</span><span>Kết quả</span><span></span></div><div id="paymentRows"></div><button type="button" class="warehouse-secondary" id="addPaymentRow">+ Thêm phương thức (tiền mặt + CK/QR/thẻ)</button><p id="paymentRemain" class="cashier-payment-help"></p></div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Hủy</button><button type="button" class="warehouse-primary" id="confirmPayment">Hoàn thành &amp; in hóa đơn</button></div></div>`;
       document.body.appendChild(overlay);
       const rows = overlay.querySelector('#paymentRows');
       const syncRemain = () => {
@@ -305,6 +314,11 @@
         row.querySelector('.pay-status').addEventListener('change', syncRemain);
       };
       addRow(payable, 'Tiền mặt');
+      overlay.querySelectorAll('.pay-method').forEach(button => button.addEventListener('click', () => {
+        overlay.querySelectorAll('.pay-method').forEach(item => item.classList.toggle('active', item === button));
+        const row = rows.querySelector('.cashier-payment-row');
+        if (row) row.querySelector('.method').value = button.dataset.method;
+      }));
       overlay.querySelector('#addPaymentRow').addEventListener('click', () => {
         const successTotal = [...rows.querySelectorAll('.cashier-payment-row')].reduce((sum, row) => row.querySelector('.pay-status').value === 'Thành công' ? sum + (Number(row.querySelector('.amount').value) || 0) : sum, 0);
         addRow(Math.max(0, Math.round(payable - successTotal)) || '', 'Chuyển khoản');
@@ -405,7 +419,7 @@
             }, load);
           });
         }
-        root.querySelector('#customerBody').innerHTML = data.items.length ? data.items.map(item => `<tr><td><strong>${esc(item.TenKH)}</strong><small>${esc(item.MaKH)}</small></td><td>${esc(item.SDT || '—')}<small>${esc(item.Email || '')}</small></td><td class="num">${item.DiemTichLuy}</td><td>${esc(item.HangThanhVien)}</td><td><button class="warehouse-secondary" data-edit="${esc(item.MaKH)}" data-name="${esc(item.TenKH)}" data-phone="${esc(item.SDT || '')}" data-points="${item.DiemTichLuy}" data-rank="${esc(item.HangThanhVien)}">Cập nhật</button></td></tr>`).join('') : '<tr><td colspan="5" class="warehouse-empty">Chưa có khách hàng phù hợp.</td></tr>';
+        root.querySelector('#customerBody').innerHTML = data.items.length ? data.items.map(item => `<tr><td>${person(item.TenKH, item.MaKH)}</td><td>${esc(item.SDT || '—')}<small>${esc(item.Email || '')}</small></td><td class="num">${item.DiemTichLuy}</td><td>${esc(item.HangThanhVien)}</td><td><button class="warehouse-secondary" data-edit="${esc(item.MaKH)}" data-name="${esc(item.TenKH)}" data-phone="${esc(item.SDT || '')}" data-points="${item.DiemTichLuy}" data-rank="${esc(item.HangThanhVien)}">Cập nhật</button></td></tr>`).join('') : '<tr><td colspan="5" class="warehouse-empty">Chưa có khách hàng phù hợp.</td></tr>';
       } catch (error) { context.showToast(error.message, 'error'); }
     };
     await load();
@@ -441,70 +455,158 @@
             }
           });
         }
-        root.querySelector('#invoiceBody').innerHTML = data.items.length ? data.items.map(item => `<tr><td><strong>${esc(item.MaHD)}</strong><small>${fmtTime(item.NgayLap)}</small></td><td>${esc(item.TenKH || 'Khách vãng lai')}</td><td class="num">${money(item.TongThanhToan)}</td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></td><td>${item.TrangThai === 'Hoàn thành' ? `<button type="button" class="warehouse-secondary" data-print="${esc(item.MaHD)}">In lại</button>` : item.TrangThai === 'Nháp' ? `<button type="button" class="warehouse-primary" data-continue="${esc(item.MaHD)}">Tiếp tục thanh toán</button><button type="button" class="warehouse-danger" data-cancel="${esc(item.MaHD)}">Hủy nháp</button>` : '—'}</td></tr>`).join('') : '<tr><td colspan="5" class="warehouse-empty">Chưa có hóa đơn.</td></tr>';
+        root.querySelector('#invoiceBody').innerHTML = data.items.length ? data.items.map(item => `<tr><td><strong>${esc(item.MaHD)}</strong><small>${fmtTime(item.NgayLap)}</small></td><td>${person(item.TenKH || 'Khách vãng lai', item.SDT || '')}</td><td class="num">${money(item.TongThanhToan)}</td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></td><td>${item.TrangThai === 'Hoàn thành' ? `<button type="button" class="warehouse-secondary" data-print="${esc(item.MaHD)}">In lại</button>` : item.TrangThai === 'Nháp' ? `<button type="button" class="warehouse-primary" data-continue="${esc(item.MaHD)}">Tiếp tục thanh toán</button><button type="button" class="warehouse-danger" data-cancel="${esc(item.MaHD)}">Hủy nháp</button>` : '—'}</td></tr>`).join('') : '<tr><td colspan="5" class="warehouse-empty">Chưa có hóa đơn.</td></tr>';
       } catch (error) { context.showToast(error.message, 'error'); }
     };
     await load();
   };
 
   const initReturns = async (root, context) => {
+    const reasons = [
+      { label: 'Hàng hỏng / lỗi cửa hàng', form: 'Hoàn tiền', hint: 'Hàng hỏng thường hoàn tiền. Thủ kho bỏ tick nhập lại kho; không mở lại ca cũ.' },
+      { label: 'Hết hạn / kém chất lượng', form: 'Hoàn tiền', hint: 'Không nhập lại kho nếu hàng không bán được.' },
+      { label: 'Giao nhầm / sai sản phẩm', form: 'Đổi hàng', hint: 'Có thể đổi sang đúng hàng nếu còn tồn.' },
+      { label: 'Khách đổi ý (còn nguyên tem)', form: 'Hoàn tiền', hint: 'Chỉ hoàn khi hàng còn nguyên; Thủ kho kiểm tra bao bì.' },
+      { label: 'Lý do khác', form: '', hint: 'Ghi rõ tình trạng hàng và mong muốn của khách.' }
+    ];
+    const invoiceHitHtml = item => `<button type="button" class="cashier-invoice-hit" data-hd="${esc(item.MaHD)}">${avatar(item.TenKH || 'K')}<div><strong>${esc(item.MaHD)}</strong><small>${esc(item.TenKH || 'Khách vãng lai')}${item.SDT ? ` · ${esc(item.SDT)}` : ''}</small></div><div class="cashier-invoice-hit-meta"><span>${fmtTime(item.NgayLap)}</span><span>Ca ${esc(item.MaCa || '—')} · ${esc(item.TenNV)}</span><strong>${money(item.TongThanhToan)}</strong></div></button>`;
+    const renderInvoiceForm = (overlay, data) => {
+      const inv = data.invoice;
+      overlay.querySelector('#returnInvoiceHits').innerHTML = '';
+      overlay.querySelector('#returnForm').innerHTML = `<div class="return-source-card"><div><span>HÓA ĐƠN GỐC</span><strong>${esc(inv.MaHD)}</strong></div><div><span>NGÀY BÁN</span><strong>${fmtTime(inv.NgayLap)}</strong></div><div><span>CA / THU NGÂN GỐC</span><strong>${esc(inv.MaCa || '—')}</strong><small>${esc(inv.TenNV)}</small></div><div><span>KHÁCH HÀNG</span><strong>${esc(inv.TenKH || 'Khách vãng lai')}</strong><small>${esc(inv.SDT || 'Không SĐT')}</small></div><div><span>TỔNG HĐ</span><strong>${money(inv.TongThanhToan)}</strong></div></div>
+        <p class="cashier-return-shift-note">Hóa đơn gắn với ca đã bán (có thể là ca trước hoặc thu ngân khác). Hoàn tiền / giao đổi ghi vào <strong>ca bạn đang mở</strong>, không mở lại ca cũ và không sửa Phiếu thu ca đã đối soát.</p>
+        <div class="warehouse-field"><label>Lý do đổi trả *</label><div class="cashier-reason-chips">${reasons.map(item => `<button type="button" class="cashier-reason-chip" data-reason="${esc(item.label)}" data-form="${esc(item.form)}">${esc(item.label)}</button>`).join('')}</div><textarea id="returnReason" maxlength="500" placeholder="Chọn lý do nhanh hoặc ghi rõ tình trạng hàng..."></textarea><small id="returnReasonHint" class="cashier-payment-help"></small></div>
+        <div class="warehouse-field"><label>Hình thức xử lý *</label><div class="cashier-return-forms"><label><input type="radio" name="returnFormType" value="Hoàn tiền" checked> Hoàn tiền<span>Trả tiền từ két ca đang mở</span></label><label><input type="radio" name="returnFormType" value="Đổi hàng"> Đổi hàng<span>Giao sản phẩm khác sau khi Quản lý duyệt</span></label></div></div>
+        <div class="warehouse-table-wrap"><table class="warehouse-table cashier-return-table"><thead><tr><th></th><th>SẢN PHẨM</th><th>ĐÃ BÁN</th><th>CÒN ĐỔI TRẢ</th><th>SL TRẢ</th><th>THÀNH TIỀN</th></tr></thead><tbody>${data.lines.map(line => {
+          const left = Number(line.SLConDoiTra || 0);
+          return `<tr class="cashier-return-line" data-sp="${esc(line.MaSP)}" data-price="${Number(line.DonGia)}" data-left="${left}"><td><input type="checkbox" ${left > 0 ? '' : 'disabled'}></td><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)}</small></td><td class="num">${line.SoLuong}</td><td class="num">${left}</td><td><input type="number" min="1" max="${Math.max(left, 0)}" value="${Math.max(left, 0)}" ${left > 0 ? '' : 'disabled'}></td><td class="num return-line-amount">${money(0)}</td></tr>`;
+        }).join('')}</tbody></table></div>
+        <div class="cashier-return-total">Tạm tính tiền hàng trả: <strong id="returnRefundPreview">${money(0)}</strong></div>
+        <div class="warehouse-modal-actions return-form-actions"><button type="button" class="warehouse-secondary close">Hủy</button><button type="button" class="warehouse-primary" id="saveReturn">Lưu nháp và gửi Thủ kho</button></div>`;
+      const updatePreview = () => {
+        let total = 0;
+        overlay.querySelectorAll('.cashier-return-line').forEach(row => {
+          const qty = Number(row.querySelector('input[type=number]').value) || 0;
+          const amount = row.querySelector('input[type=checkbox]').checked ? qty * Number(row.dataset.price) : 0;
+          total += amount;
+          row.querySelector('.return-line-amount').textContent = money(amount);
+        });
+        overlay.querySelector('#returnRefundPreview').textContent = money(total);
+      };
+      overlay.querySelectorAll('.cashier-return-line input').forEach(input => input.addEventListener('input', updatePreview));
+      overlay.querySelectorAll('.cashier-return-line input[type=checkbox]').forEach(input => input.addEventListener('change', updatePreview));
+      overlay.querySelectorAll('.cashier-reason-chip').forEach(chip => chip.addEventListener('click', () => {
+        overlay.querySelectorAll('.cashier-reason-chip').forEach(item => item.classList.toggle('active', item === chip));
+        overlay.querySelector('#returnReason').value = chip.dataset.reason;
+        overlay.querySelector('#returnReasonHint').textContent = reasons.find(item => item.label === chip.dataset.reason)?.hint || '';
+        if (chip.dataset.form) overlay.querySelector(`input[name=returnFormType][value="${chip.dataset.form}"]`).checked = true;
+      }));
+      overlay.querySelector('#saveReturn').addEventListener('click', async () => {
+        const lines = [...overlay.querySelectorAll('.cashier-return-line')].filter(row => row.querySelector('input[type=checkbox]').checked).map(row => ({ MaSP: row.dataset.sp, SoLuong: Number(row.querySelector('input[type=number]').value) }));
+        try {
+          const created = await api(context, '/cashier/returns', { method: 'POST', body: JSON.stringify({ MaHD: inv.MaHD, LyDo: overlay.querySelector('#returnReason').value, HinhThucXuLy: overlay.querySelector('input[name=returnFormType]:checked').value, lines }) });
+          await api(context, `/cashier/returns/${created.MaDT}/submit`, { method: 'POST' });
+          context.showToast('Đã gửi hàng cho Thủ kho kiểm tra.', 'success'); overlay.remove(); await load();
+        } catch (error) { context.showToast(error.message, 'error'); }
+      });
+      overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', () => overlay.remove()));
+    };
     const openCreate = async () => {
       const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
-      overlay.innerHTML = `<div class="warehouse-modal receipt-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">ĐỔI TRẢ</p><h2>Lập yêu cầu từ hóa đơn gốc</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="warehouse-field"><label>Tìm hóa đơn đã hoàn thành</label><input id="returnSearch" placeholder="Mã HĐ, tên hoặc SĐT..."></div><div id="returnInvoiceHits"></div><div id="returnForm"></div></div></div>`;
+      overlay.innerHTML = `<div class="warehouse-modal receipt-modal return-create-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">ĐỔI TRẢ</p><h2>Lập yêu cầu từ hóa đơn gốc</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="return-workflow-hint"><svg><use href="#i-refresh"/></svg><div><strong>Khách mua ca trước / nhân viên khác vẫn đổi trả được</strong><p>Tìm hóa đơn đã hoàn thành → chọn hàng → Thủ kho kiểm tra → Quản lý duyệt → hoàn tất trên ca đang mở của bạn.</p></div></div><div class="warehouse-field"><label>Tìm hóa đơn đã hoàn thành</label><input id="returnSearch" placeholder="Mã HĐ, tên khách, SĐT, mã ca hoặc tên thu ngân gốc..."></div><div id="returnInvoiceHits" class="cashier-invoice-hits"></div><div id="returnForm"></div></div></div>`;
       document.body.appendChild(overlay);
-      const close = () => overlay.remove(); overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
-      overlay.querySelector('#returnSearch').addEventListener('input', async event => {
+      overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', () => overlay.remove()));
+      const showHits = items => {
+        overlay.querySelector('#returnInvoiceHits').innerHTML = items.length
+          ? `<p class="cashier-payment-help">${items.length} hóa đơn gần đây hoặc khớp tìm kiếm. Chọn một hóa đơn để lập phiếu.</p>${items.map(invoiceHitHtml).join('')}`
+          : '<p class="cashier-payment-help">Không tìm thấy hóa đơn hoàn thành.</p>';
+      };
+      try { showHits((await api(context, '/cashier/returns/recent-invoices')).items); }
+      catch (error) { context.showToast(error.message, 'error'); }
+      let timer = 0;
+      overlay.querySelector('#returnSearch').addEventListener('input', event => {
+        clearTimeout(timer);
         const query = event.target.value.trim();
-        if (query.length < 2) return;
-        try {
-          const data = await api(context, `/cashier/returns/search-invoices?search=${encodeURIComponent(query)}`);
-          overlay.querySelector('#returnInvoiceHits').innerHTML = data.items.map(item => `<button type="button" class="cashier-customer-hit" data-hd="${esc(item.MaHD)}"><strong>${esc(item.MaHD)}</strong><small>${esc(item.TenKH || 'Khách vãng lai')} · ${money(item.TongThanhToan)}</small></button>`).join('');
-        } catch (error) { context.showToast(error.message, 'error'); }
+        timer = setTimeout(async () => {
+          try {
+            if (query.length < 2) return showHits((await api(context, '/cashier/returns/recent-invoices')).items);
+            showHits((await api(context, `/cashier/returns/search-invoices?search=${encodeURIComponent(query)}`)).items);
+          } catch (error) { context.showToast(error.message, 'error'); }
+        }, 250);
       });
       overlay.addEventListener('click', async event => {
         const hit = event.target.closest('[data-hd]');
         if (!hit) return;
-        try {
-          const data = await api(context, `/cashier/returns/source/${hit.dataset.hd}`);
-          overlay.querySelector('#returnForm').innerHTML = `<div class="warehouse-field"><label>Lý do *</label><input id="returnReason" maxlength="500"></div><div class="warehouse-field"><label>Hình thức</label><select id="returnFormType"><option>Hoàn tiền</option><option>Đổi hàng</option></select></div><div class="warehouse-form-lines">${data.lines.map(line => `<label class="cashier-return-line"><input type="checkbox" data-sp="${esc(line.MaSP)}" ${line.SLConDoiTra > 0 ? '' : 'disabled'}><span>${esc(line.TenSP)} · còn ${line.SLConDoiTra}/${line.SoLuong}</span><input type="number" min="1" max="${line.SLConDoiTra}" value="${Math.max(1, line.SLConDoiTra)}" ${line.SLConDoiTra > 0 ? '' : 'disabled'}></label>`).join('')}</div><button class="warehouse-primary" id="saveReturn">Lưu nháp và gửi Thủ kho</button>`;
-          overlay.querySelector('#saveReturn').addEventListener('click', async () => {
-            const lines = [...overlay.querySelectorAll('.cashier-return-line')].filter(row => row.querySelector('input[type=checkbox]').checked).map(row => ({ MaSP: row.querySelector('input[type=checkbox]').dataset.sp, SoLuong: Number(row.querySelector('input[type=number]').value) }));
-            try {
-              const created = await api(context, '/cashier/returns', { method: 'POST', body: JSON.stringify({ MaHD: data.invoice.MaHD, LyDo: overlay.querySelector('#returnReason').value, HinhThucXuLy: overlay.querySelector('#returnFormType').value, lines }) });
-              await api(context, `/cashier/returns/${created.MaDT}/submit`, { method: 'POST' });
-              context.showToast('Đã gửi hàng cho Thủ kho kiểm tra.', 'success'); close(); await load();
-            } catch (error) { context.showToast(error.message, 'error'); }
-          });
-        } catch (error) { context.showToast(error.message, 'error'); }
+        try { renderInvoiceForm(overlay, await api(context, `/cashier/returns/source/${hit.dataset.hd}`)); }
+        catch (error) { context.showToast(error.message, 'error'); }
       });
     };
     const completeModal = async (id) => {
       const detail = await api(context, `/cashier/returns/${id}`);
       const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
       const refund = detail.ticket.HinhThucXuLy === 'Hoàn tiền';
-      overlay.innerHTML = `<div class="warehouse-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">HOÀN TẤT ĐỔI TRẢ</p><h2>${esc(id)}</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body">${refund ? `<div class="warehouse-field"><label>Phương thức hoàn *</label><select id="refundMethod"><option>Tiền mặt</option><option>QR</option><option>Thẻ</option><option>Chuyển khoản</option></select></div><div class="warehouse-field"><label>Mã giao dịch hoàn</label><input id="refundCode"></div><p class="cashier-payment-help">Hoàn tiền mặt được trừ khi tính tiền bàn giao cuối ca. Phải đang mở ca.</p>` : `<p>Chọn sản phẩm giao đổi cho khách (sẽ trừ tồn khi hoàn tất).</p><div id="exchangeLines"></div><button class="warehouse-secondary" id="addExchange">+ Thêm hàng giao đổi</button>`}<p class="cashier-payment-help">${esc(detail.ticket.KetQuaKiemTra || '')}</p></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-primary confirm">Hoàn thành</button></div></div>`;
+      const returned = detail.lines.filter(item => item.LoaiDong === 'Hàng khách trả');
+      const returnedValue = returned.reduce((sum, item) => sum + Number(item.ThanhTien || 0), 0);
+      overlay.innerHTML = `<div class="warehouse-modal receipt-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">HOÀN TẤT ĐỔI TRẢ</p><h2>${esc(id)}</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="return-source-card"><div><span>HÓA ĐƠN GỐC</span><strong>${esc(detail.ticket.MaHD)}</strong><small>Ca gốc ${esc(detail.ticket.MaCaGoc || '—')} · ${esc(detail.ticket.ThuNganGoc || '')}</small></div><div><span>HÌNH THỨC</span><strong>${esc(detail.ticket.HinhThucXuLy)}</strong></div><div><span>TIỀN HÀNG TRẢ</span><strong>${money(returnedValue)}</strong></div><div><span>KIỂM TRA KHO</span><strong>${esc(detail.ticket.KetQuaKiemTra || '—')}</strong></div></div><p class="cashier-return-shift-note">Phải đang mở ca của bạn. Tiền hoàn tiền mặt trừ két ca hiện tại, không đụng ca đã đóng.</p><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HÀNG KHÁCH TRẢ</th><th>SL</th><th>THÀNH TIỀN</th></tr></thead><tbody>${returned.map(item => `<tr><td>${esc(item.TenSP)}</td><td class="num">${item.SoLuong}</td><td class="num">${money(item.ThanhTien)}</td></tr>`).join('')}</tbody></table></div>${refund ? `<div class="warehouse-field"><label>Phương thức hoàn *</label><select id="refundMethod"><option>Tiền mặt</option><option>QR</option><option>Thẻ</option><option>Chuyển khoản</option></select></div><div class="warehouse-field" id="refundCodeField" hidden><label>Mã giao dịch hoàn *</label><input id="refundCode" placeholder="Mã QR / thẻ / chuyển khoản"></div><p class="cashier-payment-help">Hoàn tiền mặt được trừ khi tính tiền bàn giao cuối ca đang mở.</p>` : `<p>Đổi trực tiếp chỉ áp dụng sản phẩm ngang giá. Hệ thống trừ tồn khi hoàn tất.</p><div class="warehouse-field"><label>Tìm hàng giao đổi</label><input id="exchangeSearch" placeholder="Mã, tên hoặc mã vạch..."></div><div id="exchangeHits" class="cashier-invoice-hits"></div><div id="exchangeLines" class="cashier-exchange-lines"></div><div class="cashier-return-total">Giá trị giao đổi: <strong id="exchangeValue">${money(0)}</strong> · Chênh lệch: <strong id="exchangeDiff">${money(0)}</strong></div><p class="cashier-payment-help" id="exchangeDiffHelp">Chọn hàng giao đổi có tổng giá trị đúng bằng tiền hàng trả.</p>`}</div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-primary confirm">Hoàn thành</button></div></div>`;
       document.body.appendChild(overlay);
-      const close = () => overlay.remove(); overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
-      overlay.querySelector('#addExchange')?.addEventListener('click', () => {
-        overlay.querySelector('#exchangeLines').insertAdjacentHTML('beforeend', '<div class="cashier-payment-row"><input class="ex-sp" placeholder="Mã SP"><input class="ex-qty" type="number" min="1" value="1"></div>');
+      const close = () => overlay.remove();
+      overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+      overlay.querySelector('#refundMethod')?.addEventListener('change', () => {
+        overlay.querySelector('#refundCodeField').hidden = overlay.querySelector('#refundMethod').value === 'Tiền mặt';
+      });
+      const updateExchangeTotals = () => {
+        const valueEl = overlay.querySelector('#exchangeValue');
+        if (!valueEl) return;
+        const rows = [...overlay.querySelectorAll('.cashier-exchange-row')];
+        const value = rows.reduce((sum, row) => sum + Number(row.dataset.price) * Number(row.querySelector('.ex-qty').value || 0), 0);
+        const diff = value - returnedValue;
+        valueEl.textContent = money(value);
+        overlay.querySelector('#exchangeDiff').textContent = money(diff);
+        overlay.querySelector('.confirm').disabled = !rows.length || Math.abs(diff) > 0.01;
+        overlay.querySelector('#exchangeDiffHelp').textContent = diff > 0
+          ? `Hàng mới cao hơn ${money(diff)}. Hãy hoàn hàng cũ và lập hóa đơn bán mới; không giao qua phiếu này.`
+          : diff < 0
+            ? `Hàng mới thấp hơn ${money(Math.abs(diff))}. Hãy hoàn hàng cũ và lập hóa đơn bán mới; không giao qua phiếu này.`
+            : 'Đã ngang giá, có thể hoàn tất giao đổi.';
+      };
+      overlay.querySelector('#exchangeSearch')?.addEventListener('input', async event => {
+        const query = event.target.value.trim();
+        if (query.length < 2) { overlay.querySelector('#exchangeHits').innerHTML = ''; return; }
+        try {
+          const catalog = await api(context, `/cashier/returns/catalog?search=${encodeURIComponent(query)}`);
+          overlay.querySelector('#exchangeHits').innerHTML = (catalog.products || []).slice(0, 12).map(item => `<button type="button" class="cashier-invoice-hit" data-ex="${esc(item.MaSP)}" data-name="${esc(item.TenSP)}" data-price="${Number(item.GiaBan)}" data-stock="${Number(item.SLTon)}"><div><strong>${esc(item.TenSP)}</strong><small>${esc(item.MaSP)} · tồn ${item.SLTon} · ${money(item.GiaBan)}</small></div></button>`).join('') || '<p class="cashier-payment-help">Không có sản phẩm phù hợp.</p>';
+        } catch (error) { context.showToast(error.message, 'error'); }
+      });
+      overlay.addEventListener('click', event => {
+        const hit = event.target.closest('[data-ex]');
+        if (hit && overlay.contains(hit) && !overlay.querySelector(`.cashier-exchange-row[data-sp="${hit.dataset.ex}"]`)) {
+          overlay.querySelector('#exchangeLines').insertAdjacentHTML('beforeend', `<div class="cashier-exchange-row" data-sp="${esc(hit.dataset.ex)}" data-price="${hit.dataset.price}"><div><strong>${esc(hit.dataset.name)}</strong><small>${esc(hit.dataset.ex)} · ${money(Number(hit.dataset.price))}</small></div><input class="ex-qty" type="number" min="1" max="${hit.dataset.stock}" value="1"><button type="button" class="warehouse-icon-button" data-remove-ex>×</button></div>`);
+          overlay.querySelector('#exchangeHits').innerHTML = '';
+          overlay.querySelector('#exchangeSearch').value = '';
+          overlay.querySelectorAll('.ex-qty').forEach(input => { input.oninput = updateExchangeTotals; });
+          updateExchangeTotals();
+        }
+        const remove = event.target.closest('[data-remove-ex]');
+        if (remove) { remove.closest('.cashier-exchange-row').remove(); updateExchangeTotals(); }
       });
       overlay.querySelector('.confirm').addEventListener('click', async () => {
         const payload = refund
-          ? { PhuongThucHoan: overlay.querySelector('#refundMethod').value, MaGiaoDichHoan: overlay.querySelector('#refundCode').value }
-          : { exchange: [...overlay.querySelectorAll('#exchangeLines .cashier-payment-row')].map(row => ({ MaSP: row.querySelector('.ex-sp').value.trim(), SoLuong: Number(row.querySelector('.ex-qty').value) })) };
+          ? { PhuongThucHoan: overlay.querySelector('#refundMethod').value, MaGiaoDichHoan: overlay.querySelector('#refundCode')?.value }
+          : { exchange: [...overlay.querySelectorAll('.cashier-exchange-row')].map(row => ({ MaSP: row.dataset.sp, SoLuong: Number(row.querySelector('.ex-qty').value) })) };
         try {
           const result = await api(context, `/cashier/returns/${id}/complete`, { method: 'POST', body: JSON.stringify(payload) });
           context.showToast(result.message, 'success'); close(); await load();
         } catch (error) { context.showToast(error.message, 'error'); }
       });
+      if (!refund) updateExchangeTotals();
     };
     const load = async () => {
       try {
         const data = await api(context, '/cashier/returns?scope=mine');
-        root.innerHTML = `${heading('THU NGÂN / ĐỔI TRẢ', 'Yêu cầu đổi hàng hoặc hoàn tiền', 'Lập từ hóa đơn gốc, gửi Thủ kho kiểm tra, Quản lý duyệt, rồi hoàn tất tại quầy.', '<button class="warehouse-primary" id="newReturn">Lập yêu cầu</button>')}<article class="warehouse-table-card"><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU</th><th>HÓA ĐƠN</th><th>HÌNH THỨC</th><th>SỐ TIỀN HOÀN</th><th>TRẠNG THÁI</th><th></th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><strong>${esc(item.MaDT)}</strong></td><td>${esc(item.MaHD)}</td><td>${esc(item.HinhThucXuLy)}</td><td class="num">${money(item.SoTienHoan)}</td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></td><td>${item.TrangThai === 'Đã duyệt' ? `<button class="warehouse-primary" data-complete="${esc(item.MaDT)}">Hoàn tất</button>` : '—'}</td></tr>`).join('') : '<tr><td colspan="6" class="warehouse-empty">Chưa có yêu cầu đổi trả.</td></tr>'}</tbody></table></div></article>`;
+        root.innerHTML = `${heading('THU NGÂN / UC26', 'Yêu cầu đổi hàng hoặc hoàn tiền', 'Lập từ hóa đơn gốc (kể cả ca trước), gửi Thủ kho kiểm tra, Quản lý duyệt, rồi hoàn tất tại quầy trên ca đang mở.', '<button class="warehouse-primary" id="newReturn">Lập yêu cầu</button>')}<article class="warehouse-table-card"><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU</th><th>HÓA ĐƠN / KHÁCH</th><th>CA GỐC</th><th>HÌNH THỨC</th><th>SỐ TIỀN HOÀN</th><th>TRẠNG THÁI</th><th></th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><strong>${esc(item.MaDT)}</strong><small>${fmtTime(item.NgayLap)}</small></td><td>${esc(item.MaHD)}<small>${esc(item.TenKH || 'Khách vãng lai')}</small></td><td>${esc(item.MaCaGoc || '—')}<small>${esc(item.ThuNganGoc || '')}${item.MaCaHoan ? `<br>Hoàn ca ${esc(item.MaCaHoan)}` : ''}</small></td><td>${esc(item.HinhThucXuLy)}</td><td class="num">${money(item.SoTienHoan)}</td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></td><td>${item.TrangThai === 'Đã duyệt' ? `<button class="warehouse-primary" data-complete="${esc(item.MaDT)}">Hoàn tất</button>` : '—'}</td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có yêu cầu đổi trả.</td></tr>'}</tbody></table></div></article>`;
         root.querySelector('#newReturn').addEventListener('click', openCreate);
         root.querySelectorAll('[data-complete]').forEach(button => button.addEventListener('click', () => completeModal(button.dataset.complete)));
-      } catch (error) { context.showToast(error.message, 'error'); }
+      } catch (error) { context.showToast(error.message, 'error'); root.innerHTML = `<div class="welcome-card"><h2>Không tải được đổi trả</h2><p>${esc(error.message)}</p></div>`; }
     };
     await load();
   };

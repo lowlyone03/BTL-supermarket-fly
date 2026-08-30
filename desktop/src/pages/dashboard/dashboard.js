@@ -173,6 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const formatToday = () => new Intl.DateTimeFormat('vi-VN', {
     weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: HANOI_TIME_ZONE
   }).format(new Date()).replace(',', '');
+  const formatMoney = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
 
   const updatePendingIndicators = total => {
     pendingTotal = Number(total || 0);
@@ -192,7 +193,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     contentArea.innerHTML = '<div class="overview-loading">Đang tổng hợp dữ liệu điều hành...</div>';
     try {
-      const data = await apiGet('/admin/dashboard');
+      const [data, catalog] = await Promise.all([
+        apiGet('/admin/dashboard'),
+        apiGet('/admin/catalog/products').catch(() => ({ items: [], summary: {} }))
+      ]);
       if (loadVersion !== navigationVersion) return;
       const summary = data.summary;
       const pending = data.pendingApprovals;
@@ -213,6 +217,21 @@ document.addEventListener('DOMContentLoaded', () => {
       const priorityText = pending.TongChoDuyet > 0
         ? 'Đơn mua hàng, chứng từ kho, đề nghị đổi trả và thanh toán đang chờ Quản lý xem xét.'
         : 'Các công việc chờ phê duyệt đã được xử lý. Hãy tiếp tục kiểm tra nhân sự, tài khoản và hoạt động hệ thống.';
+      const featuredProducts = (catalog.items || [])
+        .filter(item => item.TrangThai === 'Đang bán' && window.FLY_PRODUCT_IMAGES?.hasBundledImage(item.MaSP))
+        .sort((left, right) => {
+          const leftRisk = Number(left.SLTon || 0) - Number(left.TonKhoToiThieu || 0);
+          const rightRisk = Number(right.SLTon || 0) - Number(right.TonKhoToiThieu || 0);
+          return leftRisk - rightRisk || String(left.MaSP).localeCompare(String(right.MaSP));
+        })
+        .slice(0, 6);
+      const productCards = featuredProducts.map((item, index) => {
+        const low = Number(item.SLTon || 0) <= Number(item.TonKhoToiThieu || 0);
+        return `<article class="overview-product-card ${low ? 'low' : ''}">
+          <div class="overview-product-visual">${window.FLY_PRODUCT_IMAGES.markup(item, { className: 'overview-product-photo', eager: index < 3 })}<span>${escapeHtml(item.TenDM || item.MaDM || 'Hàng hóa')}</span></div>
+          <div class="overview-product-copy"><small>${escapeHtml(item.MaSP)}</small><h3>${escapeHtml(item.TenSP)}</h3><strong>${formatMoney(item.GiaBan)}</strong><div><span>Còn ${Number(item.SLTon || 0).toLocaleString('vi-VN')} ${escapeHtml(item.DonViTinh || '')}</span><b>${low ? 'Cần bổ sung' : 'Sẵn sàng'}</b></div></div>
+        </article>`;
+      }).join('');
 
       contentArea.innerHTML = `
         <section class="overview-page">
@@ -239,6 +258,11 @@ document.addEventListener('DOMContentLoaded', () => {
             <article class="stat-card ${summary.ChuaCoTaiKhoan ? 'attention' : ''}"><div><span>CHƯA CÓ TÀI KHOẢN</span><i><svg><use href="#i-user-plus"/></svg></i></div><strong>${summary.ChuaCoTaiKhoan}</strong><small><b>${summary.ChuaCoTaiKhoan}</b> nhân viên chưa được cấp tài khoản</small></article>
             <article class="stat-card ${summary.TaiKhoanBiKhoa ? 'attention' : ''}"><div><span>TÀI KHOẢN BỊ KHÓA</span><i><svg><use href="#i-lock"/></svg></i></div><strong>${summary.TaiKhoanBiKhoa}</strong><small><b>${summary.ThaoTacHomNay}</b> thao tác hôm nay</small></article>
           </div>
+
+          <section class="overview-product-showcase">
+            <div class="section-heading"><div><p>HÀNG HÓA TRỰC QUAN</p><h2>Sản phẩm cần theo dõi</h2><span>Ưu tiên những mặt hàng gần hoặc dưới mức tồn tối thiểu.</span></div><button type="button" data-open-target="../admin/products.html">Quản lý sản phẩm <svg><use href="#i-chevron"/></svg></button></div>
+            <div class="overview-product-grid">${productCards || '<div class="overview-product-empty">Chưa có ảnh sản phẩm phù hợp với dữ liệu hiện tại.</div>'}</div>
+          </section>
 
           <div class="overview-columns">
             <article class="overview-panel">

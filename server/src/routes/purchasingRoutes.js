@@ -1,6 +1,7 @@
 const express = require('express');
 const controller = require('../controllers/warehouseController');
 const orderController = require('../controllers/purchaseOrderController');
+const reportController = require('../controllers/reportController');
 const { verifyToken, requirePermission } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
@@ -17,5 +18,6 @@ router.post('/purchase-orders/:id/submit', requirePermission('UC13'), orderContr
 router.post('/purchase-orders/:id/send-supplier', requirePermission('UC14'), orderController.sendSupplier);
 router.post('/purchase-orders/:id/supplier-confirm', requirePermission('UC14'), orderController.confirmSupplier);
 router.post('/purchase-orders/:id/shipments', requirePermission('UC14'), orderController.recordShipment);
+router.get('/reports/buying', requirePermission('UC14'), reportController.getPurchasingReport);
 
 module.exports = router;

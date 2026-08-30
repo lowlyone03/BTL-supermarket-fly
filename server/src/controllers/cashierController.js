@@ -1,5 +1,6 @@
 const { sql, poolPromise } = require('../config/db');
 const { closeOpenAttendance } = require('../services/attendanceSync');
+const { calculateGrossProfit, RESTOCK_ACCEPTED_SQL } = require('../services/financialRules');
 
 const generateShiftId = async transaction => {
     const now = new Date();
@@ -223,10 +224,21 @@ const getShiftSummary = async (source, maCa, lock = false) => {
         FROM ThanhToan tt JOIN HoaDon hd ON hd.MaHD=tt.MaHD
         WHERE hd.MaCa=@MaCa AND hd.TrangThai=N'Hoàn thành'`);
     const refunds = await next().input('MaCa', sql.VarChar, maCa).query(`
-        SELECT COALESCE(SUM(SoTienHoan),0) TongTienHoanMat
-        FROM PhieuDoiTra
-        WHERE TrangThai=N'Hoàn thành' AND PhuongThucHoan=N'Tiền mặt'
-          AND (MaCaHoan=@MaCa OR (MaCaHoan IS NULL AND NgayHoan BETWEEN
+        WITH ChiTietDoiTraTheoPhieu AS (
+            SELECT ct.MaDT,
+                   SUM(CASE WHEN ct.LoaiDong=N'Hàng khách trả' THEN ct.ThanhTienVon ELSE 0 END) GiaVonHangTra,
+                   SUM(CASE WHEN ct.LoaiDong=N'Hàng giao đổi' THEN ct.ThanhTienVon ELSE 0 END) GiaVonHangGiaoDoi
+            FROM ChiTietDoiTra ct GROUP BY ct.MaDT
+        )
+        SELECT COALESCE(SUM(CASE WHEN dt.PhuongThucHoan=N'Tiền mặt' THEN dt.SoTienHoan ELSE 0 END),0) TongTienHoanMat,
+               COALESCE(SUM(dt.SoTienHoan),0) TienHoan,
+               COALESCE(SUM(CASE WHEN ${RESTOCK_ACCEPTED_SQL}
+                                 THEN ct.GiaVonHangTra ELSE 0 END),0) GiaVonHangTraNhapLai,
+               COALESCE(SUM(ct.GiaVonHangGiaoDoi),0) GiaVonHangGiaoDoi
+        FROM PhieuDoiTra dt
+        LEFT JOIN ChiTietDoiTraTheoPhieu ct ON ct.MaDT=dt.MaDT
+        WHERE dt.TrangThai=N'Hoàn thành'
+          AND (dt.MaCaHoan=@MaCa OR (dt.MaCaHoan IS NULL AND dt.NgayHoan BETWEEN
               (SELECT ThoiGianBatDau FROM CaLamViec WHERE MaCa=@MaCa)
               AND COALESCE((SELECT ThoiGianKetThuc FROM CaLamViec WHERE MaCa=@MaCa),GETDATE())))`);
     const invoices = await next().input('MaCa', sql.VarChar, maCa).query(`
@@ -246,12 +258,19 @@ const getShiftSummary = async (source, maCa, lock = false) => {
         ...totals.recordset[0],
         ...refunds.recordset[0],
         ...invoices.recordset[0],
-        GiaVon: Number(cost.recordset[0].GiaVon || 0),
+        GiaVonHoaDon: Number(cost.recordset[0].GiaVon || 0),
         ThanhToanChoXacNhan: Number(pending.recordset[0].Tong || 0)
     };
     summary.TienMatHeThong = Number(summary.TongTienMat || 0) - Number(summary.TongTienHoanMat || 0);
     summary.TienMatTrongKet = Number(summary.TienDauCa || 0) + Number(summary.TienMatHeThong || 0);
-    summary.LoiNhuanGop = Number(summary.DoanhThu || 0) - Number(summary.GiaVon || 0);
+    const profit = calculateGrossProfit({
+        DoanhThuHoaDon: summary.DoanhThu,
+        TienHoan: summary.TienHoan,
+        GiaVonHoaDon: summary.GiaVonHoaDon,
+        GiaVonHangTraNhapLai: summary.GiaVonHangTraNhapLai,
+        GiaVonHangGiaoDoi: summary.GiaVonHangGiaoDoi
+    });
+    Object.assign(summary, profit, { GiaVon: profit.GiaVonHangBanThuan });
     return summary;
 };
 

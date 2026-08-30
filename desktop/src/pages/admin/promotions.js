@@ -40,6 +40,8 @@
     document.getElementById('promoValue').value = item?.GiaTri ?? 10;
     document.getElementById('promoStart').value = dateOnly(item?.NgayBatDau) || new Date().toISOString().slice(0, 10);
     document.getElementById('promoEnd').value = dateOnly(item?.NgayKetThuc) || '';
+    window.FLY_VI_DATE?.refresh(document.getElementById('promoStart'));
+    window.FLY_VI_DATE?.refresh(document.getElementById('promoEnd'));
     document.getElementById('promoStatus').value = item?.TrangThai || 'Hiệu lực';
     document.getElementById('promoModal').style.display = 'flex';
   };

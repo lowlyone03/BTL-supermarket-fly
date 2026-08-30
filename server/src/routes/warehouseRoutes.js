@@ -4,11 +4,13 @@ const receiptController = require('../controllers/receiptController');
 const returnsController = require('../controllers/returnsController');
 const inventoryCountController = require('../controllers/inventoryCountController');
 const stockIssueController = require('../controllers/stockIssueController');
+const reportController = require('../controllers/reportController');
 const { verifyToken, requirePermission } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
 router.use(verifyToken);
 router.get('/dashboard', requirePermission('UC15'), controller.getDashboard);
+router.get('/reports/inventory', requirePermission('UC15'), reportController.getWarehouseReport);
 router.get('/inventory', requirePermission('UC15'), controller.getInventory);
 router.get('/inventory-counts', requirePermission('UC20'), inventoryCountController.listCounts);
 router.post('/inventory-counts', requirePermission('UC20'), inventoryCountController.createCount);

@@ -6,9 +6,14 @@
   <title>Điều hành - Supermarket Fly</title>
   <link rel="stylesheet" href="dashboard.css">
   <link rel="stylesheet" href="../admin/admin.css">
-  <link rel="stylesheet" href="../warehouse/warehouse.css?v=uc28-uc09-1">
+  <link rel="stylesheet" href="../warehouse/warehouse.css?v=product-images-1">
   <link rel="stylesheet" href="../workforce/workforce.css?v=attendance-overtime-1">
-  <link rel="stylesheet" href="../cashier/cashier.css">
+  <link rel="stylesheet" href="../cashier/cashier.css?v=product-images-1">
+  <link rel="stylesheet" href="../shared/locale-ui.css?v=vi-date-3">
+  <link rel="stylesheet" href="../shared/ui-polish.css?v=ui-polish-1">
+  <link rel="stylesheet" href="../shared/report-charts.css?v=report-dashboard-11">
+  <link rel="stylesheet" href="../shared/product-images.css?v=products-1">
+  <link rel="stylesheet" href="overview-modern.css?v=overview-1">
 </head>
 <body>
   <svg class="svg-library" aria-hidden="true">
@@ -38,6 +43,14 @@
     <symbol id="i-request" viewBox="0 0 24 24"><path d="M6 3h12v18H6z"/><path d="M9 7h6M9 11h6M9 15h3M15 14v5M12.5 16.5h5"/></symbol>
     <symbol id="i-truck" viewBox="0 0 24 24"><path d="M3 6h11v10H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
     <symbol id="i-warning" viewBox="0 0 24 24"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></symbol>
+    <symbol id="i-cash" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/><path d="M6 10v4M18 10v4"/></symbol>
+    <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v6M14 20h3"/></symbol>
+    <symbol id="i-card" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M7 15h4"/></symbol>
+    <symbol id="i-bank" viewBox="0 0 24 24"><path d="M3 10h18M5 10v8M9 10v8M15 10v8M19 10v8M3 18h18M12 3 3 9h18L12 3Z"/></symbol>
+    <symbol id="i-trend" viewBox="0 0 24 24"><path d="M3 17 9 11l4 4 8-8"/><path d="M14 7h7v7"/></symbol>
+    <symbol id="i-cart" viewBox="0 0 24 24"><path d="M3 4h2l2.4 12h11.2L21 8H7"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></symbol>
+    <symbol id="i-team" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></symbol>
   </svg>
 
   <div class="app-shell">
@@ -59,7 +72,7 @@
         <a href="#" class="nav-item" id="managerApprovalNav" data-target="manager-purchase-approvals"><svg><use href="#i-approve"/></svg><span>Trung tâm phê duyệt</span><b class="nav-badge" id="approvalNavBadge">0</b></a>
         <a href="#" class="nav-item" id="managerPayablesNav" data-target="manager-payables"><svg><use href="#i-report"/></svg><span>Theo dõi công nợ</span></a>
         <a href="#" class="nav-item" id="managerWorkforceNav" data-target="manager-workforce"><svg><use href="#i-calendar"/></svg><span>Phân ca &amp; chấm công</span></a>
-        <a href="#" class="nav-item is-coming" id="managerReportNav" data-coming-soon="Báo cáo quản trị"><svg><use href="#i-report"/></svg><span>Báo cáo</span></a>
+        <a href="#" class="nav-item" id="managerReportNav" data-target="manager-reports"><svg><use href="#i-report"/></svg><span>Báo cáo cửa hàng</span></a>
 
         <div class="nav-group" id="navGroupWarehouse" style="display:none">
           <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span>Lịch làm việc</span></a>
@@ -73,6 +86,7 @@
           <a href="#" class="nav-item" data-target="warehouse-receiving"><svg><use href="#i-truck"/></svg><span>Nhận &amp; kiểm tra hàng</span></a>
           <a href="#" class="nav-item" data-target="warehouse-receipts"><svg><use href="#i-request"/></svg><span>Phiếu nhập kho</span></a>
           <a href="#" class="nav-item" data-target="warehouse-returns"><svg><use href="#i-refresh"/></svg><span>Kiểm tra đổi trả</span></a>
+          <a href="#" class="nav-item" data-target="warehouse-reports"><svg><use href="#i-report"/></svg><span>Báo cáo kho</span></a>
         </div>
 
         <div class="nav-group" id="navGroupPurchasing" style="display:none">
@@ -81,6 +95,7 @@
           <div class="nav-group-title">MUA HÀNG</div>
           <a href="#" class="nav-item" data-target="purchasing-suppliers"><svg><use href="#i-store"/></svg><span>Nhà cung cấp</span></a>
           <a href="#" class="nav-item" data-target="purchasing-orders"><svg><use href="#i-approve"/></svg><span>Đơn mua hàng</span></a>
+          <a href="#" class="nav-item" data-target="purchasing-reports"><svg><use href="#i-report"/></svg><span>Báo cáo mua hàng</span></a>
         </div>
 
         <div class="nav-group" id="navGroupAccounting" style="display:none">
@@ -90,6 +105,7 @@
           <a href="#" class="nav-item" data-target="accounting-payables"><svg><use href="#i-report"/></svg><span>Công nợ Nhà cung cấp</span></a>
           <div class="nav-group-title">ĐỐI SOÁT BÁN HÀNG</div>
           <a href="#" class="nav-item" data-target="accounting-settlements"><svg><use href="#i-clock"/></svg><span>Ca &amp; Phiếu thu</span></a>
+          <a href="#" class="nav-item" data-target="accounting-reports"><svg><use href="#i-report"/></svg><span>Báo cáo nội bộ</span></a>
           <div class="nav-group-title">NHÂN SỰ MỞ RỘNG</div>
           <a href="#" class="nav-item" data-target="accounting-payroll"><svg><use href="#i-team"/></svg><span>Bảng lương tháng</span></a>
         </div>
@@ -102,6 +118,7 @@
           <a href="#" class="nav-item" data-target="cashier-customers"><svg><use href="#i-users"/></svg><span>Khách hàng</span></a>
           <a href="#" class="nav-item" data-target="cashier-invoices"><svg><use href="#i-approve"/></svg><span>Hóa đơn</span></a>
           <a href="#" class="nav-item" data-target="cashier-returns"><svg><use href="#i-refresh"/></svg><span>Đổi trả</span></a>
+          <a href="#" class="nav-item" data-target="cashier-reports"><svg><use href="#i-report"/></svg><span>Báo cáo bán hàng</span></a>
         </div>
 
         <div class="nav-group" id="navGroupSystem" style="display:none">
@@ -165,16 +182,21 @@
   </div>
 
   <script src="../shared/escape-key.js"></script>
-  <script src="../shared/print-documents.js"></script>
+  <script src="../shared/locale-ui.js?v=vi-date-4"></script>
+  <script src="../shared/product-images.js?v=products-1"></script>
+  <script src="../shared/report-charts.js?v=charts-4"></script>
+  <script src="../shared/report-layout.js?v=layout-3"></script>
+  <script src="../shared/print-documents.js?v=print-report-4"></script>
   <script src="../admin/admin-page-templates.js"></script>
-  <script src="../warehouse/warehouse-pages.js?v=inventory-count-2"></script>
+  <script src="../warehouse/warehouse-pages.js?v=product-images-1"></script>
   <script src="../warehouse/supplier-pages.js"></script>
-  <script src="../warehouse/purchase-order-pages.js?v=uc28-uc09-1"></script>
-  <script src="../warehouse/receipt-pages.js"></script>
+  <script src="../warehouse/purchase-order-pages.js?v=uc28-ui-vi-1"></script>
+  <script src="../warehouse/receipt-pages.js?v=ui-vi-date-1"></script>
   <script src="../warehouse/stock-issue-pages.js?v=uc19-uc06-1"></script>
-  <script src="../accounting/accounting-pages.js?v=uc28-uc09-1"></script>
+  <script src="../accounting/accounting-pages.js?v=report-dashboard-5"></script>
   <script src="../workforce/workforce-pages.js?v=attendance-overtime-1"></script>
-  <script src="../cashier/cashier-pages.js?v=pos-uc24-3"></script>
-  <script src="dashboard.js?v=shift-live-2"></script>
+  <script src="../cashier/cashier-pages.js?v=product-images-1"></script>
+  <script src="../shared/role-reports.js?v=report-dashboard-6"></script>
+  <script src="dashboard.js?v=overview-products-1"></script>
 </body>
 </html>

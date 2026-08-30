@@ -2,6 +2,7 @@ const express = require('express');
 const controller = require('../controllers/cashierController');
 const sales = require('../controllers/salesController');
 const returns = require('../controllers/returnsController');
+const reportController = require('../controllers/reportController');
 const { verifyToken, requirePermission } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
@@ -10,6 +11,7 @@ router.get('/schedule', requirePermission('UC31'), controller.getMySchedule);
 router.post('/attendance/check-in', requirePermission('UC31'), controller.checkIn);
 router.post('/attendance/check-out', requirePermission('UC31'), controller.checkOut);
 router.get('/shifts', requirePermission('UC22'), controller.getShifts);
+router.get('/reports/sales', requirePermission('UC22'), reportController.getSalesReport);
 router.post('/shifts/open', requirePermission('UC22'), controller.openShift);
 router.get('/shifts/current/summary', requirePermission('UC22'), controller.getCurrentShiftSummary);
 router.post('/shifts/close', requirePermission('UC22'), controller.closeShift);
@@ -25,6 +27,8 @@ router.post('/invoices/:id/cancel', requirePermission('UC24'), sales.cancelInvoi
 router.post('/invoices/:id/payments', requirePermission('UC25'), sales.addPayment);
 router.post('/invoices/:id/complete', requirePermission('UC25'), sales.completeInvoice);
 router.get('/returns/search-invoices', requirePermission('UC26'), returns.searchInvoices);
+router.get('/returns/recent-invoices', requirePermission('UC26'), returns.listRecentInvoices);
+router.get('/returns/catalog', requirePermission('UC26'), sales.getCatalog);
 router.get('/returns/source/:id', requirePermission('UC26'), returns.getInvoiceForReturn);
 router.get('/returns', requirePermission('UC26'), returns.listReturns);
 router.get('/returns/:id', requirePermission('UC26'), returns.getReturn);

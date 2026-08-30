@@ -1,0 +1,1988 @@
+.financial-reports {
+  --report-accent: #1f7657;
+  --report-accent-2: #31916d;
+  --report-accent-soft: #e8f5ef;
+}
+.financial-reports.report-accounting { --report-accent: #365f9f; --report-accent-2: #587bc0; --report-accent-soft: #eaf0fb; }
+.financial-reports.report-purchasing { --report-accent: #73509b; --report-accent-2: #9670b7; --report-accent-soft: #f1ebf7; }
+.financial-reports.report-warehouse { --report-accent: #197678; --report-accent-2: #31999a; --report-accent-soft: #e6f5f4; }
+.financial-reports.report-cashier { --report-accent: #b05b43; --report-accent-2: #d07b5e; --report-accent-soft: #faeee9; }
+
+/* Executive report header: period, scope and status read as one modern summary surface. */
+.financial-reports .financial-report-title {
+  position: relative;
+  isolation: isolate;
+  min-height: 108px;
+  overflow: hidden;
+  margin: 0 0 15px;
+  padding: 20px 23px;
+  border: 1px solid color-mix(in srgb, var(--report-accent), white 78%);
+  border-radius: 21px;
+  background: linear-gradient(120deg, #fff 0%, color-mix(in srgb, var(--report-accent-soft), white 22%) 100%);
+  box-shadow: 0 14px 34px rgba(25,58,44,.07);
+}
+.financial-reports .financial-report-title::before,
+.financial-reports .financial-report-title::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--report-accent), transparent 94%);
+}
+.financial-reports .financial-report-title::before { width: 240px; height: 240px; top: -165px; right: 12%; }
+.financial-reports .financial-report-title::after { width: 150px; height: 150px; right: -35px; bottom: -100px; }
+.financial-reports .financial-report-title p { color: var(--report-accent); }
+.financial-reports .financial-report-title h2 { margin-top: 5px; color: #19372b; font-size: 25px; letter-spacing: -.035em; }
+.financial-reports .financial-report-title div > span { color: #708178; font-size: 12px; }
+.financial-reports .financial-report-title > .status-pill {
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--report-accent), white 72%);
+  background: #fff;
+  box-shadow: 0 5px 14px rgba(25,58,44,.06);
+  color: var(--report-accent);
+}
+.financial-reports .financial-report-title > .status-pill::before { background: var(--report-accent); }
+
+/* Period command bar */
+.financial-reports .financial-report-filter {
+  overflow: visible;
+  border-color: color-mix(in srgb, var(--report-accent), white 78%);
+  background: rgba(255,255,255,.86);
+  box-shadow: 0 12px 32px rgba(25,58,44,.065), inset 0 1px 0 #fff;
+  backdrop-filter: blur(16px);
+}
+.financial-reports .report-period-fields {
+  gap: 7px;
+  padding: 6px;
+  border: 1px solid #e0e9e4;
+  border-radius: 15px;
+  background: #f3f7f5;
+}
+.financial-reports .report-period-fields > label > span { padding-left: 8px; color: #71847a; }
+.financial-reports .report-period-fields select,
+.financial-reports .report-period-fields .custom-select-trigger {
+  border-color: transparent;
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(26,58,44,.045);
+}
+.financial-reports .warehouse-toolbar-actions .warehouse-primary {
+  min-height: 46px;
+  border-color: var(--report-accent);
+  background: linear-gradient(135deg, var(--report-accent), var(--report-accent-2));
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--report-accent), transparent 72%);
+}
+.financial-reports .warehouse-toolbar-actions .warehouse-secondary { min-height: 46px; background: rgba(255,255,255,.84); }
+
+/* Primary KPI hierarchy */
+.financial-reports .fly-kpi-grid.primary { gap: 14px; }
+.financial-reports .fly-kpi-grid.primary .fly-kpi {
+  --tile: var(--report-accent);
+  position: relative;
+  isolation: isolate;
+  min-height: 112px;
+  overflow: hidden;
+  padding: 17px;
+  border: 1px solid color-mix(in srgb, var(--tile), white 78%);
+  background: linear-gradient(145deg, #fff 52%, color-mix(in srgb, var(--tile), white 94%));
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--tile), transparent 91%);
+}
+.financial-reports .fly-kpi-grid.primary .fly-kpi:nth-child(2) { --tile: #d49a2f; }
+.financial-reports .fly-kpi-grid.primary .fly-kpi:nth-child(3) { --tile: #4e73bb; }
+.financial-reports .fly-kpi-grid.primary .fly-kpi:nth-child(4) { --tile: #8a5f9e; }
+.financial-reports .fly-kpi-grid.primary .fly-kpi.attention { --tile: #c25f47; }
+.financial-reports .fly-kpi-grid.primary .fly-kpi::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--tile), color-mix(in srgb, var(--tile), white 35%));
+}
+.financial-reports .fly-kpi-grid.primary .fly-kpi::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  width: 95px;
+  height: 95px;
+  right: -46px;
+  top: -48px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tile), transparent 93%);
+}
+.financial-reports .fly-kpi-grid.primary .fly-kpi-icon {
+  background: color-mix(in srgb, var(--tile), white 88%);
+  color: var(--tile);
+}
+.financial-reports .fly-kpi-grid.primary .fly-kpi > div > span { color: color-mix(in srgb, var(--tile), #53645c 55%); }
+.financial-reports .fly-kpi-grid.primary .fly-kpi strong { font-size: clamp(20px, 1.5vw, 25px); }
+
+/* Secondary operational KPIs are deliberately compact. */
+.financial-reports .fly-kpi-grid.compact { gap: 10px; margin-top: -3px; }
+.financial-reports .fly-kpi-grid.compact .fly-kpi {
+  min-height: 78px;
+  padding: 11px 13px;
+  border-style: dashed;
+  background: rgba(255,255,255,.74);
+  box-shadow: none;
+}
+.financial-reports .fly-kpi-grid.compact .fly-kpi-icon { width: 34px; height: 34px; flex-basis: 34px; border-radius: 10px; }
+.financial-reports .fly-kpi-grid.compact .fly-kpi-icon svg { width: 17px; height: 17px; }
+.financial-reports .fly-kpi-grid.compact .fly-kpi strong { margin-top: 2px; font-size: 18px; }
+.financial-reports .fly-kpi-grid.compact .fly-kpi small { font-size: 10px; }
+
+.financial-reports .fly-report-insight {
+  border-color: color-mix(in srgb, var(--report-accent), white 75%);
+  background: linear-gradient(105deg, var(--report-accent-soft), rgba(255,255,255,.78));
+  box-shadow: inset 4px 0 0 var(--report-accent);
+}
+.financial-reports .fly-report-insight::before { background: color-mix(in srgb, var(--report-accent), white 84%); color: var(--report-accent); }
+
+.financial-reports .fly-chart-card.executive > header {
+  border-color: color-mix(in srgb, var(--report-accent), white 82%);
+  background: linear-gradient(125deg, #fff, color-mix(in srgb, var(--report-accent-soft), white 18%));
+}
+
+.report-preview .document-preview-shell {
+  border: 1px solid rgba(255,255,255,.12);
+  background: #e8eeea;
+  box-shadow: 0 34px 100px rgba(8,31,22,.42);
+}
+.report-preview .document-preview-shell > header {
+  border-color: #d8e3dd;
+  background: linear-gradient(120deg, #fff, #eef6f2);
+}
+.report-preview .document-preview-shell > header span { color: #6f8178; }
+.report-preview .document-preview-shell > header strong { color: #19372b; }
+.report-preview .document-preview-shell > header .warehouse-secondary {
+  border-color: #ccdcd4;
+  background: #fff;
+  color: #315344;
+}
+.report-preview .document-preview-shell > header .warehouse-primary {
+  border-color: var(--report-accent);
+  background: var(--report-accent);
+  color: #fff;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--report-accent), transparent 76%);
+}
+.report-preview .document-preview-shell iframe {
+  background-color: #e8eeea;
+  background-image: radial-gradient(circle at 1px 1px, #cbd8d1 1px, transparent 0);
+  background-size: 18px 18px;
+}
+
+.fly-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, .85fr);
+  gap: 14px;
+  margin-bottom: 14px;
+  align-items: start;
+}
+
+.fly-dashboard-grid.equal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fly-dashboard-grid.triple { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.fly-dashboard-grid > .wide { grid-column: 1 / -1; }
+
+.fly-chart-card {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #d8e2dc;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 14px 38px rgba(25, 58, 44, .07);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.fly-chart-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 46px rgba(25, 58, 44, .11);
+}
+
+.fly-chart-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 92px;
+  padding: 17px 19px 14px;
+  border-bottom: 1px solid rgba(213, 225, 218, .8);
+  background: linear-gradient(135deg, #f7fbf9, #edf7f2);
+}
+
+.fly-chart-card > header > div {
+  position: relative;
+  min-width: 0;
+  min-height: 54px;
+  padding-left: 45px;
+}
+
+.fly-chart-card > header > div::before {
+  content: '↗';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 11px;
+  background: #dcefe6;
+  color: #237759;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+
+.fly-chart-card > header p,
+.fly-chart-card > header h2,
+.fly-chart-card > header small { margin: 0; }
+.fly-chart-card > header p {
+  color: #75877e;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .1em;
+}
+.fly-chart-card > header h2 {
+  margin-top: 4px;
+  color: #173327;
+  font-size: 20px;
+  letter-spacing: -.02em;
+}
+.fly-chart-card > header small {
+  display: block;
+  margin-top: 4px;
+  color: #788980;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.fly-chart-badge {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid #cce3d7;
+  border-radius: 999px;
+  background: rgba(255,255,255,.74);
+  color: #2a6e53;
+  font-size: 10px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.fly-chart-card.executive > header {
+  border-color: #d8e5de;
+  background: linear-gradient(125deg, #fff 0%, #edf7f2 100%);
+}
+.fly-chart-card.executive > header p,
+.fly-chart-card.executive > header small { color: #71847a; }
+.fly-chart-card.executive > header h2 { color: #173327; }
+.fly-chart-card.executive > header > div::before { background: #dcefe6; color: #237759; }
+.fly-chart-card.executive .fly-chart-badge { border-color: #cce3d7; background: #fff; color: #2a6e53; }
+
+.fly-chart-card.summary > header { background: linear-gradient(135deg, #fffaf0, #f8edcf); }
+.fly-chart-card.summary > header > div::before { content: '◔'; background: #f3dfad; color: #9a6813; }
+.fly-chart-card.ranking > header { background: linear-gradient(135deg, #fbf7fb, #f1e7f0); }
+.fly-chart-card.ranking > header > div::before { content: '★'; background: #ead7e7; color: #80446f; font-size: 14px; }
+.fly-chart-card.operations > header { background: linear-gradient(135deg, #f4f8fe, #e6eefb); }
+.fly-chart-card.operations > header > div::before { content: '▥'; background: #d9e5f8; color: #456ca9; }
+
+.fly-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 15px;
+  padding: 13px 20px 0;
+  color: #50655b;
+  font-size: 12px;
+  font-weight: 700;
+}
+.fly-chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.fly-chart-legend i,
+.fly-donut-legend i {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 3px;
+  background: var(--legend);
+}
+
+.fly-chart-canvas { padding: 6px 15px 14px; }
+.fly-chart-canvas.horizontal { padding-top: 11px; }
+.fly-chart-canvas svg { display: block; width: 100%; height: auto; overflow: visible; }
+.fly-chart-grid line { stroke: #e6ece8; stroke-width: 1; stroke-dasharray: 4 5; }
+.fly-chart-grid text,
+.fly-chart-canvas > svg > text {
+  fill: #71847a;
+  font-family: inherit;
+  font-size: 11px;
+}
+.fly-chart-line {
+  fill: none;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.fly-chart-area { pointer-events: none; }
+.fly-chart-point,
+.fly-chart-bar,
+.fly-donut-segment {
+  outline: none;
+  cursor: crosshair;
+  transition: opacity .16s ease, filter .16s ease, stroke-width .16s ease;
+}
+.fly-chart-point { stroke: #fff; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+.fly-chart-point:hover,
+.fly-chart-point:focus { r: 6.5px; filter: drop-shadow(0 3px 5px rgba(20, 61, 43, .25)); }
+.fly-chart-bar:hover,
+.fly-chart-bar:focus { opacity: .78; filter: drop-shadow(0 3px 5px rgba(20, 61, 43, .18)); }
+.fly-chart-track { fill: #edf2ef; }
+.fly-chart-value { fill: #253e32 !important; font-weight: 800; }
+.fly-chart-canvas.horizontal text { font-size: 12px; }
+
+.fly-metric-bars {
+  display: grid;
+  gap: 15px;
+  padding: 18px 20px 21px;
+}
+.fly-metric-bar { outline: none; }
+.fly-metric-bar > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+  color: #60736a;
+  font-size: 11px;
+}
+.fly-metric-bar strong { color: #19372a; font-size: 12px; text-align: right; }
+.fly-metric-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e9efec;
+}
+.fly-metric-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--bar), white 18%), var(--bar));
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--bar), transparent 70%);
+  transition: width .35s ease;
+}
+.fly-metric-bar:hover .fly-metric-track i,
+.fly-metric-bar:focus .fly-metric-track i { filter: saturate(1.2) brightness(.96); }
+.fly-metric-bar small { display: block; margin-top: 5px; color: #84938b; font-size: 10px; }
+
+.fly-donut-layout {
+  display: grid;
+  grid-template-columns: minmax(165px, .82fr) minmax(180px, 1.18fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 285px;
+  padding: 13px 20px 20px;
+}
+.fly-donut svg { display: block; width: 100%; max-height: 245px; filter: drop-shadow(0 8px 14px rgba(133, 93, 22, .08)); }
+.fly-donut text { fill: #71847a; font-size: 10px; font-weight: 700; }
+.fly-donut .fly-donut-total { fill: #1c392c; font-size: 15px; font-weight: 850; }
+.fly-donut-segment { vector-effect: non-scaling-stroke; }
+.fly-donut-segment:hover,
+.fly-donut-segment:focus { stroke-width: 36; filter: drop-shadow(0 3px 5px rgba(20, 61, 43, .16)); }
+.fly-donut-legend { display: grid; gap: 11px; }
+.fly-donut-legend > div {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: #5e7167;
+  font-size: 12px;
+}
+.fly-donut-legend strong { color: #203c2f; font-size: 12px; text-align: right; }
+
+.fly-chart-empty {
+  min-height: 228px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 24px;
+  color: #75877e;
+  text-align: center;
+}
+.fly-chart-empty > span { color: #58a384; font-size: 34px; line-height: 1; }
+.fly-chart-empty strong { color: #354f42; font-size: 13px; }
+.fly-chart-empty small { max-width: 340px; font-size: 11px; }
+
+.fly-chart-tooltip {
+  position: fixed;
+  z-index: 10000;
+  max-width: 220px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 9px;
+  background: #163b2d;
+  box-shadow: 0 10px 28px rgba(10, 35, 26, .22);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.fly-report-insight {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin: 0 0 14px;
+  padding: 12px 15px;
+  border: 1px solid #cfe3d8;
+  border-radius: 13px;
+  background: linear-gradient(105deg, #edf8f2, #f8fbf9);
+  color: #416052;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.fly-report-insight::before {
+  content: '↗';
+  display: grid;
+  width: 27px;
+  height: 27px;
+  flex: 0 0 27px;
+  place-items: center;
+  border-radius: 8px;
+  background: #d9eee4;
+  color: #237758;
+  font-size: 16px;
+  font-weight: 900;
+}
+.fly-report-insight strong { color: #173a2b; }
+
+@media (max-width: 1180px) {
+  .fly-dashboard-grid,
+  .fly-dashboard-grid.equal,
+  .fly-dashboard-grid.triple { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .fly-donut-layout { grid-template-columns: 1fr; }
+  .fly-donut svg { max-height: 200px; }
+  .fly-chart-card > header { padding-inline: 15px; }
+  .fly-chart-legend { padding-inline: 15px; }
+}
+
+@media print {
+  .fly-chart-tooltip { display: none !important; }
+  .fly-chart-card { break-inside: avoid; box-shadow: none; }
+}
+
+/* Report composition v2 — editorial hierarchy with a compact executive overview. */
+.financial-reports {
+  width: min(100%, 1540px);
+  margin-inline: auto;
+}
+
+.financial-reports > .warehouse-heading {
+  position: relative;
+  margin: 0 0 16px;
+  padding: 7px 4px 18px;
+  align-items: flex-end;
+  border-bottom: 1px solid rgba(201, 215, 207, .82);
+}
+.financial-reports > .warehouse-heading::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  bottom: -1px;
+  width: 74px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--report-accent);
+}
+.financial-reports > .warehouse-heading .warehouse-kicker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--report-accent), white 78%);
+  border-radius: 999px;
+  background: var(--report-accent-soft);
+  color: var(--report-accent);
+  font-size: 9px;
+  letter-spacing: .11em;
+}
+.financial-reports > .warehouse-heading h1 {
+  margin: 11px 0 7px;
+  color: #172d23;
+  font-size: clamp(31px, 2.45vw, 42px);
+  font-weight: 760;
+  letter-spacing: -.052em;
+}
+.financial-reports > .warehouse-heading > div > p:last-child {
+  max-width: 900px;
+  color: #6d7d74;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.financial-reports .financial-report-filter {
+  margin-bottom: 18px;
+  border: 1px solid #d9e4de;
+  border-radius: 19px;
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 10px 30px rgba(25,58,44,.05);
+}
+.financial-reports .financial-report-filter .warehouse-toolbar {
+  min-height: 78px;
+  padding: 11px 13px;
+  align-items: center;
+}
+.financial-reports .report-period-fields {
+  padding: 5px;
+  border: 0;
+  background: #f3f7f5;
+}
+.financial-reports .report-period-fields > label {
+  min-height: 52px;
+  justify-content: center;
+}
+.financial-reports .warehouse-toolbar-actions {
+  gap: 8px;
+}
+.financial-reports .warehouse-toolbar-actions button {
+  min-height: 44px;
+  border-radius: 12px;
+}
+
+#financialReportBody,
+#roleReportBody {
+  display: grid;
+  grid-template-columns: minmax(250px, .38fr) minmax(0, 1.62fr);
+  align-items: stretch;
+  gap: 16px;
+}
+#financialReportBody > *,
+#roleReportBody > * { grid-column: 1 / -1; }
+#financialReportBody > .financial-report-title,
+#roleReportBody > .financial-report-title {
+  grid-column: 1;
+  min-height: 128px;
+  height: 100%;
+  margin: 0;
+  padding: 20px;
+}
+#financialReportBody > .fly-kpi-grid.primary,
+#roleReportBody > .fly-kpi-grid.primary {
+  grid-column: 2;
+  height: 100%;
+  margin: 0;
+}
+
+.financial-reports .financial-report-title {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-radius: 18px;
+}
+.financial-reports .financial-report-title h2 {
+  font-size: clamp(22px, 1.7vw, 28px);
+  line-height: 1.08;
+}
+.financial-reports .financial-report-title > .status-pill {
+  position: static;
+  align-self: flex-start;
+  margin-top: 14px;
+  padding: 6px 10px;
+}
+
+.financial-reports .fly-kpi-grid.primary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.financial-reports .fly-kpi-grid.primary .fly-kpi {
+  min-height: 128px;
+  height: 100%;
+  padding: 17px 15px 15px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 10px;
+  border-radius: 18px;
+  box-shadow: 0 9px 24px rgba(25,58,44,.045);
+}
+.financial-reports .fly-kpi-grid.primary .fly-kpi::before {
+  inset: 0 16px auto;
+  width: auto;
+  height: 2px;
+  border-radius: 0 0 999px 999px;
+}
+.financial-reports .fly-kpi-grid.primary .fly-kpi-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 10px;
+  align-self: flex-start;
+}
+.financial-reports .fly-kpi-grid.primary .fly-kpi-icon svg {
+  width: 17px;
+  height: 17px;
+}
+.financial-reports .fly-kpi-grid.primary .fly-kpi > div { width: 100%; }
+.financial-reports .fly-kpi-grid.primary .fly-kpi strong {
+  margin-top: 4px;
+  font-size: clamp(19px, 1.32vw, 24px);
+  letter-spacing: -.035em;
+}
+.financial-reports .fly-kpi-grid.primary .fly-kpi small {
+  margin-top: 4px;
+  color: #7b8981;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.financial-reports .fly-kpi-grid.compact {
+  margin: 0;
+  padding: 8px;
+  gap: 6px;
+  border: 1px solid #dfe7e2;
+  border-radius: 18px;
+  background: rgba(255,255,255,.67);
+}
+.financial-reports .fly-kpi-grid.compact .fly-kpi {
+  min-height: 72px;
+  border: 0;
+  border-right: 1px solid #e1e8e4;
+  border-radius: 10px;
+  background: transparent;
+}
+.financial-reports .fly-kpi-grid.compact .fly-kpi:last-child { border-right: 0; }
+
+.financial-reports .fly-report-insight {
+  margin: 0;
+  padding: 13px 16px;
+  border-radius: 15px;
+  box-shadow: none;
+}
+.financial-reports .gross-profit-steps { margin: 0; }
+
+.financial-reports .fly-dashboard-grid,
+.financial-reports .fly-dashboard-grid.equal,
+.financial-reports .fly-dashboard-grid.triple {
+  gap: 16px;
+  margin: 2px 0 0;
+}
+.financial-reports .fly-chart-card {
+  border-color: #dce5e0;
+  border-radius: 18px;
+  box-shadow: 0 10px 30px rgba(25,58,44,.055);
+}
+.financial-reports .fly-chart-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 15px 36px rgba(25,58,44,.085);
+}
+.financial-reports .fly-chart-card > header {
+  min-height: 80px;
+  padding: 14px 16px 12px;
+}
+.financial-reports .fly-chart-card > header > div {
+  min-height: 48px;
+  padding-left: 41px;
+}
+.financial-reports .fly-chart-card > header > div::before {
+  width: 31px;
+  height: 31px;
+  border-radius: 10px;
+}
+.financial-reports .fly-chart-card > header h2 {
+  font-size: 18px;
+  letter-spacing: -.03em;
+}
+.financial-reports .fly-chart-card > header small { font-size: 11px; }
+.financial-reports .fly-chart-legend { padding-top: 11px; }
+.financial-reports .fly-donut-layout { min-height: 260px; }
+
+.financial-reports .financial-report-sections,
+.financial-reports > .warehouse-table-card,
+#financialReportBody > .warehouse-table-card,
+#roleReportBody > .warehouse-table-card {
+  margin: 2px 0 0;
+}
+.financial-reports .warehouse-table-card {
+  overflow: hidden;
+  border-color: #dce5e0;
+  border-radius: 18px;
+  box-shadow: 0 8px 26px rgba(25,58,44,.045);
+}
+.financial-reports .warehouse-panel-title {
+  min-height: 64px;
+  background: linear-gradient(120deg, #fff, #f6f9f7);
+}
+
+@media (max-width: 1450px) {
+  #financialReportBody,
+  #roleReportBody { grid-template-columns: 1fr; }
+  #financialReportBody > .financial-report-title,
+  #roleReportBody > .financial-report-title,
+  #financialReportBody > .fly-kpi-grid.primary,
+  #roleReportBody > .fly-kpi-grid.primary { grid-column: 1; }
+  #financialReportBody > .financial-report-title,
+  #roleReportBody > .financial-report-title { min-height: 104px; }
+  .financial-reports .financial-report-title {
+    flex-direction: row;
+    align-items: center;
+  }
+  .financial-reports .financial-report-title > .status-pill { align-self: center; margin-top: 0; }
+}
+
+@media (max-width: 980px) {
+  .financial-reports .fly-kpi-grid.primary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .financial-reports .fly-kpi-grid.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .financial-reports .fly-kpi-grid.compact .fly-kpi:nth-child(2) { border-right: 0; }
+  .financial-reports .financial-report-filter .warehouse-toolbar { align-items: stretch; }
+}
+
+@media (max-width: 620px) {
+  .financial-reports > .warehouse-heading h1 { font-size: 30px; }
+  .financial-reports .financial-report-title { align-items: flex-start; flex-direction: column; }
+  .financial-reports .financial-report-title > .status-pill { align-self: flex-start; margin-top: 12px; }
+  .financial-reports .fly-kpi-grid.primary,
+  .financial-reports .fly-kpi-grid.compact { grid-template-columns: 1fr; }
+  .financial-reports .fly-kpi-grid.primary .fly-kpi { min-height: 108px; }
+  .financial-reports .fly-kpi-grid.compact .fly-kpi { border-right: 0; border-bottom: 1px solid #e1e8e4; }
+  .financial-reports .fly-kpi-grid.compact .fly-kpi:last-child { border-bottom: 0; }
+}
+
+/* Shared navigation and chapter hierarchy for all five actor reports. */
+.report-jump-nav {
+  position: sticky;
+  top: 7px;
+  z-index: 24;
+  grid-column: 1 / -1;
+  min-height: 54px;
+  padding: 7px 8px 7px 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid rgba(211,224,217,.94);
+  border-radius: 16px;
+  background: rgba(255,255,255,.9);
+  box-shadow: 0 10px 30px rgba(25,58,44,.07);
+  backdrop-filter: blur(16px);
+}
+.report-jump-nav > div:first-child span,
+.report-jump-nav > div:first-child strong { display: block; }
+.report-jump-nav > div:first-child span {
+  color: var(--report-accent);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+.report-jump-nav > div:first-child strong {
+  margin-top: 2px;
+  color: #233a30;
+  font-size: 11px;
+}
+.report-jump-nav > div:last-child {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 12px;
+  background: #f2f6f4;
+}
+.report-jump-nav button {
+  min-height: 36px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 9px;
+  color: #687a70;
+  background: transparent;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 760;
+  cursor: pointer;
+  transition: color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+.report-jump-nav button i {
+  color: #93a099;
+  font-size: 8px;
+  font-style: normal;
+}
+.report-jump-nav button:hover { color: var(--report-accent); background: rgba(255,255,255,.72); }
+.report-jump-nav button.active {
+  color: var(--report-accent);
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(25,58,44,.07);
+}
+.report-jump-nav button.active i { color: var(--report-accent); }
+
+.report-executive-overview {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(250px, .38fr) minmax(0, 1.62fr);
+  align-items: stretch;
+  gap: 16px;
+  scroll-margin-top: 76px;
+}
+.report-executive-overview > .financial-report-title {
+  min-height: 128px;
+  height: 100%;
+  margin: 0;
+  padding: 20px;
+}
+.report-executive-overview > .fly-kpi-grid.primary {
+  height: 100%;
+  margin: 0;
+}
+
+.report-chapter {
+  grid-column: 1 / -1;
+  min-height: 46px;
+  margin: 6px 0 -3px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  scroll-margin-top: 76px;
+}
+.report-chapter > span {
+  width: 31px;
+  height: 31px;
+  flex: 0 0 31px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--report-accent), white 76%);
+  border-radius: 10px;
+  background: var(--report-accent-soft);
+  color: var(--report-accent);
+  font-size: 9px;
+  font-weight: 850;
+}
+.report-chapter > div { min-width: 0; }
+.report-chapter small,
+.report-chapter strong { display: block; }
+.report-chapter small {
+  color: #87938d;
+  font-size: 7px;
+  font-weight: 850;
+  letter-spacing: .12em;
+}
+.report-chapter strong {
+  margin-top: 2px;
+  color: #243a30;
+  font-size: 13px;
+  letter-spacing: -.015em;
+}
+.report-chapter::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  margin-left: 5px;
+  background: linear-gradient(90deg, #dbe5df, transparent);
+}
+
+@media (max-width: 1450px) {
+  .report-executive-overview { grid-template-columns: 1fr; }
+  .report-executive-overview > .financial-report-title { min-height: 104px; }
+  .report-executive-overview .financial-report-title { flex-direction: row; align-items: center; }
+  .report-executive-overview .financial-report-title > .status-pill { align-self: center; margin-top: 0; }
+}
+@media (max-width: 720px) {
+  .report-jump-nav { position: static; align-items: flex-start; flex-direction: column; }
+  .report-jump-nav > div:last-child { width: 100%; }
+  .report-jump-nav button { flex: 1; justify-content: center; }
+  .report-jump-nav button i { display: none; }
+  .report-executive-overview .financial-report-title { align-items: flex-start; flex-direction: column; }
+  .report-executive-overview .financial-report-title > .status-pill { align-self: flex-start; margin-top: 12px; }
+}
+
+/* Report dashboard v3 — compact, data-first and shared by all five actors. */
+.financial-reports,
+.financial-reports.report-manager,
+.financial-reports.report-accounting,
+.financial-reports.report-purchasing,
+.financial-reports.report-warehouse,
+.financial-reports.report-cashier {
+  --report-accent: #237a59;
+  --report-accent-2: #3b9b75;
+  --report-accent-soft: #eaf5f0;
+  --report-ink: #17352a;
+  --report-muted: #718179;
+  --report-line: #dce5e0;
+  --report-surface: rgba(255, 255, 255, .97);
+  width: min(100%, 1660px);
+}
+
+.financial-reports > .warehouse-heading {
+  min-height: 72px;
+  margin-bottom: 11px;
+  padding: 2px 2px 13px;
+  align-items: center;
+}
+.financial-reports > .warehouse-heading::after { width: 78px; }
+.financial-reports > .warehouse-heading h1 {
+  margin-top: 4px;
+  font-size: clamp(28px, 2.3vw, 38px);
+  letter-spacing: -.045em;
+}
+.financial-reports > .warehouse-heading > div > p:last-child {
+  max-width: 900px;
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.financial-reports .financial-report-filter {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 15px;
+  box-shadow: 0 7px 22px rgba(28, 61, 47, .045);
+}
+.financial-reports .financial-report-filter .warehouse-toolbar { min-height: 44px; }
+.financial-reports .report-period-fields { gap: 9px; }
+.financial-reports .report-period-fields > label { min-width: 145px; }
+.financial-reports .report-period-fields select,
+.financial-reports .report-period-fields .custom-select-trigger,
+.financial-reports .warehouse-toolbar-actions button {
+  min-height: 42px;
+  border-radius: 10px;
+}
+
+#financialReportBody,
+#roleReportBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+#financialReportBody > *,
+#roleReportBody > * {
+  grid-column: 1;
+  margin: 0;
+}
+
+.report-jump-nav,
+.report-chapter { display: none !important; }
+.report-executive-overview { display: contents; }
+
+.financial-reports .financial-report-title {
+  min-height: 56px !important;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.financial-reports .financial-report-title::before,
+.financial-reports .financial-report-title::after { display: none; }
+.financial-reports .financial-report-title p { font-size: 8px; letter-spacing: .12em; }
+.financial-reports .financial-report-title h2 {
+  margin-top: 3px;
+  font-size: 22px;
+  letter-spacing: -.025em;
+}
+.financial-reports .financial-report-title div > span { font-size: 11px; }
+.financial-reports .financial-report-title > .status-pill {
+  align-self: center;
+  margin-top: 0;
+  padding: 7px 11px;
+  border: 1px solid #d7e9e1;
+  background: #eff8f4;
+  font-size: 10px;
+}
+
+.financial-reports .fly-kpi-grid.primary {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+.financial-reports .fly-kpi-grid.primary .fly-kpi {
+  min-height: 114px;
+  padding: 14px;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid var(--report-line);
+  border-radius: 15px;
+  background: var(--report-surface);
+  box-shadow: 0 8px 22px rgba(29, 62, 49, .055);
+}
+.financial-reports .fly-kpi-grid.primary .fly-kpi::before {
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: auto;
+  height: 3px;
+  border-radius: 0 0 15px 15px;
+  background: var(--tile, var(--report-accent));
+}
+.financial-reports .fly-kpi-grid.primary .fly-kpi::after { display: none; }
+.financial-reports .fly-kpi-grid.primary .fly-kpi-icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 10px;
+}
+.financial-reports .fly-kpi-grid.primary .fly-kpi-icon svg { width: 17px; height: 17px; }
+.financial-reports .fly-kpi-grid.primary .fly-kpi > div { min-width: 0; }
+.financial-reports .fly-kpi-grid.primary .fly-kpi > div > span {
+  overflow: hidden;
+  color: #718179;
+  font-size: 8px;
+  letter-spacing: .075em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.financial-reports .fly-kpi-grid.primary .fly-kpi strong {
+  margin-top: 5px;
+  font-size: clamp(17px, 1.25vw, 22px);
+  line-height: 1.08;
+  letter-spacing: -.035em;
+}
+.financial-reports .fly-kpi-grid.primary .fly-kpi small {
+  margin-top: 7px;
+  overflow: hidden;
+  font-size: 9px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.financial-reports .fly-report-insight {
+  min-height: 48px;
+  padding: 10px 13px;
+  border-radius: 12px;
+  font-size: 11px;
+}
+.financial-reports .fly-report-insight::before {
+  width: 26px;
+  height: 26px;
+  flex-basis: 26px;
+  font-size: 14px;
+}
+
+.financial-reports .report-chart-trio {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 12px;
+  align-items: stretch;
+}
+.financial-reports .fly-chart-card {
+  min-height: 348px;
+  border-radius: 15px;
+  box-shadow: 0 8px 24px rgba(28, 60, 47, .055);
+}
+.financial-reports .fly-chart-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(28, 60, 47, .085);
+}
+.financial-reports .fly-chart-card > header,
+.financial-reports .fly-chart-card.executive > header,
+.financial-reports .fly-chart-card.summary > header,
+.financial-reports .fly-chart-card.ranking > header,
+.financial-reports .fly-chart-card.operations > header {
+  min-height: 72px;
+  padding: 13px 15px 11px;
+  border-bottom-color: #e3e9e6;
+  background: #fff;
+}
+.financial-reports .fly-chart-card > header > div {
+  min-height: 0;
+  padding-left: 0;
+}
+.financial-reports .fly-chart-card > header > div::before { display: none; }
+.financial-reports .fly-chart-card > header p {
+  color: #788980;
+  font-size: 8px;
+  letter-spacing: .11em;
+}
+.financial-reports .fly-chart-card > header h2 {
+  margin-top: 4px;
+  font-size: 15px;
+  line-height: 1.25;
+}
+.financial-reports .fly-chart-card > header small {
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1.35;
+}
+.financial-reports .fly-chart-badge {
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-size: 8px;
+}
+.financial-reports .fly-chart-legend {
+  gap: 7px 12px;
+  padding: 10px 15px 0;
+  font-size: 10px;
+}
+.financial-reports .fly-chart-canvas {
+  display: flex;
+  min-height: 245px;
+  padding: 7px 12px 13px;
+  align-items: center;
+}
+.financial-reports .fly-chart-canvas svg {
+  width: 100%;
+  max-height: 238px;
+}
+.financial-reports .fly-chart-canvas.horizontal { min-height: 248px; }
+.financial-reports .fly-chart-canvas.horizontal svg { max-height: 240px; }
+.financial-reports .fly-donut-layout {
+  grid-template-columns: minmax(135px, .9fr) minmax(135px, 1.1fr);
+  gap: 4px;
+  min-height: 270px;
+  padding: 10px 14px 15px;
+}
+.financial-reports .fly-donut svg { max-height: 205px; }
+.financial-reports .fly-donut-legend { gap: 8px; }
+.financial-reports .fly-donut-legend > div {
+  gap: 6px;
+  font-size: 9px;
+}
+.financial-reports .fly-donut-legend strong { font-size: 9px; }
+.financial-reports .fly-chart-grid text,
+.financial-reports .fly-chart-canvas > svg > text { font-size: 9px; }
+
+.financial-reports .report-bottom-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+.financial-reports .report-bottom-grid > .warehouse-table-card {
+  min-width: 0;
+  min-height: 280px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--report-line);
+  border-radius: 15px;
+  background: var(--report-surface);
+  box-shadow: 0 8px 24px rgba(28, 60, 47, .05);
+}
+.financial-reports .report-bottom-grid .warehouse-panel-title {
+  min-height: 64px;
+  padding: 13px 15px 11px;
+}
+.financial-reports .report-bottom-grid .warehouse-panel-title h2 { font-size: 15px; }
+.financial-reports .report-bottom-grid .warehouse-table-wrap { overflow: auto; }
+.financial-reports .report-bottom-grid .warehouse-table { min-width: 460px; }
+.financial-reports .report-bottom-grid .warehouse-table th {
+  padding: 9px 11px;
+  font-size: 8px;
+}
+.financial-reports .report-bottom-grid .warehouse-table td {
+  padding: 10px 11px;
+  font-size: 10px;
+}
+
+.report-alert-list { display: grid; }
+.report-alert-list article {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 57px;
+  padding: 9px 13px;
+  border-bottom: 1px solid #e6ece8;
+}
+.report-alert-list article:last-child { border-bottom: 0; }
+.report-alert-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 9px;
+  background: #ecf6f1;
+  color: #237a59;
+}
+.report-alert-icon svg { width: 16px; height: 16px; }
+.report-alert-list article.warning .report-alert-icon { background: #fff3d9; color: #b67a0d; }
+.report-alert-list article.danger .report-alert-icon { background: #fff0ec; color: #bd4d38; }
+.report-alert-list article.info .report-alert-icon { background: #edf3fb; color: #426ea8; }
+.report-alert-list strong,
+.report-alert-list small { display: block; }
+.report-alert-list strong { color: #253c31; font-size: 10px; line-height: 1.3; }
+.report-alert-list small { margin-top: 3px; color: #7b8a82; font-size: 9px; line-height: 1.35; }
+.report-alert-list b { color: #2c483a; font-size: 10px; white-space: nowrap; }
+
+.financial-reports .report-detail-disclosure {
+  overflow: hidden;
+  border: 1px solid #dfe7e2;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .82);
+}
+.financial-reports .report-detail-disclosure > summary {
+  position: relative;
+  padding: 13px 42px 13px 15px;
+  color: #52675d;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+}
+.financial-reports .report-detail-disclosure > summary::-webkit-details-marker { display: none; }
+.financial-reports .report-detail-disclosure > summary::after {
+  content: '+';
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  color: var(--report-accent);
+  font-size: 18px;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+.financial-reports .report-detail-disclosure[open] > summary::after { content: '−'; }
+.financial-reports .report-detail-disclosure[open] > summary { border-bottom: 1px solid #e2e9e5; }
+.financial-reports .report-detail-disclosure > :not(summary) { margin: 12px; }
+
+@media (max-width: 1440px) {
+  .financial-reports .fly-kpi-grid.primary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .financial-reports .fly-kpi-grid.primary .fly-kpi { min-height: 102px; }
+}
+
+@media (max-width: 1180px) {
+  .financial-reports .report-chart-trio,
+  .financial-reports .report-bottom-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .financial-reports .report-chart-trio > :last-child,
+  .financial-reports .report-bottom-grid > :last-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 800px) {
+  .financial-reports > .warehouse-heading { align-items: flex-start; }
+  .financial-reports .financial-report-filter .warehouse-toolbar { gap: 11px; }
+  .financial-reports .report-period-fields,
+  .financial-reports .warehouse-toolbar-actions { width: 100%; }
+  .financial-reports .report-period-fields > label { min-width: min(100%, 150px); flex: 1; }
+  .financial-reports .fly-kpi-grid.primary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .financial-reports .report-chart-trio,
+  .financial-reports .report-bottom-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .financial-reports .report-chart-trio > :last-child,
+  .financial-reports .report-bottom-grid > :last-child { grid-column: 1; }
+}
+
+@media (max-width: 560px) {
+  .financial-reports > .warehouse-heading h1 { font-size: 26px; }
+  .financial-reports .financial-report-title { align-items: flex-start; flex-direction: column; gap: 9px; }
+  .financial-reports .financial-report-title > .status-pill { align-self: flex-start; }
+  .financial-reports .fly-kpi-grid.primary { grid-template-columns: minmax(0, 1fr); }
+  .financial-reports .fly-kpi-grid.primary .fly-kpi { min-height: 96px; }
+  .financial-reports .fly-donut-layout { grid-template-columns: minmax(0, 1fr); }
+  .financial-reports .fly-donut svg { max-height: 180px; }
+}
+
+/* Report dashboard v4
+   UI-only layout reset. This block deliberately overrides the older report
+   compositions above so every actor uses one predictable full-width flow. */
+.financial-reports {
+  width: 100%;
+  max-width: 1660px;
+  min-width: 0;
+  margin-inline: auto;
+  container-type: inline-size;
+}
+
+.financial-reports #financialReportBody,
+.financial-reports #roleReportBody {
+  display: flex !important;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.financial-reports #financialReportBody > *,
+.financial-reports #roleReportBody > * {
+  width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
+  grid-column: auto !important;
+}
+
+.financial-reports > .warehouse-heading {
+  width: 100%;
+  min-height: auto;
+  margin-bottom: 12px;
+  padding: 5px 4px 16px;
+}
+
+.financial-reports > .warehouse-heading h1 {
+  max-width: 920px;
+  margin: 9px 0 5px;
+  font-size: clamp(30px, 2.2vw, 40px);
+  line-height: 1.08;
+}
+
+.financial-reports > .warehouse-heading > div > p:last-child {
+  max-width: 960px;
+  margin-top: 0;
+  line-height: 1.5;
+}
+
+.financial-reports .financial-report-filter {
+  width: 100%;
+  margin: 0 0 2px;
+  padding: 0;
+  overflow: visible;
+  border: 1px solid #d9e4de;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .97);
+  box-shadow: 0 9px 26px rgba(28, 61, 47, .05);
+}
+
+.financial-reports .financial-report-filter .warehouse-toolbar {
+  display: flex;
+  width: 100%;
+  min-height: 78px;
+  padding: 13px 14px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.financial-reports .report-period-fields {
+  display: flex;
+  width: auto;
+  max-width: 760px;
+  min-width: 0;
+  flex: 1 1 620px;
+  align-items: stretch;
+  gap: 8px;
+  padding: 5px;
+  border-radius: 13px;
+  background: #f2f6f4;
+}
+
+.financial-reports .report-period-fields > label {
+  min-width: 0;
+  flex: 1 1 150px;
+}
+
+.financial-reports .report-period-fields > label:first-child { flex-basis: 170px; }
+
+.financial-reports .warehouse-toolbar-actions {
+  display: flex;
+  min-width: max-content;
+  margin-left: auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.financial-reports .warehouse-toolbar-actions button {
+  min-height: 46px;
+  padding-inline: 17px;
+  white-space: nowrap;
+}
+
+.financial-reports .financial-report-title {
+  display: grid !important;
+  min-height: 62px !important;
+  margin: 0 !important;
+  padding: 11px 15px !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid #dce7e1;
+  border-left: 4px solid var(--report-accent);
+  border-radius: 14px;
+  background: linear-gradient(105deg, #ffffff 0%, #f5faf7 100%);
+  box-shadow: 0 6px 18px rgba(28, 61, 47, .04);
+}
+
+.financial-reports .financial-report-title > div {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 7px 12px;
+}
+
+.financial-reports .financial-report-title p {
+  grid-column: 1 / -1;
+  font-size: 8px;
+  line-height: 1;
+}
+
+.financial-reports .financial-report-title h2 {
+  margin: 0;
+  color: var(--report-ink);
+  font-size: 20px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.financial-reports .financial-report-title div > span {
+  overflow: hidden;
+  color: var(--report-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.financial-reports .financial-report-title > .status-pill {
+  align-self: center;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.financial-reports .fly-kpi-grid.primary {
+  display: grid !important;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 11px;
+  margin: 0 !important;
+}
+
+.financial-reports .fly-kpi-grid.primary .fly-kpi {
+  position: relative;
+  min-width: 0;
+  min-height: 124px;
+  height: auto;
+  padding: 15px 14px 13px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  overflow: hidden;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(28, 61, 47, .055);
+}
+
+.financial-reports .fly-kpi-grid.primary .fly-kpi-icon {
+  display: grid;
+  width: 37px;
+  height: 37px;
+  flex: 0 0 37px;
+  place-items: center;
+  align-self: flex-start;
+}
+
+.financial-reports .fly-kpi-grid.primary .fly-kpi-icon svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.financial-reports .fly-kpi-grid.primary .fly-kpi > div {
+  width: 100%;
+  min-width: 0;
+}
+
+.financial-reports .fly-kpi-grid.primary .fly-kpi > div > span,
+.financial-reports .fly-kpi-grid.primary .fly-kpi small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.financial-reports .fly-kpi-grid.primary .fly-kpi strong {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: clamp(18px, 1.24vw, 23px);
+  line-height: 1.12;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.financial-reports .report-chart-trio,
+.financial-reports .report-bottom-grid {
+  display: grid !important;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  align-items: stretch;
+  gap: 13px;
+  margin: 2px 0 0 !important;
+}
+
+.financial-reports .report-chart-trio::before,
+.financial-reports .report-bottom-grid::before {
+  grid-column: 1 / -1;
+  display: flex;
+  min-height: 26px;
+  align-items: center;
+  padding-left: 10px;
+  border-left: 3px solid var(--report-accent);
+  color: #63776d;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .11em;
+}
+
+.financial-reports .report-chart-trio::before { content: 'PHÂN TÍCH TRỰC QUAN'; }
+.financial-reports .report-bottom-grid::before { content: 'CHI TIẾT VÀ CẢNH BÁO'; }
+
+.financial-reports .report-chart-trio > .fly-chart-card,
+.financial-reports .report-bottom-grid > .warehouse-table-card {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.financial-reports .report-chart-trio > .fly-chart-card {
+  min-height: 365px;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.financial-reports .fly-chart-card > header {
+  min-height: 78px;
+  padding: 14px 15px 12px;
+  align-items: flex-start;
+}
+
+.financial-reports .fly-chart-card > header > div {
+  width: 100%;
+  min-width: 0;
+}
+
+.financial-reports .fly-chart-card > header h2,
+.financial-reports .fly-chart-card > header small,
+.financial-reports .fly-chart-card > header p {
+  max-width: 100%;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
+}
+
+.financial-reports .fly-chart-card > header h2 {
+  font-size: 16px;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+.financial-reports .fly-chart-card > header small {
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+
+.financial-reports .fly-chart-badge {
+  max-width: 42%;
+  overflow: hidden;
+  flex: 0 0 auto;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.financial-reports .fly-chart-canvas {
+  width: 100%;
+  min-width: 0;
+  min-height: 255px;
+}
+
+.financial-reports .fly-chart-canvas svg { max-height: 248px; }
+
+.financial-reports .fly-donut-layout {
+  width: 100%;
+  min-width: 0;
+  min-height: 278px;
+  grid-template-columns: minmax(145px, .9fr) minmax(145px, 1.1fr);
+}
+
+.financial-reports .report-bottom-grid > .warehouse-table-card {
+  min-height: 300px;
+  border-radius: 16px;
+}
+
+.financial-reports .report-bottom-grid .warehouse-panel-title {
+  min-height: 70px;
+  padding: 14px 15px 12px;
+  background: #fff;
+}
+
+.financial-reports .report-bottom-grid .warehouse-panel-title h2 {
+  font-size: 16px;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+.financial-reports .report-bottom-grid .warehouse-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.financial-reports .report-detail-disclosure {
+  width: 100%;
+  min-width: 0;
+  margin-top: 1px;
+}
+
+.financial-reports .report-detail-disclosure .fly-dashboard-grid,
+.financial-reports .report-detail-disclosure .financial-report-sections {
+  width: auto;
+  min-width: 0;
+}
+
+@media (max-width: 1540px) {
+  .financial-reports .fly-kpi-grid.primary {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .financial-reports .report-chart-trio,
+  .financial-reports .report-bottom-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .financial-reports .report-chart-trio > :last-child,
+  .financial-reports .report-bottom-grid > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 1120px) {
+  .financial-reports .financial-report-filter .warehouse-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  .financial-reports .report-period-fields {
+    width: 100%;
+    max-width: none;
+    flex-basis: auto;
+  }
+
+  .financial-reports .warehouse-toolbar-actions {
+    width: 100%;
+    min-width: 0;
+    margin-left: 0;
+  }
+
+  .financial-reports .warehouse-toolbar-actions button { flex: 1 1 auto; }
+
+  .financial-reports .report-chart-trio,
+  .financial-reports .report-bottom-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .financial-reports .report-chart-trio > :last-child,
+  .financial-reports .report-bottom-grid > :last-child { grid-column: 1; }
+}
+
+@media (max-width: 720px) {
+  .financial-reports .report-period-fields { flex-wrap: wrap; }
+  .financial-reports .report-period-fields > label { flex-basis: calc(50% - 8px); }
+  .financial-reports .warehouse-toolbar-actions { flex-wrap: wrap; }
+
+  .financial-reports .financial-report-title {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  .financial-reports .financial-report-title > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .financial-reports .financial-report-title h2,
+  .financial-reports .financial-report-title div > span { white-space: normal; }
+  .financial-reports .financial-report-title > .status-pill { justify-self: start; }
+
+  .financial-reports .fly-kpi-grid.primary {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .financial-reports .report-period-fields > label { flex-basis: 100%; }
+  .financial-reports .warehouse-toolbar-actions button { flex-basis: 100%; }
+  .financial-reports .fly-kpi-grid.primary { grid-template-columns: minmax(0, 1fr) !important; }
+  .financial-reports .fly-donut-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Report reading guide v1
+   Explanatory UI for the five role reports. It does not alter report data. */
+.financial-reports .report-kpi-explained {
+  cursor: help;
+}
+
+.financial-reports .report-kpi-help {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid #c9dcd2;
+  border-radius: 50%;
+  background: #f5faf7;
+  color: #267b5b;
+  font-family: Georgia, serif;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 3px 9px rgba(29, 69, 52, .07);
+}
+
+.financial-reports .fly-kpi.attention .report-kpi-help {
+  border-color: #ead3a3;
+  background: #fff9ec;
+  color: #9b6710;
+}
+
+.financial-reports .report-kpi-explained:hover .report-kpi-help {
+  border-color: #81b49e;
+  background: #e7f4ee;
+  transform: translateY(-1px);
+}
+
+.financial-reports .report-reading-guide {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #d6e3dc;
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(28, 61, 47, .055);
+}
+
+.financial-reports .report-reading-guide > summary {
+  display: grid;
+  min-height: 84px;
+  padding: 15px 18px;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  cursor: pointer;
+  list-style: none;
+  background:
+    radial-gradient(circle at 88% 30%, rgba(220, 238, 229, .7), transparent 28%),
+    linear-gradient(112deg, #f8fcfa 0%, #f3f8f5 54%, #fbfaf5 100%);
+}
+
+.financial-reports .report-reading-guide > summary::-webkit-details-marker { display: none; }
+
+.financial-reports .report-guide-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid #c6ded2;
+  border-radius: 13px;
+  background: #e8f4ee;
+  color: #1f7656;
+  font-family: Georgia, serif;
+  font-size: 21px;
+  font-weight: 800;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8);
+}
+
+.financial-reports .report-guide-heading {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.financial-reports .report-guide-heading small,
+.financial-reports .report-metric-dictionary header small {
+  color: #397c62;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .12em;
+}
+
+.financial-reports .report-guide-heading strong {
+  color: #173a2d;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.financial-reports .report-guide-heading em {
+  max-width: 1040px;
+  color: #63766d;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.financial-reports .report-guide-state {
+  min-width: 102px;
+  color: #39745c;
+  font-size: 11px;
+  font-weight: 750;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.financial-reports .report-guide-state::after { content: 'Thu gọn  ↑'; }
+.financial-reports .report-reading-guide:not([open]) .report-guide-state::after { content: 'Mở hướng dẫn  ↓'; }
+
+.financial-reports .report-guide-content {
+  display: grid;
+  gap: 17px;
+  padding: 17px;
+  border-top: 1px solid #e2ebe6;
+}
+
+.financial-reports .report-guide-flow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 11px;
+}
+
+.financial-reports .report-guide-flow article {
+  display: grid;
+  min-width: 0;
+  min-height: 116px;
+  padding: 14px;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  border: 1px solid #e0e9e4;
+  border-radius: 13px;
+  background: #fafcfb;
+}
+
+.financial-reports .report-guide-flow article:nth-child(2) { background: #fcfbf6; }
+.financial-reports .report-guide-flow article:nth-child(3) { background: #f8fafd; }
+
+.financial-reports .report-guide-flow article > b {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: #e4f2eb;
+  color: #247657;
+  font-size: 12px;
+}
+
+.financial-reports .report-guide-flow article:nth-child(2) > b {
+  background: #f8ecd0;
+  color: #946411;
+}
+
+.financial-reports .report-guide-flow article:nth-child(3) > b {
+  background: #e8eef9;
+  color: #4668aa;
+}
+
+.financial-reports .report-guide-flow article strong {
+  display: block;
+  margin: 1px 0 5px;
+  color: #213d32;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.financial-reports .report-guide-flow article p {
+  margin: 0;
+  color: #65776f;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.financial-reports .report-metric-dictionary {
+  overflow: hidden;
+  border: 1px solid #e0e8e4;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.financial-reports .report-metric-dictionary > header {
+  display: flex;
+  min-height: 64px;
+  padding: 12px 15px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid #e5ece8;
+  background: #f8faf9;
+}
+
+.financial-reports .report-metric-dictionary header h3 {
+  margin: 3px 0 0;
+  color: #1f382e;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.financial-reports .report-metric-dictionary header p {
+  max-width: 360px;
+  margin: 0;
+  color: #75847d;
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.financial-reports .report-metric-dictionary dl {
+  display: grid;
+  margin: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.financial-reports .report-metric-dictionary dl > div {
+  min-width: 0;
+  min-height: 112px;
+  padding: 14px 15px;
+  border-right: 1px solid #e7edea;
+  border-bottom: 1px solid #e7edea;
+}
+
+.financial-reports .report-metric-dictionary dl > div:nth-child(3n) { border-right: 0; }
+.financial-reports .report-metric-dictionary dl > div:nth-last-child(-n + 3) { border-bottom: 0; }
+
+.financial-reports .report-metric-dictionary dt {
+  margin: 0 0 7px;
+  color: #2b6e54;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .045em;
+  line-height: 1.35;
+}
+
+.financial-reports .report-metric-dictionary dd {
+  margin: 0;
+  color: #596d63;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+@media (max-width: 1120px) {
+  .financial-reports .report-guide-flow,
+  .financial-reports .report-metric-dictionary dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .financial-reports .report-guide-flow article:last-child { grid-column: 1 / -1; }
+  .financial-reports .report-metric-dictionary dl > div { border-right: 1px solid #e7edea; border-bottom: 1px solid #e7edea; }
+  .financial-reports .report-metric-dictionary dl > div:nth-child(2n) { border-right: 0; }
+  .financial-reports .report-metric-dictionary dl > div:nth-last-child(-n + 2) { border-bottom: 0; }
+}
+
+@media (max-width: 720px) {
+  .financial-reports .report-reading-guide > summary {
+    grid-template-columns: 38px minmax(0, 1fr);
+    padding: 13px;
+  }
+
+  .financial-reports .report-guide-icon { width: 38px; height: 38px; }
+  .financial-reports .report-guide-state { grid-column: 2; min-width: 0; text-align: left; }
+  .financial-reports .report-guide-content { padding: 12px; }
+  .financial-reports .report-guide-flow,
+  .financial-reports .report-metric-dictionary dl { grid-template-columns: minmax(0, 1fr); }
+  .financial-reports .report-guide-flow article:last-child { grid-column: 1; }
+  .financial-reports .report-metric-dictionary > header { align-items: flex-start; flex-direction: column; gap: 6px; }
+  .financial-reports .report-metric-dictionary header p { max-width: none; text-align: left; }
+  .financial-reports .report-metric-dictionary dl > div,
+  .financial-reports .report-metric-dictionary dl > div:nth-child(2n),
+  .financial-reports .report-metric-dictionary dl > div:nth-last-child(-n + 2) {
+    min-height: auto;
+    border-right: 0;
+    border-bottom: 1px solid #e7edea;
+  }
+  .financial-reports .report-metric-dictionary dl > div:last-child { border-bottom: 0; }
+}
+
+@media print {
+  .financial-reports .report-reading-guide { display: none !important; }
+}

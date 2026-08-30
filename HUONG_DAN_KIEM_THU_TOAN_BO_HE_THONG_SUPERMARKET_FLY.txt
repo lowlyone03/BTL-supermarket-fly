@@ -1,0 +1,1709 @@
+HƯỚNG DẪN KIỂM THỬ TOÀN BỘ HỆ THỐNG QUẢN TRỊ NỘI BỘ SUPERMARKET FLY
+Phiên bản rà soát: 30/08/2026
+Phạm vi: UC01–UC33, 5 actor, 12 nhân viên
+
+================================================================================
+0. MỤC ĐÍCH VÀ CÁCH DÙNG TÀI LIỆU
+================================================================================
+
+Tài liệu này dùng để test thủ công toàn bộ hệ thống theo đúng mã nguồn hiện tại,
+không phải một danh sách chức năng chung chung. Mỗi ca kiểm thử có:
+
+- Actor/tài khoản thực hiện.
+- Màn hình cần mở.
+- Tiền điều kiện và dữ liệu cần chuẩn bị.
+- Các bước thao tác.
+- Kết quả phải nhìn thấy.
+- Điểm cần đối chiếu ở màn hình/actor khác.
+- Nhánh ngoại lệ thực tế và yêu cầu không được làm sai dữ liệu.
+
+QUY ƯỚC KẾT QUẢ:
+
+- PASS: giao diện, trạng thái chứng từ, số tiền/tồn kho và nhật ký đều đúng.
+- FAIL: chỉ cần một trong các lớp trên sai, dù giao diện vẫn báo thành công.
+- BLOCKED: không thể test vì thiếu dữ liệu tiền điều kiện; ghi rõ dữ liệu còn thiếu.
+- N/A: chức năng không thuộc phạm vi phiên bản này; phải ghi lý do.
+
+Với mỗi lỗi, ghi tối thiểu:
+
+  Mã lỗi | Ngày giờ | Tài khoản | Màn hình | Mã chứng từ liên quan
+  Tiền điều kiện | Dữ liệu nhập | Các bước tái hiện
+  Kết quả mong đợi | Kết quả thực tế | Ảnh/video | Mức độ
+
+Mức độ gợi ý:
+
+- Critical: sai tiền, sai tồn, mất dữ liệu, vượt quyền, không đăng nhập được toàn hệ thống.
+- High: sai trạng thái luồng, duyệt/chi/hoàn sai, không thể hoàn tất nghiệp vụ chính.
+- Medium: báo cáo sai cục bộ, kiểm tra đầu vào thiếu, thao tác vòng vèo.
+- Low: lệch giao diện, câu chữ, icon, responsive nhưng chưa làm sai nghiệp vụ.
+
+LƯU Ý PHẠM VI:
+
+- Bộ tài liệu gốc mô tả UC01–UC29.
+- Mã nguồn hiện tại có thêm UC30–UC33 cho phân ca, chấm công và bảng lương.
+- Hệ thống có một cửa hàng/kho logic; không có luồng điều chuyển giữa nhiều kho.
+- 5 actor: Quản lý cửa hàng, Nhân viên mua hàng, Thủ kho, Thu ngân, Kế toán.
+
+================================================================================
+1. AN TOÀN DỮ LIỆU TRƯỚC KHI TEST
+================================================================================
+
+1.1. Đây là kiểm thử có phát sinh dữ liệu thật
+
+Các bài test bán hàng, nhập kho, xuất kho, kiểm kê, đổi trả, công nợ, thanh toán,
+chốt ca và bảng lương sẽ làm thay đổi cơ sở dữ liệu. Nên dùng database test hoặc
+sao lưu database trước khi bắt đầu.
+
+Không chạy “npm run setup:next” trên database đang dùng để trình bày/nghiệm thu nếu
+chưa sao lưu. Lệnh này chạy migration, seed tài khoản/quyền và các bước dọn dữ liệu.
+
+1.2. Quy tắc đặt dữ liệu test
+
+- Nội dung, ghi chú, lý do: bắt đầu bằng TEST-FULL-20260830.
+- Mã danh mục/sản phẩm/NCC nếu được phép tự đặt: bắt đầu bằng TST30.
+- Ghi lại tất cả mã được hệ thống sinh: đề nghị, đơn mua, chuyến giao, phiếu nhập,
+  hóa đơn mua, công nợ, phiếu chi, ca, hóa đơn bán, phiếu đổi trả, kiểm kê.
+- Không sửa trực tiếp dữ liệu thật để “ép” chứng từ qua trạng thái.
+- Ngoại lệ duy nhất được hướng dẫn ở mục ACC-13 là làm cho một khoản nợ TEST đến hạn;
+  chỉ được thực hiện trên database test và với đúng mã công nợ đã ghi lại.
+
+1.3. Một thao tác lỗi phải để hệ thống nguyên vẹn
+
+Sau mỗi ca ngoại lệ, kiểm tra đủ 5 điểm:
+
+1) Không sinh thêm chứng từ ngoài ý muốn.
+2) Trạng thái chứng từ cũ không đổi.
+3) Tồn kho/sổ kho không đổi.
+4) Tiền, công nợ, điểm khách hàng không đổi.
+5) Không thể “lọt” thao tác bằng cách tải lại trang hoặc bấm nút hai lần.
+
+================================================================================
+2. KHỞI ĐỘNG VÀ KIỂM TRA TỰ ĐỘNG TRƯỚC KHI TEST TAY
+================================================================================
+
+Mở PowerShell tại thư mục dự án:
+
+  cd D:\UDTHTKT\BTL\supermarket-fly
+  npm run test:next
+
+Kỳ vọng:
+
+- Kiểm tra cú pháp toàn bộ controller và mã giao diện đạt.
+- 16/16 kiểm thử quy tắc lãi gộp, đổi ngang giá và UC27 đạt.
+- Kiểm thử ảnh sản phẩm, mẫu in và bộ lập lịch đạt.
+- Không có dòng lỗi hoặc tiến trình kết thúc khác mã 0.
+
+Kết quả nền đã xác minh khi lập tài liệu ngày 30/08/2026:
+
+- npm run test:next kết thúc với mã 0.
+- 16/16 quy tắc nghiệp vụ đạt.
+- 36/36 ảnh sản phẩm hợp lệ và có placeholder cho sản phẩm mới.
+- Mẫu in báo cáo A4 có thương hiệu, KPI, SVG xu hướng và bảng chi tiết đạt.
+- Bộ lập lịch ca chính/tăng cường và lịch hành chính đạt.
+
+Khi bạn test ở lần sau vẫn phải chạy lại, vì kết quả trên chỉ xác nhận trạng thái mã nguồn
+tại thời điểm tạo tài liệu, không thay cho kiểm thử thủ công với database hiện tại.
+
+Khởi động hệ thống:
+
+  npm start
+
+Kỳ vọng:
+
+- Server chạy tại http://localhost:3000.
+- Ứng dụng desktop mở và kết nối SQL Server thành công.
+- Không chạy thêm một bản server trùng cổng 3000.
+
+CÁC SCRIPT TÍCH HỢP TÙY CHỌN:
+
+- server\test-opening-flow.js: kiểm thử chuỗi mua–nhập–đối chiếu; có dọn dữ liệu test.
+- server\test-cashier-opening.js: cần lịch đã công bố và chấm công đúng ngày.
+- server\test-delivery-flow.js: phụ thuộc đơn nền PO20260824001.
+- server\test-sales-flow.js: TẠO HÓA ĐƠN THẬT, GIẢM TỒN THẬT, CHỐT CA THẬT và không
+  tự dọn dữ liệu nghiệp vụ. Chỉ chạy trên database test/đã sao lưu.
+
+Không cần chạy các script tùy chọn để hoàn thành bộ test thủ công bên dưới.
+
+================================================================================
+3. TÀI KHOẢN TEST VÀ PHÂN QUYỀN CHUẨN
+================================================================================
+
+Mật khẩu mẫu sau khi seed/reset: 123
+
+1) Quản lý cửa hàng
+   Tài khoản: admin | Mã NV: NV_QL01
+   Quyền chuẩn: UC01–UC10, UC30, UC32.
+
+2) Nhân viên mua hàng
+   Tài khoản: muahang | Mã NV: NV_MH01
+   Quyền chuẩn: UC01, UC11–UC14, UC31.
+
+3) Thủ kho
+   Tài khoản: thukho | Mã NV: NV_TK01
+   Quyền chuẩn: UC01, UC15–UC21, UC31.
+
+4) Kế toán
+   Tài khoản: ketoan | Mã NV: NV_KT01
+   Quyền chuẩn: UC01, UC27–UC29, UC31, UC33.
+
+5) Thu ngân
+   Tài khoản: thungan, thungan02, ..., thungan08
+   Mã NV tương ứng: NV_TN01, NV_TN02, ..., NV_TN08
+   Quyền chuẩn: UC01, UC22–UC26, UC31.
+
+Hệ thống chuẩn chỉ có 12 nhân viên:
+
+- 1 quản lý.
+- 1 nhân viên mua hàng.
+- 1 thủ kho.
+- 1 kế toán.
+- 8 thu ngân.
+
+PHIẾU GHI DỮ LIỆU TEST (điền trước khi chạy E2E):
+
+  Thu ngân chính: ____________________  Ngày/ca/quầy: ____________________
+  Thu ngân thứ hai: __________________  Ngày/ca/quầy: ____________________
+  Sản phẩm A đủ tồn: _________________  Tồn đầu: ______  Giá bán: _________
+  Sản phẩm B đủ tồn: _________________  Tồn đầu: ______  Giá bán: _________
+  Sản phẩm C tồn thấp: _______________  Tồn đầu: ______  Tồn tối thiểu: ____
+  Nhà cung cấp hoạt động: ____________  Mã NCC: __________________________
+  Khách thành viên: __________________  Điểm đầu: ________________________
+  Tiền đầu ca: _______________________  Mã giao dịch điện tử test: _______
+
+================================================================================
+4. THỨ TỰ TEST KHUYẾN NGHỊ
+================================================================================
+
+Chạy theo thứ tự để chứng từ của bước trước làm dữ liệu hợp lệ cho bước sau:
+
+Giai đoạn A  : Smoke, đăng nhập, phân quyền, dữ liệu nền.
+Giai đoạn B  : Nhân sự, tài khoản, danh mục, sản phẩm, khuyến mãi, NCC.
+Giai đoạn C  : Quản lý lập/công bố lịch; nhân viên xem lịch và chấm công.
+Giai đoạn D  : Kho đề nghị mua → Mua hàng lập đơn → Quản lý duyệt → giao hàng.
+Giai đoạn E  : Kho nhận/kiểm tra/nhập → Kế toán đối chiếu → sinh công nợ.
+Giai đoạn F  : Thu ngân mở ca → bán hàng → thanh toán → chốt ca.
+Giai đoạn G  : Đổi trả liên actor và các nhánh nhập lại/không nhập lại/đổi ngang giá.
+Giai đoạn H  : Xuất kho thủ công, kiểm kê và duyệt chênh lệch.
+Giai đoạn I  : Phiếu thu ca, phiếu chi NCC, bảng lương.
+Giai đoạn J  : Báo cáo 5 actor, CSV/PDF/in, bảo mật, đồng thời và hồi quy.
+
+================================================================================
+5. MA TRẬN BAO PHỦ UC
+================================================================================
+
+UC01  Đăng nhập/đăng xuất              : GEN-01 đến GEN-07
+UC02  Tài khoản/phân quyền             : MGR-01 đến MGR-10, SEC-01 đến SEC-05
+UC03  Nhật ký hệ thống                 : MGR-11 đến MGR-13
+UC04  NV/sản phẩm/khuyến mãi           : MGR-14 đến MGR-30
+UC05  Duyệt đơn mua                    : P2P-08 đến P2P-13
+UC06  Duyệt phiếu xuất                 : WHI-06 đến WHI-10
+UC07  Duyệt chênh lệch kiểm kê         : INV-07 đến INV-12
+UC08  Duyệt đổi trả                    : RET-07 đến RET-11
+UC09  Duyệt phiếu chi                  : ACC-14 đến ACC-19
+UC10  Báo cáo quản lý                  : RPT-01 đến RPT-08
+UC11  Nhà cung cấp                     : PUR-01 đến PUR-07
+UC12  Tiếp nhận đề nghị mua            : P2P-04 đến P2P-07
+UC13  Đơn mua                          : P2P-08 đến P2P-17
+UC14  Giao hàng                        : P2P-18 đến P2P-23
+UC15  Tồn kho/báo cáo kho              : WH-01 đến WH-05, RPT-09 đến RPT-14
+UC16  Đề nghị mua hàng                 : P2P-01 đến P2P-03
+UC17  Nhận và kiểm tra hàng            : WH-06 đến WH-12
+UC18  Phiếu nhập kho                   : WH-13 đến WH-19
+UC19  Phiếu xuất kho                   : WHI-01 đến WHI-13
+UC20  Kiểm kê kho                      : INV-01 đến INV-13
+UC21  Kiểm tra đổi trả                 : RET-04 đến RET-06
+UC22  Ca bán hàng/báo cáo thu ngân     : POS-01 đến POS-10, RPT-15 đến RPT-20
+UC23  Khách hàng                       : POS-11 đến POS-16
+UC24  Hóa đơn                          : POS-17 đến POS-27
+UC25  Thanh toán/hoàn tất              : POS-28 đến POS-42
+UC26  Đổi trả                          : RET-01 đến RET-24
+UC27  Đối chiếu ba chứng từ            : ACC-01 đến ACC-12
+UC28  Công nợ/phiếu chi                : ACC-13 đến ACC-24
+UC29  Quyết toán ca/báo cáo kế toán    : ACC-25 đến ACC-32, RPT-27 đến RPT-32
+UC30  Phân ca                          : WF-01 đến WF-12
+UC31  Lịch cá nhân/chấm công           : WF-13 đến WF-21
+UC32  Duyệt chấm công                  : WF-22 đến WF-29
+UC33  Bảng lương                       : PAY-01 đến PAY-12
+
+================================================================================
+6. A — ĐĂNG NHẬP, PHÂN QUYỀN VÀ KHẢ NĂNG PHỤC HỒI
+================================================================================
+
+[GEN-01] Đăng nhập đúng với cả 5 actor
+Tài khoản: lần lượt admin, muahang, thukho, thungan, ketoan.
+Bước:
+1. Nhập đúng tên đăng nhập và mật khẩu 123.
+2. Bấm đăng nhập.
+3. Ghi lại tên, mã viết tắt/avatar, chức danh, menu bên trái và màn hình đầu tiên.
+Kỳ vọng:
+- Vào đúng dashboard của vai trò; tên và chức danh đúng tài khoản.
+- Mỗi vai trò chỉ nhìn thấy menu được cấp.
+- Không lẫn dữ liệu phiên đăng nhập trước.
+
+[GEN-02] Sai mật khẩu
+Bước: nhập tài khoản hợp lệ, mật khẩu sai; bấm đăng nhập nhiều lần cách nhau vài giây.
+Kỳ vọng: báo sai thông tin; không tạo phiên; không lộ tài khoản có tồn tại hay không;
+không vào được dashboard bằng nút Back hoặc tải lại.
+
+[GEN-03] Bỏ trống và dữ liệu có khoảng trắng
+Bước: thử bỏ trống tên/mật khẩu, nhập chỉ khoảng trắng, và thêm khoảng trắng trước/sau.
+Kỳ vọng: trường bắt buộc được chỉ rõ; ứng dụng không treo; không gửi thao tác hợp lệ rỗng.
+
+[GEN-04] Tài khoản bị khóa/nghỉ việc
+Tiền điều kiện: admin khóa một tài khoản test không phải admin.
+Bước: tài khoản đó đăng nhập; sau đó admin mở lại và thử lại.
+Kỳ vọng: lúc khóa bị từ chối rõ lý do; mở lại thì đăng nhập được; không ảnh hưởng tài khoản khác.
+
+[GEN-05] Đăng xuất
+Bước: đăng nhập, mở một màn hình có dữ liệu, bấm Đăng xuất, thử Back/tải lại.
+Kỳ vọng: về màn đăng nhập; token cũ không còn dùng được; màn dữ liệu bảo vệ không hiện lại.
+
+[GEN-06] Phiên hết hạn/token không hợp lệ
+Cách test an toàn: đăng nhập, đóng ứng dụng lâu hơn thời hạn phiên 8 giờ hoặc xóa token
+trong môi trường test rồi mở lại.
+Kỳ vọng: yêu cầu đăng nhập lại; không lộ dữ liệu; thông báo dễ hiểu.
+
+[GEN-07] Mất server rồi phục hồi
+Bước: đang ở màn danh sách thì dừng server; thử tải/lưu; sau đó khởi động lại server.
+Kỳ vọng: báo lỗi kết nối, không báo lưu thành công giả; không nhân đôi dữ liệu; sau khi server
+trở lại có thể tải lại và tiếp tục.
+
+[SEC-01] Menu theo vai trò
+Bước: dùng từng actor đối chiếu menu với mục 3.
+Kỳ vọng: không có menu nghiệp vụ ngoài quyền; báo cáo và lịch đúng vai trò.
+
+[SEC-02] Truy cập thẳng màn hình ngoài quyền
+Bước: từ công cụ phát triển hoặc điều hướng nội bộ thử mở màn quản lý bằng tài khoản thu ngân.
+Kỳ vọng: bị chặn; không chỉ ẩn nút mà API cũng trả 403; không tải dữ liệu nhạy cảm.
+
+[SEC-03] Gọi lại yêu cầu bằng token vai trò khác
+Bước: lấy một yêu cầu lưu/duyệt ở Network, gửi lại bằng phiên actor không có quyền.
+Kỳ vọng: 403; chứng từ và nhật ký nghiệp vụ không đổi.
+
+[SEC-04] Double click/nút gửi nhiều lần
+Bước: tại các nút Tạo, Gửi duyệt, Duyệt, Xác nhận, Thanh toán, Hoàn tất, bấm nhanh 2 lần.
+Kỳ vọng: nút khóa trong khi xử lý; chỉ một bản ghi/một chuyển trạng thái/một bút toán.
+
+[SEC-05] Chuỗi nhập nguy hiểm
+Bước: nhập dấu nháy, ký tự HTML, chuỗi rất dài vào ô tên/ghi chú/lý do.
+Kỳ vọng: dữ liệu hiển thị như văn bản, không chạy script; lỗi độ dài rõ ràng; ứng dụng không vỡ.
+
+================================================================================
+7. B — QUẢN LÝ DỮ LIỆU NỀN (QUẢN LÝ CỬA HÀNG)
+================================================================================
+
+[MGR-01] Danh sách tài khoản đúng 12 nhân viên
+Màn hình: Quản lý tài khoản.
+Kỳ vọng: tài khoản liên kết đúng nhân viên/chức danh/trạng thái; không có nhân viên thứ 13
+ngoài dữ liệu chủ động tạo cho test.
+
+[MGR-02] Tạo tài khoản hợp lệ
+Tiền điều kiện: có nhân viên đang làm việc chưa có tài khoản trong database test.
+Bước: chọn đúng nhân viên, nhập username chữ thường không dấu, gán đúng vai trò, lưu.
+Kỳ vọng: tạo một tài khoản; mật khẩu ban đầu 123; nhân viên đăng nhập đúng dashboard.
+
+[MGR-03] Username không hợp lệ/trùng
+Thử: dưới 3 ký tự, có dấu/cách/ký tự lạ, dài quá 50, trùng username.
+Kỳ vọng: chặn và nêu đúng trường; không sinh tài khoản rác.
+
+[MGR-04] Một nhân viên có hai tài khoản
+Bước: tạo tài khoản thứ hai cho cùng nhân viên.
+Kỳ vọng: bị chặn.
+
+[MGR-05] Vai trò không khớp chức danh
+Bước: gán vai trò Kế toán cho nhân viên Thu ngân.
+Kỳ vọng: bị chặn; quyền không đổi.
+
+[MGR-06] Khóa/mở tài khoản
+Bước: khóa một thu ngân, thử đăng nhập; mở lại, đăng nhập lại.
+Kỳ vọng: đúng như GEN-04; có trạng thái và nhật ký rõ ràng.
+
+[MGR-07] Không tự khóa/tự đổi vai trò quản lý đang đăng nhập
+Bước: admin thử khóa chính mình hoặc đổi mình thành vai trò khác.
+Kỳ vọng: bị chặn; hệ thống không mất quản trị viên hoạt động.
+
+[MGR-08] Chỉ có một quản lý
+Bước: thử tạo/gán thêm quản lý cửa hàng.
+Kỳ vọng: bị chặn; NV_QL01 vẫn là quản lý duy nhất.
+
+[MGR-09] Reset mật khẩu
+Bước: reset tài khoản test, đăng nhập bằng mật khẩu cũ rồi bằng 123.
+Kỳ vọng: mật khẩu cũ sai; 123 đúng; thao tác có nhật ký.
+
+[MGR-10] Ma trận phân quyền chức năng
+Bước: mở Phân quyền chức năng, thay một quyền không khóa của tài khoản test, đăng xuất
+rồi đăng nhập lại và thử cả menu lẫn thao tác API.
+Kỳ vọng: quyền mới có hiệu lực; các quyền nền UC01–UC10 của quản lý không bị bỏ trái quy tắc.
+Sau test: trả lại ma trận chuẩn mục 3.
+
+[MGR-11] Nhật ký đăng nhập và thay đổi dữ liệu
+Bước: thực hiện đăng nhập, tạo/sửa/khóa, duyệt một chứng từ; mở Nhật ký hệ thống.
+Kỳ vọng: có thời gian, người thực hiện, hành động, đối tượng/mã chứng từ và kết quả phù hợp.
+
+[MGR-12] Lọc và tìm nhật ký
+Bước: lọc theo ngày, người dùng, loại hành động; tìm mã chứng từ TEST.
+Kỳ vọng: tổng và danh sách khớp; không trả dữ liệu ngoài khoảng.
+
+[MGR-13] Nhật ký không cho sửa/xóa từ giao diện
+Kỳ vọng: không có nút sửa/xóa làm mất dấu vết; actor khác không truy cập được.
+
+[MGR-14] Tạo nhân viên hợp lệ
+Màn hình: Quản lý nhân viên.
+Bước: nhập đủ dữ liệu với mã TEST, chức danh không phải Quản lý, trạng thái Đang làm việc.
+Kỳ vọng: xuất hiện đúng danh sách; có thể dùng để tạo tài khoản.
+
+[MGR-15] Trùng điện thoại/email nhân viên
+Kỳ vọng: chặn từng trường trùng; không tạo bản ghi một phần.
+
+[MGR-16] Chức danh/trạng thái ngoài danh mục
+Kỳ vọng: chỉ 5 vai trò và trạng thái “Đang làm việc”/“Nghỉ việc”; giá trị lạ bị chặn.
+
+[MGR-17] Cho nhân viên nghỉ việc
+Bước: đổi nhân viên test đang có tài khoản sang Nghỉ việc.
+Kỳ vọng: tài khoản bị khóa; không đăng nhập được; dữ liệu lịch sử/chứng từ vẫn giữ nguyên.
+
+[MGR-18] Không tự cho quản lý đang đăng nhập nghỉ/chuyển chức danh
+Kỳ vọng: bị chặn.
+
+[MGR-19] Tạo danh mục sản phẩm
+Bước: nhập mã/tên hợp lệ, lưu.
+Kỳ vọng: danh mục hoạt động xuất hiện trong form sản phẩm và báo cáo.
+
+[MGR-20] Danh mục thiếu/trùng
+Thử thiếu mã, thiếu tên, trùng mã.
+Kỳ vọng: chặn; không tạo dòng trùng.
+
+[MGR-21] Vô hiệu danh mục đang có sản phẩm hoạt động
+Kỳ vọng: bị chặn; sản phẩm không mất liên kết.
+
+[MGR-22] Tạo sản phẩm hợp lệ
+Bước: nhập mã, danh mục, tên, đơn vị, giá mua/bán/tồn tối thiểu hợp lệ; lưu.
+Kỳ vọng: sản phẩm mới có tồn ban đầu 0; ảnh đúng ánh xạ hoặc ảnh dự phòng; tìm được theo mã,
+tên và mã vạch.
+
+[MGR-23] Sản phẩm trùng mã/mã vạch
+Kỳ vọng: chặn; không ghi đè sản phẩm cũ.
+
+[MGR-24] Số âm/sai định dạng sản phẩm
+Thử giá âm, tồn tối thiểu âm, chuỗi ở ô số, bỏ đơn vị/danh mục.
+Kỳ vọng: chặn đúng trường; tồn và giá cũ không đổi.
+
+[MGR-25] Vô hiệu sản phẩm
+Kỳ vọng: sản phẩm lịch sử vẫn hiện trong chứng từ cũ nhưng không được thêm vào chứng từ mới.
+
+[MGR-26] Ảnh sản phẩm
+Bước: kiểm tra lưới sản phẩm/POS/tồn kho với tất cả sản phẩm hiện có.
+Kỳ vọng: ảnh không méo, không vỡ đường dẫn; ảnh dự phòng thống nhất; tên/giá không bị che.
+
+[MGR-27] Tạo khuyến mãi phần trăm
+Bước: mã/tên, loại %, giá trị 10, khoảng ngày đang hiệu lực, chọn phạm vi phù hợp.
+Kỳ vọng: lưu được và POS áp đúng khi thỏa điều kiện.
+
+[MGR-28] Khuyến mãi tiền cố định
+Kỳ vọng: giảm đúng số tiền, không làm tổng thanh toán âm.
+
+[MGR-29] Ngoại lệ khuyến mãi
+Thử % >100, ngày kết thúc trước ngày bắt đầu, thiếu mã/tên, trùng mã.
+Kỳ vọng: chặn; POS không áp khuyến mãi chưa hợp lệ/hết hạn/chưa đến ngày.
+
+[MGR-30] Tìm kiếm/lọc dữ liệu nền
+Kỳ vọng: tìm mã/tên/điện thoại/mã vạch đúng; xóa từ khóa trả đủ danh sách; không phân trang trùng.
+
+================================================================================
+8. C — PHÂN CA, LỊCH CÁ NHÂN, CHẤM CÔNG (UC30–UC32)
+================================================================================
+
+[WF-01] Tạo lịch một ca hợp lệ
+Actor: admin. Màn hình: Phân ca & chấm công.
+Bước: chọn ngày, thu ngân, ca chính và quầy; lưu nháp.
+Kỳ vọng: lịch nháp xuất hiện; đúng giờ/quầy/nhân viên; chưa cho mở POS trước khi công bố.
+
+[WF-02] Công bố lịch đủ định biên
+Bước: bố trí đủ người theo yêu cầu ca, bấm Công bố.
+Kỳ vọng: trạng thái Đã công bố; nhân viên nhìn thấy trong Lịch làm việc.
+
+[WF-03] Công bố lịch thiếu định biên
+Kỳ vọng: bị chặn và chỉ rõ ca thiếu người.
+
+[WF-04] Trùng nhân viên cùng ngày
+Bước: xếp hai lịch chồng/trùng cho cùng nhân viên.
+Kỳ vọng: bị chặn.
+
+[WF-05] Trùng quầy trong ca chính
+Bước: xếp hai thu ngân cùng quầy/cùng ca chính.
+Kỳ vọng: bị chặn.
+
+[WF-06] Ca chính không chọn quầy
+Kỳ vọng: bị chặn. Ca tăng cường/bán thời gian xử lý theo cấu hình nhưng không được mở POS.
+
+[WF-07] Quá 48 giờ/tuần
+Kỳ vọng: lịch làm tổng giờ vượt 48 bị chặn.
+
+[WF-08] Nghỉ giữa hai ca dưới 12 giờ
+Kỳ vọng: bị chặn và nêu xung đột.
+
+[WF-09] Tạo lịch tự động theo khoảng
+Bước: chọn khoảng không quá 31 ngày, chạy tạo lịch, xem kết quả trước khi công bố.
+Kỳ vọng: không trùng người/quầy, tuân thủ 48h và 12h nghỉ.
+
+[WF-10] Khoảng tạo tự động trên 31 ngày
+Kỳ vọng: bị chặn.
+
+[WF-11] Sửa/xóa lịch đã công bố
+Kỳ vọng: không cho sửa/xóa trực tiếp; lịch sử không biến mất.
+
+[WF-12] Thu ngân bị xếp ca văn phòng
+Kỳ vọng: bị chặn.
+
+[WF-13] 5 actor xem lịch cá nhân
+Bước: từng actor mở Lịch làm việc.
+Kỳ vọng: chỉ hiện lịch của mình, ngày/giờ/trạng thái dễ hiểu.
+
+[WF-14] Check-in đúng lịch đã công bố
+Bước: nhân viên bấm Chấm công vào trong ngày/ca hợp lệ.
+Kỳ vọng: ghi nhận một lần, có giờ thực tế.
+
+[WF-15] Check-in không có lịch/chưa công bố
+Kỳ vọng: bị chặn; không tạo bản ghi chấm công rỗng.
+
+[WF-16] Check-in hai lần
+Kỳ vọng: lần hai bị chặn hoặc trả cùng bản ghi; không nhân đôi.
+
+[WF-17] Check-out hợp lệ không có ca POS mở
+Kỳ vọng: ghi nhận giờ ra; thời lượng hợp lý.
+
+[WF-18] Check-out khi còn ca POS mở
+Kỳ vọng: bị chặn và yêu cầu chốt ca bán hàng trước.
+
+[WF-19] Check-out khi chưa check-in
+Kỳ vọng: bị chặn.
+
+[WF-20] Check-out hai lần
+Kỳ vọng: không tạo hai giờ ra/không nhân đôi công.
+
+[WF-21] Ca tăng cường thử mở POS
+Kỳ vọng: không được mở POS; chấm công vẫn theo lịch nếu cấu hình cho phép.
+
+[WF-22] Quản lý xem chấm công chờ duyệt
+Kỳ vọng: đúng nhân viên, lịch, giờ vào/ra, phút thường/đêm/tăng ca.
+
+[WF-23] Duyệt chấm công bình thường
+Kỳ vọng: trạng thái Đã duyệt; bản ghi được đưa vào kỳ lương.
+
+[WF-24] Duyệt lại bản ghi đã duyệt
+Kỳ vọng: bị chặn; số phút không đổi.
+
+[WF-25] Duyệt tăng ca không ghi chú
+Kỳ vọng: bị chặn nếu có phút tăng ca được duyệt.
+
+[WF-26] Phút tăng ca duyệt lớn hơn thực tế
+Kỳ vọng: bị chặn.
+
+[WF-27] Khoảng chấm công vượt 16 giờ
+Kỳ vọng: bị chặn/cảnh báo để quản lý sửa dữ liệu, không tính lương sai.
+
+[WF-28] Dữ liệu qua đêm
+Kỳ vọng: phút ban đêm được tách đúng theo cấu hình; không âm/không tính hai lần.
+
+[WF-29] Ca văn phòng có nghỉ trưa
+Kỳ vọng: thời gian nghỉ trưa cấu hình không được tính vào phút trả lương.
+
+================================================================================
+9. D–E — CHUỖI MUA HÀNG → NHẬP KHO → ĐỐI CHIẾU (P2P E2E)
+================================================================================
+
+9.1. Nhà cung cấp
+
+[PUR-01] Tạo NCC hợp lệ
+Actor: muahang. Màn hình: Nhà cung cấp.
+Bước: nhập mã, tên, mã số thuế, điện thoại/email hợp lệ, điều khoản; lưu.
+Kỳ vọng: NCC hoạt động, tìm được, dùng được trong đơn mua.
+
+[PUR-02] Thiếu mã/tên/mã số thuế
+Kỳ vọng: chặn đúng trường.
+
+[PUR-03] Trùng mã NCC/mã số thuế
+Kỳ vọng: chặn; không ghi đè.
+
+[PUR-04] Email/điện thoại sai định dạng
+Kỳ vọng: chặn; thông báo cụ thể.
+
+[PUR-05] Vô hiệu NCC
+Kỳ vọng: chứng từ cũ vẫn xem được; không chọn NCC này cho đơn mua mới.
+
+[PUR-06] Lịch sử giao dịch NCC
+Kỳ vọng: đơn mua/phiếu nhập/công nợ liên quan đúng NCC, không lẫn NCC khác.
+
+[PUR-07] Actor khác sửa NCC
+Kỳ vọng: menu/API đều chặn.
+
+9.2. Đề nghị mua từ kho
+
+[P2P-01] Thủ kho tạo và gửi đề nghị mua hợp lệ
+Actor: thukho. Màn hình: Đề nghị mua hàng.
+Bước: thêm 2 sản phẩm hoạt động, số lượng nguyên dương, không trùng; lưu nháp rồi gửi.
+Kỳ vọng: trạng thái Chờ tiếp nhận; ghi đúng tác giả và chi tiết.
+
+[P2P-02] Dòng đề nghị không hợp lệ
+Thử: không có dòng, sản phẩm trùng, số lượng 0/âm/thập phân, sản phẩm ngừng hoạt động.
+Kỳ vọng: chặn; không tạo/gửi chứng từ.
+
+[P2P-03] Sửa/hủy đề nghị sai trạng thái/sai tác giả
+Kỳ vọng: chỉ tác giả được sửa ở trạng thái cho phép; chứng từ đã tiếp nhận không bị sửa ngược.
+
+[P2P-04] Mua hàng tiếp nhận đề nghị
+Actor: muahang. Màn hình: Đề nghị từ kho.
+Kỳ vọng: chuyển đúng trạng thái; có thể dùng làm nguồn đơn mua.
+
+[P2P-05] Yêu cầu kho bổ sung
+Bước: nhập lý do rõ ràng rồi gửi yêu cầu bổ sung.
+Kỳ vọng: kho thấy lý do; chỉ tác giả sửa rồi gửi lại.
+
+[P2P-06] Yêu cầu bổ sung không có lý do
+Kỳ vọng: bị chặn.
+
+[P2P-07] Tiếp nhận hai lần
+Kỳ vọng: lần hai không tạo thêm trạng thái/lịch sử trùng.
+
+9.3. Đơn mua và phê duyệt
+
+[P2P-08] Lập đơn mua hợp lệ từ đề nghị đã tiếp nhận
+Actor: muahang. Màn hình: Đơn mua.
+Bước: chọn đề nghị, NCC hoạt động, ngày giao, điều khoản thanh toán 30–45 ngày;
+thêm dòng thuộc đề nghị, số lượng không vượt phần còn lại, đơn giá >=0, chiết khấu 0–100.
+Kỳ vọng: đơn nháp tổng tiền đúng; liên kết đúng đề nghị/NCC.
+
+[P2P-09] Sản phẩm không thuộc đề nghị
+Kỳ vọng: bị chặn.
+
+[P2P-10] Số lượng vượt phần còn lại của đề nghị
+Kỳ vọng: bị chặn; đề nghị không bị “tiêu” số lượng.
+
+[P2P-11] Điều khoản 29 ngày và 46 ngày
+Kỳ vọng: đều bị chặn; chỉ 30–45 hợp lệ.
+
+[P2P-12] Dòng đơn mua lỗi
+Thử: trùng sản phẩm, số lượng 0/âm/thập phân, giá âm, chiết khấu âm/>100.
+Kỳ vọng: chặn; tổng tiền không sinh NaN/âm.
+
+[P2P-13] Gửi quản lý duyệt
+Kỳ vọng: trạng thái Chờ duyệt; dữ liệu khóa khỏi sửa tự do.
+
+[P2P-14] Quản lý duyệt đơn mua
+Actor: admin. Màn hình: Trung tâm phê duyệt.
+Kỳ vọng: trạng thái Đã duyệt; tồn kho và công nợ CHƯA thay đổi.
+
+[P2P-15] Quản lý yêu cầu chỉnh sửa
+Bước: với một đơn TEST khác, nhập lý do và gửi lại mua hàng.
+Kỳ vọng: mua hàng thấy lý do; được sửa ở trạng thái Yêu cầu chỉnh sửa rồi gửi lại.
+
+[P2P-16] Từ chối/yêu cầu sửa không có lý do
+Kỳ vọng: bị chặn.
+
+[P2P-17] Duyệt/từ chối lại đơn đã xử lý
+Kỳ vọng: bị chặn; không tạo lịch sử mâu thuẫn.
+
+9.4. Gửi NCC và chuyến giao
+
+[P2P-18] Gửi đơn cho NCC và xác nhận
+Actor: muahang.
+Kỳ vọng: trạng thái đi đúng thứ tự; không nhảy từ Nháp thẳng sang Đang giao.
+
+[P2P-19] Khai báo chuyến giao hợp lệ
+Bước: nhập số phiếu giao, ngày giờ xuất phát, ETA >= xuất phát, số kiện nguyên >=0.
+Kỳ vọng: một chuyến giao hoạt động; kho nhìn thấy để nhận hàng.
+
+[P2P-20] ETA trước thời điểm xuất phát
+Kỳ vọng: bị chặn.
+
+[P2P-21] Số kiện âm/thập phân
+Kỳ vọng: bị chặn.
+
+[P2P-22] Tạo chuyến thứ hai khi chuyến đầu chưa kiểm nhận
+Kỳ vọng: bị chặn.
+
+[P2P-23] Đánh dấu chuyến đến hai lần
+Actor: thukho.
+Kỳ vọng: lần đầu chuyển đúng; lần hai không nhân đôi lượt nhận.
+
+9.5. Nhận, kiểm tra và nhập kho
+
+[WH-01] Xem tồn kho đầu kỳ
+Actor: thukho. Ghi tồn và giá trị của sản phẩm A/B trước khi nhận.
+Kỳ vọng: tìm/lọc đúng; tổng danh mục khớp các dòng.
+
+[WH-02] Cảnh báo tồn thấp
+Kỳ vọng: chỉ sản phẩm tồn <= ngưỡng theo quy tắc hệ thống; link chi tiết đúng sản phẩm.
+
+[WH-03] Tìm mã/tên/mã vạch
+Kỳ vọng: cùng sản phẩm, dữ liệu nhất quán với màn quản lý sản phẩm.
+
+[WH-04] Actor không phải kho thử sửa tồn trực tiếp
+Kỳ vọng: không có chức năng sửa tay; API bị chặn.
+
+[WH-05] Tồn không âm
+Kỳ vọng: mọi màn tồn, POS và báo cáo không hiển thị âm do thao tác hợp lệ.
+
+[WH-06] Nhận đủ hàng
+Actor: thukho. Chọn chuyến P2P-19; với mỗi dòng nhập:
+  Giao = Chấp nhận; Từ chối = 0; đơn giá hợp lệ.
+Kỳ vọng: phiếu kiểm nhận nháp đúng số lượng.
+
+[WH-07] Nhận một phần có hàng từ chối
+Với một dòng: Giao 10, Chấp nhận 8, Từ chối 2, nhập lý do từ chối.
+Kỳ vọng: cho lưu; chỉ 8 có khả năng nhập kho sau xác nhận.
+
+[WH-08] Sai phương trình giao hàng
+Thử Giao 10, Chấp nhận 8, Từ chối 1.
+Kỳ vọng: chặn vì Giao phải bằng Chấp nhận + Từ chối.
+
+[WH-09] Từ chối hàng không có lý do
+Kỳ vọng: bị chặn.
+
+[WH-10] Giao vượt số lượng còn phải giao
+Kỳ vọng: bị chặn.
+
+[WH-11] Dòng trùng/sản phẩm ngoài đơn
+Kỳ vọng: bị chặn.
+
+[WH-12] Số âm, số lẻ, giá âm
+Kỳ vọng: bị chặn; phiếu không đổi trạng thái.
+
+[WH-13] Xác nhận phiếu nhập
+Bước: ghi tồn trước; bấm Xác nhận một lần.
+Kỳ vọng:
+- Chỉ số Chấp nhận được cộng tồn.
+- Hàng từ chối không vào tồn.
+- Có giao dịch sổ kho đúng mã phiếu.
+- Giá vốn bình quân/giá trị tồn cập nhật theo quy tắc hệ thống.
+- Đơn mua chuyển Giao một phần hoặc Hoàn thành đúng số còn lại.
+
+[WH-14] Xác nhận phiếu nhập hai lần
+Kỳ vọng: không cộng tồn lần hai, không sinh sổ kho thứ hai.
+
+[WH-15] Sửa phiếu đã xác nhận
+Kỳ vọng: bị chặn; số đã nhập giữ nguyên.
+
+[WH-16] Giao một phần rồi giao tiếp
+Bước: sau khi chuyến trước đã nhận, mua hàng tạo chuyến tiếp theo cho số còn lại; kho nhận.
+Kỳ vọng: cho phép; tổng giao không vượt đơn; khi đủ thì đơn Hoàn thành.
+
+[WH-17] Đối chiếu chéo tồn
+Mở Tồn kho, lịch sử giao dịch, báo cáo kho và sản phẩm.
+Kỳ vọng: cùng mức tồn cuối; số nhập kỳ tăng đúng lượng chấp nhận.
+
+[WH-18] Mất kết nối khi xác nhận
+Bước: ở database test, ngắt server đúng trước khi bấm; sau đó phục hồi và tải lại.
+Kỳ vọng: hoặc toàn bộ phiếu được xác nhận một lần, hoặc không có gì thay đổi; không có trạng thái
+đã xác nhận nhưng thiếu sổ kho/tồn.
+
+[WH-19] Hai cửa sổ cùng xác nhận
+Kỳ vọng: chỉ một cửa sổ thành công; tồn chỉ cộng một lần.
+
+================================================================================
+10. UC27 — HÓA ĐƠN MUA VÀ ĐỐI CHIẾU BA CHỨNG TỪ
+================================================================================
+
+[ACC-01] Lập hóa đơn mua khớp hoàn toàn
+Actor: ketoan. Màn hình: Đối chiếu hóa đơn.
+Tiền điều kiện: phiếu nhập WH-13 đã xác nhận.
+Bước:
+1. Chọn đúng đơn mua và phiếu nhập cùng NCC.
+2. Nhập số/ngày hóa đơn duy nhất.
+3. Mỗi dòng nhập đúng sản phẩm, số lượng chấp nhận, đơn giá, thuế suất, tiền thuế.
+4. Kiểm tra tiền hàng, tổng thuế và tổng cộng; lưu hóa đơn.
+Kỳ vọng: hóa đơn ở trạng thái Chờ đối chiếu; CHƯA sinh công nợ.
+
+[ACC-02] Xác nhận đối chiếu khớp
+Bước: mở lại đủ 3 chứng từ, đánh dấu xác nhận đối chiếu rõ ràng, thực hiện đối chiếu.
+Kỳ vọng:
+- So sánh sản phẩm, số lượng đặt/nhận/hóa đơn, đơn giá đơn mua/phiếu nhận/hóa đơn.
+- So sánh thành tiền từng dòng, thuế suất, tiền thuế.
+- So sánh tổng tiền hàng, tổng thuế, tổng cộng đầu hóa đơn.
+- Chỉ khi tất cả khớp mới chuyển Đã đối chiếu và sinh đúng 1 công nợ.
+
+[ACC-03] Không đánh dấu xác nhận đối chiếu
+Kỳ vọng: bị chặn; hóa đơn còn Chờ đối chiếu; không công nợ.
+
+[ACC-04] Lệch sản phẩm
+Cách test: tạo hóa đơn TEST khác với dòng sản phẩm không đúng nguồn nếu UI/API cho nhập.
+Kỳ vọng: lưu/đối chiếu bị chặn; chỉ rõ dòng lệch; không công nợ.
+
+[ACC-05] Lệch số lượng
+Thử hóa đơn ghi khác số chấp nhận trên phiếu nhập.
+Kỳ vọng: đối chiếu không đạt; không công nợ.
+
+[ACC-06] Lệch đơn giá
+Kỳ vọng: đối chiếu không đạt.
+
+[ACC-07] Lệch thuế suất
+Ví dụ nguồn 8%, hóa đơn nhập 10%.
+Kỳ vọng: đối chiếu không đạt; nêu lỗi thuế suất.
+
+[ACC-08] Lệch tiền thuế
+Giữ thuế suất đúng nhưng thay tiền thuế/tổng thuế.
+Kỳ vọng: đối chiếu không đạt; không được chỉ so sản phẩm–số lượng–đơn giá.
+
+[ACC-09] Lệch tổng tiền hàng hoặc tổng cộng
+Kỳ vọng: đối chiếu không đạt; không sinh công nợ.
+
+[ACC-10] Một phiếu nhập dùng cho hai hóa đơn
+Kỳ vọng: hóa đơn thứ hai bị chặn.
+
+[ACC-11] Trùng số hóa đơn hoặc chọn phiếu khác PO/NCC
+Kỳ vọng: bị chặn.
+
+[ACC-12] Đối chiếu hai lần/double click
+Kỳ vọng: chỉ một công nợ; tổng công nợ không nhân đôi.
+
+ĐỐI CHIẾU CÔNG THỨC UC27:
+
+  Tiền hàng dòng = Số lượng hóa đơn × Đơn giá hóa đơn
+  Tiền thuế dòng = Tiền hàng dòng × Thuế suất / 100
+  Tổng tiền hàng = Tổng tiền hàng các dòng
+  Tổng thuế       = Tổng tiền thuế các dòng
+  Tổng cộng       = Tổng tiền hàng + Tổng thuế
+
+Khi một kiểm tra không khớp, trạng thái và toàn bộ công nợ phải giữ nguyên.
+
+================================================================================
+11. F — BÁN HÀNG TẠI QUẦY VÀ CA BÁN HÀNG
+================================================================================
+
+11.1. Mở/đóng ca
+
+[POS-01] Mở ca đúng điều kiện
+Actor: thungan đã có lịch công bố và đã check-in.
+Màn hình: Ca bán hàng.
+Bước: nhập tiền đầu ca không âm và không quá 1.000.000.000đ; mở ca.
+Kỳ vọng: có đúng một ca mở, đúng thu ngân/ngày/quầy/tiền đầu.
+
+[POS-02] Mở ca không có lịch
+Kỳ vọng: bị chặn.
+
+[POS-03] Mở ca chưa check-in
+Kỳ vọng: bị chặn.
+
+[POS-04] Mở ca bằng lịch tăng cường
+Kỳ vọng: bị chặn.
+
+[POS-05] Mở ca thứ hai
+Kỳ vọng: bị chặn; ca đầu vẫn mở.
+
+[POS-06] Tiền đầu ca âm/quá giới hạn/sai định dạng
+Kỳ vọng: bị chặn.
+
+[POS-07] Chốt ca hợp lệ
+Tiền điều kiện: hoàn tất các hóa đơn, không còn thanh toán chờ xử lý.
+Bước: nhập Tiền cuối ca; xác nhận.
+Kỳ vọng:
+- Ca chuyển Đã đóng.
+- Tiền thực nộp = Tiền cuối ca - Tiền đầu ca.
+- Tiền mặt hệ thống = tiền mặt thu thành công - tiền hoàn bằng tiền mặt đã hoàn tất.
+- Chênh lệch = Tiền thực nộp - Tiền mặt hệ thống.
+
+[POS-08] Chốt ca còn hóa đơn nháp
+Kỳ vọng: bị chặn, chỉ rõ hóa đơn cần xử lý/hủy.
+
+[POS-09] Chốt ca còn thanh toán chờ xử lý
+Kỳ vọng: bị chặn.
+
+[POS-10] Tiền cuối ca nhỏ hơn tiền đầu ca
+Kỳ vọng: bị chặn vì Tiền thực nộp âm; ca vẫn mở.
+
+11.2. Khách hàng
+
+[POS-11] Tạo khách hợp lệ
+Màn hình: Khách hàng. Nhập tên và điện thoại hợp lệ.
+Kỳ vọng: tìm được; điểm khởi tạo đúng chính sách.
+
+[POS-12] Thiếu tên
+Kỳ vọng: bị chặn.
+
+[POS-13] Trùng điện thoại
+Kỳ vọng: không tạo hai khách cho cùng số.
+
+[POS-14] Sửa thông tin khách
+Kỳ vọng: hóa đơn lịch sử vẫn liên kết đúng; điểm không bị đặt lại.
+
+[POS-15] Sửa điểm trực tiếp từ hồ sơ
+Kỳ vọng: không cho sửa tùy ý; điểm chỉ biến động qua bán/đổi trả theo nghiệp vụ.
+
+[POS-16] Tìm khách nhanh tại POS
+Kỳ vọng: chọn đúng khách, hiển thị điểm hiện có; bỏ chọn trở về Khách lẻ.
+
+11.3. Hóa đơn và giỏ hàng
+
+[POS-17] Tạo hóa đơn nháp có hai sản phẩm
+Tiền điều kiện: ca POS đang mở.
+Bước: thêm A và B, số lượng nguyên dương trong tồn; lưu.
+Kỳ vọng: dòng, giá, tạm tính, giảm giá, thuế/tổng nếu có và phải trả đúng.
+
+[POS-18] Bán khi không có ca mở
+Kỳ vọng: bị chặn.
+
+[POS-19] Thêm cùng sản phẩm hai lần
+Kỳ vọng: giao diện gộp số lượng hoặc chặn dòng trùng; backend không lưu hai dòng trùng.
+
+[POS-20] Số lượng 0/âm/thập phân
+Kỳ vọng: bị chặn.
+
+[POS-21] Số lượng lớn hơn tồn
+Kỳ vọng: bị chặn; tồn không đổi.
+
+[POS-22] Sản phẩm ngừng hoạt động
+Kỳ vọng: không thể thêm vào hóa đơn mới.
+
+[POS-23] Áp khuyến mãi hợp lệ
+Kỳ vọng: mức giảm đúng loại %/tiền; tổng không âm; hiển thị mã/tên khuyến mãi.
+
+[POS-24] Khuyến mãi chưa đến ngày/hết hạn/không đúng phạm vi
+Kỳ vọng: bị chặn hoặc không xuất hiện để chọn.
+
+[POS-25] Dùng điểm hợp lệ
+Tiền điều kiện: chọn thành viên có đủ điểm.
+Kỳ vọng: điểm sử dụng là số nguyên không âm, tiền giảm đúng cấu hình đang chạy
+(mặc định dự án: 1 điểm = 1.000đ); không làm tổng âm.
+
+[POS-26] Dùng điểm cho khách lẻ/quá số dư/số lẻ
+Kỳ vọng: bị chặn; điểm khách không đổi.
+
+[POS-27] Hủy hóa đơn nháp và thử hủy hóa đơn đã thanh toán
+Kỳ vọng: nháp được hủy đúng; hóa đơn đã hoàn tất không được hủy theo cách này.
+
+11.4. Thanh toán và hoàn tất hóa đơn
+
+[POS-28] Thanh toán tiền mặt đủ một lần
+Bước: thêm giao dịch tiền mặt Thành công đúng tổng phải trả; hoàn tất.
+Kỳ vọng: hóa đơn Hoàn thành; tồn giảm đúng; có sổ xuất bán; doanh thu/giá vốn ghi nhận;
+điểm khách được cộng theo cấu hình (mặc định 10.000đ chi tiêu = 1 điểm).
+
+[POS-29] Thanh toán hỗn hợp tiền mặt + QR
+Bước: chia đúng tổng; QR Thành công có mã giao dịch duy nhất.
+Kỳ vọng: tổng thành công bằng đúng phải trả; hóa đơn hoàn tất; báo cáo cơ cấu thanh toán đúng.
+
+[POS-30] Thanh toán QR/thẻ/chuyển khoản thiếu mã giao dịch
+Kỳ vọng: bị chặn.
+
+[POS-31] Trùng mã giao dịch điện tử
+Kỳ vọng: giao dịch sau bị chặn; hóa đơn chưa được tính đã thanh toán nếu còn thiếu.
+
+[POS-32] Số tiền thanh toán 0/âm
+Kỳ vọng: bị chặn.
+
+[POS-33] Tổng thanh toán thành công nhỏ hơn phải trả
+Kỳ vọng: không cho hoàn tất; hóa đơn vẫn nháp/đang thanh toán; tồn, điểm, doanh thu chưa đổi.
+
+[POS-34] Tổng thanh toán lớn hơn phải trả
+Kỳ vọng: giao dịch gây vượt tổng bị chặn; không tạo số dư âm.
+
+[POS-35] Có giao dịch thất bại và giao dịch thành công đủ tiền
+Kỳ vọng: chỉ khoản thành công được cộng; khi tổng thành công đủ thì mới hoàn tất.
+
+[POS-36] Còn giao dịch chờ xử lý
+Kỳ vọng: không cho hoàn tất dù các con số hiển thị có vẻ đủ.
+
+[POS-37] Thiếu tồn ở thời điểm hoàn tất
+Cách test: hai thu ngân/cửa sổ cùng bán phần tồn cuối của một sản phẩm.
+Kỳ vọng: giao dịch hoàn tất sau bị chặn khi kiểm tra lại tồn; tồn không âm; không ghi doanh thu
+nửa chừng và không trừ điểm sai.
+
+[POS-38] Hoàn tất hai lần
+Kỳ vọng: chỉ một lần giảm tồn, ghi doanh thu, giá vốn và cộng điểm.
+
+[POS-39] Thu ngân khác thử hoàn tất hóa đơn/ca của người khác
+Kỳ vọng: bị chặn.
+
+[POS-40] Tra cứu hóa đơn
+Bước: tìm theo mã, khách, ngày, trạng thái.
+Kỳ vọng: chi tiết dòng, thanh toán, người lập và lịch sử đúng.
+
+[POS-41] In hóa đơn
+Kỳ vọng: logo/tên cửa hàng, mã/ngày, thu ngân, dòng hàng, tổng/giảm/thanh toán rõ; không cắt chữ;
+không in nút giao diện; khổ giấy đúng mẫu.
+
+[POS-42] Đối chiếu sau bán
+Kiểm tra đồng thời:
+- Tồn A/B giảm đúng số bán.
+- Sổ kho có xuất bán đúng giá vốn tại thời điểm bán.
+- Doanh thu và phương thức thanh toán tăng đúng.
+- Điểm thành viên = điểm đầu - điểm đã dùng + điểm được cộng.
+- Tiền mặt ca chỉ gồm giao dịch tiền mặt thành công.
+
+================================================================================
+12. G — ĐỔI TRẢ LIÊN ACTOR VÀ CÁC NHÁNH NGOẠI LỆ
+================================================================================
+
+Luồng chuẩn bắt buộc:
+
+Thu ngân lập yêu cầu → Thủ kho kiểm tra → Quản lý duyệt → chính thu ngân lập yêu cầu
+hoàn tất hoàn/đổi khi có ca của mình đang mở.
+
+[RET-01] Lập yêu cầu hoàn tiền hợp lệ
+Actor: thu ngân đã lập hóa đơn POS-28.
+Bước: chọn hóa đơn Hoàn thành, hình thức Hoàn tiền, lý do, một dòng và số lượng còn trả được;
+lưu/gửi kiểm tra.
+Kỳ vọng: trạng thái Chờ kho kiểm tra; chưa hoàn tiền, chưa cộng tồn, chưa đổi doanh thu.
+
+[RET-02] Trả từ hóa đơn chưa hoàn thành
+Kỳ vọng: bị chặn.
+
+[RET-03] Dữ liệu yêu cầu không hợp lệ
+Thử: thiếu lý do, không có dòng, dòng trùng, sản phẩm ngoài hóa đơn, số lượng 0/âm,
+vượt số còn có thể trả.
+Kỳ vọng: bị chặn; không tạo yêu cầu.
+
+[RET-04] Kho chấp nhận hàng nhập lại
+Actor: thukho. Màn hình: Kiểm tra đổi trả.
+Bước: kiểm tra và ghi kết quả có nội dung chấp nhận/đủ điều kiện nhập lại.
+Kỳ vọng: chuyển Chờ quản lý duyệt; tồn CHƯA tăng trước khi hoàn tất toàn luồng.
+
+[RET-05] Kho xác nhận không nhập lại
+Bước: dùng yêu cầu khác, ghi hư hỏng/không đạt và kết quả không chấp nhận nhập lại.
+Kỳ vọng: chuyển Chờ duyệt; hệ thống ghi rõ không nhập lại.
+
+[RET-06] Kho kiểm tra sai trạng thái/hai lần/không có kết quả
+Kỳ vọng: bị chặn; không đổi tồn.
+
+[RET-07] Quản lý duyệt yêu cầu
+Actor: admin. Màn hình: Trung tâm phê duyệt.
+Kỳ vọng: chuyển Đã duyệt; vẫn chưa hoàn tiền/cộng tồn cho đến lúc thu ngân hoàn tất.
+
+[RET-08] Quản lý từ chối có lý do
+Kỳ vọng: trạng thái Từ chối; không hoàn tiền/không đổi tồn; thu ngân thấy lý do.
+
+[RET-09] Từ chối không lý do
+Kỳ vọng: bị chặn.
+
+[RET-10] Duyệt sai trạng thái/hai lần
+Kỳ vọng: bị chặn hoặc idempotent; không tạo hai giao dịch.
+
+[RET-11] Thu ngân khác thử hoàn tất
+Kỳ vọng: bị chặn; chỉ tác giả yêu cầu được hoàn tất.
+
+[RET-12] Tác giả không có ca mở
+Kỳ vọng: bị chặn; không tự mở lại ca cũ/ca người khác.
+
+[RET-13] Hoàn tiền mặt, hàng được nhập lại
+Tiền điều kiện: yêu cầu RET-04 và RET-07, tác giả có ca đang mở.
+Bước: chọn Tiền mặt, hoàn tất.
+Kỳ vọng:
+- Phiếu Hoàn thành; tiền hoàn ghi đúng.
+- Tồn tăng đúng số hàng được chấp nhận nhập lại.
+- Có sổ kho nhập trả.
+- Tiền mặt hệ thống của ca giảm đúng tiền hoàn.
+- Doanh thu thuần/lãi gộp báo cáo phản ánh khoản hoàn.
+
+[RET-14] Hoàn tiền mặt, hàng không nhập lại
+Kỳ vọng: tiền hoàn vẫn ghi nhận nhưng tồn không tăng; không có giao dịch nhập trả sai.
+
+[RET-15] Hoàn điện tử
+Bước: chọn QR/thẻ/chuyển khoản và nhập mã hoàn tiền duy nhất.
+Kỳ vọng: hoàn tất; tiền điện tử không bị đưa vào két/tiền thực nộp ca; báo cáo tách đúng.
+
+[RET-16] Hoàn điện tử thiếu/trùng mã
+Kỳ vọng: bị chặn; phiếu chưa hoàn tất.
+
+[RET-17] Hoàn tất hai lần
+Kỳ vọng: không hoàn hai lần, không cộng tồn hai lần, không trừ doanh thu/điểm hai lần.
+
+[RET-18] Trả tiếp quá số lượng còn lại sau một lần trả
+Kỳ vọng: bị chặn dựa trên tổng số đã trả, không chỉ số trên phiếu hiện tại.
+
+[RET-19] Lập yêu cầu đổi hàng ngang giá
+Bước: hình thức Đổi hàng; chọn hàng trả và hàng giao đổi có tổng giá bán bằng nhau.
+Kỳ vọng: lưu/gửi được; đi qua kho và quản lý như luồng chuẩn.
+
+[RET-20] Hoàn tất đổi ngang giá
+Kỳ vọng:
+- Hàng trả chỉ cộng tồn nếu kho chấp nhận nhập lại.
+- Hàng giao đổi giảm tồn.
+- Có đủ sổ kho hai chiều tương ứng.
+- Không thu/hoàn chênh lệch; doanh thu không bị ghi thành hóa đơn bán mới ngoài quy tắc.
+
+[RET-21] Đổi chênh giá dù chỉ 1 đồng
+Kỳ vọng: bị chặn. Nghiệp vụ đúng là hoàn hàng cũ và lập hóa đơn mới, không giao đổi trực tiếp.
+
+[RET-22] Hàng giao đổi thiếu tồn/ngừng hoạt động
+Kỳ vọng: bị chặn; hàng trả và tồn khác chưa thay đổi.
+
+[RET-23] Dòng hàng giao đổi trùng/số lượng lẻ/0/âm
+Kỳ vọng: bị chặn.
+
+[RET-24] Đối chiếu công thức lãi gộp sau đổi trả
+Mở báo cáo ca, quản lý và kế toán; đối chiếu đúng 3 bước:
+
+  Doanh thu thuần = Doanh thu hóa đơn hoàn thành - Tiền hoàn
+  Giá vốn thuần   = Giá vốn hóa đơn - Giá vốn hàng trả nhập lại
+                    + Giá vốn hàng giao đổi
+  Lãi gộp         = Doanh thu thuần - Giá vốn thuần
+
+Đặc biệt:
+- Hàng trả không nhập lại: không được trừ giá vốn hàng trả khỏi giá vốn thuần.
+- Hàng giao đổi: phải cộng giá vốn hàng giao đổi.
+- Ba báo cáo cùng kỳ phải dùng cùng số liệu nguồn, dù phạm vi actor khác nhau.
+
+================================================================================
+13. H — PHIẾU XUẤT KHO THỦ CÔNG VÀ KIỂM KÊ
+================================================================================
+
+13.1. Phiếu xuất kho
+
+[WHI-01] Tạo phiếu xuất nội bộ hợp lệ
+Actor: thukho. Chọn loại Xuất nội bộ, dòng hàng duy nhất, số lượng nguyên dương, lý do/ghi chú.
+Kỳ vọng: lưu nháp; tồn chưa giảm.
+
+[WHI-02] Tạo phiếu hủy hàng hợp lệ
+Kỳ vọng: lưu/gửi duyệt; tồn chưa giảm trước khi xác nhận xuất.
+
+[WHI-03] Trả nhà cung cấp hợp lệ
+Tiền điều kiện: chọn phiếu nhập nguồn còn lượng có thể trả.
+Kỳ vọng: chỉ chọn được hàng thuộc phiếu nhập đó và không vượt lượng khả dụng.
+
+[WHI-04] Trả NCC không có phiếu nhập nguồn/sản phẩm ngoài nguồn
+Kỳ vọng: bị chặn.
+
+[WHI-05] Dòng xuất lỗi
+Thử không dòng, trùng sản phẩm, số lượng 0/âm/lẻ, thiếu lý do/ghi chú bắt buộc.
+Kỳ vọng: bị chặn.
+
+[WHI-06] Gửi quản lý duyệt
+Kỳ vọng: Chờ duyệt; tồn chưa giảm.
+
+[WHI-07] Quản lý duyệt
+Kỳ vọng: Đã duyệt; tồn VẪN chưa giảm.
+
+[WHI-08] Quản lý từ chối có lý do
+Kỳ vọng: Từ chối; tồn không đổi.
+
+[WHI-09] Từ chối không lý do/duyệt sai trạng thái
+Kỳ vọng: bị chặn.
+
+[WHI-10] Thủ kho xác nhận xuất sau duyệt
+Kỳ vọng: tồn giảm đúng một lần; sổ kho ghi đúng loại/lý do/chứng từ.
+
+[WHI-11] Tồn không đủ tại thời điểm xác nhận
+Cách test: sau khi duyệt, dùng một nghiệp vụ TEST khác làm tồn giảm dưới lượng xuất.
+Kỳ vọng: xác nhận bị chặn; không âm tồn; phiếu không ghi hoàn thành giả.
+
+[WHI-12] Xác nhận hai lần
+Kỳ vọng: không trừ tồn hai lần.
+
+[WHI-13] Actor mua hàng/thu ngân xác nhận xuất
+Kỳ vọng: 403; tồn không đổi.
+
+13.2. Kiểm kê
+
+[INV-01] Tạo đợt kiểm kê
+Actor: thukho. Chọn kho đang hoạt động.
+Kỳ vọng: đợt Đang kiểm kê và lấy đầy đủ mặt hàng tồn tại thời điểm tạo.
+
+[INV-02] Nhập tồn thực tế bằng tồn hệ thống
+Bước: nhập số nguyên >=0 cho mọi dòng, tình trạng hợp lệ; gửi.
+Kỳ vọng: không chênh lệch thì hoàn thành theo luồng, không tạo điều chỉnh tồn.
+
+[INV-03] Thiếu dòng/chưa kiểm hết
+Kỳ vọng: không cho gửi.
+
+[INV-04] Dòng trùng/tồn thực tế âm hoặc lẻ/tình trạng lạ
+Kỳ vọng: bị chặn.
+
+[INV-05] Có chênh lệch nhưng thiếu lý do
+Kỳ vọng: bị chặn.
+
+[INV-06] Gửi kiểm kê có chênh lệch
+Kỳ vọng: Chờ quản lý duyệt; tồn hệ thống chưa đổi.
+
+[INV-07] Quản lý duyệt chênh lệch
+Kỳ vọng: tồn được điều chỉnh đúng chênh lệch một lần; có sổ kho/lịch sử; trạng thái hoàn thành.
+
+[INV-08] Quản lý từ chối có lý do
+Kỳ vọng: tồn không đổi; ghi lý do.
+
+[INV-09] Từ chối không lý do
+Kỳ vọng: bị chặn.
+
+[INV-10] Tồn thay đổi trong lúc chờ duyệt
+Cách test: lập kiểm kê chênh lệch, sau đó hoàn tất một bán/nhập TEST cho cùng sản phẩm trước
+khi quản lý duyệt.
+Kỳ vọng: duyệt bị chặn vì số hệ thống không còn bằng snapshot; không ghi đè tồn mới.
+
+[INV-11] Duyệt hai lần
+Kỳ vọng: không điều chỉnh hai lần.
+
+[INV-12] Không có “phiếu điều chỉnh kho” rời
+Kỳ vọng: chênh lệch được xử lý ngay trong quy trình kiểm kê theo phạm vi dự án.
+
+[INV-13] Đối chiếu báo cáo kho sau nhập/xuất/kiểm kê/đổi trả
+Kỳ vọng:
+  Tồn cuối = Tồn đầu + Nhập mua + Nhập trả - Xuất bán - Xuất thủ công
+             ± Điều chỉnh kiểm kê - Hàng giao đổi
+Các nhóm chỉ được cộng nếu nghiệp vụ đã hoàn thành.
+
+================================================================================
+14. I — CÔNG NỢ, PHIẾU CHI, QUYẾT TOÁN CA VÀ BẢNG LƯƠNG
+================================================================================
+
+14.1. Công nợ và phiếu chi NCC
+
+[ACC-13] Kiểm tra ngày đến hạn công nợ
+Tiền điều kiện: công nợ sinh từ ACC-02.
+Kỳ vọng: hạn thanh toán = ngày phát sinh công nợ hiện tại + số ngày thanh toán trên đơn mua
+(30–45 ngày), không lấy tùy tiện ngày hóa đơn.
+
+Lưu ý: công nợ vừa sinh thường chưa đến hạn nên hệ thống đúng khi chưa cho lập phiếu chi.
+Để test thanh toán ngay, ưu tiên chọn một công nợ TEST đã đến hạn. Nếu database test không có,
+chỉ người quản trị database mới được đổi hạn cho đúng một mã TEST đã ghi lại, sau khi SELECT
+xác nhận đúng dòng. Tuyệt đối không làm trên dữ liệu thật/không UPDATE theo điều kiện rộng.
+
+[ACC-14] Lập phiếu chi đủ toàn bộ công nợ đến hạn
+Actor: ketoan. Màn hình: Công nợ NCC.
+Bước: chọn khoản đã đối chiếu, chưa thanh toán, đã đến hạn; chọn tiền mặt/chuyển khoản;
+nhập nội dung; tạo và gửi duyệt.
+Kỳ vọng: số tiền bằng toàn bộ còn phải trả; không cho sửa thành trả một phần.
+
+[ACC-15] Lập phiếu chi cho nợ chưa đến hạn
+Kỳ vọng: bị chặn.
+
+[ACC-16] Trả trước/trả một phần/trả bằng nhiều phiếu
+Kỳ vọng: bị chặn; phiên bản này chỉ thanh toán đủ một lần cho mỗi công nợ.
+
+[ACC-17] Thiếu nội dung/phương thức lạ
+Kỳ vọng: bị chặn.
+
+[ACC-18] Lập phiếu thứ hai cho cùng công nợ
+Kỳ vọng: bị chặn.
+
+[ACC-19] Quản lý duyệt phiếu chi
+Actor: admin. Kỳ vọng: Đã duyệt nhưng công nợ CHƯA giảm trước khi kế toán xác nhận chi.
+
+[ACC-20] Quản lý từ chối có lý do
+Kỳ vọng: kế toán có thể sửa/gửi lại đúng chính phiếu bị từ chối; công nợ không đổi.
+
+[ACC-21] Từ chối không lý do/duyệt sai số tiền
+Kỳ vọng: bị chặn; hệ thống kiểm lại số tiền bằng toàn bộ còn nợ.
+
+[ACC-22] Xác nhận chuyển khoản thành công
+Actor: ketoan. Nhập mã giao dịch ngân hàng duy nhất.
+Kỳ vọng: phiếu Đã chi; công nợ Đã thanh toán, còn lại 0; báo cáo dòng tiền/công nợ cập nhật.
+
+[ACC-23] Chuyển khoản thất bại
+Bước: đánh dấu thất bại, nhập lý do.
+Kỳ vọng: lý do bắt buộc; công nợ vẫn nguyên; có thể xử lý lại theo trạng thái cho phép.
+
+[ACC-24] Thành công thiếu/trùng mã giao dịch hoặc xác nhận hai lần
+Kỳ vọng: bị chặn; không giảm nợ hai lần.
+
+14.2. Phiếu thu/chốt ca
+
+[ACC-25] Kế toán xem ca đã đóng
+Màn hình: Ca & Phiếu thu.
+Kỳ vọng: snapshot có tiền đầu/cuối, tiền mặt hệ thống, thực nộp, chênh lệch, thu ngân.
+
+[ACC-26] Lập/xác nhận phiếu thu ca khớp
+Kỳ vọng: đúng một phiếu thu; trạng thái quyết toán/đối soát ca hoàn thành.
+
+[ACC-27] Ca có chênh lệch 0
+Kỳ vọng: không bắt lý do chênh lệch; số thu đúng tiền thực nộp.
+
+[ACC-28] Ca có chênh lệch khác 0 nhưng thiếu lý do
+Kỳ vọng: bị chặn.
+
+[ACC-29] Ca có chênh lệch có lý do
+Kỳ vọng: lưu được; báo cáo hiển thị chênh lệch và lý do; không tạo “báo cáo chênh lệch” rời.
+
+[ACC-30] Tạo phiếu thu cho ca chưa đóng
+Kỳ vọng: bị chặn.
+
+[ACC-31] Tạo hai phiếu thu cho cùng ca
+Kỳ vọng: bị chặn/idempotent; tổng phiếu thu không nhân đôi.
+
+[ACC-32] Đối chiếu tiền mặt sau hoàn hàng
+Kỳ vọng: tiền mặt hệ thống = tiền mặt thu thành công - hoàn tiền mặt hoàn tất; QR/thẻ/chuyển
+khoản và hoàn điện tử không vào két ca.
+
+14.3. Bảng lương UC33
+
+[PAY-01] Lập kỳ lương từ chấm công đã duyệt
+Actor: ketoan. Màn hình: Bảng lương.
+Kỳ vọng: chỉ bản ghi chấm công Đã duyệt được tính.
+
+[PAY-02] Chấm công chưa duyệt không vào lương
+Kỳ vọng: số phút/tiền của bản ghi đó = không được cộng.
+
+[PAY-03] Kiểm tra đơn giá mặc định
+Kỳ vọng khi chưa cấu hình riêng: 55.000đ/giờ và hệ số đêm 1,30; nếu màn hình cho thấy
+cấu hình khác thì dùng cấu hình đang hoạt động và ghi vào biên bản.
+
+[PAY-04] Tách giờ thường/đêm/tăng ca
+Kỳ vọng: không trùng phút; tổng thành phần giải thích được tổng lương.
+
+[PAY-05] Nghỉ trưa ca văn phòng
+Kỳ vọng: không trả lương cho thời gian nghỉ theo cấu hình.
+
+[PAY-06] Lập lại kỳ đang ở trạng thái Đã lập
+Kỳ vọng: cập nhật đúng theo thiết kế, không nhân đôi nhân viên/dòng lương.
+
+[PAY-07] Khóa kỳ lương
+Kỳ vọng: chỉ kỳ đã lập được khóa; dữ liệu nền chấm công không làm đổi kỳ đã khóa.
+
+[PAY-08] Tính lại kỳ đã khóa/đã trả
+Kỳ vọng: bị chặn.
+
+[PAY-09] Trả lương một nhân viên
+Bước: kỳ đã khóa, nhập mã giao dịch, xác nhận.
+Kỳ vọng: nhân viên chuyển Đã trả; số tiền đúng; người khác chưa đổi.
+
+[PAY-10] Trả lương thiếu mã giao dịch
+Kỳ vọng: bị chặn.
+
+[PAY-11] Trả một nhân viên hai lần
+Kỳ vọng: bị chặn; tổng đã trả không nhân đôi.
+
+[PAY-12] Hoàn tất toàn kỳ
+Kỳ vọng: khi tất cả nhân viên đã trả, kỳ chuyển Đã thanh toán; báo cáo/trạng thái nhất quán.
+
+================================================================================
+15. J — BÁO CÁO CỦA 5 ACTOR
+================================================================================
+
+QUY TẮC CHUNG CHO MỌI BÁO CÁO:
+
+- Lập báo cáo theo Ngày/Tháng/Quý/Năm phải dùng đúng từ ngày–đến ngày.
+- KPI phải có tên, đơn vị và dòng giải thích; người dùng nhìn vào hiểu “số gì, tính thế nào”.
+- Biểu đồ có tiêu đề, chú giải, trục/đơn vị, tooltip và trạng thái không có dữ liệu.
+- Bảng chi tiết là nguồn kiểm chứng biểu đồ, không được lệch tổng.
+- CSV/PDF/bản in dùng cùng kỳ và cùng con số với màn hình.
+- Không dựng số giả khi API không có dữ liệu; hiển thị 0/trống có giải thích.
+- Nút tải/lập báo cáo phải khóa khi đang xử lý; không chồng biểu đồ khi lập lại.
+
+15.1. Báo cáo Quản lý cửa hàng — UC10
+
+[RPT-01] KPI tổng quan quản lý
+Kiểm tra: doanh thu thuần, lãi gộp, phiếu thu/phiếu chi, công nợ còn lại, ca mở, đổi trả,
+mua/nhập/xuất, tồn thấp, tồn cuối kỳ, thuế đầu vào và cảnh báo.
+Kỳ vọng: mỗi KPI có ghi chú phạm vi; tiền có “đ”; số lượng có đơn vị; 0 không bị hiểu là lỗi tải.
+
+[RPT-02] Biểu đồ doanh thu–giá vốn–lãi gộp
+Kỳ vọng: từng ngày khớp bảng; lãi gộp theo công thức RET-24; legend có thể phân biệt.
+
+[RPT-03] Cơ cấu doanh thu
+Kỳ vọng: giá vốn thuần + lãi gộp = doanh thu thuần; tỷ lệ/tổng donut khớp KPI.
+
+[RPT-04] Xếp hạng thu ngân và khối lượng chứng từ
+Kỳ vọng: chỉ hóa đơn/ca trong kỳ; thứ tự giảm dần; tên/mã đúng; không cộng hóa đơn hủy.
+
+[RPT-05] Khối thu–chi, bán hàng, công nợ
+Kỳ vọng: có ghi chú giải nghĩa “theo hệ thống”, “thực nộp”, “còn lại”, “quá hạn”; số khớp
+màn Kế toán.
+
+[RPT-06] Bảng chi tiết nhân viên và theo ngày
+Kỳ vọng: tổng các dòng khớp KPI/biểu đồ; cuộn và tiêu đề cột dễ đọc.
+
+[RPT-07] CSV và bản in/PDF quản lý
+Kỳ vọng: tiêu đề, kỳ, KPI, biểu đồ in được, bảng, ghi chú, người lập/chữ ký/footer; tiếng Việt
+không lỗi font; không có nền xanh đậm che nội dung; không bị cắt trang.
+
+[RPT-08] Kỳ không dữ liệu
+Kỳ vọng: KPI 0, biểu đồ/bảng có empty state rõ; không NaN/undefined/Infinity.
+
+15.2. Báo cáo Thủ kho — UC15
+
+[RPT-09] KPI kho
+Kiểm tra: giá trị tồn, dưới tồn tối thiểu, phiếu nhập/xuất, đợt kiểm kê, chênh lệch.
+Kỳ vọng: ghi rõ số “phiếu” khác số “đơn vị hàng”; giá trị tiền có đơn vị.
+
+[RPT-10] Biểu đồ nhập–xuất–tồn theo ngày
+Kỳ vọng: tồn cuối ngày diễn biến hợp lý; nhập/xuất khớp sổ; ngày không giao dịch xử lý nhất quán.
+
+[RPT-11] Giá trị tồn và cơ cấu theo danh mục
+Kỳ vọng: tổng danh mục = KPI giá trị tồn; phần trăm donut xấp xỉ 100% do làm tròn.
+
+[RPT-12] Chứng từ gần đây/hàng cần bổ sung/cảnh báo
+Kỳ vọng: trạng thái và link mở đúng chứng từ/sản phẩm; không gán cảnh báo giả.
+
+[RPT-13] Đối chiếu sau các E2E
+Kỳ vọng: nhận hàng, bán, trả, giao đổi, xuất thủ công, kiểm kê đều phản ánh đúng kỳ.
+
+[RPT-14] CSV/PDF/in báo cáo kho
+Kỳ vọng: cùng số liệu màn hình; cột không tràn; ngày và tiền định dạng vi-VN.
+
+15.3. Báo cáo Thu ngân — UC22
+
+[RPT-15] Phạm vi cá nhân
+Actor: thungan.
+Kỳ vọng: chỉ hóa đơn, phương thức thanh toán, hoàn tiền và ca do chính tài khoản lập;
+không gồm doanh thu của thu ngân khác.
+
+[RPT-16] KPI ca/bán hàng
+Kiểm tra: hóa đơn hoàn thành, doanh thu, tiền hoàn do mình, tiền mặt, QR/thẻ/chuyển khoản.
+Kỳ vọng: dòng note giải thích tiền điện tử không vào két ca.
+
+[RPT-17] Biểu đồ doanh thu theo ngày/ca
+Kỳ vọng: tổng điểm dữ liệu = KPI; ngày không bán hiển thị hợp lý.
+
+[RPT-18] Cơ cấu phương thức thanh toán
+Kỳ vọng: chỉ giao dịch thành công; tổng cơ cấu khớp tiền đã thu; không cộng giao dịch thất bại/chờ.
+
+[RPT-19] Sản phẩm bán chạy, ca và hóa đơn gần đây
+Kỳ vọng: số lượng/doanh thu đúng hóa đơn hoàn thành của cá nhân; link mở đúng hóa đơn.
+
+[RPT-20] CSV/PDF/in thu ngân
+Kỳ vọng: ghi rõ “báo cáo cá nhân”, tên/mã thu ngân và kỳ; không lộ số của nhân viên khác.
+
+15.4. Báo cáo Nhân viên mua hàng — hỗ trợ UC11–UC14
+
+[RPT-21] KPI mua hàng
+Kiểm tra: tổng giá trị mua, đơn chờ xử lý/chờ duyệt, NCC hoạt động, giao trễ, công nợ liên quan,
+tỷ lệ giao đúng hạn nếu API có nguồn.
+Kỳ vọng: chỉ hiện trường có nguồn thật; trường chưa phát sinh có note 0/chưa có dữ liệu.
+
+[RPT-22] Giá trị mua theo ngày/NCC/danh mục
+Kỳ vọng: tổng biểu đồ khớp tổng mua theo định nghĩa trạng thái trên màn hình; nhãn dễ đọc.
+
+[RPT-23] Tỷ lệ giao đúng hạn
+Kỳ vọng: mẫu số và ý nghĩa được ghi rõ; không chia 0 thành NaN; dữ liệu khớp ETA/thời điểm nhận.
+
+[RPT-24] Top NCC và đơn cần xử lý/cảnh báo
+Kỳ vọng: link đúng; trạng thái chờ duyệt, giao trễ, chưa đủ hàng phản ánh thực tế.
+
+[RPT-25] Phân quyền dữ liệu
+Kỳ vọng: mua hàng thấy thông tin phục vụ mua/NCC nhưng không có nút duyệt quản lý hoặc chi tiền.
+
+[RPT-26] CSV/PDF/in mua hàng
+Kỳ vọng: cùng kỳ/số liệu, tiếng Việt/font/khổ trang đúng.
+
+15.5. Báo cáo Kế toán — UC29
+
+[RPT-27] KPI kế toán
+Kiểm tra: doanh thu đã đối soát, phiếu thu, phiếu chi, công nợ phải trả, công nợ đến/quá hạn,
+chênh lệch bàn giao tiền mặt.
+Kỳ vọng: note phân biệt doanh thu, dòng tiền và công nợ; không dùng các khái niệm thay nhau.
+
+[RPT-28] Biểu đồ doanh thu đối soát và thu–chi
+Kỳ vọng: tổng theo thời gian khớp KPI; phiếu chi chỉ tính đúng trạng thái báo cáo quy định.
+
+[RPT-29] Cơ cấu tuổi nợ
+Kỳ vọng: chia nhóm chưa đến hạn/1–30/31–60/61–90/trên 90 theo ngày hiện tại; tổng bằng nợ còn lại.
+
+[RPT-30] Bảng công nợ và đối soát ca
+Kỳ vọng: trạng thái đến hạn/quá hạn, tiền hệ thống/thực nộp/chênh lệch chính xác; link đúng chứng từ.
+
+[RPT-31] Chuỗi giá vốn/lãi gộp
+Kỳ vọng: nếu hiển thị, dùng đúng RET-24 và khớp báo cáo quản lý cùng kỳ.
+
+[RPT-32] CSV/PDF/in kế toán
+Kỳ vọng: cùng số màn hình; biểu đồ/bảng không cắt; phần thuế/tổng tiền thể hiện đúng dữ liệu UC27.
+
+15.6. Test bộ lọc, responsive và khả năng đọc cho cả 5 báo cáo
+
+[RPT-33] Ngày
+Chọn một ngày có chứng từ và một ngày trống. Kỳ vọng: from=to đúng ngày địa phương.
+
+[RPT-34] Tháng
+Kỳ vọng: ngày đầu/cuối tháng đúng cả tháng 28/29/30/31 ngày.
+
+[RPT-35] Quý
+Kỳ vọng: Q1=01–03, Q2=04–06, Q3=07–09, Q4=10–12.
+
+[RPT-36] Năm
+Kỳ vọng: 01/01–31/12 đúng năm; không lấy dữ liệu năm khác.
+
+[RPT-37] Đổi kỳ liên tục
+Bước: lập tháng A → tháng B → lại A.
+Kỳ vọng: số quay về đúng; không cộng dồn/chồng SVG/nhân đôi listener.
+
+[RPT-38] Giải thích số liệu
+Kỳ vọng: mọi KPI/bảng có nhãn và note đủ để actor hiểu phạm vi, đơn vị, trạng thái được tính;
+tooltip biểu đồ nói rõ ngày/tên chuỗi/giá trị.
+
+[RPT-39] Màn 1920×1080 và 1366×768
+Kỳ vọng: KPI không bị ép thành cột hẹp; biểu đồ đủ chiều cao; bảng cuộn ngang khi cần;
+không chồng nút; sidebar không che nội dung.
+
+[RPT-40] Zoom 80%, 100%, 125%
+Kỳ vọng: icon căn giữa, chữ không tràn card, không xuất hiện khoảng trống vô lý.
+
+[RPT-41] Bàn phím
+Kỳ vọng: Tab theo thứ tự hợp lý, focus nhìn thấy, Enter/Space dùng được cho nút/chọn;
+modal đóng được bằng nút rõ ràng/Escape nếu thiết kế hỗ trợ.
+
+[RPT-42] Màu và khả năng phân biệt
+Kỳ vọng: cảnh báo không chỉ dựa vào màu; chữ đủ tương phản; xanh thương hiệu dùng có tiết chế;
+biểu đồ có legend/nhãn để người mù màu vẫn hiểu.
+
+================================================================================
+16. CÁC CHUỖI E2E BẮT BUỘC PHẢI PASS
+================================================================================
+
+[E2E-01] Mua đến công nợ — 5 actor liên quan
+
+1. Thủ kho tạo/gửi đề nghị mua 2 sản phẩm.
+2. Mua hàng tiếp nhận và lập đơn, điều khoản 30–45 ngày.
+3. Quản lý duyệt.
+4. Mua hàng gửi NCC, xác nhận và tạo chuyến giao.
+5. Thủ kho nhận một phần: có hàng chấp nhận và hàng từ chối.
+6. Thủ kho xác nhận phiếu nhập.
+7. Kế toán lập hóa đơn đúng lượng chấp nhận, thuế và tổng.
+8. Kế toán xác nhận đối chiếu.
+
+Phải chứng minh:
+
+- Chỉ hàng chấp nhận tăng tồn.
+- Đơn ở Giao một phần nếu còn lượng chưa giao.
+- Chỉ đối chiếu khớp đầy đủ mới sinh đúng một công nợ.
+- Công nợ bằng tổng cộng hóa đơn và có hạn đúng điều khoản.
+- Báo cáo kho/mua hàng/kế toán/quản lý cùng phản ánh chứng từ theo phạm vi.
+
+[E2E-02] Bán đến quyết toán ca
+
+1. Quản lý lập và công bố lịch đủ điều kiện.
+2. Thu ngân check-in và mở ca.
+3. Tạo/chọn khách thành viên.
+4. Lập hóa đơn 2 sản phẩm, áp khuyến mãi/điểm nếu có.
+5. Thanh toán hỗn hợp tiền mặt + QR đúng tổng.
+6. Hoàn tất và in hóa đơn.
+7. Đối chiếu tồn, điểm, sổ kho, doanh thu và giá vốn.
+8. Chốt ca đúng tiền.
+9. Kế toán xác nhận phiếu thu ca.
+10. Thu ngân check-out.
+
+Phải chứng minh:
+
+- Không ghi nhận tài chính/tồn trước khi hóa đơn hoàn tất.
+- Chỉ giao dịch thành công được tính.
+- Tiền mặt và điện tử tách đúng.
+- Không check-out khi còn ca mở.
+- Báo cáo thu ngân chỉ có số cá nhân; quản lý/kế toán có số đúng phạm vi.
+
+[E2E-03] Hoàn tiền, có nhập lại hàng
+
+1. Dùng hóa đơn hoàn thành của E2E-02.
+2. Tác giả lập yêu cầu hoàn tiền.
+3. Kho chấp nhận nhập lại.
+4. Quản lý duyệt.
+5. Tác giả có ca mở và hoàn bằng tiền mặt.
+6. Đối chiếu tồn, két ca, doanh thu thuần, giá vốn thuần, lãi gộp, điểm khách.
+
+[E2E-04] Hoàn tiền, không nhập lại hàng
+
+Lặp E2E-03 với kết quả kho không chấp nhận nhập lại.
+Phải chứng minh: tiền hoàn có nhưng tồn không tăng và giá vốn hàng trả không bị trừ sai.
+
+[E2E-05] Đổi ngang giá
+
+Lập phiếu đổi có tổng hàng trả = tổng hàng giao đổi; kho/quản lý xử lý; thu ngân hoàn tất.
+Phải chứng minh: hai chiều tồn đúng, giá vốn hàng giao đổi được cộng, không có chênh lệch tiền.
+Sau đó đổi giá lệch 1 đồng để chứng minh hệ thống chặn.
+
+[E2E-06] Xuất kho có phê duyệt
+
+Kho lập → quản lý duyệt → kiểm tra tồn chưa đổi → kho xác nhận → tồn giảm và có sổ kho.
+Lặp với nhánh quản lý từ chối để chứng minh tồn giữ nguyên.
+
+[E2E-07] Kiểm kê có chênh lệch
+
+Kho tạo/nhập/gửi → quản lý duyệt → tồn điều chỉnh một lần.
+Lặp với nhánh tồn thay đổi trong lúc chờ để chứng minh hệ thống chặn ghi đè snapshot.
+
+[E2E-08] Công nợ đến thanh toán
+
+Kế toán lập phiếu chi đủ nợ đến hạn → quản lý duyệt → kế toán thử thất bại có lý do
+→ xác nhận thành công có mã giao dịch → nợ về 0.
+Phải chứng minh: duyệt không tự giảm nợ; chỉ chi thành công mới giảm.
+
+[E2E-09] Chấm công đến trả lương
+
+Quản lý công bố lịch → nhân viên check-in/out → quản lý duyệt công/tăng ca có ghi chú
+→ kế toán lập kỳ → khóa → trả từng người → kỳ Đã thanh toán.
+
+[E2E-10] Một kỳ báo cáo xuyên 5 actor
+
+Chọn cùng một tháng có dữ liệu của E2E-01 đến E2E-09; lập báo cáo cả 5 actor.
+Phải chứng minh các giao điểm sau bằng nhau:
+
+- Nhập/xuất/tồn giữa báo cáo kho và quản lý.
+- Đơn mua/giá trị mua giữa báo cáo mua hàng và quản lý.
+- Doanh thu hóa đơn giữa báo cáo thu ngân (theo cá nhân) và tổng nhân viên ở quản lý.
+- Phiếu thu ca/công nợ/phiếu chi giữa kế toán và quản lý.
+- Lãi gộp giữa quản lý và kế toán theo cùng công thức.
+
+================================================================================
+17. KIỂM THỬ ĐỒNG THỜI, ROLLBACK VÀ TOÀN VẸN DỮ LIỆU
+================================================================================
+
+[CON-01] Hai thu ngân tranh số tồn cuối
+Kỳ vọng: chỉ một hóa đơn hoàn tất; tồn không âm; hóa đơn còn lại không ghi tài chính.
+
+[CON-02] Hai cửa sổ duyệt cùng chứng từ
+Áp dụng đơn mua, phiếu xuất, đổi trả, kiểm kê, phiếu chi.
+Kỳ vọng: một lần chuyển trạng thái; không nhân đôi nhật ký/bút toán.
+
+[CON-03] Hai cửa sổ xác nhận phiếu nhập
+Kỳ vọng: chỉ cộng tồn một lần.
+
+[CON-04] Hai cửa sổ hoàn tất đổi trả
+Kỳ vọng: chỉ hoàn tiền/thay đổi tồn một lần.
+
+[CON-05] Hai cửa sổ đối chiếu UC27
+Kỳ vọng: chỉ sinh một công nợ.
+
+[CON-06] Hai cửa sổ chi cùng công nợ
+Kỳ vọng: chỉ một giao dịch thành công; công nợ không âm.
+
+[CON-07] Mất kết nối giữa thao tác
+Áp dụng lưu hóa đơn, hoàn tất bán, xác nhận nhập/xuất, thanh toán.
+Kỳ vọng: tải lại cho thấy hoặc toàn bộ giao dịch hoàn tất nhất quán, hoặc toàn bộ chưa đổi;
+không có trạng thái nửa vời.
+
+[CON-08] Tải lại sau POST thành công
+Kỳ vọng: không gửi lại tự động và không nhân bản chứng từ.
+
+[CON-09] Sửa dữ liệu nguồn khi chứng từ đang chờ
+Ví dụ vô hiệu sản phẩm/NCC hoặc thay tồn trong lúc chờ.
+Kỳ vọng: bước xác nhận cuối kiểm tra lại điều kiện, không tin snapshot cũ một cách mù quáng.
+
+[CON-10] Số tiền lớn và làm tròn
+Thử giá/số lượng hợp lệ gần giới hạn giao diện, thuế có số lẻ theo chính sách.
+Kỳ vọng: không tràn số/NaN; tổng dòng = tổng đầu; hiển thị và lưu dùng cùng quy tắc làm tròn.
+
+================================================================================
+18. CHECKLIST GIAO DIỆN TOÀN HỆ THỐNG
+================================================================================
+
+Chạy checklist này trên mỗi vai trò, ưu tiên màn dashboard, danh sách, form, modal và báo cáo:
+
+[ ] Sidebar đúng vai trò; mục đang mở được đánh dấu; cuộn không che Đăng xuất.
+[ ] Topbar tìm kiếm, chuông, avatar, tên/chức danh căn thẳng hàng.
+[ ] Tiêu đề trang, mô tả, nút chính và bộ lọc có thứ bậc rõ.
+[ ] Icon nằm giữa ô, cùng kích thước; không lệch baseline.
+[ ] Card cùng hàng có chiều cao hợp lý; số và đơn vị không tách khó đọc.
+[ ] Trạng thái có chữ, không chỉ có màu.
+[ ] Form đánh dấu trường bắt buộc; lỗi nằm gần trường; dữ liệu nhập không mất vô lý.
+[ ] Nút nguy hiểm/từ chối có xác nhận; nút đang gửi bị disabled/loading.
+[ ] Bảng có tiêu đề cố định hoặc cuộn hợp lý; tiền canh phải; ngày nhất quán.
+[ ] Empty state giải thích “chưa có dữ liệu”, không để khung trắng khó hiểu.
+[ ] Loading state không nhảy bố cục mạnh; lỗi mạng có nút thử lại.
+[ ] Modal không cao quá màn; đóng không làm lưu ngầm; focus không rơi ra nền.
+[ ] Thông báo thành công ghi rõ mã chứng từ/trạng thái tiếp theo.
+[ ] Thông báo lỗi nói người dùng cần sửa gì, không chỉ “Có lỗi xảy ra”.
+[ ] Ảnh sản phẩm không vỡ/méo; có ảnh dự phòng.
+[ ] Mẫu in/PDF không mang sidebar/topbar/nút; font tiếng Việt đúng; ngắt trang đẹp.
+
+================================================================================
+19. ĐỐI CHIẾU CUỐI BUỔI TEST
+================================================================================
+
+19.1. Đối chiếu tồn kho theo từng sản phẩm TEST
+
+  Tồn cuối dự kiến
+  = Tồn đầu
+  + nhập mua đã xác nhận
+  + hàng trả được nhập lại đã hoàn tất
+  - bán hàng đã hoàn tất
+  - hàng giao đổi đã hoàn tất
+  - xuất kho thủ công đã xác nhận
+  ± điều chỉnh kiểm kê đã duyệt.
+
+So sánh với:
+
+- Màn Tồn kho.
+- Sổ giao dịch kho.
+- Báo cáo kho.
+- Báo cáo quản lý.
+
+19.2. Đối chiếu tiền ca
+
+  Tiền mặt hệ thống = Tiền mặt bán thành công - Hoàn tiền mặt hoàn tất
+  Tiền thực nộp     = Tiền cuối ca - Tiền đầu ca
+  Chênh lệch        = Tiền thực nộp - Tiền mặt hệ thống
+
+So sánh màn Ca bán hàng, Phiếu thu ca, báo cáo Thu ngân, Kế toán và Quản lý.
+
+19.3. Đối chiếu công nợ
+
+  Nợ phát sinh = Tổng cộng hóa đơn mua đã đối chiếu khớp
+  Nợ còn lại chỉ giảm khi phiếu chi đã duyệt được xác nhận thành công
+
+Phiếu bị từ chối/thất bại/chờ duyệt không được làm giảm nợ.
+
+19.4. Đối chiếu doanh thu và lãi gộp
+
+  Doanh thu thuần = Doanh thu hóa đơn hoàn thành - Tiền hoàn
+  Giá vốn thuần   = Giá vốn hóa đơn - Giá vốn hàng trả nhập lại
+                    + Giá vốn hàng giao đổi
+  Lãi gộp         = Doanh thu thuần - Giá vốn thuần
+
+19.5. Đối chiếu điểm khách hàng
+
+  Điểm cuối = Điểm đầu - Điểm đã dùng + Điểm được cộng từ hóa đơn
+              ± điều chỉnh điểm do đổi trả theo nghiệp vụ hệ thống.
+
+Không được cộng điểm từ hóa đơn chưa hoàn tất/thanh toán thất bại.
+
+19.6. Đối chiếu 12 nhân viên
+
+- Danh sách nhân viên đúng 12 người theo bộ dữ liệu chốt.
+- Chỉ một quản lý.
+- Mỗi nhân viên tối đa một tài khoản.
+- Tài khoản và chức danh khớp.
+- Người nghỉ việc/khóa không đăng nhập được nhưng lịch sử vẫn còn.
+
+================================================================================
+20. MẪU BIÊN BẢN CHẠY TEST
+================================================================================
+
+Ngày test: __________________  Người test: _________________________________
+Database/máy: ______________  Commit/phiên bản: ___________________________
+Thời gian bắt đầu: __________  Thời gian kết thúc: _________________________
+
+Tổng số ca dự kiến: _________
+PASS: ______  FAIL: ______  BLOCKED: ______  N/A: ______
+
+Các E2E bắt buộc:
+
+[ ] E2E-01 Mua đến công nợ
+[ ] E2E-02 Bán đến quyết toán ca
+[ ] E2E-03 Hoàn tiền có nhập lại
+[ ] E2E-04 Hoàn tiền không nhập lại
+[ ] E2E-05 Đổi ngang giá
+[ ] E2E-06 Xuất kho có phê duyệt
+[ ] E2E-07 Kiểm kê có chênh lệch
+[ ] E2E-08 Công nợ đến thanh toán
+[ ] E2E-09 Chấm công đến trả lương
+[ ] E2E-10 Báo cáo xuyên 5 actor
+
+Các lỗi Critical/High còn mở:
+
+1. ________________________________________________________________________
+2. ________________________________________________________________________
+3. ________________________________________________________________________
+
+KẾT LUẬN NGHIỆM THU NỘI BỘ:
+
+[ ] Đủ điều kiện trình bày/nghiệm thu.
+[ ] Đủ điều kiện có điều kiện; cần sửa các lỗi ghi kèm.
+[ ] Chưa đủ điều kiện vì sai tiền/tồn/quyền hoặc luồng chính.
+
+Người test ký: __________________  Quản lý xác nhận: ________________________
+
+================================================================================
+21. TIÊU CHÍ KẾT LUẬN “HỆ THỐNG ĐÃ ỔN”
+================================================================================
+
+Chỉ kết luận hệ thống ổn khi đồng thời đạt:
+
+1. “npm run test:next” đạt toàn bộ.
+2. GEN, SEC và quyền của 5 actor không có lỗi High/Critical.
+3. Cả 10 chuỗi E2E bắt buộc PASS.
+4. Không có thao tác lỗi nào làm đổi tiền, tồn, công nợ, điểm hoặc trạng thái ngoài ý muốn.
+5. Nhập/xuất/bán/đổi trả/kiểm kê không làm tồn âm và không ghi hai lần.
+6. UC27 so đủ sản phẩm, số lượng, đơn giá, thuế suất, tiền thuế và tổng tiền.
+7. UC28 chỉ giảm nợ sau khi chi thành công đủ một lần.
+8. Lãi gộp sau đổi trả đúng công thức 3 bước của Chương 6.
+9. Ca bán hàng, phiếu thu và báo cáo đối chiếu được đến từng phương thức thanh toán.
+10. Báo cáo 5 actor có số liệu thật, có chú giải, khớp bảng/CSV/PDF và không lộ sai phạm vi.
+11. 12 nhân viên/tài khoản đúng cơ cấu chốt và không vượt quyền.
+12. Giao diện dùng được ở 1366×768 và 1920×1080, không vỡ form/bảng/biểu đồ/mẫu in.
+
+HẾT TÀI LIỆU

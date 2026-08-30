@@ -1,4 +1,5 @@
 const { sql, poolPromise } = require('../config/db');
+const { roundMoney, evaluateThreeWayMatch } = require('../services/financialRules');
 
 const clean = (value, max, fallback = null) => String(value ?? '').trim().slice(0, max) || fallback;
 
@@ -36,8 +37,8 @@ const normalizeLines = inputLines => {
             throw new Error(`Dòng hóa đơn ${index + 1} không hợp lệ.`);
         }
         seen.add(MaSP);
-        const ThanhTien = SoLuong * DonGia;
-        return { MaSP, SoLuong, DonGia, ThueSuat, ThanhTien, TienThue: ThanhTien * ThueSuat / 100 };
+        const ThanhTien = roundMoney(SoLuong * DonGia);
+        return { MaSP, SoLuong, DonGia, ThueSuat, ThanhTien, TienThue: roundMoney(ThanhTien * ThueSuat / 100) };
     });
 };
 
@@ -45,7 +46,7 @@ const loadReceiptReference = async (transaction, MaPN, lock = false) => {
     const lockHint = lock ? 'WITH (UPDLOCK,HOLDLOCK)' : '';
     const header = await new sql.Request(transaction).input('MaPN', sql.VarChar, MaPN).query(`
         SELECT pn.MaPN,pn.MaPO,pn.MaNCC,ncc.TenNCC,pn.NgayXacNhan,pn.TongTien,
-               po.SoNgayThanhToan,po.DieuKhoanThanhToan
+               po.TongTien AS TongTienDonMua,po.SoNgayThanhToan,po.DieuKhoanThanhToan
         FROM PhieuNhap pn ${lockHint}
         JOIN DonMuaHang po ON po.MaPO=pn.MaPO
         JOIN NhaCungCap ncc ON ncc.MaNCC=pn.MaNCC
@@ -53,7 +54,8 @@ const loadReceiptReference = async (transaction, MaPN, lock = false) => {
     if (!header.recordset.length) throw new Error('Phiếu nhập chưa được xác nhận hoặc không tồn tại.');
     const lines = await new sql.Request(transaction).input('MaPN', sql.VarChar, MaPN).query(`
         SELECT ct.MaSP,po.SoLuong AS SoLuongDat,ct.SoLuongChapNhan,
-               ct.DonGiaNhap,po.DonGia AS DonGiaDonMua,
+               ct.DonGiaNhap,ct.ThanhTien AS ThanhTienPhieuNhap,
+               po.DonGia AS DonGiaDonMua,po.ThanhTien AS ThanhTienDonMua,
                sp.TenSP,sp.DonViTinh
         FROM ChiTietPhieuNhap ct
         JOIN PhieuNhap pn ON pn.MaPN=ct.MaPN
@@ -62,29 +64,6 @@ const loadReceiptReference = async (transaction, MaPN, lock = false) => {
         WHERE ct.MaPN=@MaPN AND ct.SoLuongChapNhan>0
         ORDER BY sp.TenSP`);
     return { header: header.recordset[0], lines: lines.recordset };
-};
-
-const compareWithReceipt = (invoiceLines, receiptLines) => {
-    const differences = [];
-    const referenceMap = new Map(receiptLines.map(line => [line.MaSP, line]));
-    const seen = new Set();
-    for (const line of invoiceLines) {
-        const reference = referenceMap.get(line.MaSP);
-        if (!reference) differences.push(`${line.MaSP}: không có trong Phiếu nhập`);
-        else {
-            if (line.SoLuong !== Number(reference.SoLuongChapNhan)) {
-                differences.push(`${line.MaSP}: hóa đơn ${line.SoLuong}, thực nhận ${reference.SoLuongChapNhan}`);
-            }
-            if (Math.abs(line.DonGia - Number(reference.DonGiaNhap ?? reference.DonGiaDonMua)) > 0.01) {
-                differences.push(`${line.MaSP}: đơn giá khác Đơn mua/Phiếu nhập`);
-            }
-        }
-        seen.add(line.MaSP);
-    }
-    for (const reference of receiptLines) {
-        if (!seen.has(reference.MaSP)) differences.push(`${reference.MaSP}: đã nhận nhưng thiếu trên hóa đơn`);
-    }
-    return differences;
 };
 
 const createDebtIfMatched = async (transaction, invoice, paymentDays) => {
@@ -330,9 +309,17 @@ const reconcileInvoice = async (req, res) => {
         if (used.recordset.length) throw new Error('Phiếu nhập này đã được đối chiếu với hóa đơn khác.');
         const lineResult = await new sql.Request(transaction).input('MaHD', sql.VarChar, MaHDMH)
             .query('SELECT MaSP,SoLuong,DonGia,ThueSuat,TienThue,ThanhTien FROM ChiTietHoaDonMuaHang WHERE MaHDMH=@MaHD');
-        const invoiceLines = lineResult.recordset.map(line => ({ ...line, SoLuong: Number(line.SoLuong), DonGia: Number(line.DonGia) }));
-        const differences = compareWithReceipt(invoiceLines, reference.lines);
-        const matched = differences.length === 0;
+        const invoiceLines = lineResult.recordset.map(line => ({
+            ...line,
+            SoLuong: Number(line.SoLuong),
+            DonGia: Number(line.DonGia),
+            ThueSuat: Number(line.ThueSuat || 0),
+            TienThue: Number(line.TienThue || 0),
+            ThanhTien: Number(line.ThanhTien || 0)
+        }));
+        const matchResult = evaluateThreeWayMatch({ invoice, invoiceLines, receipt: reference.header, receiptLines: reference.lines });
+        const differences = matchResult.differenceMessages;
+        const matched = matchResult.matched;
         await new sql.Request(transaction)
             .input('MaHD', sql.VarChar, MaHDMH).input('MaPN', sql.VarChar, MaPN)
             .input('DoiChieu', sql.NVarChar, matched ? 'Đã khớp' : 'Chênh lệch')
@@ -348,7 +335,8 @@ const reconcileInvoice = async (req, res) => {
         await transaction.commit();
         res.json({
             message: matched ? 'Đối chiếu thành công. Công nợ phải trả đã được ghi nhận.' : 'Hồ sơ còn chênh lệch, chưa phát sinh công nợ.',
-            MaHDMH, MaCNPTra, TrangThaiDoiChieu: matched ? 'Đã khớp' : 'Chênh lệch', differences
+            MaHDMH, MaCNPTra, TrangThaiDoiChieu: matched ? 'Đã khớp' : 'Chênh lệch',
+            differences, differenceDetails: matchResult.differences, totals: matchResult.totals
         });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
@@ -380,38 +368,28 @@ const previewReconciliation = async (req, res) => {
                     FROM ChiTietHoaDonMuaHang ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
                     WHERE ct.MaHDMH=@MaHD ORDER BY sp.TenSP`);
         const invoiceLines = invoiceLinesResult.recordset.map(line => ({
-            ...line, SoLuong: Number(line.SoLuong), DonGia: Number(line.DonGia)
+            ...line,
+            SoLuong: Number(line.SoLuong),
+            DonGia: Number(line.DonGia),
+            ThueSuat: Number(line.ThueSuat || 0),
+            TienThue: Number(line.TienThue || 0),
+            ThanhTien: Number(line.ThanhTien || 0)
         }));
-        const differences = compareWithReceipt(invoiceLines, reference.lines);
-        const invoiceMap = new Map(invoiceLines.map(line => [line.MaSP, line]));
-        const receiptMap = new Map(reference.lines.map(line => [line.MaSP, line]));
-        const productIds = [...new Set([...invoiceMap.keys(), ...receiptMap.keys()])];
-        const rows = productIds.map(MaSP => {
-            const hd = invoiceMap.get(MaSP);
-            const pn = receiptMap.get(MaSP);
-            const quantityMatched = Boolean(hd && pn && hd.SoLuong === Number(pn.SoLuongChapNhan));
-            const priceMatched = Boolean(hd && pn
-                && Math.abs(hd.DonGia - Number(pn.DonGiaNhap ?? pn.DonGiaDonMua)) <= 0.01);
-            return {
-                MaSP,
-                TenSP: hd?.TenSP || pn?.TenSP,
-                DonViTinh: hd?.DonViTinh || pn?.DonViTinh,
-                SoLuongDat: Number(pn?.SoLuongDat || 0),
-                SoLuongThucNhan: Number(pn?.SoLuongChapNhan || 0),
-                SoLuongHoaDon: Number(hd?.SoLuong || 0),
-                DonGiaDonMua: Number(pn?.DonGiaDonMua || 0),
-                DonGiaHoaDon: Number(hd?.DonGia || 0),
-                KetQua: quantityMatched && priceMatched ? 'Khớp' : 'Chênh lệch'
-            };
-        });
+        const matchResult = evaluateThreeWayMatch({ invoice, invoiceLines, receipt: reference.header, receiptLines: reference.lines });
         await transaction.commit();
         res.json({
             invoice,
-            purchaseOrder: { MaPO: reference.header.MaPO, SoNgayThanhToan: reference.header.SoNgayThanhToan },
+            purchaseOrder: {
+                MaPO: reference.header.MaPO,
+                SoNgayThanhToan: reference.header.SoNgayThanhToan,
+                TongTien: Number(reference.header.TongTienDonMua || 0)
+            },
             receipt: reference.header,
-            rows,
-            differences,
-            result: differences.length ? 'Chênh lệch' : 'Đủ điều kiện ghi nhận công nợ'
+            rows: matchResult.rows,
+            totals: matchResult.totals,
+            differences: matchResult.differenceMessages,
+            differenceDetails: matchResult.differences,
+            result: matchResult.matched ? 'Đủ điều kiện ghi nhận công nợ' : 'Chênh lệch'
         });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
