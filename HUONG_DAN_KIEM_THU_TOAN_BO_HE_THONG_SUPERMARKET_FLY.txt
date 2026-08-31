@@ -3,6 +3,193 @@ Phiên bản rà soát: 30/08/2026
 Phạm vi: UC01–UC33, 5 actor, 12 nhân viên
 
 ================================================================================
+HƯỚNG DẪN NHANH CHO THÀNH VIÊN NHẬN BẢN TEST
+================================================================================
+
+A. HIỂU ĐÚNG CÁCH CHIA NGƯỜI TEST
+
+Hệ thống hiện kết nối tới SQL Server tại localhost\SQLEXPRESS. Vì vậy:
+
+- Mỗi người cài trên một máy sẽ có một database riêng; dữ liệu tạo ở máy A không tự xuất hiện ở máy B.
+- Các ca độc lập như giao diện, tìm kiếm, phân quyền, nhập sai dữ liệu có thể chia cho nhiều người test song song.
+- Các chuỗi liên actor E2E-01 đến E2E-10 phải chạy trên CÙNG MỘT database.
+- Cách khuyến nghị: chọn một máy làm máy test tích hợp; một người điều phối đăng xuất/đăng nhập lần lượt
+  bằng admin, thukho, muahang, ketoan và thungan. Các thành viên khác quan sát, đối chiếu và ghi lỗi.
+- Không chép database qua lại giữa chừng một chuỗi nghiệp vụ.
+
+B. NGƯỜI NHẬN BẢN TEST LÀM ĐÚNG 8 BƯỚC SAU
+
+Bước 1 — Nhận đủ gói bàn giao
+
+  supermarket-fly_2026-08-31_<MA_COMMIT>.bundle
+  SupermarketFlyDB_2026-08-30_225448.bak
+  SupermarketFly_Uploads_2026-08-30_225448.zip
+  BAN_GIAO_SUPERMARKET_FLY_2026-08-30_225448_SHA256.txt
+
+Bước 2 — Chuẩn bị máy
+
+- Cài Git, Node.js 22 trở lên, SQL Server Express, SSMS và ODBC Driver 17 for SQL Server.
+- Instance SQL Server phải là localhost\SQLEXPRESS.
+- Dùng Windows Authentication.
+
+Bước 3 — Lấy mã nguồn
+
+Mở PowerShell tại thư mục muốn đặt dự án và chạy:
+
+  git clone "ĐƯỜNG_DẪN\supermarket-fly_2026-08-31_<MA_COMMIT>.bundle" supermarket-fly
+  cd .\supermarket-fly
+  git log -1 --oneline
+  git status --short
+
+Kỳ vọng:
+
+- Commit đầu dòng phải trùng mã commit ghi trong manifest của gói bàn giao.
+- git status --short không in ra nội dung nào.
+
+Bước 4 — Khôi phục database
+
+- Mở SSMS → kết nối localhost\SQLEXPRESS bằng Windows Authentication.
+- Databases → Restore Database → Device → chọn file .bak.
+- Tên database đích: SupermarketFlyDB.
+- Nếu đã có database cùng tên, phải backup database cũ trước khi ghi đè.
+- Sau restore chạy:
+
+  USE SupermarketFlyDB;
+  SELECT COUNT(*) AS SoNhanVien FROM NhanVien;
+  SELECT COUNT(*) AS SoTaiKhoan FROM TaiKhoan;
+
+Kỳ vọng: 12 nhân viên và 12 tài khoản.
+
+Bước 5 — Khôi phục ảnh và cài thư viện
+
+- Giải nén ZIP ảnh vào supermarket-fly\server\uploads.
+- Tại thư mục supermarket-fly chạy:
+
+  npm install
+  cd .\server
+  npm install
+  cd ..\desktop
+  npm install
+  cd ..
+
+Bước 6 — Chạy kiểm tra nền
+
+  npm run test:next
+
+Kỳ vọng: lệnh kết thúc mã 0; có 16/16 quy tắc nghiệp vụ đạt; kiểm tra ảnh, upload, tìm kiếm,
+mẫu in và lịch làm việc đều PASS. Nếu bước này FAIL thì ghi BLOCKED và chưa test tay trên bản đó.
+
+Bước 7 — Mở ứng dụng
+
+  npm start
+
+Kỳ vọng: cửa sổ Electron mở, server chạy cổng 3000 và đăng nhập được. Giữ PowerShell mở khi test.
+
+Bước 8 — Test theo lô được giao và ghi kết quả
+
+- Mở đúng mã ca trong tài liệu, ví dụ [MGR-26], [POS-29] hoặc [E2E-02].
+- Ghi trạng thái dữ liệu trước test.
+- Làm đúng từng bước của ca kiểm thử.
+- Chụp kết quả và kiểm tra chéo ở actor/màn hình được chỉ định.
+- Đánh dấu PASS, FAIL, BLOCKED hoặc N/A; không chỉ ghi “đã test”.
+
+C. PHÂN CÔNG GỢI Ý CHO 5 THÀNH VIÊN
+
+Người 1 — Quản lý cửa hàng, tài khoản admin
+
+- GEN-01 đến GEN-08; SEC-01 đến SEC-05.
+- MGR-01 đến MGR-30.
+- WF-01 đến WF-12 và WF-22 đến WF-29.
+- Các bước phê duyệt trong P2P, RET, WHI, INV và ACC.
+- RPT-01 đến RPT-08.
+
+Người 2 — Nhân viên mua hàng, tài khoản muahang
+
+- PUR-01 đến PUR-07.
+- P2P-04 đến P2P-23, trừ các bước phê duyệt của quản lý.
+- RPT-21 đến RPT-26.
+
+Người 3 — Thủ kho, tài khoản thukho
+
+- P2P-01 đến P2P-03.
+- WH-01 đến WH-19.
+- RET-04 đến RET-06.
+- WHI-01 đến WHI-13 và INV-01 đến INV-13.
+- RPT-09 đến RPT-14.
+
+Người 4 — Thu ngân, tài khoản thungan hoặc thungan02–thungan08
+
+- WF-13 đến WF-21.
+- POS-01 đến POS-42.
+- RET-01 đến RET-03 và RET-11 đến RET-24.
+- RPT-15 đến RPT-20.
+
+Người 5 — Kế toán, tài khoản ketoan
+
+- ACC-01 đến ACC-32.
+- PAY-01 đến PAY-12.
+- RPT-27 đến RPT-32.
+
+Cả nhóm:
+
+- RPT-33 đến RPT-42.
+- E2E-01 đến E2E-10.
+- CON-01 đến CON-10.
+- Checklist giao diện mục 18 và đối chiếu cuối buổi mục 19.
+
+D. THỨ TỰ CHẠY TRÊN MÁY TEST TÍCH HỢP
+
+Không chạy tùy ý. Chạy theo thứ tự sau để bước trước tạo dữ liệu cho bước sau:
+
+1. GEN + SEC: đăng nhập, quyền, tìm kiếm, lỗi mất kết nối.
+2. MGR + PUR: nhân viên, tài khoản, danh mục, sản phẩm có ảnh, khuyến mãi, nhà cung cấp.
+3. WF: quản lý công bố lịch; nhân viên xem lịch và chấm công.
+4. E2E-01: thukho đề nghị → muahang lập đơn → admin duyệt → muahang giao → thukho nhập
+   → ketoan đối chiếu và sinh công nợ.
+5. E2E-02: admin lập lịch → thungan mở ca/bán/chốt → ketoan xác nhận phiếu thu.
+6. E2E-03 đến E2E-05: hoàn tiền có/không nhập lại và đổi ngang giá.
+7. E2E-06 đến E2E-09: xuất kho, kiểm kê, thanh toán công nợ, bảng lương.
+8. E2E-10 và RPT: lập cùng một kỳ báo cáo cho cả 5 actor rồi đối chiếu giao điểm.
+9. CON: double click, hai cửa sổ, mất kết nối và tải lại.
+10. Mục 19: chốt tồn kho, tiền ca, công nợ, doanh thu/lãi gộp, điểm khách và 12 nhân viên.
+
+E. CÁCH CHẠY MỖI CA KIỂM THỬ
+
+Ví dụ người test được giao [POS-29]:
+
+1. Đọc Actor, Màn hình và Tiền điều kiện của POS-29.
+2. Ghi mã ca POS, tiền đầu ca, mã hóa đơn, tồn đầu của từng sản phẩm và điểm đầu của khách.
+3. Thực hiện thanh toán hỗn hợp tiền mặt + QR đúng như các bước.
+4. So tổng các giao dịch thành công với số phải trả.
+5. Hoàn tất hóa đơn và kiểm tra lại hóa đơn, tồn kho, sổ kho, điểm khách và báo cáo thu ngân.
+6. Chụp màn hình kết quả và ghi PASS nếu tất cả cùng đúng.
+7. Nếu giao diện báo thành công nhưng tồn/tiền/điểm sai thì vẫn phải ghi FAIL mức Critical hoặc High.
+
+Với một ca ngoại lệ, ngoài thông báo lỗi phải xác nhận đủ năm điều:
+
+1) Không sinh chứng từ ngoài ý muốn.
+2) Trạng thái chứng từ cũ không đổi.
+3) Tồn kho/sổ kho không đổi.
+4) Tiền, công nợ và điểm khách không đổi.
+5) Tải lại trang hoặc bấm hai lần vẫn không lọt thao tác.
+
+F. MẪU GHI NHANH MỘT KẾT QUẢ
+
+  Mã ca: POS-29
+  Người test: ____________________
+  Ngày giờ: ______________________
+  Tài khoản: thungan_____________
+  Mã chứng từ: ___________________
+  Dữ liệu đầu: ___________________
+  Kết quả mong đợi: ______________
+  Kết quả thực tế: _______________
+  Đối chiếu chéo: _________________
+  Ảnh/video: ______________________
+  Kết luận: PASS / FAIL / BLOCKED / N/A
+  Mức độ nếu lỗi: Critical / High / Medium / Low
+
+
+================================================================================
 0. MỤC ĐÍCH VÀ CÁCH DÙNG TÀI LIỆU
 ================================================================================
 
