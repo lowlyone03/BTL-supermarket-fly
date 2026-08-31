@@ -1,0 +1,358 @@
+KỊCH BẢN GỬI NHÓM VÀ HƯỚNG DẪN 6 NGƯỜI TEST SUPERMARKET FLY
+
+Bạn là người phát triển. Sáu người còn lại là người test.
+Bạn chỉ cần làm theo đúng thứ tự và sao chép các tin nhắn bên dưới.
+
+================================================================================
+PHẦN 1 — TRƯỚC KHI NHẮN VÀO NHÓM
+================================================================================
+
+Bạn chuẩn bị đúng hai thứ:
+
+1. Link tải dự án:
+https://github.com/lowlyone03/BTL-supermarket-fly/archive/refs/tags/test-team-v3-2026-08-31.zip
+
+2. File database mới nhất:
+SupermarketFlyDB_2026-08-30_225448.bak
+
+Bạn tải file .bak lên Google Drive và bật quyền “Bất kỳ ai có đường liên kết đều có thể xem/tải”.
+Không gửi file Uploads, Bundle, Checksum, node_modules hoặc .env.
+
+Sau đó điền tên sáu người:
+
+Người 1 — Sản phẩm/Quản lý: __________________________
+Người 2 — Mua hàng/NCC: ______________________________
+Người 3 — Kho: _______________________________________
+Người 4 — Thu ngân: __________________________________
+Người 5 — Kế toán: ___________________________________
+Người 6 — Tìm kiếm/Báo cáo/Giao diện: _________________
+
+================================================================================
+PHẦN 2 — TIN NHẮN SỐ 1: THÔNG BÁO BUỔI TEST
+================================================================================
+
+Sao chép nguyên đoạn này gửi vào nhóm:
+
+--------------------------------------------------------------------------------
+Mọi người ơi, mình cần 6 bạn hỗ trợ test hệ thống Supermarket Fly.
+
+Mỗi người sẽ được giao một phần riêng, không cần biết Git và không cần sửa code.
+Mọi người chỉ cần tải dự án, mở ứng dụng, đăng nhập và làm đúng các bước mình gửi.
+
+Trước tiên mọi người cho mình biết máy đã có các phần mềm sau chưa:
+1. Node.js.
+2. SQL Server Express.
+3. SQL Server Management Studio (SSMS).
+
+Ai chưa biết kiểm tra hoặc chưa có thì trả lời “CHƯA CÀI” để mình hỗ trợ trước.
+Chưa cần tải gì cho đến khi mình gửi tin nhắn tiếp theo.
+--------------------------------------------------------------------------------
+
+Bạn chờ cả sáu người trả lời.
+
+Nếu nhiều người không biết SQL Server/SSMS, chọn CÁCH DỄ NHẤT:
+
+- Chỉ chạy dự án trên máy của bạn.
+- Sáu người không cần tải dự án.
+- Mỗi người ngồi vào máy bạn hoặc điều khiển qua phần mềm chia sẻ màn hình.
+- Mỗi người đăng nhập tài khoản được giao và test trong 15–20 phút.
+
+Nếu cả sáu máy đã có Node.js, SQL Server Express và SSMS, tiếp tục Tin nhắn số 2.
+
+================================================================================
+PHẦN 3 — TIN NHẮN SỐ 2: GỬI FILE
+================================================================================
+
+Thay <LINK_DATABASE> bằng link Google Drive của file .bak rồi gửi:
+
+--------------------------------------------------------------------------------
+Đây là hai file mọi người cần tải:
+
+1. Dự án Supermarket Fly:
+https://github.com/lowlyone03/BTL-supermarket-fly/archive/refs/tags/test-team-v3-2026-08-31.zip
+
+2. Database:
+<LINK_DATABASE>
+
+Sau khi tải xong:
+- Giải nén ZIP dự án vào D:\SupermarketFlyTest.
+- Giữ nguyên file database .bak, không giải nén và không đổi đuôi file.
+- Nhắn “ĐÃ TẢI XONG” vào nhóm.
+
+Mọi người chưa nhấp đúp file nào cho đến khi mình gửi bước tiếp theo.
+--------------------------------------------------------------------------------
+
+Bạn chờ đủ sáu dòng “ĐÃ TẢI XONG”.
+
+================================================================================
+PHẦN 4 — TIN NHẮN SỐ 3: KHÔI PHỤC DATABASE
+================================================================================
+
+Gửi đoạn này:
+
+--------------------------------------------------------------------------------
+Bây giờ mọi người khôi phục database như sau:
+
+1. Mở SQL Server Management Studio (SSMS).
+2. Server name nhập: localhost\SQLEXPRESS
+3. Authentication chọn: Windows Authentication
+4. Bấm Connect.
+5. Bấm chuột phải vào Databases ở cột bên trái.
+6. Chọn Restore Database...
+7. Phần Source chọn Device.
+8. Bấm nút ba chấm (...), bấm Add và chọn file
+   SupermarketFlyDB_2026-08-30_225448.bak đã tải.
+9. Database đích phải có tên: SupermarketFlyDB
+10. Bấm OK và chờ thông báo restore thành công.
+
+Nếu máy báo đã có database SupermarketFlyDB hoặc báo lỗi quyền đọc file,
+không tự xóa database. Chụp màn hình gửi mình hỗ trợ.
+
+Restore xong thì nhắn “DATABASE XONG”.
+--------------------------------------------------------------------------------
+
+Bạn chờ đủ sáu dòng “DATABASE XONG”.
+
+================================================================================
+PHẦN 5 — TIN NHẮN SỐ 4: CÀI VÀ MỞ ỨNG DỤNG
+================================================================================
+
+Gửi đoạn này:
+
+--------------------------------------------------------------------------------
+Mọi người mở thư mục dự án đã giải nén.
+
+Lần đầu tiên:
+1. Nhấp đúp file 1_CAI_DAT_LAN_DAU.bat.
+2. Chờ cửa sổ màu đen chạy xong.
+3. Khi thấy “CAI DAT THANH CONG” thì bấm phím bất kỳ để đóng.
+
+Mở ứng dụng:
+1. Nhấp đúp file 2_CHAY_SUPERMARKET_FLY.bat.
+2. Không đóng cửa sổ màu đen.
+3. Chờ cửa sổ đăng nhập Supermarket Fly xuất hiện.
+
+Nếu cửa sổ màu đen có cảnh báo npm nhưng cuối cùng vẫn có dòng
+“CAI DAT THANH CONG” thì phần cài đặt đã xong.
+
+Nếu không thấy màn hình đăng nhập, chụp toàn bộ cửa sổ màu đen gửi mình.
+Ai đã thấy màn hình đăng nhập thì nhắn “ĐÃ MỞ ĐƯỢC APP”.
+--------------------------------------------------------------------------------
+
+Bạn chỉ bắt đầu test khi đủ sáu người đã nhắn “ĐÃ MỞ ĐƯỢC APP”.
+
+================================================================================
+PHẦN 6 — TIN NHẮN SỐ 5: QUY TẮC TEST CHUNG
+================================================================================
+
+Gửi đoạn này:
+
+--------------------------------------------------------------------------------
+Quy tắc chung khi test:
+
+1. Mật khẩu tất cả tài khoản là: 123
+2. Mỗi người chỉ test phần mình được giao.
+3. Không sửa code, không mở database để sửa tay và không xóa dữ liệu có sẵn.
+4. Dữ liệu mới đặt tên bắt đầu bằng TEST và số người, ví dụ TEST-N1-SAN-PHAM.
+5. Làm xong gửi PASS; có lỗi gửi FAIL; không làm tiếp được gửi BLOCKED.
+
+Mẫu báo lỗi:
+
+Người test:
+Tài khoản:
+Màn hình:
+Tôi đã làm:
+Tôi mong đợi:
+Thực tế xảy ra:
+Mã sản phẩm/hóa đơn/chứng từ nếu có:
+Ảnh hoặc video:
+
+Không chỉ nhắn “bị lỗi” vì mình sẽ không biết cách làm lại lỗi đó.
+--------------------------------------------------------------------------------
+
+================================================================================
+PHẦN 7 — TIN NHẮN RIÊNG CHO NGƯỜI 1: SẢN PHẨM
+================================================================================
+
+Gửi riêng cho Người 1:
+
+--------------------------------------------------------------------------------
+Bạn test phần Quản lý sản phẩm.
+
+Tài khoản: admin
+Mật khẩu: 123
+
+Bước 1: Đăng nhập và mở menu “Sản phẩm & giá”.
+Bước 2: Tìm một sản phẩm bằng tên có dấu, ví dụ “sữa tươi”.
+Bước 3: Tìm lại bằng tên không dấu, ví dụ “sua tuoi”.
+Bước 4: Bấm thêm sản phẩm nhưng không chọn ảnh rồi thử lưu.
+         Kỳ vọng: hệ thống chặn và yêu cầu chọn ảnh.
+Bước 5: Thêm sản phẩm với tên TEST-N1-SAN-PHAM, điền đủ dữ liệu và chọn ảnh JPG/PNG/WebP.
+         Kỳ vọng: tạo thành công và nhìn thấy đúng ảnh.
+Bước 6: Tìm lại TEST-N1-SAN-PHAM rồi mở sửa, thay ảnh khác và lưu.
+         Kỳ vọng: thông tin và ảnh mới hiển thị đúng.
+
+Làm xong gửi:
+PASS-N1 nếu tất cả đúng.
+FAIL-N1 kèm bước bị sai và ảnh/video nếu có lỗi.
+--------------------------------------------------------------------------------
+
+================================================================================
+PHẦN 8 — TIN NHẮN RIÊNG CHO NGƯỜI 2: MUA HÀNG
+================================================================================
+
+Gửi riêng cho Người 2:
+
+--------------------------------------------------------------------------------
+Bạn test phần Nhà cung cấp và Mua hàng.
+
+Tài khoản: muahang
+Mật khẩu: 123
+
+Bước 1: Đăng nhập và mở “Nhà cung cấp”.
+Bước 2: Tìm NCC bằng mã, tên có dấu và tên không dấu.
+Bước 3: Thêm NCC mới với mã TEST-N2-NCC, tên TEST-N2-NHA-CUNG-CAP,
+         số điện thoại và email hợp lệ.
+         Kỳ vọng: tạo thành công.
+Bước 4: Thử tạo lại đúng mã TEST-N2-NCC.
+         Kỳ vọng: hệ thống chặn trùng và hiện lý do.
+Bước 5: Mở danh sách “Đơn mua”, thử tìm theo mã và đổi bộ lọc trạng thái.
+         Kỳ vọng: danh sách lọc đúng, không vỡ giao diện.
+
+Làm xong gửi PASS-N2 hoặc FAIL-N2 kèm bước và ảnh/video.
+--------------------------------------------------------------------------------
+
+================================================================================
+PHẦN 9 — TIN NHẮN RIÊNG CHO NGƯỜI 3: KHO
+================================================================================
+
+Gửi riêng cho Người 3:
+
+--------------------------------------------------------------------------------
+Bạn test phần Tồn kho.
+
+Tài khoản: thukho
+Mật khẩu: 123
+
+Bước 1: Đăng nhập và mở “Tồn kho & cảnh báo”.
+Bước 2: Tìm một sản phẩm bằng mã.
+Bước 3: Tìm cùng sản phẩm bằng tên có dấu rồi tên không dấu.
+Bước 4: Nếu có mã vạch thì tìm bằng mã vạch.
+Bước 5: Kiểm tra ảnh, số tồn, tồn tối thiểu và cảnh báo của sản phẩm.
+         Kỳ vọng: tồn không âm, ảnh không vỡ và số liệu đọc được.
+Bước 6: Mở “Báo cáo kho”, đổi tháng rồi xem KPI, biểu đồ và bảng.
+         Kỳ vọng: giao diện không bị co thành cột hẹp, biểu đồ có chú thích.
+
+Không tự sửa số tồn trong database.
+Làm xong gửi PASS-N3 hoặc FAIL-N3 kèm bước và ảnh/video.
+--------------------------------------------------------------------------------
+
+================================================================================
+PHẦN 10 — TIN NHẮN RIÊNG CHO NGƯỜI 4: THU NGÂN
+================================================================================
+
+Gửi riêng cho Người 4:
+
+--------------------------------------------------------------------------------
+Bạn test phần Thu ngân, khách hàng và hóa đơn.
+
+Tài khoản: thungan
+Mật khẩu: 123
+
+Bước 1: Đăng nhập, mở “Lịch làm việc” và “Ca bán hàng”.
+Bước 2: Mở “Khách hàng”, tìm bằng tên và số điện thoại.
+Bước 3: Mở “Hóa đơn”, tìm một hóa đơn đã có bằng mã.
+Bước 4: Mở “Báo cáo bán hàng”, đổi kỳ báo cáo và xem biểu đồ thanh toán.
+         Kỳ vọng: chỉ hiển thị dữ liệu của thu ngân đang đăng nhập.
+Bước 5: Nếu hệ thống cho check-in và mở ca, thử tạo một hóa đơn nháp,
+         thêm sản phẩm rồi kiểm tra ảnh, số lượng và tổng tiền.
+
+Nếu không mở được ca vì chưa có lịch/check-in, gửi:
+BLOCKED-N4: thiếu lịch hoặc chấm công.
+Đây không tự động được tính là lỗi hệ thống.
+
+Nếu làm được thì gửi PASS-N4 hoặc FAIL-N4 kèm bước và ảnh/video.
+--------------------------------------------------------------------------------
+
+================================================================================
+PHẦN 11 — TIN NHẮN RIÊNG CHO NGƯỜI 5: KẾ TOÁN
+================================================================================
+
+Gửi riêng cho Người 5:
+
+--------------------------------------------------------------------------------
+Bạn test phần Kế toán.
+
+Tài khoản: ketoan
+Mật khẩu: 123
+
+Bước 1: Đăng nhập và mở “Đối chiếu hóa đơn”.
+Bước 2: Mở một bộ chứng từ có sẵn.
+Bước 3: Kiểm tra màn hình có sản phẩm, số lượng, đơn giá, thuế suất,
+         tiền thuế và tổng cộng hay không.
+Bước 4: Mở “Công nợ NCC”, thử tìm/lọc theo NCC và trạng thái.
+Bước 5: Mở báo cáo kế toán, đổi kỳ rồi xem KPI, biểu đồ và bảng.
+Bước 6: Bấm xem bản in/PDF nhưng không xác nhận thanh toán thật.
+         Kỳ vọng: bản in rõ, không lệch và số liệu khớp màn hình.
+
+Không bấm chi tiền/xác nhận chứng từ nếu chưa ghi lại mã chứng từ.
+Làm xong gửi PASS-N5 hoặc FAIL-N5 kèm bước và ảnh/video.
+--------------------------------------------------------------------------------
+
+================================================================================
+PHẦN 12 — TIN NHẮN RIÊNG CHO NGƯỜI 6: TÌM KIẾM VÀ BÁO CÁO
+================================================================================
+
+Gửi riêng cho Người 6:
+
+--------------------------------------------------------------------------------
+Bạn test phần Tìm kiếm, phân quyền, báo cáo và giao diện.
+
+Mật khẩu tất cả tài khoản: 123
+
+Lần lượt đăng nhập:
+admin, muahang, thukho, thungan, ketoan.
+
+Với mỗi tài khoản:
+Bước 1: Kiểm tra tên/vai trò đúng và menu bên trái có đúng chức năng không.
+Bước 2: Thử ô tìm kiếm trên thanh trên cùng.
+Bước 3: Mở màn hình báo cáo của vai trò đó.
+Bước 4: Đổi kỳ ngày/tháng/quý/năm nếu có.
+Bước 5: Kiểm tra KPI có chú thích, biểu đồ có tên/legend và bảng không bị vỡ.
+Bước 6: Thử Xuất CSV và Xem bản in/PDF nếu màn hình có nút.
+Bước 7: Thu nhỏ cửa sổ rồi kiểm tra chữ, icon, card và bảng có bị lệch không.
+
+Kỳ vọng: không nhìn thấy menu ngoài quyền; tìm kiếm hoạt động; báo cáo dễ đọc.
+Làm xong gửi PASS-N6 hoặc FAIL-N6, ghi rõ tài khoản và màn hình bị lỗi.
+--------------------------------------------------------------------------------
+
+================================================================================
+PHẦN 13 — SAU KHI NHẬN KẾT QUẢ
+================================================================================
+
+Bạn lập danh sách rất đơn giản:
+
+N1: PASS / FAIL / BLOCKED
+N2: PASS / FAIL / BLOCKED
+N3: PASS / FAIL / BLOCKED
+N4: PASS / FAIL / BLOCKED
+N5: PASS / FAIL / BLOCKED
+N6: PASS / FAIL / BLOCKED
+
+Ưu tiên sửa:
+
+1. Sai tiền, sai tồn, mất dữ liệu, vượt quyền.
+2. Không thể hoàn tất chức năng chính.
+3. Tìm kiếm/báo cáo sai dữ liệu.
+4. Giao diện, chữ, icon và khoảng cách.
+
+Sau khi bạn sửa, gửi lại đúng người đã báo lỗi và yêu cầu họ làm lại đúng bước cũ.
+Không cần bắt cả sáu người tải lại nếu thay đổi không liên quan phần của họ.
+
+================================================================================
+LƯU Ý CUỐI
+================================================================================
+
+Đây là vòng test đơn giản để xác nhận sáu khu vực chính dùng được. Nó chưa thay thế kiểm thử toàn bộ
+luồng mua → nhập → đối chiếu → bán → đổi trả → quyết toán. Sau khi vòng đơn giản ổn, mới tổ chức một
+buổi test liên actor trên cùng một máy/database bằng tài liệu đầy đủ.

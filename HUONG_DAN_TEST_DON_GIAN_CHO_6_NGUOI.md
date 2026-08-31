@@ -2,12 +2,16 @@
 
 Tài liệu này dành cho thành viên **không biết Git**. Các bạn chỉ cần tải ZIP, cài ứng dụng, đăng nhập và test phần được giao.
 
+Nếu bạn là người phát triển và muốn có sẵn từng câu để sao chép gửi vào nhóm, hãy mở
+`0_TIN_NHAN_GUI_NHOM_TEST_6_NGUOI.txt` trước. File đó đã tách sẵn tin nhắn chung và tin nhắn riêng
+cho từng người từ lúc tải dự án đến khi báo PASS/FAIL/BLOCKED.
+
 ## 1. Người phát triển gửi gì vào nhóm?
 
 Chỉ gửi hai thứ:
 
 1. Link tải dự án ZIP:
-   `https://github.com/lowlyone03/BTL-supermarket-fly/archive/refs/tags/test-team-v2-2026-08-31.zip`
+   `https://github.com/lowlyone03/BTL-supermarket-fly/archive/refs/tags/test-team-v3-2026-08-31.zip`
 2. File database `SupermarketFlyDB_2026-08-30_225448.bak` qua Google Drive/OneDrive.
 
 Không cần gửi `SupermarketFly_Uploads_2026-08-30_225448.zip`: file đó chỉ là thư mục ảnh runtime,
