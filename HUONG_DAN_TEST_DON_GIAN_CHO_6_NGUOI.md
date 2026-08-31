@@ -4,19 +4,22 @@ Tài liệu này dành cho thành viên **không biết Git**. Các bạn chỉ 
 
 ## 1. Người phát triển gửi gì vào nhóm?
 
-Chỉ gửi ba thứ:
+Chỉ gửi hai thứ:
 
 1. Link tải dự án ZIP:
-   `https://github.com/lowlyone03/BTL-supermarket-fly/archive/refs/tags/test-team-v1-2026-08-31.zip`
+   `https://github.com/lowlyone03/BTL-supermarket-fly/archive/refs/tags/test-team-v2-2026-08-31.zip`
 2. File database `SupermarketFlyDB_2026-08-30_225448.bak` qua Google Drive/OneDrive.
-3. File `SupermarketFly_Uploads_2026-08-30_225448.zip` qua Google Drive/OneDrive.
+
+Không cần gửi `SupermarketFly_Uploads_2026-08-30_225448.zip`: file đó chỉ là thư mục ảnh runtime,
+hiện gần như rỗng. Ảnh sản phẩm mẫu đã nằm trong ZIP dự án; ảnh mới do tester tải lên sẽ được
+hệ thống tự tạo trong `server\uploads` trên máy của người đó.
 
 Không yêu cầu thành viên dùng `git clone`, tạo commit, push code hoặc dùng GitHub Issues.
 
 ## 2. Tin nhắn gửi cho 6 thành viên
 
 ```text
-Mọi người tải ba mục mình gửi: ZIP dự án, file database .bak và ZIP ảnh.
+Mọi người chỉ tải hai mục mình gửi: ZIP dự án và file database .bak.
 
 Mỗi người làm theo file HUONG_DAN_TEST_DON_GIAN_CHO_6_NGUOI.md trong dự án.
 Mật khẩu tài khoản test đều là 123.
@@ -53,17 +56,10 @@ Nếu thiếu một trong các phần trên, báo người phát triển hỗ tr
 5. Đặt tên database là `SupermarketFlyDB` rồi bấm Restore.
 6. Nếu máy đã có database cùng tên, hỏi người phát triển trước khi ghi đè.
 
-## 6. Chép ảnh sản phẩm
+## 6. Ảnh sản phẩm
 
-Giải nén `SupermarketFly_Uploads_2026-08-30_225448.zip`, sau đó chép thư mục `uploads` vào trong thư mục `server` của dự án.
-
-Đường dẫn đúng:
-
-```text
-D:\SupermarketFlyTest\...\server\uploads\products
-```
-
-ZIP ảnh hiện có thể gần như trống; đây không phải lỗi vì ảnh sản phẩm mẫu đã nằm sẵn trong dự án.
+Không cần chép thêm file ảnh nào. Ảnh sản phẩm mẫu đã có sẵn trong dự án. Khi tester thêm sản phẩm
+và chọn ảnh mới, hệ thống sẽ tự tạo `server\uploads\products` trên máy đó.
 
 ## 7. Cài và chạy bằng cách nhấp đúp
 

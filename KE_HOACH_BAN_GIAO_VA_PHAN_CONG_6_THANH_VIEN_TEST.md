@@ -56,8 +56,6 @@ Tạo một thư mục trên Google Drive/OneDrive, ví dụ:
 ```text
 SUPERMARKET_FLY_TEST_V1
 ├── SupermarketFlyDB_2026-08-30_225448.bak
-├── SupermarketFly_Uploads_2026-08-30_225448.zip
-├── CHECKSUM_DATABASE_VA_UPLOADS_2026-08-31.txt
 └── LINK_GITHUB.txt
 ```
 
@@ -73,9 +71,9 @@ File hướng dẫn chính: HUONG_DAN_KIEM_THU_TOAN_BO_HE_THONG_SUPERMARKET_FLY.
 Các file phải gửi:
 
 1. `SupermarketFlyDB_2026-08-30_225448.bak`: dữ liệu nền giống nhau cho sáu máy.
-2. `SupermarketFly_Uploads_2026-08-30_225448.zip`: cấu trúc ảnh runtime.
-3. `CHECKSUM_DATABASE_VA_UPLOADS_2026-08-31.txt`: mã kiểm tra hai file bàn giao.
-4. Link GitHub và mã commit cần test.
+2. Link GitHub và mã commit cần test.
+
+Không cần gửi ZIP ảnh trong đợt này vì thư mục ảnh runtime đang rỗng; ảnh mẫu đã nằm trong GitHub.
 
 Không cần gửi:
 
@@ -85,7 +83,7 @@ Không cần gửi:
 - Các bản `.bak` cũ khác.
 - Cả thư mục `BTL` chứa tài liệu cá nhân không liên quan.
 
-GitHub chứa mã nguồn và ảnh mẫu. File `.bak` và ảnh do người dùng tải lên không nằm trên GitHub nên phải gửi riêng qua Drive.
+GitHub chứa mã nguồn và ảnh mẫu. Chỉ file `.bak` phải gửi riêng qua Drive trong đợt test hiện tại.
 
 ### 2.3. Tạo nơi nhận lỗi
 
@@ -117,7 +115,7 @@ Mọi người test Supermarket Fly theo bản đã chốt sau:
 GitHub: https://github.com/lowlyone03/BTL-supermarket-fly.git
 Branch: main
 Commit bắt buộc: <MÃ COMMIT>
-Database và ảnh: <LINK DRIVE>
+Database: <LINK DRIVE>
 Mật khẩu tài khoản mẫu: 123
 
 Trước khi test, mọi người phải gửi lại 4 ảnh/xác nhận:
@@ -175,15 +173,11 @@ SELECT COUNT(*) AS SoTaiKhoan FROM TaiKhoan;
 
 Kỳ vọng: `12` nhân viên và `12` tài khoản.
 
-### 4.4. Khôi phục ảnh và cài thư viện
+### 4.4. Cài thư viện
 
-Giải nén ZIP để có:
+Không cần chép ZIP ảnh. Ảnh mẫu đã nằm trong mã nguồn và thư mục ảnh tải lên sẽ được hệ thống tự tạo.
 
-```text
-BTL-supermarket-fly\server\uploads\products
-```
-
-Sau đó chạy:
+Chạy:
 
 ```powershell
 npm install
