@@ -93,7 +93,7 @@ Bước 8 — Test theo lô được giao và ghi kết quả
 - Chụp kết quả và kiểm tra chéo ở actor/màn hình được chỉ định.
 - Đánh dấu PASS, FAIL, BLOCKED hoặc N/A; không chỉ ghi “đã test”.
 
-C. PHÂN CÔNG GỢI Ý CHO 5 THÀNH VIÊN
+C. PHÂN CÔNG GỢI Ý CHO 6 THÀNH VIÊN TEST (KHÔNG TÍNH NGƯỜI PHÁT TRIỂN)
 
 Người 1 — Quản lý cửa hàng, tài khoản admin
 
@@ -130,12 +130,16 @@ Người 5 — Kế toán, tài khoản ketoan
 - PAY-01 đến PAY-12.
 - RPT-27 đến RPT-32.
 
-Cả nhóm:
+Người 6 — QA tích hợp, dùng lần lượt cả 5 loại tài khoản
 
 - RPT-33 đến RPT-42.
 - E2E-01 đến E2E-10.
 - CON-01 đến CON-10.
 - Checklist giao diện mục 18 và đối chiếu cuối buổi mục 19.
+
+Người phát triển/điều phối không tính trong sáu người trên. Người phát triển chuẩn bị bản Git/database,
+nhận lỗi và sửa; người đã báo lỗi phải là người retest. Xem quy trình bàn giao đầy đủ trong
+KE_HOACH_BAN_GIAO_VA_PHAN_CONG_6_THANH_VIEN_TEST.md.
 
 D. THỨ TỰ CHẠY TRÊN MÁY TEST TÍCH HỢP
 
