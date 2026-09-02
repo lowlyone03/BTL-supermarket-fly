@@ -2,6 +2,7 @@
   const previous = window.FLY_ROLE_PAGES;
   const templates = {
     'manager-workforce': '<section class="warehouse-page workforce-page"><div class="overview-loading">Đang tải kế hoạch nhân sự...</div></section>',
+    'manager-holidays': '<section class="warehouse-page workforce-page manager-holidays"><div class="overview-loading">Đang tải lịch ngày lễ...</div></section>',
     'cashier-schedule': '<section class="warehouse-page workforce-page"><div class="overview-loading">Đang tải lịch làm việc cá nhân...</div></section>'
   };
   const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
@@ -306,13 +307,66 @@
         root.querySelector('#goShift')?.addEventListener('click', () => context.navigate('cashier-shifts'));
         root.querySelector('#refreshPersonal').addEventListener('click', load);
       } catch (error) { context.showToast(error.message, 'error'); }
-    }; await load();
+    };     await load();
+  };
+
+  const initHolidays = async (root, context) => {
+    let year = new Date().getFullYear();
+    const heading = (kicker, title, subtitle) => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(kicker)}</p><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div></header>`;
+    const load = async () => {
+      try {
+        const data = await api(context, `/admin/workforce/holidays/${year}`);
+        const tet = data.items.filter(item => item.NhomLe === 'TetAmLich');
+        const gioTo = data.items.find(item => item.NhomLe === 'GioTo');
+        const adjacent = data.items.find(item => item.NhomLe === 'QuocKhanhLienKe');
+        const tetInputs = Array.from({ length: 5 }, (_, index) => tet[index]?.NgayDuongLich?.slice(0, 10) || '').map((value, index) =>
+          `<label class="warehouse-field"><span>Tết âm ngày ${index + 1}/5</span><input type="date" class="tet-am-day" data-index="${index}" value="${esc(value)}"></label>`).join('');
+        root.innerHTML = `${heading('ĐIỀU HÀNH / UC30', `Ngày lễ năm ${year}`, data.note || 'Khai báo ngày dương lịch cho Tết âm và Giỗ Tổ. Ngày cố định (01/01, 30/04, 01/05, 02/09) không xóa. Khóa khi kỳ lương chứa ngày đó đã khóa.')}
+          ${data.lunarError ? `<div class="approval-center-note"><strong>Thiếu lịch âm.</strong><span>${esc(data.lunarError)}</span></div>` : ''}
+          <article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="payroll-period-field"><span>Năm</span><input type="number" id="holidayYear" min="2020" max="2100" value="${year}"></label><div class="warehouse-toolbar-actions"><button class="warehouse-secondary" id="reloadHolidays">Tải lại</button><button class="warehouse-primary" id="saveHolidays">Lưu lịch lễ</button></div></div>
+          <div class="warehouse-form-grid" style="padding:16px">${tetInputs}
+            <label class="warehouse-field"><span>Giỗ Tổ Hùng Vương (dương lịch)</span><input type="date" id="gioToDay" value="${esc((gioTo?.NgayDuongLich || '').slice(0, 10))}"></label>
+            <label class="warehouse-field"><span>Ngày liền kề Quốc khánh 02/09</span><select id="adjacentDay"><option value="${year}-09-01" ${!adjacent || (adjacent.NgayDuongLich || '').slice(0, 10) === `${year}-09-01` ? 'selected' : ''}>01/09/${year}</option><option value="${year}-09-03" ${(adjacent?.NgayDuongLich || '').slice(0, 10) === `${year}-09-03` ? 'selected' : ''}>03/09/${year}</option></select></label>
+          </div>
+          <div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NGÀY</th><th>TÊN LỄ</th><th>NHÓM</th><th>NGUỒN</th><th>KHÓA</th></tr></thead><tbody>${data.items.map(item => `<tr><td>${esc((item.NgayDuongLich || '').slice(0, 10))}</td><td>${esc(item.TenLe)}</td><td>${esc(item.NhomLe)}</td><td>${esc(item.Nguon)}</td><td>${item.NgayKhoa ? '<span class="status-pill sent">Đã khóa</span>' : '—'}</td></tr>`).join('')}</tbody></table></div></article>
+          <article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>HỆ SỐ</p><h2>BLLĐ 2019 Điều 98 / NĐ 145 Điều 55–57</h2></div><button class="warehouse-secondary" id="saveRates">Lưu hệ số</button></div>
+          <div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>LOẠI NGÀY</th><th>LOẠI GIỜ</th><th>HỆ SỐ</th><th>TỐI THIỂU</th><th>MÔ TẢ</th></tr></thead><tbody>${(data.rates || []).map(item => `<tr><td>${esc(item.LoaiNgay)}</td><td>${esc(item.LoaiGio)}</td><td class="num"><input type="number" class="rate-heso" data-ma="${esc(item.MaHeSo)}" min="${Number(item.MinHeSo)}" step="0.01" value="${Number(item.HeSo).toFixed(2)}"></td><td class="num">${Number(item.MinHeSo).toFixed(2)}</td><td>${esc(item.MoTa)}</td></tr>`).join('')}</tbody></table></div></article>`;
+        root.querySelector('#holidayYear').addEventListener('change', () => { year = Number(root.querySelector('#holidayYear').value) || year; load(); });
+        root.querySelector('#reloadHolidays').addEventListener('click', load);
+        root.querySelector('#saveHolidays').addEventListener('click', async () => {
+          const tetAm = Array.from(root.querySelectorAll('.tet-am-day')).map(input => input.value).filter(Boolean);
+          const gioToValue = root.querySelector('#gioToDay').value;
+          const quocKhanhLienKe = root.querySelector('#adjacentDay').value;
+          try {
+            const result = await api(context, `/admin/workforce/holidays/${year}`, {
+              method: 'PUT', body: JSON.stringify({ tetAm, gioTo: gioToValue, quocKhanhLienKe })
+            });
+            context.showToast(result.message, 'success'); await load();
+          } catch (error) { context.showToast(error.message, 'error'); }
+        });
+        root.querySelector('#saveRates').addEventListener('click', async () => {
+          const items = Array.from(root.querySelectorAll('.rate-heso')).map(input => ({
+            MaHeSo: input.dataset.ma, HeSo: Number(input.value)
+          }));
+          try {
+            const result = await api(context, '/admin/workforce/pay-rates', {
+              method: 'PUT', body: JSON.stringify({ items })
+            });
+            context.showToast(result.message, 'success'); await load();
+          } catch (error) { context.showToast(error.message, 'error'); }
+        });
+      } catch (error) {
+        root.innerHTML = `<div class="welcome-card"><h2>Không thể tải lịch ngày lễ</h2><p>${esc(error.message)}</p></div>`;
+      }
+    };
+    await load();
   };
 
   window.FLY_ROLE_PAGES = {
     templates: { ...(previous?.templates || {}), ...templates },
     init: async (pageName, context) => {
       if (pageName === 'manager-workforce') return initManagerWorkforce(document.querySelector('.workforce-page'), context);
+      if (pageName === 'manager-holidays') return initHolidays(document.querySelector('.manager-holidays'), context);
       if (pageName === 'cashier-schedule') return initCashierSchedule(document.querySelector('.workforce-page'), context);
       return previous?.init?.(pageName, context);
     }

@@ -1,4 +1,6 @@
 const { sql, poolPromise } = require('../config/db');
+const { isRestockAccepted, looksUnsellable } = require('../services/financialRules');
+const { logAudit } = require('../services/auditLog');
 
 const editableStatuses = new Set(['Nháp', 'Yêu cầu bổ sung']);
 
@@ -16,16 +18,8 @@ const normalizeLines = lines => {
     });
 };
 
-const writeAudit = async (request, user, action, recordId, content) => {
-    await request
-        .input('LogMaTK', sql.Int, user.MaTK)
-        .input('LogHanhDong', sql.NVarChar, action)
-        .input('LogBang', sql.NVarChar, 'DeNghiMuaHang')
-        .input('LogMaBanGhi', sql.VarChar, recordId)
-        .input('LogNoiDung', sql.NVarChar, content)
-        .query(`INSERT INTO NhatKy (MaTK, HanhDong, BangLienQuan, MaBanGhi, NoiDung, ThoiGian)
-                VALUES (@LogMaTK, @LogHanhDong, @LogBang, @LogMaBanGhi, @LogNoiDung, GETDATE())`);
-};
+const writeAudit = (request, user, action, recordId, content) =>
+    logAudit(request, { user, action, table: 'DeNghiMuaHang', recordId, content, uc: 'UC16' });
 
 const getWarehouse = async pool => {
     const result = await pool.request().query(`SELECT TOP 1 MaKho, TenKho, DiaChi
@@ -364,8 +358,240 @@ const requestPurchasingChanges = async (req, res) => {
     }
 };
 
+const isoDay = value => {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+    const part = type => parts.find(item => item.type === type)?.value || '';
+    return `${part('year')}-${part('month')}-${part('day')}`;
+};
+
+const addIsoDays = (value, days) => {
+    const [year, month, day] = String(value).split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day + days));
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+};
+
+const getHistory = async (req, res) => {
+    try {
+        const today = isoDay(new Date());
+        const from = String(req.query.from || `${today.slice(0, 8)}01`).trim();
+        const to = String(req.query.to || today).trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+            throw new Error('Ngày lịch sử phải có dạng YYYY-MM-DD.');
+        }
+        if (from > to) throw new Error('Từ ngày không được sau đến ngày.');
+        const toExclusive = addIsoDays(to, 1);
+        const kind = String(req.query.kind || 'all').trim();
+        const search = String(req.query.search || '').trim();
+        const pool = await poolPromise;
+        const bind = () => pool.request()
+            .input('MaNV', sql.VarChar, req.user.MaNV)
+            .input('MaTK', sql.Int, req.user.MaTK)
+            .input('From', sql.Date, from)
+            .input('ToExclusive', sql.Date, toExclusive);
+
+        const [inspections, lines, stockMoves, receipts, issues, counts, requests, audit] = await Promise.all([
+            bind().query(`
+                SELECT dt.MaDT, dt.MaHD, dt.NgayLap, dt.NgayKiemTra, dt.KetQuaKiemTra, dt.LyDo,
+                       dt.HinhThucXuLy, dt.TrangThai, dt.SoTienHoan, dt.GhiChu, dt.NgayDuyet, dt.NgayHoan,
+                       kh.TenKH, lap.TenNV NguoiLap, duyet.TenNV NguoiDuyet, hd.MaCa MaCaGoc
+                FROM PhieuDoiTra dt
+                JOIN HoaDon hd ON hd.MaHD=dt.MaHD
+                JOIN NhanVien lap ON lap.MaNV=dt.MaNV_Lap
+                LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
+                LEFT JOIN NhanVien duyet ON duyet.MaNV=dt.MaNV_Duyet
+                WHERE dt.MaNV_KiemTra=@MaNV
+                  AND dt.NgayKiemTra>=@From AND dt.NgayKiemTra<@ToExclusive
+                ORDER BY dt.NgayKiemTra DESC`),
+            bind().query(`
+                SELECT ct.MaDT, ct.MaSP, sp.TenSP, ct.SoLuong, ct.ThanhTien, ct.LoaiDong, ct.LyDo
+                FROM ChiTietDoiTra ct
+                JOIN PhieuDoiTra dt ON dt.MaDT=ct.MaDT
+                JOIN SanPham sp ON sp.MaSP=ct.MaSP
+                WHERE dt.MaNV_KiemTra=@MaNV
+                  AND dt.NgayKiemTra>=@From AND dt.NgayKiemTra<@ToExclusive
+                ORDER BY sp.TenSP`),
+            bind().query(`
+                SELECT gd.MaGD, gd.MaChungTu, gd.MaSP, sp.TenSP, gd.LoaiGD, gd.SoLuong,
+                       gd.NgayGD, gd.GhiChu, nv.TenNV NguoiGhiSo
+                FROM GiaoDichKho gd
+                JOIN SanPham sp ON sp.MaSP=gd.MaSP
+                JOIN NhanVien nv ON nv.MaNV=gd.MaNV
+                JOIN PhieuDoiTra dt ON dt.MaDT=gd.MaChungTu AND dt.MaNV_KiemTra=@MaNV
+                WHERE gd.LoaiChungTu=N'DoiTra'
+                  AND dt.NgayKiemTra>=@From AND dt.NgayKiemTra<@ToExclusive
+                ORDER BY gd.NgayGD DESC`),
+            bind().query(`
+                SELECT pn.MaPN, pn.NgayNhap, pn.NgayXacNhan, pn.TrangThai, pn.TongTien, pn.GhiChu, ncc.TenNCC
+                FROM PhieuNhap pn
+                LEFT JOIN NhaCungCap ncc ON ncc.MaNCC=pn.MaNCC
+                WHERE pn.MaNV=@MaNV AND pn.NgayNhap>=@From AND pn.NgayNhap<@ToExclusive
+                ORDER BY pn.NgayNhap DESC`),
+            bind().query(`
+                SELECT px.MaPX, px.NgayXuat, px.LoaiXuat, px.TrangThai, px.GhiChu, px.NgayDuyet
+                FROM PhieuXuat px
+                WHERE px.MaNV=@MaNV AND px.NgayXuat>=@From AND px.NgayXuat<@ToExclusive
+                ORDER BY px.NgayXuat DESC`),
+            bind().query(`
+                SELECT kk.MaKK, kk.NgayKiemKe, kk.TrangThai, kk.GhiChu, kk.NgayDuyet, kk.LyDoTuChoi
+                FROM KiemKe kk
+                WHERE kk.MaNV=@MaNV AND kk.NgayKiemKe>=@From AND kk.NgayKiemKe<@ToExclusive
+                ORDER BY kk.NgayKiemKe DESC`),
+            bind().query(`
+                SELECT dn.MaDN, dn.NgayLap, dn.NgayGui, dn.TrangThai, dn.LyDo,
+                       COUNT(ct.MaSP) SoMatHang, SUM(ct.SLDeNghi) TongSoLuong
+                FROM DeNghiMuaHang dn
+                JOIN ChiTietDeNghi ct ON ct.MaDN=dn.MaDN
+                WHERE dn.MaNV_Lap=@MaNV AND dn.NgayLap>=@From AND dn.NgayLap<@ToExclusive
+                GROUP BY dn.MaDN, dn.NgayLap, dn.NgayGui, dn.TrangThai, dn.LyDo
+                ORDER BY dn.NgayLap DESC`),
+            bind().query(`
+                SELECT nk.MaNK, nk.ThoiGian, nk.HanhDong, nk.BangLienQuan, nk.MaBanGhi, nk.NoiDung
+                FROM NhatKy nk
+                WHERE nk.MaTK=@MaTK
+                  AND nk.BangLienQuan IN (N'DeNghiMuaHang', N'PhieuDoiTra', N'PhieuNhap', N'PhieuXuat', N'KiemKe')
+                  AND nk.ThoiGian>=@From AND nk.ThoiGian<@ToExclusive
+                ORDER BY nk.ThoiGian DESC`)
+        ]);
+
+        const linesByTicket = new Map();
+        for (const line of lines.recordset) {
+            if (!linesByTicket.has(line.MaDT)) linesByTicket.set(line.MaDT, []);
+            linesByTicket.get(line.MaDT).push(line);
+        }
+        const movesByTicket = new Map();
+        for (const move of stockMoves.recordset) {
+            if (!movesByTicket.has(move.MaChungTu)) movesByTicket.set(move.MaChungTu, []);
+            movesByTicket.get(move.MaChungTu).push(move);
+        }
+        const auditByRecord = new Map();
+        for (const row of audit.recordset) {
+            const key = `${row.BangLienQuan}:${row.MaBanGhi}`;
+            if (!auditByRecord.has(key)) auditByRecord.set(key, []);
+            auditByRecord.get(key).push(row);
+        }
+
+        const inspectionCards = inspections.recordset.map(ticket => {
+            const restock = isRestockAccepted(ticket.KetQuaKiemTra);
+            const scrap = /không nhập lại/i.test(String(ticket.KetQuaKiemTra || ''));
+            const corrected = /Sửa tích nhầm|Đã trừ tồn tích nhầm|Đã sửa tích nhầm/i.test(`${ticket.KetQuaKiemTra || ''} ${ticket.GhiChu || ''}`);
+            const mistaken = restock && looksUnsellable(ticket.LyDo);
+            const products = (linesByTicket.get(ticket.MaDT) || []).filter(line => line.LoaiDong === 'Hàng khách trả');
+            return {
+                kind: 'doi-tra',
+                at: ticket.NgayKiemTra,
+                recordId: ticket.MaDT,
+                title: corrected
+                    ? 'Kiểm đổi trả — đã sửa tích nhầm'
+                    : restock ? 'Kiểm đổi trả — nhập lại kho bán' : scrap ? 'Kiểm đổi trả — loại bỏ / vứt' : 'Kiểm đổi trả',
+                subtitle: `${ticket.MaHD} · ${ticket.TenKH || 'Khách vãng lai'} · ${ticket.HinhThucXuLy}`,
+                tone: corrected ? 'ok' : mistaken ? 'danger' : restock ? 'ok' : scrap ? 'warn' : 'info',
+                status: ticket.TrangThai,
+                hangDiDau: corrected
+                    ? (ticket.TrangThai === 'Hoàn thành'
+                        ? 'Đã trừ tồn hàng hỏng nhập nhầm'
+                        : 'Đã sửa: không nhập lại kho khi thu ngân xác nhận')
+                    : restock
+                        ? 'Nhập lại kho bán (cộng tồn khi thu ngân xác nhận)'
+                        : scrap
+                            ? 'Loại bỏ / vứt — không cộng tồn (đã trừ lúc bán)'
+                            : 'Chưa rõ xử lý kho',
+                restock,
+                mistaken,
+                corrected,
+                canRevise: ticket.TrangThai === 'Chờ duyệt',
+                canFlagMistake: restock && !corrected && ['Đã duyệt', 'Hoàn thành'].includes(ticket.TrangThai),
+                ticket,
+                products,
+                stockMoves: movesByTicket.get(ticket.MaDT) || [],
+                audit: auditByRecord.get(`PhieuDoiTra:${ticket.MaDT}`) || []
+            };
+        });
+
+        const timeline = [
+            ...inspectionCards,
+            ...receipts.recordset.map(row => ({
+                kind: 'phieu-nhap',
+                at: row.NgayXacNhan || row.NgayNhap,
+                recordId: row.MaPN,
+                title: `Phiếu nhập ${row.MaPN}`,
+                subtitle: `${row.TenNCC || 'NCC'} · ${row.TrangThai}`,
+                tone: row.TrangThai === 'Đã xác nhận' ? 'ok' : 'info',
+                status: row.TrangThai,
+                detail: row.GhiChu || null,
+                amount: row.TongTien
+            })),
+            ...issues.recordset.map(row => ({
+                kind: 'phieu-xuat',
+                at: row.NgayXuat,
+                recordId: row.MaPX,
+                title: `Phiếu xuất ${row.MaPX}`,
+                subtitle: `${row.LoaiXuat} · ${row.TrangThai}`,
+                tone: /hủy|hỏng|trả/i.test(row.LoaiXuat || '') ? 'warn' : 'info',
+                status: row.TrangThai,
+                detail: row.GhiChu || null
+            })),
+            ...counts.recordset.map(row => ({
+                kind: 'kiem-ke',
+                at: row.NgayKiemKe,
+                recordId: row.MaKK,
+                title: `Kiểm kê ${row.MaKK}`,
+                subtitle: row.TrangThai,
+                tone: row.TrangThai === 'Từ chối' ? 'danger' : /duyệt|hoàn thành/i.test(row.TrangThai || '') ? 'ok' : 'info',
+                status: row.TrangThai,
+                detail: row.LyDoTuChoi || row.GhiChu || null
+            })),
+            ...requests.recordset.map(row => ({
+                kind: 'de-nghi',
+                at: row.NgayGui || row.NgayLap,
+                recordId: row.MaDN,
+                title: `Đề nghị mua ${row.MaDN}`,
+                subtitle: `${row.SoMatHang} mặt hàng · ${row.TrangThai}`,
+                tone: 'info',
+                status: row.TrangThai,
+                detail: row.LyDo || null
+            }))
+        ].sort((left, right) => new Date(right.at) - new Date(left.at));
+
+        const match = value => !search || String(value || '').toLocaleLowerCase('vi-VN').includes(search.toLocaleLowerCase('vi-VN'));
+        const filtered = timeline.filter(item => {
+            if (kind !== 'all' && item.kind !== kind) return false;
+            if (!search) return true;
+            const blob = [
+                item.title, item.subtitle, item.status, item.detail, item.hangDiDau, item.recordId,
+                item.ticket?.LyDo, item.ticket?.KetQuaKiemTra, item.ticket?.GhiChu,
+                ...(item.products || []).map(line => `${line.TenSP} ${line.MaSP}`)
+            ].join(' ');
+            return match(blob);
+        });
+
+        const actor = await pool.request().input('MaNV', sql.VarChar, req.user.MaNV).query(`
+            SELECT MaNV, TenNV FROM NhanVien WHERE MaNV=@MaNV`);
+        res.json({
+            actor: actor.recordset[0] || { MaNV: req.user.MaNV, TenNV: req.user.TenNV },
+            period: { from, to },
+            summary: {
+                SoKiemDoiTra: inspectionCards.length,
+                SoNhapLai: inspectionCards.filter(item => item.restock).length,
+                SoLoaiBo: inspectionCards.filter(item => !item.restock).length,
+                SoTichNham: inspectionCards.filter(item => item.mistaken).length,
+                SoPhieuNhap: receipts.recordset.length,
+                SoPhieuXuat: issues.recordset.length,
+                SoKiemKe: counts.recordset.length,
+                SoDeNghi: requests.recordset.length
+            },
+            timeline: filtered,
+            audit: audit.recordset
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không thể tải lịch sử kho.' });
+    }
+};
+
 module.exports = {
-    getDashboard, getInventory,
+    getDashboard, getInventory, getHistory,
     listWarehouseRequests: listRequests(false),
     listPurchasingRequests: listRequests(true),
     getWarehouseRequestDetail: getRequestDetail(false),

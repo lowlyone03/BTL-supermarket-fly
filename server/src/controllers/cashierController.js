@@ -1,6 +1,7 @@
 const { sql, poolPromise } = require('../config/db');
 const { closeOpenAttendance } = require('../services/attendanceSync');
 const { calculateGrossProfit, RESTOCK_ACCEPTED_SQL } = require('../services/financialRules');
+const { logAudit } = require('../services/auditLog');
 
 const generateShiftId = async transaction => {
     const now = new Date();
@@ -187,12 +188,11 @@ const openShift = async (req, res) => {
             .input('TienDauCa', sql.Decimal(18, 2), TienDauCa)
             .query(`INSERT INTO CaLamViec (MaCa,MaNV,MaLich,MaQuay,ThoiGianBatDau,TienDauCa,TrangThai)
                     VALUES (@MaCa,@MaNV,@MaLich,@MaQuay,GETDATE(),@TienDauCa,N'Đang mở')`);
-        await new sql.Request(transaction)
-            .input('MaTK', sql.Int, req.user.MaTK)
-            .input('MaCa', sql.VarChar, MaCa)
-            .input('NoiDung', sql.NVarChar, `Thu ngân mở ca với tiền đầu ca ${TienDauCa.toLocaleString('vi-VN')} đồng`)
-            .query(`INSERT INTO NhatKy (MaTK,HanhDong,BangLienQuan,MaBanGhi,NoiDung,ThoiGian)
-                    VALUES (@MaTK,N'Mở ca bán hàng',N'CaLamViec',@MaCa,@NoiDung,GETDATE())`);
+        await logAudit(transaction, {
+            user: req.user, req, action: 'Mở ca bán hàng', table: 'CaLamViec', recordId: MaCa, uc: 'UC22',
+            severity: 'Quan trọng',
+            content: `Thu ngân mở ca với tiền đầu ca ${TienDauCa.toLocaleString('vi-VN')} đồng`
+        });
         await transaction.commit();
         res.status(201).json({ message: `Đã mở ca ${MaCa}. Bạn có thể bắt đầu bán hàng.`, MaCa });
     } catch (error) {
@@ -318,11 +318,11 @@ const closeShift = async (req, res) => {
                     TienMatHeThong=@TienMatHeThong,TienThucNop=@TienThucNop,
                     TrangThai=N'Đã chốt',TrangThaiDoiSoat=N'Chờ Kế toán đối soát'
                 WHERE MaCa=@MaCa`);
-        await new sql.Request(transaction).input('MaTK', sql.Int, req.user.MaTK)
-            .input('MaCa', sql.VarChar, maCa)
-            .input('NoiDung', sql.NVarChar, `Đóng ca; hệ thống ${summary.TienMatHeThong}; thực nộp ${tienThucNop}`)
-            .query(`INSERT NhatKy(MaTK,HanhDong,BangLienQuan,MaBanGhi,NoiDung,ThoiGian)
-                    VALUES(@MaTK,N'Đóng ca bán hàng',N'CaLamViec',@MaCa,@NoiDung,GETDATE())`);
+        await logAudit(transaction, {
+            user: req.user, req, action: 'Đóng ca bán hàng', table: 'CaLamViec', recordId: maCa, uc: 'UC22',
+            severity: 'Quan trọng',
+            content: `Đóng ca; hệ thống ${Number(summary.TienMatHeThong).toLocaleString('vi-VN')}đ; thực nộp ${Number(tienThucNop).toLocaleString('vi-VN')}đ; lệch ${Number(tienThucNop - summary.TienMatHeThong).toLocaleString('vi-VN')}đ`
+        });
         await closeOpenAttendance(transaction, maCa);
         await transaction.commit();
         res.json({

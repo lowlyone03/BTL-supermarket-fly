@@ -1,15 +1,11 @@
 const { sql, poolPromise } = require('../config/db');
+const { logAudit } = require('../services/auditLog');
 
 const editableStatuses = new Set(['Nháp', 'Yêu cầu chỉnh sửa']);
 const clean = (value, max, fallback = null) => String(value ?? '').trim().slice(0, max) || fallback;
 
-const writeAudit = async (request, user, action, recordId, content) => {
-    await request.input('LogMaTK', sql.Int, user.MaTK).input('LogHanhDong', sql.NVarChar, action)
-        .input('LogBang', sql.NVarChar, 'DonMuaHang').input('LogMaBanGhi', sql.VarChar, recordId)
-        .input('LogNoiDung', sql.NVarChar, content)
-        .query(`INSERT INTO NhatKy (MaTK,HanhDong,BangLienQuan,MaBanGhi,NoiDung,ThoiGian)
-                VALUES (@LogMaTK,@LogHanhDong,@LogBang,@LogMaBanGhi,@LogNoiDung,GETDATE())`);
-};
+const writeAudit = (request, user, action, recordId, content) =>
+    logAudit(request, { user, action, table: 'DonMuaHang', recordId, content, uc: 'UC13' });
 
 const normalizeLines = lines => {
     if (!Array.isArray(lines) || !lines.length) throw new Error('Đơn mua phải có ít nhất một mặt hàng.');

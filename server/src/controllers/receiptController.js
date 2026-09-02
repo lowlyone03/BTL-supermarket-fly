@@ -1,16 +1,10 @@
 const { sql, poolPromise } = require('../config/db');
+const { logAudit } = require('../services/auditLog');
 
 const clean = (value, max, fallback = null) => String(value ?? '').trim().slice(0, max) || fallback;
 
-const writeAudit = async (request, user, action, recordId, content, table = 'PhieuNhap') => {
-    await request.input('LogMaTK', sql.Int, user.MaTK)
-        .input('LogHanhDong', sql.NVarChar, action)
-        .input('LogBang', sql.NVarChar, table)
-        .input('LogMaBanGhi', sql.VarChar, recordId)
-        .input('LogNoiDung', sql.NVarChar, content)
-        .query(`INSERT INTO NhatKy (MaTK,HanhDong,BangLienQuan,MaBanGhi,NoiDung,ThoiGian)
-                VALUES (@LogMaTK,@LogHanhDong,@LogBang,@LogMaBanGhi,@LogNoiDung,GETDATE())`);
-};
+const writeAudit = (request, user, action, recordId, content, table = 'PhieuNhap') =>
+    logAudit(request, { user, action, table, recordId, content, uc: 'UC17', severity: 'Quan trọng' });
 
 const generateId = async (transaction, table, column, prefix) => {
     const result = await new sql.Request(transaction)

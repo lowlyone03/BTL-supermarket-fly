@@ -46,10 +46,19 @@
         id ? api(context, `/warehouse/stock-issues/${id}`) : Promise.resolve(null)
       ]);
       if (detail && detail.issue.TrangThai !== 'Nháp') return issueReadOnlyModal(context, id, onDone);
-      const issue = detail?.issue || { LoaiXuat: 'Hủy hàng', MaPN: '', GhiChu: '' };
+      let prefill = null;
+      if (!id) {
+        try { prefill = JSON.parse(sessionStorage.getItem('fly_stock_issue_prefill') || 'null'); }
+        catch { prefill = null; }
+        if (prefill) sessionStorage.removeItem('fly_stock_issue_prefill');
+      }
+      const issue = detail?.issue || { LoaiXuat: prefill?.LoaiXuat || 'Hủy hàng', MaPN: '', GhiChu: prefill?.GhiChu || '' };
       let catalog = options.products;
       let sourceReceipt = null;
       let lines = (detail?.lines || []).map(line => ({ MaSP: line.MaSP, SoLuong: Number(line.SoLuong), GhiChu: line.GhiChu || '' }));
+      if (!id && Array.isArray(prefill?.lines) && prefill.lines.length) {
+        lines = prefill.lines.map(line => ({ MaSP: line.MaSP, SoLuong: Number(line.SoLuong) || 1, GhiChu: line.GhiChu || '' }));
+      }
       const overlay = document.createElement('div');
       overlay.className = 'warehouse-modal-backdrop';
       overlay.innerHTML = `<div class="warehouse-modal stock-issue-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">${id ? `CẬP NHẬT ${esc(id)}` : 'LẬP PHIẾU XUẤT KHO THỦ CÔNG'}</p><h2>${esc(options.warehouse.TenKho)}</h2><span>Nháp → Chờ duyệt → Đã duyệt → Thủ kho xác nhận xuất</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="receipt-rule"><svg><use href="#i-warning"></use></svg><span>Phê duyệt chưa làm giảm tồn. Trả Nhà cung cấp bắt buộc chọn Phiếu nhập nguồn; không có nghiệp vụ điều chuyển kho.</span></div><div class="stock-issue-fields"><div class="warehouse-field"><label>Loại xuất *</label><select id="stockIssueType"><option ${issue.LoaiXuat === 'Trả NCC' ? 'selected' : ''}>Trả NCC</option><option ${issue.LoaiXuat === 'Hủy hàng' ? 'selected' : ''}>Hủy hàng</option><option ${issue.LoaiXuat === 'Sử dụng nội bộ' ? 'selected' : ''}>Sử dụng nội bộ</option></select></div><div class="warehouse-field source-receipt-field"><label>Phiếu nhập nguồn *</label><select id="stockIssueReceipt"><option value="">Chọn Phiếu nhập đã xác nhận</option>${options.receipts.map(receipt => `<option value="${esc(receipt.MaPN)}" ${receipt.MaPN === issue.MaPN ? 'selected' : ''}>${esc(receipt.MaPN)} · ${esc(receipt.TenNCC)} · ${receipt.TongChapNhan} đơn vị</option>`).join('')}</select><small class="source-receipt-note"></small></div><div class="warehouse-field stock-issue-note"><label>Lý do/Ghi chú xuất kho *</label><textarea id="stockIssueNote" maxlength="500" placeholder="Ghi rõ lý do xuất hủy, trả NCC hoặc sử dụng nội bộ...">${esc(issue.GhiChu || '')}</textarea></div></div><div class="stock-issue-add-row"><div class="warehouse-field"><label>Sản phẩm</label><select id="stockIssueProduct"></select></div><div class="warehouse-field"><label>Số lượng</label><input id="stockIssueQuantity" type="number" min="1" step="1" value="1"></div><button class="warehouse-secondary" id="addStockIssueLine" type="button"><svg><use href="#i-plus"></use></svg>Thêm dòng</button></div><div class="warehouse-table-wrap"><table class="warehouse-table stock-issue-line-table"><thead><tr><th>SẢN PHẨM</th><th>TỒN HIỆN TẠI</th><th>GIỚI HẠN NGUỒN</th><th>SỐ LƯỢNG XUẤT</th><th>GHI CHÚ DÒNG</th><th></th></tr></thead><tbody id="stockIssueLines"></tbody></table></div></div><div class="warehouse-modal-actions"><div class="stock-issue-action-note"><strong>Tồn kho chưa thay đổi khi lưu hoặc gửi duyệt.</strong><span>Chỉ bước “Xác nhận đã xuất hàng” sau phê duyệt mới trừ tồn.</span></div><button class="warehouse-secondary close" type="button">Hủy</button><button class="warehouse-secondary save-draft" type="button">Lưu Nháp</button><button class="warehouse-primary save-submit" type="button">Lưu và gửi duyệt</button></div></div>`;
@@ -174,6 +183,13 @@
       } catch (error) { context.showToast(error.message, 'error'); }
     };
     await load();
+    const pending = sessionStorage.getItem('fly_open_stock_issue');
+    if (pending) {
+      sessionStorage.removeItem('fly_open_stock_issue');
+      await issueEditorModal(context, pending, load);
+    } else if (sessionStorage.getItem('fly_stock_issue_prefill')) {
+      await issueEditorModal(context, null, load);
+    }
   };
 
   window.FLY_ROLE_PAGES = {

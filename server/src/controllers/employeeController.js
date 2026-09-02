@@ -1,4 +1,6 @@
 const { sql, poolPromise } = require('../config/db');
+const { logAudit } = require('../services/auditLog');
+const { ensurePayrollSchema } = require('../services/payrollSchema');
 
 const EMPLOYEE_STATUSES = ['Đang làm việc', 'Nghỉ việc'];
 
@@ -138,13 +140,10 @@ const createEmployee = async (req, res) => {
                     VALUES (@MaNV, @TenNV, @ChucVu, @SDT, @Email, @DiaChi, @TrangThai)`);
 
         // Ghi nhật ký
-        await pool.request()
-            .input('MaTK', sql.Int, req.user.MaTK)
-            .input('HanhDong', sql.NVarChar, 'Thêm nhân viên')
-            .input('BangLienQuan', sql.NVarChar, 'NhanVien')
-            .input('MaBanGhi', sql.VarChar, MaNV)
-            .input('NoiDung', sql.NVarChar, `Thêm nhân viên: ${TenNV}`)
-            .query('INSERT INTO NhatKy (MaTK, HanhDong, BangLienQuan, MaBanGhi, NoiDung, ThoiGian) VALUES (@MaTK, @HanhDong, @BangLienQuan, @MaBanGhi, @NoiDung, GETDATE())');
+        await logAudit(pool, {
+            user: req.user, req, action: 'Thêm nhân viên', table: 'NhanVien', recordId: MaNV,
+            content: `Thêm nhân viên ${TenNV} — ${ChucVu}`
+        });
 
         res.status(201).json({ message: 'Thêm nhân viên thành công' });
     } catch (error) {
@@ -161,6 +160,7 @@ const updateEmployee = async (req, res) => {
     try {
         const { maNV } = req.params;
         const pool = await poolPromise;
+        await ensurePayrollSchema(pool);
         const validation = await validateEmployeeInput(pool, req.body);
         if (validation.error) {
             return res.status(400).json({ message: validation.error });
@@ -193,7 +193,9 @@ const updateEmployee = async (req, res) => {
                 .input('TrangThai', sql.NVarChar, TrangThai)
                 .query(`UPDATE NhanVien
                         SET TenNV = @TenNV, ChucVu = @ChucVu, SDT = @SDT,
-                            Email = @Email, DiaChi = @DiaChi, TrangThai = @TrangThai
+                            Email = @Email, DiaChi = @DiaChi, TrangThai = @TrangThai,
+                            NgayNghiViec = CASE WHEN @TrangThai=N'Nghỉ việc'
+                                THEN COALESCE(NgayNghiViec, CONVERT(date, GETDATE())) ELSE NULL END
                         WHERE MaNV = @MaNV`);
 
             // Chức vụ và vai trò là cùng một phân loại actor, vì vậy phải luôn đồng bộ.
@@ -219,13 +221,10 @@ const updateEmployee = async (req, res) => {
         }
 
         // Ghi nhật ký
-        await pool.request()
-            .input('MaTK', sql.Int, req.user.MaTK)
-            .input('HanhDong', sql.NVarChar, 'Sửa nhân viên')
-            .input('BangLienQuan', sql.NVarChar, 'NhanVien')
-            .input('MaBanGhi', sql.VarChar, maNV)
-            .input('NoiDung', sql.NVarChar, `Cập nhật thông tin NV: ${TenNV}`)
-            .query('INSERT INTO NhatKy (MaTK, HanhDong, BangLienQuan, MaBanGhi, NoiDung, ThoiGian) VALUES (@MaTK, @HanhDong, @BangLienQuan, @MaBanGhi, @NoiDung, GETDATE())');
+        await logAudit(pool, {
+            user: req.user, req, action: 'Sửa nhân viên', table: 'NhanVien', recordId: maNV,
+            content: `Cập nhật thông tin NV: ${TenNV}`
+        });
 
         res.json({ message: 'Cập nhật nhân viên thành công' });
     } catch (error) {

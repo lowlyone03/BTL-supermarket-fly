@@ -1,4 +1,5 @@
 const { sql, poolPromise } = require('../config/db');
+const { logAudit } = require('../services/auditLog');
 const { roundMoney, evaluateThreeWayMatch } = require('../services/financialRules');
 
 const clean = (value, max, fallback = null) => String(value ?? '').trim().slice(0, max) || fallback;
@@ -12,16 +13,8 @@ const generateId = async (transaction, table, column, prefix) => {
     return `${prefix}${String(last ? Number(last.slice(prefix.length)) + 1 : 1).padStart(4, '0')}`;
 };
 
-const writeAudit = async (transaction, user, action, table, recordId, content) => {
-    await new sql.Request(transaction)
-        .input('MaTK', sql.Int, user.MaTK)
-        .input('HanhDong', sql.NVarChar, action)
-        .input('BangLienQuan', sql.NVarChar, table)
-        .input('MaBanGhi', sql.VarChar, recordId)
-        .input('NoiDung', sql.NVarChar, content)
-        .query(`INSERT INTO NhatKy (MaTK,HanhDong,BangLienQuan,MaBanGhi,NoiDung,ThoiGian)
-                VALUES (@MaTK,@HanhDong,@BangLienQuan,@MaBanGhi,@NoiDung,GETDATE())`);
-};
+const writeAudit = (transaction, user, action, table, recordId, content) =>
+    logAudit(transaction, { user, action, table, recordId, content, uc: 'UC27', severity: 'Quan trọng' });
 
 const normalizeLines = inputLines => {
     if (!Array.isArray(inputLines) || !inputLines.length) throw new Error('Hóa đơn phải có ít nhất một mặt hàng.');

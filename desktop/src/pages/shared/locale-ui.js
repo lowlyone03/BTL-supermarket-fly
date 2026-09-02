@@ -2,7 +2,14 @@
   const MONTHS = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
   const pad = value => String(value).padStart(2, '0');
   const daysInMonth = (year, month) => new Date(year, month, 0).getDate();
-  const currentYear = () => new Date().getFullYear();
+  const vietnamNow = () => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date());
+    const get = type => parts.find(part => part.type === type)?.value;
+    return { year: get('year'), month: get('month'), day: get('day') };
+  };
+  const currentYear = () => Number(vietnamNow().year);
   const yearList = (selected) => {
     const selectedYear = Number(selected) || currentYear();
     const years = new Set([selectedYear, ...Array.from({ length: 16 }, (_, index) => currentYear() - 8 + index)]);
@@ -29,7 +36,8 @@
   }).join('');
 
   const dateField = (id, iso = '', extraClass = '', optional = false) => {
-    const parsed = parseIsoDate(iso) || parseIsoDate(new Date().toISOString().slice(0, 10));
+    const now = vietnamNow();
+    const parsed = parseIsoDate(iso) || { year: Number(now.year), month: Number(now.month), day: Number(now.day) };
     const days = Array.from({ length: daysInMonth(parsed.year, parsed.month) }, (_, index) => index + 1);
     const empty = optional ? '<option value="">—</option>' : '';
     const selectedDay = iso ? parsed.day : (optional ? '' : parsed.day);
@@ -40,7 +48,8 @@
   };
 
   const monthField = (id, ym = '') => {
-    const parsed = parseIsoMonth(ym) || parseIsoMonth(`${currentYear()}-${pad(new Date().getMonth() + 1)}`);
+    const now = vietnamNow();
+    const parsed = parseIsoMonth(ym) || parseIsoMonth(`${now.year}-${now.month}`);
     return `<div class="fly-vi-date" data-kind="month"><select class="fly-vi-month" aria-label="Tháng">${options([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], parsed.month, month => MONTHS[month - 1])}</select><select class="fly-vi-year" aria-label="Năm">${options(yearList(parsed.year), parsed.year, year => `Năm ${year}`)}</select><input type="hidden" id="${id}" value="${ym || `${parsed.year}-${pad(parsed.month)}`}"></div>`;
   };
 
@@ -132,6 +141,7 @@
   const hydrateNative = (root = document) => {
     root.querySelectorAll('input[type="date"], input[type="month"], input[type="datetime-local"]').forEach(input => {
       if (input.closest('.fly-vi-date')) return;
+      if (input.hasAttribute('data-keep-native') || input.closest('[data-keep-native]') || input.closest('.audit-daterange') || input.closest('.warehouse-history-page') || input.closest('.warehouse-history-daterange')) return;
       const type = input.getAttribute('type');
       const id = input.id || `fly-date-${Math.random().toString(36).slice(2, 8)}`;
       if (!input.id) input.id = id;
@@ -157,7 +167,7 @@
       return `<option value="${value}" ${value === currentQuarter ? 'selected' : ''}>Quý ${quarter}/${year}</option>`;
     })).join('');
     return `
-    <article class="warehouse-table-card financial-report-filter"><div class="warehouse-toolbar"><div class="report-period-fields"><label><span>LOẠI KỲ</span><select id="reportPeriodType"><option value="day">Ngày</option><option value="month" selected>Tháng</option><option value="quarter">Quý</option><option value="year">Năm</option></select></label><label class="report-period-input" data-period-field="day"><span>NGÀY</span>${dateField('reportDay', defaults.day)}</label><label class="report-period-input active" data-period-field="month"><span>THÁNG</span>${monthField('reportMonth', defaults.month)}</label><label class="report-period-input" data-period-field="quarter"><span>QUÝ</span><select id="reportQuarter">${quarterOptions}</select></label><label class="report-period-input" data-period-field="year"><span>NĂM</span><select id="reportYear">${yearList(defaults.year).map(year => `<option value="${year}" ${String(year) === String(defaults.year) ? 'selected' : ''}>Năm ${year}</option>`).join('')}</select></label></div><div class="warehouse-toolbar-actions">${extraButtons}<button class="warehouse-primary" id="${loadId}">Lập báo cáo</button></div></div></article>`;
+    <article class="warehouse-table-card financial-report-filter"><div class="warehouse-toolbar"><div class="report-period-fields"><label><span>LOẠI KỲ</span><select id="reportPeriodType"><option value="day">Ngày</option><option value="month" selected>Tháng</option><option value="quarter">Quý</option><option value="year">Năm</option></select></label><label class="report-period-input" data-period-field="day"><span>NGÀY</span>${dateField('reportDay', defaults.day)}</label><label class="report-period-input active" data-period-field="month"><span>THÁNG</span>${monthField('reportMonth', defaults.month)}</label><label class="report-period-input" data-period-field="quarter"><span>QUÝ</span><select id="reportQuarter">${quarterOptions}</select></label><label class="report-period-input" data-period-field="year"><span>NĂM</span><select id="reportYear">${yearList(defaults.year).map(year => `<option value="${year}" ${String(year) === String(defaults.year) ? 'selected' : ''}>Năm ${year}</option>`).join('')}</select></label></div><div class="warehouse-toolbar-actions">${extraButtons}<button type="button" class="warehouse-primary" id="${loadId}">Lập báo cáo</button></div></div></article>`;
   };
 
   const hue = text => {
@@ -195,6 +205,40 @@
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
+  const reportPeriodDefaults = () => {
+    const now = vietnamNow();
+    let year = Number(now.year);
+    let month = Number(now.month);
+    if (Number(now.day) <= 3) {
+      month -= 1;
+      if (month < 1) { month = 12; year -= 1; }
+    }
+    const monthText = pad(month);
+    const quarter = Math.floor((month - 1) / 3) + 1;
+    return { day: `${now.year}-${now.month}-${now.day}`, month: `${year}-${monthText}`, quarter: `${year}-Q${quarter}`, year: String(year) };
+  };
+  const setReportPeriod = (root, type, period) => {
+    const typeSelect = root.querySelector('#reportPeriodType');
+    if (typeSelect) typeSelect.value = type;
+    root.querySelectorAll('[data-period-field]').forEach(field => field.classList.toggle('active', field.dataset.periodField === type));
+    const hidden = root.querySelector({ day: '#reportDay', month: '#reportMonth', quarter: '#reportQuarter', year: '#reportYear' }[type] || '#reportMonth');
+    if (!hidden) return;
+    hidden.value = period;
+    refresh(hidden);
+  };
+  const fallbackBanner = (requestedLabel, shownLabel) => `<div class="report-period-fallback"><svg><use href="#i-warning"></use></svg><div><strong>${esc(requestedLabel)} chưa có chứng từ để vẽ biểu đồ</strong><span>Đang mở ${esc(shownLabel)} — kỳ gần nhất còn dữ liệu. Chọn lại kỳ trống rồi bấm Lập báo cáo nếu bạn muốn xem kỳ hiện tại.</span></div></div>`;
+  const syncFromReport = (root, report) => {
+    if (!report?.period) return;
+    if (report.fallbackFrom?.label) root.dataset.reportFallbackFrom = report.fallbackFrom.label;
+    setReportPeriod(root, report.period.periodType, report.period.period);
+  };
+  const activeFallbackBanner = (root, report) => {
+    const from = report?.fallbackFrom?.label || root.dataset.reportFallbackFrom;
+    if (!from || !report?.period?.label || from === report.period.label) return '';
+    return fallbackBanner(from, report.period.label);
+  };
+
   window.FLY_VI_DATE = { MONTHS, dateField, monthField, datetimeField, mount, refresh, hydrate: hydrateNative, periodToolbar };
+  window.FLY_REPORT_PERIOD = { defaults: reportPeriodDefaults, set: setReportPeriod, syncFromReport, activeFallbackBanner };
   window.FLY_UI = { avatar, person, kpi, kpiGrid, bars, hue };
 })();

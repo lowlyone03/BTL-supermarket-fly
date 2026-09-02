@@ -33,30 +33,173 @@
   };
   const statusClass = status => ({
     'Đang mở': 'ok', 'Hoàn thành': 'ok', 'Nháp': 'draft', 'Đã hủy': 'cancelled', 'Thành công': 'ok',
-    'Thất bại': 'cancelled', 'Chờ kiểm tra': 'sent', 'Chờ duyệt': 'sent', 'Đã duyệt': 'ok', 'Từ chối': 'cancelled'
+    'Thất bại': 'cancelled', 'Chờ kiểm tra': 'sent', 'Chờ duyệt': 'sent', 'Đã duyệt': 'ok', 'Từ chối': 'cancelled',
+    'Đang đổi trả': 'sent', 'Hoàn một phần': 'returned', 'Đã hoàn hết': 'cancelled', 'Đã đổi hàng': 'returned',
+    'Đổi và hoàn': 'returned', 'Có đổi trả': 'returned'
   }[status] || 'draft');
-  const printInvoice = detail => window.FLY_PRINT?.show({
-    title: 'HÓA ĐƠN BÁN HÀNG', number: detail.invoice.MaHD, documentDate: detail.invoice.NgayLap,
-    status: detail.invoice.TrangThai,
-    fields: [
-      { label: 'Thu ngân', value: detail.invoice.TenNV },
-      { label: 'Khách hàng', value: detail.invoice.TenKH || 'Khách vãng lai' }
-    ],
-    columns: [
-      { key: 'TenSP', label: 'Sản phẩm' },
-      { key: 'SoLuong', label: 'SL', align: 'right' },
-      { key: 'DonGia', label: 'Đơn giá', format: 'money', align: 'right' },
-      { key: 'ThanhTien', label: 'Thành tiền', format: 'money', align: 'right' }
-    ],
-    rows: detail.lines,
-    totals: [
-      { label: 'Tiền hàng', value: detail.invoice.TongTienHang, format: 'money' },
-      { label: 'Giảm giá', value: detail.invoice.TienGiamGia, format: 'money' },
-      { label: 'Điểm quy đổi', value: detail.invoice.TienDiemQuyDoi, format: 'money' },
-      { label: 'Tổng thanh toán', value: detail.invoice.TongThanhToan, format: 'money' }
-    ],
-    signatures: ['Thu ngân', 'Khách hàng']
+  const invoiceReturnView = item => {
+    const tickets = Number(item?.SoPhieuDoiTra || 0);
+    if (!tickets) return null;
+    const pending = Number(item.SoPhieuDangXuLy || 0);
+    const refunded = Number(item.TienDaHoan || 0);
+    const exchanged = Number(item.SoPhieuDoiHang || 0);
+    const soldQty = Number(item.SLBan || 0);
+    const returnedQty = Number(item.SLDaTra || 0);
+    const paid = Number(item.TongThanhToan || 0);
+    const remaining = Math.max(0, paid - refunded);
+    const fullRefund = soldQty > 0 && returnedQty >= soldQty && refunded > 0 && remaining <= 0;
+    let label = 'Có đổi trả';
+    let tone = 'returned';
+    if (pending) { label = 'Đang đổi trả'; tone = 'sent'; }
+    else if (fullRefund) { label = 'Đã hoàn hết'; tone = 'cancelled'; }
+    else if (exchanged && refunded > 0) { label = 'Đổi và hoàn'; tone = 'returned'; }
+    else if (exchanged) { label = 'Đã đổi hàng'; tone = 'returned'; }
+    else if (refunded > 0) { label = 'Hoàn một phần'; tone = 'returned'; }
+    return { label, tone, tickets, pending, refunded, exchanged, soldQty, returnedQty, paid, remaining, fullRefund };
+  };
+  const invoiceStatusHtml = item => {
+    const view = invoiceReturnView(item);
+    const pills = [`<span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span>`];
+    if (view) pills.push(`<span class="status-pill ${view.tone}">${esc(view.label)}</span>`);
+    return `<div class="cashier-invoice-status">${pills.join('')}</div>`;
+  };
+  const invoiceAmountCell = item => {
+    const view = invoiceReturnView(item);
+    if (!view) return `<td class="num">${money(item.TongThanhToan)}</td>`;
+    const extra = view.fullRefund
+      ? `Đã hoàn hết ${money(view.refunded)}`
+      : view.refunded > 0
+        ? `Đã hoàn ${money(view.refunded)} · Còn ${money(view.remaining)}`
+        : view.exchanged
+          ? 'Đã đổi hàng · không hoàn tiền'
+          : view.pending
+            ? `${view.pending} phiếu đang xử lý`
+            : `${view.tickets} phiếu đổi trả`;
+    return `<td class="num cashier-invoice-amount${view.fullRefund ? ' is-fully-refunded' : ''}"><strong>${money(item.TongThanhToan)}</strong><small>${esc(extra)}</small></td>`;
+  };
+  const printInvoice = detail => {
+    const inv = detail.invoice || {};
+    const paid = (detail.payments || []).filter(item => item.TrangThai === 'Thành công');
+    const fields = [
+      { label: 'Thu ngân', value: inv.TenNV },
+      { label: 'Ca bán', value: inv.MaCa || '—' },
+      { label: 'Khách hàng', value: inv.TenKH || 'Khách vãng lai' },
+      { label: 'Điện thoại', value: inv.SDT || 'Không SĐT' }
+    ];
+    if (paid.length) {
+      fields.push({ label: 'Thanh toán', value: paid.map(item => `${item.PhuongThuc} ${money(item.SoTien)}`).join(', ') });
+    }
+    window.FLY_PRINT?.show({
+      title: 'HÓA ĐƠN BÁN HÀNG',
+      number: inv.MaHD,
+      documentDate: inv.NgayLap,
+      status: inv.TrangThai,
+      fields,
+      columns: [
+        { key: 'TenSP', label: 'Sản phẩm' },
+        { key: 'SoLuong', label: 'SL', align: 'right' },
+        { key: 'DonGia', label: 'Đơn giá', format: 'money', align: 'right' },
+        { key: 'ThanhTien', label: 'Thành tiền', format: 'money', align: 'right' }
+      ],
+      rows: detail.lines,
+      totals: [
+        { label: 'Tiền hàng', value: inv.TongTienHang, format: 'money' },
+        { label: 'Giảm giá', value: inv.TienGiamGia, format: 'money' },
+        { label: 'Điểm quy đổi', value: inv.TienDiemQuyDoi, format: 'money' },
+        { label: 'Tổng thanh toán', value: inv.TongThanhToan, format: 'money' }
+      ],
+      note: 'Bản in hóa đơn gốc lúc bán. Đổi trả sau này in trên phiếu DT riêng, không sửa chứng từ này.',
+      signatures: ['Thu ngân', 'Khách hàng']
+    });
+  };
+  const printableReturns = detail => (detail.returns || []).filter(item => !['Đã hủy', 'Từ chối'].includes(item.TrangThai));
+  const chooseSaleDocument = detail => new Promise(resolve => {
+    const tickets = printableReturns(detail);
+    const inv = detail.invoice || {};
+    if (!tickets.length) return resolve('invoice');
+    const overlay = document.createElement('div');
+    overlay.className = 'warehouse-modal-backdrop';
+    overlay.innerHTML = `<div class="warehouse-modal warehouse-confirm-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">IN / LƯU PDF</p><h2>Chọn đúng 1 chứng từ</h2></div><button type="button" class="warehouse-icon-button close" aria-label="Đóng">×</button></div><div class="warehouse-modal-body"><p class="cashier-payment-help">Hóa đơn gốc và phiếu đổi trả là hai chứng từ riêng. Một lần chỉ in hoặc lưu một bản; trên bản xem trước còn chọn mẫu hệ thống hoặc giấy trắng mực đen.</p><div class="print-doc-choices">${[`<label class="print-doc-choice"><input type="radio" name="printDocKind" value="invoice" checked><span><strong>Hóa đơn gốc ${esc(inv.MaHD)}</strong><small>Lúc bán · ${money(inv.TongThanhToan)}</small></span></label>`, ...tickets.map(ticket => `<label class="print-doc-choice"><input type="radio" name="printDocKind" value="${esc(ticket.MaDT)}"><span><strong>${esc(ticket.HinhThucXuLy)} ${esc(ticket.MaDT)}</strong><small>${esc(ticket.TrangThai)} · hoàn ${money(ticket.SoTienHoan)}</small></span></label>`)].join('')}</div></div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Hủy</button><button type="button" class="warehouse-primary confirm-print">Xem bản in</button></div></div>`;
+    document.body.appendChild(overlay);
+    const finish = value => { overlay.remove(); resolve(value); };
+    overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', () => finish(null)));
+    overlay.addEventListener('click', event => { if (event.target === overlay) finish(null); });
+    overlay.querySelector('.confirm-print').addEventListener('click', () => {
+      finish(overlay.querySelector('input[name="printDocKind"]:checked')?.value || 'invoice');
+    });
   });
+  const printSaleDocument = async (context, detail) => {
+    const choice = await chooseSaleDocument(detail);
+    if (!choice) return;
+    if (choice === 'invoice') return printInvoice(detail);
+    printReturnTicket(await api(context, `/cashier/returns/${choice}`));
+  };
+  const printReturnTicket = detail => {
+    const ticket = detail.ticket || {};
+    const restocked = /ược nhập lại kho/i.test(ticket.KetQuaKiemTra || '') && !/không nhập lại/i.test(ticket.KetQuaKiemTra || '');
+    const hangDiDau = restocked
+      ? 'Nhập lại kho bán (cộng tồn)'
+      : /không nhập lại/i.test(ticket.KetQuaKiemTra || '')
+        ? 'Loại bỏ / vứt — không cộng tồn (đã trừ lúc bán)'
+        : (ticket.KetQuaKiemTra || 'Chưa kiểm kho');
+    const rows = (detail.lines || []).map(line => ({
+      ...line,
+      Nhom: line.LoaiDong || 'Hàng khách trả'
+    }));
+    window.FLY_PRINT?.show({
+      title: ticket.HinhThucXuLy === 'Hoàn tiền' ? 'PHIẾU HOÀN TIỀN' : 'PHIẾU ĐỔI HÀNG',
+      number: ticket.MaDT,
+      documentDate: ticket.NgayHoan || ticket.NgayLap,
+      status: ticket.TrangThai,
+      fields: [
+        { label: 'Hóa đơn gốc', value: ticket.MaHD },
+        { label: 'Ngày bán gốc', value: ticket.NgayHoaDon ? fmtTime(ticket.NgayHoaDon) : '—' },
+        { label: 'Khách hàng', value: ticket.TenKH || 'Khách vãng lai' },
+        { label: 'Thu ngân lập phiếu', value: ticket.NguoiLap },
+        { label: 'Thu ngân bán gốc', value: ticket.ThuNganGoc || '—' },
+        { label: 'Hình thức', value: ticket.HinhThucXuLy },
+        { label: 'Lý do', value: ticket.LyDo || '—' },
+        { label: 'Thủ kho kiểm', value: ticket.NguoiKiemTra || '—' },
+        { label: 'Quản lý duyệt', value: ticket.NguoiDuyet || '—' },
+        { label: 'Hàng đi đâu', value: hangDiDau }
+      ],
+      columns: [
+        { key: 'Nhom', label: 'Loại dòng' },
+        { key: 'TenSP', label: 'Sản phẩm' },
+        { key: 'SoLuong', label: 'SL', align: 'right' },
+        { key: 'DonGia', label: 'Đơn giá', format: 'money', align: 'right' },
+        { key: 'ThanhTien', label: 'Thành tiền', format: 'money', align: 'right' }
+      ],
+      rows,
+      totals: [
+        { label: 'Số tiền hoàn', value: ticket.SoTienHoan, format: 'money' }
+      ],
+      note: `Phiếu ${ticket.MaDT} độc lập với hóa đơn bán ${ticket.MaHD}. ${hangDiDau}. In hóa đơn gốc để xem bản lúc thanh toán.`,
+      signatures: ['Thu ngân', 'Khách hàng']
+    });
+  };
+  const openInvoiceDetail = async (context, maHD) => {
+    const detail = await api(context, `/cashier/invoices/${maHD}`);
+    const inv = detail.invoice;
+    const view = invoiceReturnView(inv);
+    const returns = detail.returns || [];
+    const overlay = document.createElement('div');
+    overlay.className = 'warehouse-modal-backdrop';
+    overlay.innerHTML = `<div class="warehouse-modal receipt-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">HÓA ĐƠN GỐC LÚC BÁN</p><h2>${esc(inv.MaHD)}</h2></div><button type="button" class="warehouse-icon-button close" aria-label="Đóng">×</button></div><div class="warehouse-modal-body">${view ? `<p class="cashier-invoice-reprint-note"><strong>Hóa đơn gốc không bị thay.</strong> ${esc(inv.MaHD)} vẫn ${esc(inv.TrangThai)}, tổng lúc bán ${money(inv.TongThanhToan)}. Nhãn ${esc(view.label)} và tiền hoàn nằm trên phiếu đổi trả in riêng.</p>` : ''}<div class="return-source-card"><div><span>KHÁCH</span><strong>${esc(inv.TenKH || 'Khách vãng lai')}</strong><small>${esc(inv.SDT || 'Không SĐT')}</small></div><div><span>NGÀY BÁN</span><strong>${fmtTime(inv.NgayLap)}</strong></div><div><span>TỔNG LÚC BÁN</span><strong>${money(inv.TongThanhToan)}</strong></div><div><span>ĐỔI TRẢ SAU BÁN</span><strong>${view ? esc(view.label) : 'Không'}</strong>${view && view.refunded ? `<small>Đã hoàn ${money(view.refunded)} · còn ${money(view.remaining)}</small>` : ''}</div></div><p class="warehouse-kicker">DÒNG HÀNG LÚC THANH TOÁN</p><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>SẢN PHẨM</th><th>SL BÁN</th><th>ĐƠN GIÁ</th><th>THÀNH TIỀN</th></tr></thead><tbody>${(detail.lines || []).map(line => `<tr><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)}</small></td><td class="num">${line.SoLuong}</td><td class="num">${money(line.DonGia)}</td><td class="num">${money(line.ThanhTien)}</td></tr>`).join('')}</tbody></table></div>${returns.length ? `<div class="cashier-invoice-detail-returns"><p class="warehouse-kicker">PHIẾU ĐỔI TRẢ — IN RIÊNG, KHÔNG THAY HÓA ĐƠN GỐC</p><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU</th><th>HÌNH THỨC</th><th>SỐ TIỀN HOÀN</th><th>TRẠNG THÁI</th><th></th></tr></thead><tbody>${returns.map(ticket => `<tr><td><strong>${esc(ticket.MaDT)}</strong><small>${fmtTime(ticket.NgayLap)}</small></td><td>${esc(ticket.HinhThucXuLy)}</td><td class="num">${money(ticket.SoTienHoan)}</td><td><span class="status-pill ${statusClass(ticket.TrangThai)}">${esc(ticket.TrangThai)}</span></td><td><button type="button" class="warehouse-secondary" data-print-return="${esc(ticket.MaDT)}">In phiếu</button></td></tr>`).join('')}</tbody></table></div></div>` : ''}</div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Đóng</button>${inv.TrangThai === 'Hoàn thành' ? `<button type="button" class="warehouse-primary" data-print-original>In / lưu PDF</button><button type="button" class="warehouse-secondary" data-open-returns="${esc(inv.MaHD)}">Mở đổi trả</button>` : ''}</div></div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+    overlay.querySelector('[data-print-original]')?.addEventListener('click', () => printSaleDocument(context, detail));
+    overlay.querySelectorAll('[data-print-return]').forEach(button => button.addEventListener('click', async () => {
+      try { printReturnTicket(await api(context, `/cashier/returns/${button.dataset.printReturn}`)); }
+      catch (error) { context.showToast(error.message, 'error'); }
+    }));
+    overlay.querySelector('[data-open-returns]')?.addEventListener('click', () => {
+      sessionStorage.setItem('fly_return_invoice', inv.MaHD);
+      close();
+      context.navigate('cashier-returns');
+    });
+  };
 
   const customerEditor = (context, existing, onDone) => {
     const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
@@ -442,7 +585,7 @@
         const status = root.querySelector('#invoiceStatus')?.value || '';
         const data = await api(context, `/cashier/invoices?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}`);
         if (!root.querySelector('#invoiceBody')) {
-          root.innerHTML = `${heading('THU NGÂN / HÓA ĐƠN', 'Hóa đơn ca của bạn', 'Nháp: tiếp tục lập/thanh toán hoặc hủy. Hoàn thành: in lại.')}<article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="warehouse-search"><input id="invoiceQuery" placeholder="Mã hóa đơn, tên hoặc SĐT khách..."></label><select id="invoiceStatus"><option value="">Tất cả</option><option>Nháp</option><option>Hoàn thành</option><option>Đã hủy</option></select></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HÓA ĐƠN</th><th>KHÁCH</th><th>TỔNG TIỀN</th><th>TRẠNG THÁI</th><th></th></tr></thead><tbody id="invoiceBody"></tbody></table></div></article>`;
+          root.innerHTML = `${heading('THU NGÂN / HÓA ĐƠN', 'Hóa đơn ca của bạn', 'Nháp: tiếp tục lập/thanh toán hoặc hủy. Hoàn thành: In hóa đơn gốc = bản lúc bán (tổng tiền chưa trừ hoàn). Đổi trả in phiếu DT riêng trong Chi tiết hoặc menu Đổi trả.')}<article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="warehouse-search"><input id="invoiceQuery" placeholder="Mã hóa đơn, tên hoặc SĐT khách..."></label><select id="invoiceStatus"><option value="">Tất cả</option><option>Nháp</option><option>Hoàn thành</option><option value="Có đổi trả">Có đổi trả</option><option>Đã hủy</option></select></div><div class="warehouse-table-wrap"><table class="warehouse-table cashier-invoice-table"><thead><tr><th>HÓA ĐƠN</th><th>KHÁCH</th><th>TỔNG TIỀN</th><th>TRẠNG THÁI</th><th></th></tr></thead><tbody id="invoiceBody"></tbody></table></div></article>`;
           let timer;
           root.querySelector('#invoiceQuery').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250); });
           root.querySelector('#invoiceStatus').addEventListener('change', load);
@@ -452,9 +595,15 @@
               sessionStorage.setItem('fly_pos_draft', continueBtn.dataset.continue);
               return context.navigate('cashier-pos');
             }
+            const detailBtn = event.target.closest('[data-detail]');
+            if (detailBtn) {
+              try { await openInvoiceDetail(context, detailBtn.dataset.detail); } catch (error) { context.showToast(error.message, 'error'); }
+              return;
+            }
             const printBtn = event.target.closest('[data-print]');
             if (printBtn) {
-              try { printInvoice(await api(context, `/cashier/invoices/${printBtn.dataset.print}`)); } catch (error) { context.showToast(error.message, 'error'); }
+              try { await printSaleDocument(context, await api(context, `/cashier/invoices/${printBtn.dataset.print}`)); } catch (error) { context.showToast(error.message, 'error'); }
+              return;
             }
             const cancelBtn = event.target.closest('[data-cancel]');
             if (cancelBtn) {
@@ -465,7 +614,15 @@
             }
           });
         }
-        root.querySelector('#invoiceBody').innerHTML = data.items.length ? data.items.map(item => `<tr><td><strong>${esc(item.MaHD)}</strong><small>${fmtTime(item.NgayLap)}</small></td><td>${person(item.TenKH || 'Khách vãng lai', item.SDT || '')}</td><td class="num">${money(item.TongThanhToan)}</td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></td><td>${item.TrangThai === 'Hoàn thành' ? `<button type="button" class="warehouse-secondary" data-print="${esc(item.MaHD)}">In lại</button>` : item.TrangThai === 'Nháp' ? `<button type="button" class="warehouse-primary" data-continue="${esc(item.MaHD)}">Tiếp tục thanh toán</button><button type="button" class="warehouse-danger" data-cancel="${esc(item.MaHD)}">Hủy nháp</button>` : '—'}</td></tr>`).join('') : '<tr><td colspan="5" class="warehouse-empty">Chưa có hóa đơn.</td></tr>';
+        root.querySelector('#invoiceBody').innerHTML = data.items.length ? data.items.map(item => {
+          const view = invoiceReturnView(item);
+          const actions = item.TrangThai === 'Hoàn thành'
+            ? `<button type="button" class="warehouse-secondary" data-detail="${esc(item.MaHD)}">Chi tiết</button><button type="button" class="warehouse-secondary" data-print="${esc(item.MaHD)}">${view ? 'In / lưu PDF' : 'In hóa đơn gốc'}</button>`
+            : item.TrangThai === 'Nháp'
+              ? `<button type="button" class="warehouse-primary" data-continue="${esc(item.MaHD)}">Tiếp tục thanh toán</button><button type="button" class="warehouse-danger" data-cancel="${esc(item.MaHD)}">Hủy nháp</button>`
+              : `<button type="button" class="warehouse-secondary" data-detail="${esc(item.MaHD)}">Chi tiết</button>`;
+          return `<tr class="${view ? 'cashier-invoice-has-return' : ''}"><td><strong>${esc(item.MaHD)}</strong><small>${fmtTime(item.NgayLap)}</small></td><td>${person(item.TenKH || 'Khách vãng lai', item.SDT || '')}</td>${invoiceAmountCell(item)}<td>${invoiceStatusHtml(item)}</td><td><div class="warehouse-row-actions">${actions}</div></td></tr>`;
+        }).join('') : '<tr><td colspan="5" class="warehouse-empty">Chưa có hóa đơn.</td></tr>';
       } catch (error) { context.showToast(error.message, 'error'); }
     };
     await load();
@@ -479,11 +636,15 @@
       { label: 'Khách đổi ý (còn nguyên tem)', form: 'Hoàn tiền', hint: 'Chỉ hoàn khi hàng còn nguyên; Thủ kho kiểm tra bao bì.' },
       { label: 'Lý do khác', form: '', hint: 'Ghi rõ tình trạng hàng và mong muốn của khách.' }
     ];
-    const invoiceHitHtml = item => `<button type="button" class="cashier-invoice-hit" data-hd="${esc(item.MaHD)}">${avatar(item.TenKH || 'K')}<div><strong>${esc(item.MaHD)}</strong><small>${esc(item.TenKH || 'Khách vãng lai')}${item.SDT ? ` · ${esc(item.SDT)}` : ''}</small></div><div class="cashier-invoice-hit-meta"><span>${fmtTime(item.NgayLap)}</span><span>Ca ${esc(item.MaCa || '—')} · ${esc(item.TenNV)}</span><strong>${money(item.TongThanhToan)}</strong></div></button>`;
+    const invoiceHitHtml = item => {
+      const view = invoiceReturnView(item);
+      return `<button type="button" class="cashier-invoice-hit${view ? ' has-return' : ''}" data-hd="${esc(item.MaHD)}">${avatar(item.TenKH || 'K')}<div><strong>${esc(item.MaHD)}</strong><small>${esc(item.TenKH || 'Khách vãng lai')}${item.SDT ? ` · ${esc(item.SDT)}` : ''}</small>${view ? `<span class="status-pill ${view.tone}">${esc(view.label)}</span>` : ''}</div><div class="cashier-invoice-hit-meta"><span>${fmtTime(item.NgayLap)}</span><span>Ca ${esc(item.MaCa || '—')} · ${esc(item.TenNV)}</span><strong>${money(item.TongThanhToan)}</strong>${view && view.refunded ? `<small>Đã hoàn ${money(view.refunded)}</small>` : ''}</div></button>`;
+    };
     const renderInvoiceForm = (overlay, data) => {
       const inv = data.invoice;
+      const view = invoiceReturnView(inv);
       overlay.querySelector('#returnInvoiceHits').innerHTML = '';
-      overlay.querySelector('#returnForm').innerHTML = `<div class="return-source-card"><div><span>HÓA ĐƠN GỐC</span><strong>${esc(inv.MaHD)}</strong></div><div><span>NGÀY BÁN</span><strong>${fmtTime(inv.NgayLap)}</strong></div><div><span>CA / THU NGÂN GỐC</span><strong>${esc(inv.MaCa || '—')}</strong><small>${esc(inv.TenNV)}</small></div><div><span>KHÁCH HÀNG</span><strong>${esc(inv.TenKH || 'Khách vãng lai')}</strong><small>${esc(inv.SDT || 'Không SĐT')}</small></div><div><span>TỔNG HĐ</span><strong>${money(inv.TongThanhToan)}</strong></div></div>
+      overlay.querySelector('#returnForm').innerHTML = `<div class="return-source-card"><div><span>HÓA ĐƠN GỐC</span><strong>${esc(inv.MaHD)}</strong></div><div><span>NGÀY BÁN</span><strong>${fmtTime(inv.NgayLap)}</strong></div><div><span>CA / THU NGÂN GỐC</span><strong>${esc(inv.MaCa || '—')}</strong><small>${esc(inv.TenNV)}</small></div><div><span>KHÁCH HÀNG</span><strong>${esc(inv.TenKH || 'Khách vãng lai')}</strong><small>${esc(inv.SDT || 'Không SĐT')}</small></div><div><span>TỔNG HĐ</span><strong>${money(inv.TongThanhToan)}</strong></div>${view ? `<div><span>ĐỔI TRẢ</span><strong>${esc(view.label)}</strong><small>${view.refunded ? `Đã hoàn ${money(view.refunded)}` : `${view.tickets} phiếu`}</small></div>` : ''}</div>
         <p class="cashier-return-shift-note">Hóa đơn gắn với ca đã bán (có thể là ca trước hoặc thu ngân khác). Hoàn tiền / giao đổi ghi vào <strong>ca bạn đang mở</strong>, không mở lại ca cũ và không sửa Phiếu thu ca đã đối soát.</p>
         <div class="warehouse-field"><label>Lý do đổi trả *</label><div class="cashier-reason-chips">${reasons.map(item => `<button type="button" class="cashier-reason-chip" data-reason="${esc(item.label)}" data-form="${esc(item.form)}">${esc(item.label)}</button>`).join('')}</div><textarea id="returnReason" maxlength="500" placeholder="Chọn lý do nhanh hoặc ghi rõ tình trạng hàng..."></textarea><small id="returnReasonHint" class="cashier-payment-help"></small></div>
         <div class="warehouse-field"><label>Hình thức xử lý *</label><div class="cashier-return-forms"><label><input type="radio" name="returnFormType" value="Hoàn tiền" checked> Hoàn tiền<span>Trả tiền từ két ca đang mở</span></label><label><input type="radio" name="returnFormType" value="Đổi hàng"> Đổi hàng<span>Giao sản phẩm khác sau khi Quản lý duyệt</span></label></div></div>
@@ -521,7 +682,7 @@
       });
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', () => overlay.remove()));
     };
-    const openCreate = async () => {
+    const openCreate = async (presetHd = '') => {
       const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
       overlay.innerHTML = `<div class="warehouse-modal receipt-modal return-create-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">ĐỔI TRẢ</p><h2>Lập yêu cầu từ hóa đơn gốc</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="return-workflow-hint"><svg><use href="#i-refresh"/></svg><div><strong>Khách mua ca trước / nhân viên khác vẫn đổi trả được</strong><p>Tìm hóa đơn đã hoàn thành → chọn hàng → Thủ kho kiểm tra → Quản lý duyệt → hoàn tất trên ca đang mở của bạn.</p></div></div><div class="warehouse-field"><label>Tìm hóa đơn đã hoàn thành</label><input id="returnSearch" placeholder="Mã HĐ, tên khách, SĐT, mã ca hoặc tên thu ngân gốc..."></div><div id="returnInvoiceHits" class="cashier-invoice-hits"></div><div id="returnForm"></div></div></div>`;
       document.body.appendChild(overlay);
@@ -553,6 +714,22 @@
         try { renderInvoiceForm(overlay, await api(context, `/cashier/returns/source/${hit.dataset.hd}`)); }
         catch (error) { context.showToast(error.message, 'error'); }
       });
+      if (presetHd) {
+        try { renderInvoiceForm(overlay, await api(context, `/cashier/returns/source/${presetHd}`)); }
+        catch (error) { context.showToast(error.message, 'error'); }
+      }
+    };
+    const returnActionHtml = item => {
+      if (item.TrangThai === 'Đã duyệt') {
+        const label = item.HinhThucXuLy === 'Hoàn tiền' ? 'Xác nhận hoàn' : 'Xác nhận đổi';
+        return `<button type="button" class="warehouse-primary" data-complete="${esc(item.MaDT)}">${label}</button>`;
+      }
+      if (item.TrangThai === 'Chờ duyệt') return '<span class="cashier-return-wait">Chờ duyệt</span>';
+      if (item.TrangThai === 'Chờ kiểm tra') return '<span class="cashier-return-wait">Chờ Thủ kho</span>';
+      if (item.TrangThai === 'Nháp') return '<span class="cashier-return-wait">Nháp</span>';
+      if (item.TrangThai === 'Hoàn thành') return `<div class="warehouse-row-actions"><span class="cashier-return-done">Đã xác nhận</span><button type="button" class="warehouse-secondary" data-print-return="${esc(item.MaDT)}">In phiếu</button></div>`;
+      if (item.TrangThai === 'Từ chối') return '<span class="cashier-return-wait is-rejected">Từ chối</span>';
+      return '—';
     };
     const completeModal = async (id) => {
       const detail = await api(context, `/cashier/returns/${id}`);
@@ -560,7 +737,13 @@
       const refund = detail.ticket.HinhThucXuLy === 'Hoàn tiền';
       const returned = detail.lines.filter(item => item.LoaiDong === 'Hàng khách trả');
       const returnedValue = returned.reduce((sum, item) => sum + Number(item.ThanhTien || 0), 0);
-      overlay.innerHTML = `<div class="warehouse-modal receipt-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">HOÀN TẤT ĐỔI TRẢ</p><h2>${esc(id)}</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="return-source-card"><div><span>HÓA ĐƠN GỐC</span><strong>${esc(detail.ticket.MaHD)}</strong><small>Ca gốc ${esc(detail.ticket.MaCaGoc || '—')} · ${esc(detail.ticket.ThuNganGoc || '')}</small></div><div><span>HÌNH THỨC</span><strong>${esc(detail.ticket.HinhThucXuLy)}</strong></div><div><span>TIỀN HÀNG TRẢ</span><strong>${money(returnedValue)}</strong></div><div><span>KIỂM TRA KHO</span><strong>${esc(detail.ticket.KetQuaKiemTra || '—')}</strong></div></div><p class="cashier-return-shift-note">Phải đang mở ca của bạn. Tiền hoàn tiền mặt trừ két ca hiện tại, không đụng ca đã đóng.</p><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HÀNG KHÁCH TRẢ</th><th>SL</th><th>THÀNH TIỀN</th></tr></thead><tbody>${returned.map(item => `<tr><td>${esc(item.TenSP)}</td><td class="num">${item.SoLuong}</td><td class="num">${money(item.ThanhTien)}</td></tr>`).join('')}</tbody></table></div>${refund ? `<div class="warehouse-field"><label>Phương thức hoàn *</label><select id="refundMethod"><option>Tiền mặt</option><option>QR</option><option>Thẻ</option><option>Chuyển khoản</option></select></div><div class="warehouse-field" id="refundCodeField" hidden><label>Mã giao dịch hoàn *</label><input id="refundCode" placeholder="Mã QR / thẻ / chuyển khoản"></div><p class="cashier-payment-help">Hoàn tiền mặt được trừ khi tính tiền bàn giao cuối ca đang mở.</p>` : `<p>Đổi trực tiếp chỉ áp dụng sản phẩm ngang giá. Hệ thống trừ tồn khi hoàn tất.</p><div class="warehouse-field"><label>Tìm hàng giao đổi</label><input id="exchangeSearch" placeholder="Mã, tên hoặc mã vạch..."></div><div id="exchangeHits" class="cashier-invoice-hits"></div><div id="exchangeLines" class="cashier-exchange-lines"></div><div class="cashier-return-total">Giá trị giao đổi: <strong id="exchangeValue">${money(0)}</strong> · Chênh lệch: <strong id="exchangeDiff">${money(0)}</strong></div><p class="cashier-payment-help" id="exchangeDiffHelp">Chọn hàng giao đổi có tổng giá trị đúng bằng tiền hàng trả.</p>`}</div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-primary confirm">Hoàn thành</button></div></div>`;
+      const restocked = /ược nhập lại kho/i.test(detail.ticket.KetQuaKiemTra || '') && !/không nhập lại/i.test(detail.ticket.KetQuaKiemTra || '');
+      const hangDiDau = restocked
+        ? 'Nhập lại kho bán (cộng tồn)'
+        : /không nhập lại/i.test(detail.ticket.KetQuaKiemTra || '')
+          ? 'Loại bỏ / vứt — không cộng tồn (đã trừ lúc bán)'
+          : 'Chưa rõ xử lý kho';
+      overlay.innerHTML = `<div class="warehouse-modal receipt-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">${refund ? 'XÁC NHẬN HOÀN TIỀN' : 'XÁC NHẬN ĐỔI HÀNG'}</p><h2>${esc(id)}</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="return-source-card"><div><span>HÓA ĐƠN GỐC</span><strong>${esc(detail.ticket.MaHD)}</strong><small>Ca gốc ${esc(detail.ticket.MaCaGoc || '—')} · ${esc(detail.ticket.ThuNganGoc || '')}</small></div><div><span>HÌNH THỨC</span><strong>${esc(detail.ticket.HinhThucXuLy)}</strong></div><div><span>TIỀN HÀNG TRẢ</span><strong>${money(returnedValue)}</strong></div><div><span>HÀNG ĐI ĐÂU</span><strong>${esc(hangDiDau)}</strong><small>${esc(detail.ticket.KetQuaKiemTra || '—')}</small></div></div><p class="cashier-return-shift-note">Phải đang mở ca của bạn. Tiền hoàn tiền mặt trừ két ca hiện tại, không đụng ca đã đóng. Hàng loại bỏ/vứt không trừ kho lần nữa vì đã trừ lúc bán.</p><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HÀNG KHÁCH TRẢ</th><th>SL</th><th>THÀNH TIỀN</th><th>HÀNG ĐI ĐÂU</th></tr></thead><tbody>${returned.map(item => `<tr><td>${esc(item.TenSP)}</td><td class="num">${item.SoLuong}</td><td class="num">${money(item.ThanhTien)}</td><td>${esc(hangDiDau)}</td></tr>`).join('')}</tbody></table></div>${refund ? `<div class="warehouse-field"><label>Phương thức hoàn *</label><select id="refundMethod"><option>Tiền mặt</option><option>QR</option><option>Thẻ</option><option>Chuyển khoản</option></select></div><div class="warehouse-field" id="refundCodeField" hidden><label>Mã giao dịch hoàn *</label><input id="refundCode" placeholder="Mã QR / thẻ / chuyển khoản"></div><p class="cashier-payment-help">Hoàn tiền mặt được trừ khi tính tiền bàn giao cuối ca đang mở.</p>` : `<p>Đổi trực tiếp chỉ áp dụng sản phẩm ngang giá. Hệ thống trừ tồn khi hoàn tất.</p><div class="warehouse-field"><label>Tìm hàng giao đổi</label><input id="exchangeSearch" placeholder="Mã, tên hoặc mã vạch..."></div><div id="exchangeHits" class="cashier-invoice-hits"></div><div id="exchangeLines" class="cashier-exchange-lines"></div><div class="cashier-return-total">Giá trị giao đổi: <strong id="exchangeValue">${money(0)}</strong> · Chênh lệch: <strong id="exchangeDiff">${money(0)}</strong></div><p class="cashier-payment-help" id="exchangeDiffHelp">Chọn hàng giao đổi có tổng giá trị đúng bằng tiền hàng trả.</p>`}</div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-primary confirm">${refund ? 'Xác nhận hoàn' : 'Xác nhận đổi'}</button></div></div>`;
       document.body.appendChild(overlay);
       const close = () => overlay.remove();
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
@@ -616,7 +799,9 @@
           : { exchange: [...overlay.querySelectorAll('.cashier-exchange-row')].map(row => ({ MaSP: row.dataset.sp, SoLuong: Number(row.querySelector('.ex-qty').value) })) };
         try {
           const result = await api(context, `/cashier/returns/${id}/complete`, { method: 'POST', body: JSON.stringify(payload) });
-          context.showToast(result.message, 'success'); close(); await load();
+          context.showToast(result.message, 'success');
+          try { printReturnTicket(await api(context, `/cashier/returns/${id}`)); } catch { /* in phiếu không chặn hoàn tất */ }
+          close(); await load();
         } catch (error) { context.showToast(error.message, 'error'); }
       });
       if (!refund) updateExchangeTotals();
@@ -624,9 +809,18 @@
     const load = async () => {
       try {
         const data = await api(context, '/cashier/returns?scope=mine');
-        root.innerHTML = `${heading('THU NGÂN / UC26', 'Yêu cầu đổi hàng hoặc hoàn tiền', 'Lập từ hóa đơn gốc (kể cả ca trước), gửi Thủ kho kiểm tra, Quản lý duyệt, rồi hoàn tất tại quầy trên ca đang mở.', '<button class="warehouse-primary" id="newReturn">Lập yêu cầu</button>')}<article class="warehouse-table-card"><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU</th><th>HÓA ĐƠN / KHÁCH</th><th>CA GỐC</th><th>HÌNH THỨC</th><th>SỐ TIỀN HOÀN</th><th>TRẠNG THÁI</th><th></th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><strong>${esc(item.MaDT)}</strong><small>${fmtTime(item.NgayLap)}</small></td><td>${esc(item.MaHD)}<small>${esc(item.TenKH || 'Khách vãng lai')}</small></td><td>${esc(item.MaCaGoc || '—')}<small>${esc(item.ThuNganGoc || '')}${item.MaCaHoan ? `<br>Hoàn ca ${esc(item.MaCaHoan)}` : ''}</small></td><td>${esc(item.HinhThucXuLy)}</td><td class="num">${money(item.SoTienHoan)}</td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></td><td>${item.TrangThai === 'Đã duyệt' ? `<button class="warehouse-primary" data-complete="${esc(item.MaDT)}">Hoàn tất</button>` : '—'}</td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có yêu cầu đổi trả.</td></tr>'}</tbody></table></div></article>`;
-        root.querySelector('#newReturn').addEventListener('click', openCreate);
+        root.innerHTML = `${heading('THU NGÂN / UC26', 'Yêu cầu đổi hàng hoặc hoàn tiền', 'Lập phiếu → Thủ kho kiểm → Quản lý duyệt → bạn xác nhận hoàn/đổi trên ca đang mở. Cột thao tác hiện Chờ duyệt cho đến khi Quản lý duyệt xong.', '<button class="warehouse-primary" id="newReturn">Lập yêu cầu</button>')}<article class="warehouse-table-card"><div class="warehouse-table-wrap"><table class="warehouse-table cashier-return-table"><thead><tr><th>PHIẾU</th><th>HÓA ĐƠN / KHÁCH</th><th>CA GỐC</th><th>HÌNH THỨC</th><th>SỐ TIỀN HOÀN</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr class="${item.TrangThai === 'Đã duyệt' ? 'cashier-return-ready' : ''}"><td><strong>${esc(item.MaDT)}</strong><small>${fmtTime(item.NgayLap)}</small></td><td>${esc(item.MaHD)}<small>${esc(item.TenKH || 'Khách vãng lai')}</small></td><td>${esc(item.MaCaGoc || '—')}<small>${esc(item.ThuNganGoc || '')}${item.MaCaHoan ? `<br>Hoàn ca ${esc(item.MaCaHoan)}` : ''}</small></td><td>${esc(item.HinhThucXuLy)}</td><td class="num">${money(item.SoTienHoan)}</td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></td><td>${returnActionHtml(item)}</td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có yêu cầu đổi trả.</td></tr>'}</tbody></table></div></article>`;
+        root.querySelector('#newReturn').addEventListener('click', () => openCreate());
         root.querySelectorAll('[data-complete]').forEach(button => button.addEventListener('click', () => completeModal(button.dataset.complete)));
+        root.querySelectorAll('[data-print-return]').forEach(button => button.addEventListener('click', async () => {
+          try { printReturnTicket(await api(context, `/cashier/returns/${button.dataset.printReturn}`)); }
+          catch (error) { context.showToast(error.message, 'error'); }
+        }));
+        const presetHd = sessionStorage.getItem('fly_return_invoice');
+        if (presetHd) {
+          sessionStorage.removeItem('fly_return_invoice');
+          await openCreate(presetHd);
+        }
       } catch (error) { context.showToast(error.message, 'error'); root.innerHTML = `<div class="welcome-card"><h2>Không tải được đổi trả</h2><p>${esc(error.message)}</p></div>`; }
     };
     await load();

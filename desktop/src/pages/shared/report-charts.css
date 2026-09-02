@@ -168,6 +168,13 @@
   background-image: radial-gradient(circle at 1px 1px, #cbd8d1 1px, transparent 0);
   background-size: 18px 18px;
 }
+.report-preview .document-preview-shell.official-skin {
+  background: #fff;
+}
+.report-preview .document-preview-shell.official-skin iframe {
+  background-color: #fff;
+  background-image: none;
+}
 
 .fly-dashboard-grid {
   display: grid;
@@ -1986,3 +1993,44 @@
 @media print {
   .financial-reports .report-reading-guide { display: none !important; }
 }
+
+.financial-reports .report-return-block {
+  width: 100%;
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+
+.financial-reports .report-return-grid {
+  display: grid !important;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 14px;
+  margin: 0 !important;
+}
+
+.financial-reports .report-return-grid::before { content: none; }
+
+.financial-reports .report-return-tickets,
+.financial-reports .report-return-products {
+  width: 100%;
+  min-width: 0;
+  min-height: 0 !important;
+}
+
+.financial-reports .report-return-block .warehouse-table {
+  min-width: 0 !important;
+}
+
+.financial-reports .report-return-block .warehouse-table th,
+.financial-reports .report-return-block .warehouse-table td {
+  white-space: normal;
+}
+
+.financial-reports .report-return-block .status-pill {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  line-height: 1.35;
+}
+

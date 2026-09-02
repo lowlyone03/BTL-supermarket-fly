@@ -1,14 +1,151 @@
 const { sql, poolPromise } = require('../config/db');
-const { calculateGrossProfit, roundMoney, RESTOCK_ACCEPTED_SQL } = require('../services/financialRules');
-const { resolveReportingPeriod } = require('../services/reportingPeriod');
+const { calculateGrossProfit, roundMoney, RESTOCK_ACCEPTED_SQL, RESTOCK_REJECTED_SQL, STOCK_FATE_SQL } = require('../services/financialRules');
+const { resolveReportingPeriod, activityFromStamp, currentPeriodDefaults } = require('../services/reportingPeriod');
+const { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS } = require('../services/invoiceReturnSql');
 
 const bindPeriod = (pool, period) => pool.request()
-    .input('From', sql.Date, period.from)
-    .input('ToExclusive', sql.Date, period.toExclusive);
+    .input('From', sql.NVarChar(10), period.from)
+    .input('ToExclusive', sql.NVarChar(10), period.toExclusive);
 
-const buildFinancialReport = async (query) => {
-        const period = resolveReportingPeriod(query);
+const queryLatestActivity = async (pool) => {
+    const result = await pool.request().query(`
+        SELECT MAX(Ngay) LatestAt
+        FROM (
+            SELECT MAX(NgayLap) Ngay FROM HoaDon WHERE TrangThai=N'Hoàn thành'
+            UNION ALL SELECT MAX(NgayHoan) FROM PhieuDoiTra WHERE TrangThai=N'Hoàn thành'
+            UNION ALL SELECT MAX(NgayGD) FROM GiaoDichKho
+            UNION ALL SELECT MAX(NgayLap) FROM DonMuaHang WHERE TrangThai NOT IN (N'Nháp', N'Từ chối')
+        ) x`);
+    return activityFromStamp(result.recordset[0]?.LatestAt);
+};
+
+const resolveReportPeriod = async (pool, query = {}) => {
+    const requested = resolveReportingPeriod(query);
+    const latestActivity = await queryLatestActivity(pool);
+    if (String(query.lockPeriod || '') === '1' || !latestActivity) {
+        return { period: requested, latestActivity, fallbackFrom: null };
+    }
+    const current = currentPeriodDefaults();
+    const watchingCurrent = (requested.periodType === 'month' && requested.period === current.month)
+        || (requested.periodType === 'day' && requested.period === current.day);
+    if (!watchingCurrent) return { period: requested, latestActivity, fallbackFrom: null };
+    const probe = await bindPeriod(pool, requested).query(`
+        SELECT
+          (SELECT COUNT(*) FROM HoaDon WHERE TrangThai=N'Hoàn thành' AND NgayLap>=@From AND NgayLap<@ToExclusive)
+          + (SELECT COUNT(*) FROM GiaoDichKho WHERE NgayGD>=@From AND NgayGD<@ToExclusive)
+          + (SELECT COUNT(*) FROM DonMuaHang WHERE NgayLap>=@From AND NgayLap<@ToExclusive
+               AND TrangThai NOT IN (N'Nháp', N'Từ chối')) AS SoPhatSinh`);
+    if (Number(probe.recordset[0]?.SoPhatSinh)) {
+        return { period: requested, latestActivity, fallbackFrom: null };
+    }
+    const nextType = latestActivity[requested.periodType] ? requested.periodType : 'month';
+    const nextValue = latestActivity[nextType];
+    if (!nextValue || nextValue === requested.period) {
+        return { period: requested, latestActivity, fallbackFrom: null };
+    }
+    return {
+        period: resolveReportingPeriod({ periodType: nextType, period: nextValue }),
+        latestActivity,
+        fallbackFrom: requested
+    };
+};
+
+const RETURN_STEP_SQL = `
+    CASE
+      WHEN dt.TrangThai=N'Nháp' THEN N'Thu ngân chưa gửi Thủ kho'
+      WHEN dt.TrangThai=N'Chờ kiểm tra' THEN N'Thủ kho chưa kiểm hàng'
+      WHEN dt.TrangThai=N'Chờ duyệt' THEN N'Quản lý chưa duyệt'
+      WHEN dt.TrangThai=N'Đã duyệt' THEN N'Thu ngân chưa xác nhận hoàn/đổi'
+      WHEN dt.TrangThai=N'Từ chối' THEN N'Quản lý đã từ chối'
+      WHEN dt.TrangThai=N'Đã hủy' THEN N'Phiếu đã hủy'
+      WHEN ${RESTOCK_REJECTED_SQL} THEN N'Loại bỏ / vứt — không cộng tồn (đã trừ lúc bán)'
+      WHEN ${RESTOCK_ACCEPTED_SQL} THEN N'Nhập lại kho bán'
+      WHEN dt.LyDo LIKE N'%nhầm%' OR dt.LyDo LIKE N'%sai sản phẩm%' THEN N'Thu ngân bán/giao nhầm'
+      ELSE N'Đã xử lý xong tại quầy'
+    END`;
+
+const cashierReturnScope = `
+    AND (
+      @MaNV IS NULL
+      OR dt.MaNV_Lap=@MaNV
+      OR EXISTS (SELECT 1 FROM CaLamViec ca WHERE ca.MaCa=dt.MaCaHoan AND ca.MaNV=@MaNV)
+      OR EXISTS (SELECT 1 FROM HoaDon hd2 WHERE hd2.MaHD=dt.MaHD AND hd2.MaNV=@MaNV)
+    )`;
+
+const queryReturnDiagnostics = async (pool, period, maNV = null) => {
+    const bind = () => bindPeriod(pool, period).input('MaNV', sql.VarChar(20), maNV);
+    const [summary, tickets, products] = await Promise.all([
+        bind().query(`
+            SELECT
+              COUNT(*) SoPhieu,
+              SUM(CASE WHEN dt.HinhThucXuLy=N'Hoàn tiền' THEN 1 ELSE 0 END) SoHoanTien,
+              SUM(CASE WHEN dt.HinhThucXuLy=N'Đổi hàng' THEN 1 ELSE 0 END) SoDoiHang,
+              COALESCE(SUM(CASE WHEN dt.TrangThai=N'Hoàn thành' THEN dt.SoTienHoan ELSE 0 END),0) TienHoan,
+              SUM(CASE WHEN dt.TrangThai=N'Chờ kiểm tra' THEN 1 ELSE 0 END) ChoKiemTra,
+              SUM(CASE WHEN dt.TrangThai=N'Chờ duyệt' THEN 1 ELSE 0 END) ChoDuyet,
+              SUM(CASE WHEN dt.TrangThai=N'Đã duyệt' THEN 1 ELSE 0 END) ChoThuNganXacNhan,
+              SUM(CASE WHEN ${RESTOCK_REJECTED_SQL} THEN 1 ELSE 0 END) KhongNhapLai,
+              COALESCE(SUM(CASE WHEN ${RESTOCK_ACCEPTED_SQL} THEN 1 ELSE 0 END),0) NhapLaiKho
+            FROM PhieuDoiTra dt
+            WHERE dt.TrangThai NOT IN (N'Đã hủy')
+              AND (
+                (dt.NgayLap>=@From AND dt.NgayLap<@ToExclusive)
+                OR (dt.NgayHoan IS NOT NULL AND dt.NgayHoan>=@From AND dt.NgayHoan<@ToExclusive)
+              )
+              ${cashierReturnScope}`),
+        bind().query(`
+            SELECT TOP 20 dt.MaDT, dt.MaHD, dt.NgayLap, dt.NgayHoan, dt.HinhThucXuLy, dt.SoTienHoan,
+                   dt.TrangThai, dt.LyDo, dt.KetQuaKiemTra, dt.MaCaHoan,
+                   kh.TenKH, lap.TenNV NguoiLap, kho.TenNV NguoiKiemTra, duyet.TenNV NguoiDuyet,
+                   ${RETURN_STEP_SQL} BuocCanXuLy,
+                   ${STOCK_FATE_SQL} HangDiDau
+            FROM PhieuDoiTra dt
+            JOIN HoaDon hd ON hd.MaHD=dt.MaHD
+            JOIN NhanVien lap ON lap.MaNV=dt.MaNV_Lap
+            LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
+            LEFT JOIN NhanVien kho ON kho.MaNV=dt.MaNV_KiemTra
+            LEFT JOIN NhanVien duyet ON duyet.MaNV=dt.MaNV_Duyet
+            WHERE dt.TrangThai NOT IN (N'Đã hủy')
+              AND (
+                (dt.NgayLap>=@From AND dt.NgayLap<@ToExclusive)
+                OR (dt.NgayHoan IS NOT NULL AND dt.NgayHoan>=@From AND dt.NgayHoan<@ToExclusive)
+              )
+              ${cashierReturnScope}
+            ORDER BY CASE dt.TrangThai
+                       WHEN N'Đã duyệt' THEN 0 WHEN N'Chờ duyệt' THEN 1
+                       WHEN N'Chờ kiểm tra' THEN 2 WHEN N'Nháp' THEN 3 ELSE 4 END,
+                     COALESCE(dt.NgayHoan, dt.NgayLap) DESC`),
+        bind().query(`
+            SELECT TOP 8 sp.MaSP, sp.TenSP,
+                   SUM(ct.SoLuong) SLTra,
+                   COALESCE(SUM(ct.ThanhTien),0) TienHangTra,
+                   SUM(CASE WHEN ${RESTOCK_ACCEPTED_SQL} THEN ct.SoLuong ELSE 0 END) SLNhapLai,
+                   SUM(CASE WHEN ${RESTOCK_REJECTED_SQL} THEN ct.SoLuong ELSE 0 END) SLLoaiBo,
+                   SUM(CASE WHEN ${RESTOCK_REJECTED_SQL} THEN ct.SoLuong ELSE 0 END) SLKhongNhapLai,
+                   MAX(dt.LyDo) LyDoMau
+            FROM ChiTietDoiTra ct
+            JOIN PhieuDoiTra dt ON dt.MaDT=ct.MaDT
+            JOIN SanPham sp ON sp.MaSP=ct.MaSP
+            WHERE ct.LoaiDong=N'Hàng khách trả'
+              AND dt.TrangThai NOT IN (N'Đã hủy', N'Từ chối')
+              AND (
+                (dt.NgayLap>=@From AND dt.NgayLap<@ToExclusive)
+                OR (dt.NgayHoan IS NOT NULL AND dt.NgayHoan>=@From AND dt.NgayHoan<@ToExclusive)
+              )
+              ${cashierReturnScope}
+            GROUP BY sp.MaSP, sp.TenSP
+            ORDER BY SLTra DESC`)
+    ]);
+    return {
+        summary: summary.recordset[0] || {},
+        tickets: tickets.recordset,
+        products: products.recordset
+    };
+};
+
+const buildFinancialReport = async (query, prepared = null) => {
         const pool = await poolPromise;
+        const { period, latestActivity, fallbackFrom } = prepared || await resolveReportPeriod(pool, query);
         const [salesResult, returnsResult, dailyResult, purchasesResult, movementResult,
             stockResult, laterMovementResult, financeResult, cashflowDailyResult,
             debtAgingResult, payablesResult, reconciliationResult] = await Promise.all([
@@ -160,6 +297,7 @@ const buildFinancialReport = async (query) => {
                 GROUP BY TrangThaiDoiChieu ORDER BY SoHoaDon DESC`)
         ]);
 
+        const doiTra = await queryReturnDiagnostics(pool, period);
         const gross = calculateGrossProfit({ ...salesResult.recordset[0], ...returnsResult.recordset[0] });
         const daily = dailyResult.recordset.map(row => ({
             Ngay: row.Ngay,
@@ -175,6 +313,8 @@ const buildFinancialReport = async (query) => {
 
         return {
             period,
+            latestActivity,
+            fallbackFrom,
             sales: { SoHoaDon: Number(salesResult.recordset[0].SoHoaDon || 0), SoPhieuDoiTra: Number(returnsResult.recordset[0].SoPhieuDoiTra || 0), ...gross },
             daily,
             purchases: purchasesResult.recordset[0],
@@ -189,7 +329,8 @@ const buildFinancialReport = async (query) => {
             cashflowDaily: cashflowDailyResult.recordset,
             debtAging: debtAgingResult.recordset,
             payables: payablesResult.recordset,
-            reconciliation: reconciliationResult.recordset
+            reconciliation: reconciliationResult.recordset,
+            doiTra
         };
 };
 
@@ -204,10 +345,11 @@ const getFinancialReport = async (req, res) => {
 
 const getStoreOperationsReport = async (req, res) => {
     try {
-        const period = resolveReportingPeriod(req.query);
         const pool = await poolPromise;
+        const resolved = await resolveReportPeriod(pool, req.query);
+        const period = resolved.period;
         const [core, cashiers, alerts, activity, salesByCategory, topProducts, inventoryByCategory] = await Promise.all([
-            buildFinancialReport(req.query),
+            buildFinancialReport(req.query, resolved),
             bindPeriod(pool, period).query(`
                 SELECT nv.MaNV, nv.TenNV, COUNT(*) SoCa,
                        COALESCE(SUM(ca.DoanhThuHoaDon),0) DoanhThuHoaDon,
@@ -266,6 +408,8 @@ const getStoreOperationsReport = async (req, res) => {
         ]);
         res.json({
             period: core.period,
+            latestActivity: core.latestActivity,
+            fallbackFrom: core.fallbackFrom,
             sales: core.sales,
             daily: core.daily,
             purchases: core.purchases,
@@ -276,7 +420,8 @@ const getStoreOperationsReport = async (req, res) => {
             activity: activity.recordset[0],
             salesByCategory: salesByCategory.recordset,
             topProducts: topProducts.recordset,
-            inventoryByCategory: inventoryByCategory.recordset
+            inventoryByCategory: inventoryByCategory.recordset,
+            doiTra: core.doiTra
         });
     } catch (error) {
         console.error(error);
@@ -286,8 +431,8 @@ const getStoreOperationsReport = async (req, res) => {
 
 const getWarehouseReport = async (req, res) => {
     try {
-        const period = resolveReportingPeriod(req.query);
         const pool = await poolPromise;
+        const { period, latestActivity, fallbackFrom } = await resolveReportPeriod(pool, req.query);
         const [movement, stock, low, docs, daily, laterMovement, inventoryByCategory, recentDocuments] = await Promise.all([
             bindPeriod(pool, period).query(`
                 SELECT COALESCE(SUM(CASE WHEN LoaiGD=N'Nhập' THEN SoLuong ELSE 0 END),0) SoLuongNhap,
@@ -366,13 +511,16 @@ const getWarehouseReport = async (req, res) => {
         });
         res.json({
             period,
+            latestActivity,
+            fallbackFrom,
             movement: { ...m, SoLuongDauKy: openingQuantity, SoLuongCuoiKy: closingQuantity },
             stock: stock.recordset[0],
             documents: docs.recordset[0],
             lowStock: low.recordset,
             daily: dailyRows,
             inventoryByCategory: inventoryByCategory.recordset,
-            recentDocuments: recentDocuments.recordset
+            recentDocuments: recentDocuments.recordset,
+            doiTra: await queryReturnDiagnostics(pool, period)
         });
     } catch (error) {
         console.error(error);
@@ -382,8 +530,8 @@ const getWarehouseReport = async (req, res) => {
 
 const getSalesReport = async (req, res) => {
     try {
-        const period = resolveReportingPeriod(req.query);
         const pool = await poolPromise;
+        const { period, latestActivity, fallbackFrom } = await resolveReportPeriod(pool, req.query);
         const maNV = req.user.MaNV;
         const [sales, methods, shifts, returns, daily, topProducts, recentInvoices, alerts] = await Promise.all([
             bindPeriod(pool, period).input('MaNV', sql.VarChar, maNV).query(`
@@ -403,7 +551,9 @@ const getSalesReport = async (req, res) => {
             bindPeriod(pool, period).input('MaNV', sql.VarChar, maNV).query(`
                 SELECT ca.MaCa, nv.TenNV, ca.ThoiGianBatDau, ca.ThoiGianKetThuc, ca.TrangThai, ca.TienMatHeThong, ca.TienThucNop,
                        (SELECT COUNT(*) FROM HoaDon hd WHERE hd.MaCa=ca.MaCa AND hd.TrangThai=N'Hoàn thành') SoHoaDon,
-                       COALESCE((SELECT SUM(hd.TongThanhToan) FROM HoaDon hd WHERE hd.MaCa=ca.MaCa AND hd.TrangThai=N'Hoàn thành'),0) DoanhThu
+                       COALESCE((SELECT SUM(hd.TongThanhToan) FROM HoaDon hd WHERE hd.MaCa=ca.MaCa AND hd.TrangThai=N'Hoàn thành'),0) DoanhThu,
+                       (SELECT COUNT(*) FROM PhieuDoiTra dt WHERE dt.MaCaHoan=ca.MaCa AND dt.TrangThai=N'Hoàn thành') SoDoiTra,
+                       COALESCE((SELECT SUM(dt.SoTienHoan) FROM PhieuDoiTra dt WHERE dt.MaCaHoan=ca.MaCa AND dt.TrangThai=N'Hoàn thành'),0) TienHoan
                 FROM CaLamViec ca
                 JOIN NhanVien nv ON nv.MaNV=ca.MaNV
                 WHERE ca.MaNV=@MaNV AND ca.ThoiGianBatDau>=@From AND ca.ThoiGianBatDau<@ToExclusive
@@ -451,8 +601,10 @@ const getSalesReport = async (req, res) => {
                        COALESCE(kh.TenKH,N'Khách lẻ') TenKhachHang,
                        STUFF((SELECT N', '+tt.PhuongThuc FROM ThanhToan tt
                               WHERE tt.MaHD=hd.MaHD AND tt.TrangThai=N'Thành công'
-                              ORDER BY tt.PhuongThuc FOR XML PATH(''),TYPE).value('.','nvarchar(max)'),1,2,N'') PhuongThuc
+                              ORDER BY tt.PhuongThuc FOR XML PATH(''),TYPE).value('.','nvarchar(max)'),1,2,N'') PhuongThuc,
+                       ${INVOICE_RETURN_COLUMNS}
                 FROM HoaDon hd LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
+                ${INVOICE_RETURN_APPLY}
                 WHERE hd.MaNV=@MaNV AND hd.NgayLap>=@From AND hd.NgayLap<@ToExclusive
                 ORDER BY hd.NgayLap DESC`),
             bindPeriod(pool, period).input('MaNV', sql.VarChar, maNV).query(`
@@ -470,13 +622,16 @@ const getSalesReport = async (req, res) => {
         ]);
         res.json({
             period,
+            latestActivity,
+            fallbackFrom,
             sales: { ...sales.recordset[0], ...returns.recordset[0] },
             methods: methods.recordset[0],
             shifts: shifts.recordset,
             daily: daily.recordset,
             topProducts: topProducts.recordset,
             recentInvoices: recentInvoices.recordset,
-            alerts: alerts.recordset[0]
+            alerts: alerts.recordset[0],
+            doiTra: await queryReturnDiagnostics(pool, period, maNV)
         });
     } catch (error) {
         console.error(error);
@@ -486,8 +641,8 @@ const getSalesReport = async (req, res) => {
 
 const getPurchasingReport = async (req, res) => {
     try {
-        const period = resolveReportingPeriod(req.query);
         const pool = await poolPromise;
+        const { period, latestActivity, fallbackFrom } = await resolveReportPeriod(pool, req.query);
         const [summary, byStatus, suppliers, daily, byCategory, actionOrders] = await Promise.all([
             bindPeriod(pool, period).query(`
                 SELECT
@@ -557,12 +712,15 @@ const getPurchasingReport = async (req, res) => {
         ]);
         res.json({
             period,
+            latestActivity,
+            fallbackFrom,
             summary: summary.recordset[0],
             byStatus: byStatus.recordset,
             suppliers: suppliers.recordset,
             daily: daily.recordset,
             byCategory: byCategory.recordset,
-            actionOrders: actionOrders.recordset
+            actionOrders: actionOrders.recordset,
+            doiTra: await queryReturnDiagnostics(pool, period)
         });
     } catch (error) {
         console.error(error);

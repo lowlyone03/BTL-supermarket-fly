@@ -2,6 +2,7 @@ const express = require('express');
 const controller = require('../controllers/accountingController');
 const settlement = require('../controllers/settlementController');
 const payroll = require('../controllers/payrollController');
+const payrollVoucher = require('../controllers/payrollVoucherController');
 const paymentVoucher = require('../controllers/paymentVoucherController');
 const reportController = require('../controllers/reportController');
 const { verifyToken, requirePermission } = require('../middlewares/authMiddleware');
@@ -30,6 +31,10 @@ router.get('/reports/financial-summary', requirePermission('UC29'), reportContro
 router.get('/payroll/:month', requirePermission('UC33'), payroll.get);
 router.post('/payroll/:month/build', requirePermission('UC33'), payroll.build);
 router.post('/payroll/:month/lock', requirePermission('UC33'), payroll.lock);
+router.post('/payroll/:month/payment-vouchers', requirePermission('UC33'), payrollVoucher.createVouchers);
+router.get('/payroll/:month/:employee/details', requirePermission('UC33'), payroll.getDetails);
 router.post('/payroll/:month/:employee/pay', requirePermission('UC33'), payroll.pay);
+router.post('/payroll-vouchers/:id/resubmit', requirePermission('UC33'), payrollVoucher.resubmitVoucher);
+router.post('/payroll-vouchers/:id/pay', requirePermission('UC33'), payrollVoucher.payVoucher);
 
 module.exports = router;

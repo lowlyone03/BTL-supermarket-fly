@@ -2,6 +2,11 @@
 
 Tài liệu này dành cho thành viên **không biết Git**. Các bạn chỉ cần tải ZIP, cài ứng dụng, đăng nhập và test phần được giao.
 
+> **Phương án đã chốt:** mỗi thành viên tải một bản dự án và khôi phục một bản sao database trên
+> chính máy của mình. Sáu database độc lập, không kết nối vào database trên máy người phát triển.
+> Vì vậy dữ liệu một người tạo, sửa hoặc xóa không ảnh hưởng năm người còn lại và không ảnh hưởng
+> dữ liệu gốc của dự án.
+
 Nếu bạn là người phát triển và muốn có sẵn từng câu để sao chép gửi vào nhóm, hãy mở
 `0_TIN_NHAN_GUI_NHOM_TEST_6_NGUOI.txt` trước. File đó đã tách sẵn tin nhắn chung và tin nhắn riêng
 cho từng người từ lúc tải dự án đến khi báo PASS/FAIL/BLOCKED.
@@ -19,6 +24,9 @@ hiện gần như rỗng. Ảnh sản phẩm mẫu đã nằm trong ZIP dự án
 hệ thống tự tạo trong `server\uploads` trên máy của người đó.
 
 Không yêu cầu thành viên dùng `git clone`, tạo commit, push code hoặc dùng GitHub Issues.
+
+Mỗi người cần tải đủ cả **ZIP dự án và file `.bak`**. Không chỉ gửi link GitHub vì ZIP dự án không
+chứa database.
 
 ## 2. Tin nhắn gửi cho 6 thành viên
 
@@ -59,6 +67,9 @@ Nếu thiếu một trong các phần trên, báo người phát triển hỗ tr
 4. Chọn `Device` → chọn file `SupermarketFlyDB_2026-08-30_225448.bak`.
 5. Đặt tên database là `SupermarketFlyDB` rồi bấm Restore.
 6. Nếu máy đã có database cùng tên, hỏi người phát triển trước khi ghi đè.
+
+Sau khi restore, database này là bản sao riêng trên máy người test. Test xong không phải gửi database
+trở lại và cũng không cần khôi phục lại, trừ khi người phát triển yêu cầu lấy database để điều tra lỗi.
 
 ## 6. Ảnh sản phẩm
 
@@ -180,4 +191,24 @@ Nếu lỗi liên quan tiền, tồn kho hoặc hóa đơn, thêm mã sản ph�
 6. Sau khi sửa, gửi lại link ZIP phiên bản mới hoặc yêu cầu tải lại ZIP từ tag mới.
 7. Người đã báo lỗi mở bản mới và thử lại đúng các bước cũ.
 
+Lưu ý: vì sáu người dùng sáu database khác nhau, không nối một luồng bằng cách để Người 2 tạo đơn
+trên máy A rồi yêu cầu Người 3 nhập đơn đó trên máy B. Các bài test đơn giản được chạy độc lập.
+Các chuỗi liên actor `E2E-01` đến `E2E-10` phải do một người đăng nhập lần lượt các tài khoản và
+thực hiện trọn chuỗi trên cùng một máy/database.
+
 Đây là vòng smoke test đơn giản. Sau khi sáu người đã quen thao tác, mới chuyển sang tài liệu đầy đủ `HUONG_DAN_KIEM_THU_TOAN_BO_HE_THONG_SUPERMARKET_FLY.txt` để chạy các luồng liên actor.
+
+## 11. Vòng 2 — phần hệ thống khác so với Word ban đầu
+
+Sau khi vòng đơn giản không còn lỗi Critical/High, gửi tiếp cho nhóm file:
+
+- `1_TIN_NHAN_VONG_2_TEST_PHAN_KHAC_SO_VOI_WORD.txt`: câu chữ và mã test đã chia sẵn cho sáu người.
+- `DOI_CHIEU_HE_THONG_HIEN_TAI_VOI_TAI_LIEU_GOC_2026-08-31.md`: giải thích hệ thống tăng từ UC01–UC29 lên UC01–UC33, từ 35 lên 45 bảng và actor nào chịu tác động.
+
+Không có actor mới. Bốn UC mở rộng được phân vào 5 actor cũ như sau:
+
+- Quản lý: UC30 và UC32.
+- Mua hàng, Thủ kho, Thu ngân, Kế toán: UC31.
+- Kế toán: UC33.
+
+Người 1–5 test phần actor được giao. Người 6 kiểm tra chéo phân quyền, tìm kiếm, báo cáo và cuối cùng chạy `E2E-01` đến `E2E-10` trên cùng một máy/database.

@@ -1,7 +1,10 @@
 const { sql, poolPromise } = require('../config/db');
+const { isRestockAccepted } = require('../services/financialRules');
+const { logAudit } = require('../services/auditLog');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 const issueTypes = new Set(['Trả NCC', 'Hủy hàng', 'Sử dụng nội bộ']);
+const returnIssueMarker = maDT => `Nguồn đổi trả ${maDT}.`;
 
 const generateId = async (transaction, table, column, prefix, digits = 3) => {
     const result = await new sql.Request(transaction)
@@ -18,15 +21,8 @@ const datePrefix = prefix => {
     return `${prefix}${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
 };
 
-const writeAudit = async (transaction, user, action, recordId, content) => {
-    await new sql.Request(transaction)
-        .input('MaTK', sql.Int, user.MaTK)
-        .input('HanhDong', sql.NVarChar, action)
-        .input('MaBanGhi', sql.VarChar, recordId)
-        .input('NoiDung', sql.NVarChar, content)
-        .query(`INSERT NhatKy(MaTK,HanhDong,BangLienQuan,MaBanGhi,NoiDung,ThoiGian)
-                VALUES(@MaTK,@HanhDong,N'PhieuXuat',@MaBanGhi,@NoiDung,GETDATE())`);
-};
+const writeAudit = (transaction, user, action, recordId, content) =>
+    logAudit(transaction, { user, action, table: 'PhieuXuat', recordId, content, uc: 'UC19', severity: 'Quan trọng' });
 
 const getWarehouse = async request => {
     const result = await request.query(`SELECT TOP 1 MaKho,TenKho,DiaChi
@@ -259,6 +255,102 @@ const createIssue = async (req, res) => {
     }
 };
 
+const createIssueFromReturn = async (req, res) => {
+    const maDT = clean(req.params.id, 20);
+    const transaction = new sql.Transaction(await poolPromise);
+    try {
+        if (!maDT) throw new Error('Thiếu mã phiếu đổi trả.');
+        await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        const ticketResult = await new sql.Request(transaction)
+            .input('MaDT', sql.VarChar, maDT)
+            .query(`SELECT MaDT, MaNV_KiemTra, TrangThai, KetQuaKiemTra, LyDo
+                    FROM PhieuDoiTra WITH (UPDLOCK, HOLDLOCK)
+                    WHERE MaDT=@MaDT`);
+        if (!ticketResult.recordset.length) throw new Error('Không tìm thấy phiếu đổi trả.');
+        const ticket = ticketResult.recordset[0];
+        if (ticket.MaNV_KiemTra !== req.user.MaNV) {
+            throw new Error('Chỉ thủ kho đã kiểm phiếu này mới lập phiếu xuất hỏng từ lịch sử kho.');
+        }
+        if (ticket.TrangThai !== 'Hoàn thành') {
+            throw new Error('Chỉ lập phiếu xuất hỏng sau khi phiếu đổi trả đã hoàn thành và hàng đã nhập lại kho.');
+        }
+        if (!isRestockAccepted(ticket.KetQuaKiemTra)) {
+            throw new Error('Phiếu này không nhập lại kho nên không cần xuất hủy. Hàng đã loại bỏ lúc kiểm.');
+        }
+        const reversed = await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT).query(`
+            SELECT TOP 1 MaGD FROM GiaoDichKho
+            WHERE LoaiChungTu=N'DoiTra' AND MaChungTu=@MaDT AND LoaiGD=N'Xuất' AND GhiChu LIKE N'%tích nhầm%'`);
+        if (reversed.recordset.length) {
+            throw new Error('Đã trừ tồn khi xác nhận tích nhầm. Không lập thêm phiếu xuất hủy.');
+        }
+
+        const marker = returnIssueMarker(maDT);
+        const existing = await new sql.Request(transaction)
+            .input('MaNV', sql.VarChar, req.user.MaNV)
+            .input('Mau', sql.NVarChar, `%${marker}%`)
+            .query(`SELECT TOP 1 MaPX, TrangThai FROM PhieuXuat WITH (UPDLOCK, HOLDLOCK)
+                    WHERE MaNV=@MaNV AND GhiChu LIKE @Mau
+                      AND TrangThai IN (N'Nháp', N'Chờ duyệt', N'Đã duyệt', N'Đã xác nhận')
+                    ORDER BY CASE TrangThai
+                        WHEN N'Nháp' THEN 1 WHEN N'Chờ duyệt' THEN 2 WHEN N'Đã duyệt' THEN 3 ELSE 4 END,
+                        NgayXuat DESC`);
+        if (existing.recordset.length) {
+            const row = existing.recordset[0];
+            await transaction.commit();
+            const confirmed = row.TrangThai === 'Đã xác nhận';
+            return res.json({
+                MaPX: row.MaPX,
+                existed: true,
+                confirmed,
+                message: confirmed
+                    ? `Đã có phiếu xuất ${row.MaPX} xác nhận trừ tồn cho ${maDT}.`
+                    : `Đã có phiếu xuất ${row.MaPX} (${row.TrangThai}) từ ${maDT}. Mở để tiếp tục gửi duyệt/xác nhận.`
+            });
+        }
+
+        const lineRows = await new sql.Request(transaction)
+            .input('MaDT', sql.VarChar, maDT)
+            .query(`SELECT MaSP, SoLuong, LyDo FROM ChiTietDoiTra
+                    WHERE MaDT=@MaDT AND LoaiDong=N'Hàng khách trả' AND SoLuong>0`);
+        if (!lineRows.recordset.length) throw new Error('Phiếu đổi trả không có hàng khách trả để xuất hủy.');
+
+        const warehouse = await getWarehouse(new sql.Request(transaction));
+        const header = {
+            LoaiXuat: 'Hủy hàng',
+            MaPN: null,
+            GhiChu: clean(`${marker} Tích nhầm nhập lại kho bán — xuất hủy hàng hỏng/hết hạn. Lý do thu ngân: ${ticket.LyDo || 'không ghi'}.`, 500)
+        };
+        const lines = normalizeLines(lineRows.recordset.map(line => ({
+            MaSP: line.MaSP,
+            SoLuong: line.SoLuong,
+            GhiChu: `Từ ${maDT}${line.LyDo ? `: ${line.LyDo}` : ''}`
+        })));
+        const validation = await validateIssue(transaction, header, lines);
+        const maPX = await generateId(transaction, 'PhieuXuat', 'MaPX', datePrefix('PX'));
+        await new sql.Request(transaction)
+            .input('MaPX', sql.VarChar, maPX)
+            .input('MaKho', sql.VarChar, warehouse.MaKho)
+            .input('MaNV', sql.VarChar, req.user.MaNV)
+            .input('LoaiXuat', sql.NVarChar, header.LoaiXuat)
+            .input('GhiChu', sql.NVarChar, header.GhiChu)
+            .query(`INSERT PhieuXuat(MaPX,MaKho,MaNV,LoaiXuat,MaNCC,MaPN,NgayXuat,TrangThai,GhiChu)
+                    VALUES(@MaPX,@MaKho,@MaNV,@LoaiXuat,NULL,NULL,GETDATE(),N'Nháp',@GhiChu)`);
+        await replaceLines(transaction, maPX, lines, validation.productMap);
+        await writeAudit(transaction, req.user, 'Lập Phiếu xuất kho', maPX,
+            `Hủy hàng từ đổi trả ${maDT}; lưu Nháp; tồn kho chưa thay đổi`);
+        await transaction.commit();
+        res.status(201).json({
+            MaPX: maPX,
+            existed: false,
+            message: `Đã lập phiếu xuất hủy ${maPX} (Nháp) từ ${maDT}. Gửi duyệt rồi Thủ kho xác nhận xuất mới trừ tồn.`
+        });
+    } catch (error) {
+        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không thể lập phiếu xuất hỏng từ đổi trả.' });
+    }
+};
+
 const updateIssue = async (req, res) => {
     const transaction = new sql.Transaction(await poolPromise);
     try {
@@ -430,6 +522,7 @@ module.exports = {
     getOptions,
     getSourceReceipt,
     createIssue,
+    createIssueFromReturn,
     updateIssue,
     submitIssue,
     approveIssue: decideIssue(true),

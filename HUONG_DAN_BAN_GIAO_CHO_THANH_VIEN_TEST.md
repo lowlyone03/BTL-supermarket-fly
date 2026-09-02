@@ -8,7 +8,7 @@ Phạm vi: ứng dụng quản trị nội bộ Electron, 5 actor, 12 tài kho�
 Gửi riêng tư đủ ba thành phần sau:
 
 1. Mã nguồn Git của thư mục `supermarket-fly` hoặc file Git bundle được tạo cùng bản backup.
-2. File database `SupermarketFlyDB_2026-08-30_*.bak` trong thư mục `D:\UDTHTKT\BTL\Database_Backups`.
+2. File database `SupermarketFlyDB_2026-08-30_*.bak` trong thư mục `D:\UDTHTKT\BTL\TaiLieu_Du_An\05_Backup\Database_Backups`.
 3. File `SupermarketFly_Uploads_2026-08-30_*.zip` trong cùng thư mục backup.
 
 Ảnh sản phẩm mẫu nằm trong mã nguồn và đi theo Git. Ảnh do người dùng tải lên nằm trong `server/uploads`, bị Git bỏ qua, nên phải bàn giao bằng file ZIP riêng.

@@ -1,5 +1,7 @@
 const { sql, poolPromise } = require('../config/db');
-const { isRestockAccepted, isEqualValueExchange, roundMoney } = require('../services/financialRules');
+const { logAudit } = require('../services/auditLog');
+const { isRestockAccepted, looksUnsellable, isEqualValueExchange, roundMoney } = require('../services/financialRules');
+const { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS } = require('../services/invoiceReturnSql');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 
@@ -12,12 +14,8 @@ const generateId = async (transaction, table, column, prefix) => {
     return `${prefix}${String(last ? Number(last.slice(prefix.length)) + 1 : 1).padStart(4, '0')}`;
 };
 
-const writeAudit = async (request, user, action, recordId, content) => {
-    await request.input('MaTK', sql.Int, user.MaTK).input('HanhDong', sql.NVarChar, action)
-        .input('MaBanGhi', sql.VarChar, recordId).input('NoiDung', sql.NVarChar, content)
-        .query(`INSERT NhatKy(MaTK,HanhDong,BangLienQuan,MaBanGhi,NoiDung,ThoiGian)
-                VALUES(@MaTK,@HanhDong,N'PhieuDoiTra',@MaBanGhi,@NoiDung,GETDATE())`);
-};
+const writeAudit = (request, user, action, recordId, content) =>
+    logAudit(request, { user, action, table: 'PhieuDoiTra', recordId, content, uc: 'UC26', severity: 'Quan trọng' });
 
 const loadDetail = async (pool, maDT) => {
     const header = await pool.request().input('MaDT', sql.VarChar, maDT).query(`
@@ -47,10 +45,12 @@ const searchInvoices = async (req, res) => {
         const pool = await poolPromise;
         const result = await pool.request().input('Search', sql.NVarChar, `%${search}%`).query(`
             SELECT TOP 30 hd.MaHD, hd.NgayLap, hd.TongThanhToan, hd.MaKH, hd.MaCa, hd.MaNV,
-                   kh.TenKH, kh.SDT, nv.TenNV
+                   kh.TenKH, kh.SDT, nv.TenNV,
+                   ${INVOICE_RETURN_COLUMNS}
             FROM HoaDon hd
             JOIN NhanVien nv ON nv.MaNV=hd.MaNV
             LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
+            ${INVOICE_RETURN_APPLY}
             WHERE hd.TrangThai=N'Hoàn thành'
               AND (hd.MaHD LIKE @Search COLLATE Latin1_General_100_CI_AI OR kh.TenKH LIKE @Search COLLATE Latin1_General_100_CI_AI OR kh.SDT LIKE @Search COLLATE Latin1_General_100_CI_AI
                    OR nv.TenNV LIKE @Search COLLATE Latin1_General_100_CI_AI OR hd.MaCa LIKE @Search COLLATE Latin1_General_100_CI_AI)
@@ -66,9 +66,11 @@ const getInvoiceForReturn = async (req, res) => {
         const pool = await poolPromise;
         const header = await pool.request().input('MaHD', sql.VarChar, clean(req.params.id, 20)).query(`
             SELECT hd.MaHD, hd.NgayLap, hd.TongThanhToan, hd.MaKH, hd.MaCa, hd.MaNV, hd.MaKho,
-                   kh.TenKH, kh.SDT, nv.TenNV
+                   kh.TenKH, kh.SDT, nv.TenNV,
+                   ${INVOICE_RETURN_COLUMNS}
             FROM HoaDon hd JOIN NhanVien nv ON nv.MaNV=hd.MaNV
             LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
+            ${INVOICE_RETURN_APPLY}
             WHERE hd.MaHD=@MaHD AND hd.TrangThai=N'Hoàn thành'`);
         if (!header.recordset.length) return res.status(404).json({ message: 'Chỉ hóa đơn đã hoàn thành mới được đổi trả.' });
         const lines = await pool.request().input('MaHD', sql.VarChar, req.params.id).query(`
@@ -96,7 +98,8 @@ const listReturns = async (req, res) => {
             .input('Status', sql.NVarChar, status)
             .input('MaNV', sql.VarChar, req.user.MaNV).query(`
             SELECT dt.MaDT, dt.MaHD, dt.NgayLap, dt.HinhThucXuLy, dt.SoTienHoan, dt.TrangThai,
-                   dt.LyDo, dt.MaCaHoan, nv.TenNV NguoiLap, kh.TenKH, hd.MaCa MaCaGoc, ban.TenNV ThuNganGoc
+                   dt.LyDo, dt.MaCaHoan, dt.KetQuaKiemTra, dt.NgayKiemTra, dt.MaNV_KiemTra, dt.GhiChu,
+                   nv.TenNV NguoiLap, kh.TenKH, hd.MaCa MaCaGoc, ban.TenNV ThuNganGoc
             FROM PhieuDoiTra dt
             JOIN NhanVien nv ON nv.MaNV=dt.MaNV_Lap
             JOIN HoaDon hd ON hd.MaHD=dt.MaHD
@@ -104,7 +107,10 @@ const listReturns = async (req, res) => {
             LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
             WHERE (@Status=N'' OR dt.TrangThai=@Status)
               AND (${scope === 'mine' ? 'dt.MaNV_Lap=@MaNV' : '1=1'})
-            ORDER BY dt.NgayLap DESC`);
+            ORDER BY CASE dt.TrangThai
+                       WHEN N'Đã duyệt' THEN 0 WHEN N'Chờ duyệt' THEN 1
+                       WHEN N'Chờ kiểm tra' THEN 2 WHEN N'Nháp' THEN 3 ELSE 4 END,
+                     dt.NgayLap DESC`);
         res.json({ items: result.recordset });
     } catch (error) {
         res.status(500).json({ message: 'Không thể tải danh sách đổi trả.' });
@@ -116,10 +122,12 @@ const listRecentInvoices = async (req, res) => {
         const pool = await poolPromise;
         const result = await pool.request().query(`
             SELECT TOP 12 hd.MaHD, hd.NgayLap, hd.TongThanhToan, hd.MaKH, hd.MaCa, hd.MaNV,
-                   kh.TenKH, kh.SDT, nv.TenNV
+                   kh.TenKH, kh.SDT, nv.TenNV,
+                   ${INVOICE_RETURN_COLUMNS}
             FROM HoaDon hd
             JOIN NhanVien nv ON nv.MaNV=hd.MaNV
             LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
+            ${INVOICE_RETURN_APPLY}
             WHERE hd.TrangThai=N'Hoàn thành'
             ORDER BY hd.NgayLap DESC`);
         res.json({ items: result.recordset });
@@ -224,18 +232,174 @@ const inspectReturn = async (req, res) => {
         const restock = Boolean(req.body.DuocNhapLai);
         if (!resultText) throw new Error('Phải ghi kết quả kiểm tra.');
         const pool = await poolPromise;
+        const maDT = clean(req.params.id, 20);
+        const header = await pool.request().input('MaDT', sql.VarChar, maDT).query(`
+            SELECT LyDo, TrangThai, MaNV_KiemTra, KetQuaKiemTra FROM PhieuDoiTra WHERE MaDT=@MaDT`);
+        if (!header.recordset.length) throw new Error('Không tìm thấy phiếu đổi trả.');
+        const ticket = header.recordset[0];
+        const revising = ticket.TrangThai === 'Chờ duyệt' && ticket.MaNV_KiemTra === req.user.MaNV;
+        if (ticket.TrangThai !== 'Chờ kiểm tra' && !revising) {
+            if (['Đã duyệt', 'Hoàn thành'].includes(ticket.TrangThai)) {
+                throw new Error('Phiếu đã duyệt hoặc hoàn thành, không sửa kết quả kiểm. Vào Lịch sử kho bấm Tôi đã tích nhầm: hàng hỏng nhập nhầm sẽ được trừ tồn ngay.');
+            }
+            if (ticket.TrangThai === 'Chờ duyệt') {
+                throw new Error('Chỉ Thủ kho đã kiểm phiếu này mới được sửa kết quả, và chỉ trước khi Quản lý duyệt.');
+            }
+            throw new Error('Phiếu không còn ở trạng thái chờ kiểm tra.');
+        }
         const ketQua = `${restock ? 'Đạt yêu cầu, được nhập lại kho' : 'Không đạt, không nhập lại kho'}. ${resultText}`.slice(0, 200);
-        const result = await pool.request().input('MaDT', sql.VarChar, clean(req.params.id, 20))
-            .input('MaNV', sql.VarChar, req.user.MaNV).input('KetQua', sql.NVarChar, ketQua).query(`
-                UPDATE PhieuDoiTra SET MaNV_KiemTra=@MaNV, NgayKiemTra=GETDATE(),
+        const result = await pool.request().input('MaDT', sql.VarChar, maDT)
+            .input('MaNV', sql.VarChar, req.user.MaNV).input('KetQua', sql.NVarChar, ketQua).query(revising
+            ? `UPDATE PhieuDoiTra SET NgayKiemTra=GETDATE(), KetQuaKiemTra=@KetQua
+               WHERE MaDT=@MaDT AND TrangThai=N'Chờ duyệt' AND MaNV_KiemTra=@MaNV;
+               SELECT @@ROWCOUNT affected;`
+            : `UPDATE PhieuDoiTra SET MaNV_KiemTra=@MaNV, NgayKiemTra=GETDATE(),
                     KetQuaKiemTra=@KetQua, TrangThai=N'Chờ duyệt'
-                WHERE MaDT=@MaDT AND TrangThai=N'Chờ kiểm tra';
-                SELECT @@ROWCOUNT affected;`);
-        if (!result.recordset[0].affected) return res.status(400).json({ message: 'Phiếu không còn ở trạng thái chờ kiểm tra.' });
-        await writeAudit(pool.request(), req.user, 'Kiểm tra hàng đổi trả', req.params.id, ketQua);
-        res.json({ message: 'Đã ghi kết quả kiểm tra và chuyển Quản lý phê duyệt.' });
+               WHERE MaDT=@MaDT AND TrangThai=N'Chờ kiểm tra';
+               SELECT @@ROWCOUNT affected;`);
+        if (!result.recordset[0].affected) return res.status(400).json({ message: revising ? 'Không sửa được kết quả kiểm tra.' : 'Phiếu không còn ở trạng thái chờ kiểm tra.' });
+        await writeAudit(pool.request(), req.user, revising ? 'Sửa kết quả kiểm đổi trả' : 'Kiểm tra hàng đổi trả', maDT,
+            revising ? `Trước: ${ticket.KetQuaKiemTra || '—'}. Sau: ${ketQua}` : ketQua);
+        let message = revising
+            ? 'Đã sửa kết quả kiểm tra. Quản lý sẽ thấy kết quả mới khi duyệt.'
+            : 'Đã ghi kết quả kiểm tra và chuyển Quản lý phê duyệt.';
+        if (restock && looksUnsellable(ticket.LyDo)) {
+            message += ' Lưu ý: lý do thu ngân là hàng hỏng/hết hạn nhưng Thủ kho chọn nhập lại kho bán.';
+        } else if (!restock) {
+            message += ' Hàng loại bỏ/vứt: không cộng tồn (đã trừ lúc bán).';
+        }
+        res.json({ message, revised: revising });
     } catch (error) {
         res.status(400).json({ message: error.message });
+    }
+};
+
+const flagInspectMistake = async (req, res) => {
+    const transaction = new sql.Transaction(await poolPromise);
+    try {
+        const reason = clean(req.body.LyDo, 400);
+        if (!reason) throw new Error('Phải ghi rõ đã tích nhầm chỗ nào và hàng thực tế ra sao.');
+        const maDT = clean(req.params.id, 20);
+        await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        const header = await new sql.Request(transaction)
+            .input('MaDT', sql.VarChar, maDT)
+            .input('MaNV', sql.VarChar, req.user.MaNV).query(`
+            SELECT dt.MaDT, dt.TrangThai, dt.KetQuaKiemTra, dt.GhiChu, dt.LyDo, hd.MaKho
+            FROM PhieuDoiTra dt WITH (UPDLOCK, HOLDLOCK)
+            JOIN HoaDon hd ON hd.MaHD=dt.MaHD
+            WHERE dt.MaDT=@MaDT AND dt.MaNV_KiemTra=@MaNV`);
+        if (!header.recordset.length) throw new Error('Chỉ Thủ kho đã kiểm phiếu này mới xác nhận tích nhầm.');
+        const ticket = header.recordset[0];
+        if (!['Đã duyệt', 'Hoàn thành'].includes(ticket.TrangThai)) {
+            throw new Error('Phiếu còn chờ duyệt: hãy bấm Sửa kết quả kiểm, không cần báo tích nhầm.');
+        }
+        if (!isRestockAccepted(ticket.KetQuaKiemTra)) {
+            throw new Error('Phiếu này không nhập lại kho nên không có tồn nhập nhầm để trừ.');
+        }
+
+        const already = await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT).query(`
+            SELECT TOP 1 MaGD FROM GiaoDichKho WITH (UPDLOCK, HOLDLOCK)
+            WHERE LoaiChungTu=N'DoiTra' AND MaChungTu=@MaDT AND LoaiGD=N'Xuất'
+              AND GhiChu LIKE N'%tích nhầm%'`);
+        if (already.recordset.length) throw new Error('Đã trừ tồn cho tích nhầm trên phiếu này.');
+
+        const marker = `Nguồn đổi trả ${maDT}.`;
+        const confirmedIssue = await new sql.Request(transaction)
+            .input('Mau', sql.NVarChar, `%${marker}%`).query(`
+            SELECT TOP 1 MaPX FROM PhieuXuat WITH (UPDLOCK, HOLDLOCK)
+            WHERE GhiChu LIKE @Mau AND TrangThai=N'Đã xác nhận'`);
+        const stockAlreadyCut = Boolean(confirmedIssue.recordset.length);
+        const completed = ticket.TrangThai === 'Hoàn thành';
+        const lines = completed && !stockAlreadyCut
+            ? (await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT).query(`
+                SELECT ct.MaSP, ct.SoLuong, ct.DonGiaVon, ct.ThanhTienVon, sp.TenSP
+                FROM ChiTietDoiTra ct WITH (UPDLOCK, HOLDLOCK)
+                JOIN SanPham sp ON sp.MaSP=ct.MaSP
+                WHERE ct.MaDT=@MaDT AND ct.LoaiDong=N'Hàng khách trả' AND ct.SoLuong>0`)).recordset
+            : [];
+
+        if (completed && !stockAlreadyCut) {
+            if (!lines.length) throw new Error('Phiếu đổi trả không có hàng khách trả để trừ tồn.');
+            for (const line of lines) {
+                const stock = await new sql.Request(transaction)
+                    .input('MaKho', sql.VarChar, ticket.MaKho)
+                    .input('MaSP', sql.VarChar, line.MaSP).query(`
+                    SELECT SLTon, DonGiaBinhQuan FROM TonKho WITH (UPDLOCK, HOLDLOCK)
+                    WHERE MaKho=@MaKho AND MaSP=@MaSP`);
+                const available = Number(stock.recordset[0]?.SLTon || 0);
+                if (!stock.recordset.length || available < Number(line.SoLuong)) {
+                    throw new Error(`${line.TenSP} chỉ còn tồn ${available}, không đủ trừ ${line.SoLuong} đã nhập nhầm. Kiểm kê phần còn lại.`);
+                }
+                const cost = Number(stock.recordset[0].DonGiaBinhQuan || line.DonGiaVon || 0);
+                await new sql.Request(transaction)
+                    .input('MaKho', sql.VarChar, ticket.MaKho)
+                    .input('MaSP', sql.VarChar, line.MaSP)
+                    .input('SoLuong', sql.Int, line.SoLuong).query(`
+                    UPDATE TonKho SET SLTon=SLTon-@SoLuong,
+                        GiaTriTon=(SLTon-@SoLuong)*DonGiaBinhQuan, NgayCapNhat=GETDATE()
+                    WHERE MaKho=@MaKho AND MaSP=@MaSP AND SLTon>=@SoLuong`);
+                const maGD = await generateId(transaction, 'GiaoDichKho', 'MaGD',
+                    `GD${new Date().toISOString().slice(2, 10).replaceAll('-', '')}`);
+                await new sql.Request(transaction)
+                    .input('MaGD', sql.VarChar, maGD)
+                    .input('MaKho', sql.VarChar, ticket.MaKho)
+                    .input('MaSP', sql.VarChar, line.MaSP)
+                    .input('MaNV', sql.VarChar, req.user.MaNV)
+                    .input('SoLuong', sql.Int, -Number(line.SoLuong))
+                    .input('DonGiaVon', sql.Decimal(18, 2), cost)
+                    .input('ThanhTienVon', sql.Decimal(18, 2), cost * Number(line.SoLuong))
+                    .input('MaDT', sql.VarChar, maDT)
+                    .input('GhiChu', sql.NVarChar, `Sửa tích nhầm — xuất hủy hàng hỏng đã nhập lại kho`)
+                    .query(`INSERT GiaoDichKho(MaGD,MaKho,MaSP,MaNV,LoaiGD,SoLuong,DonGiaVon,ThanhTienVon,LoaiChungTu,MaChungTu,NgayGD,GhiChu)
+                            VALUES(@MaGD,@MaKho,@MaSP,@MaNV,N'Xuất',@SoLuong,@DonGiaVon,@ThanhTienVon,N'DoiTra',@MaDT,GETDATE(),@GhiChu)`);
+            }
+        }
+
+        const openIssues = await new sql.Request(transaction)
+            .input('MaNV', sql.VarChar, req.user.MaNV)
+            .input('Mau', sql.NVarChar, `%${marker}%`).query(`
+            SELECT MaPX, TrangThai FROM PhieuXuat WITH (UPDLOCK, HOLDLOCK)
+            WHERE MaNV=@MaNV AND GhiChu LIKE @Mau
+              AND TrangThai IN (N'Nháp', N'Chờ duyệt', N'Đã duyệt')`);
+        for (const issue of openIssues.recordset) {
+            if (issue.TrangThai === 'Nháp') {
+                await new sql.Request(transaction).input('MaPX', sql.VarChar, issue.MaPX)
+                    .query('DELETE ChiTietPhieuXuat WHERE MaPX=@MaPX; DELETE PhieuXuat WHERE MaPX=@MaPX');
+            } else {
+                await new sql.Request(transaction).input('MaPX', sql.VarChar, issue.MaPX).query(`
+                    UPDATE PhieuXuat SET TrangThai=N'Từ chối',
+                        LyDoTuChoi=N'Đã trừ tồn khi Thủ kho xác nhận tích nhầm trên phiếu đổi trả'
+                    WHERE MaPX=@MaPX`);
+            }
+        }
+
+        const stamp = new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+        const reduced = completed && (lines.length > 0 || stockAlreadyCut);
+        const ketQua = (reduced
+            ? 'Không đạt, không nhập lại kho. Sửa tích nhầm: hàng hỏng, đã trừ tồn nhập nhầm.'
+            : 'Không đạt, không nhập lại kho. Sửa tích nhầm: hàng hỏng, không nhập lại khi hoàn.').slice(0, 200);
+        const note = `[${reduced ? 'Đã trừ tồn tích nhầm' : 'Đã sửa tích nhầm'} ${stamp}] ${reason}`.slice(0, 500);
+        const ghiChu = `${ticket.GhiChu ? `${ticket.GhiChu}\n` : ''}${note}`.slice(0, 500);
+        await new sql.Request(transaction)
+            .input('MaDT', sql.VarChar, maDT)
+            .input('KetQua', sql.NVarChar, ketQua)
+            .input('GhiChu', sql.NVarChar, ghiChu)
+            .query('UPDATE PhieuDoiTra SET KetQuaKiemTra=@KetQua, GhiChu=@GhiChu WHERE MaDT=@MaDT');
+        await writeAudit(new sql.Request(transaction), req.user, 'Xác nhận tích nhầm kiểm đổi trả', maDT,
+            reduced
+                ? `${note}. Đã trừ tồn ${lines.reduce((sum, line) => sum + Number(line.SoLuong || 0), 0) || 'theo phiếu xuất'} đơn vị hàng hỏng nhập nhầm.`
+                : `${note}. Thu ngân xác nhận hoàn/đổi sẽ không cộng tồn.`);
+        await transaction.commit();
+        res.json({
+            reduced,
+            GhiChu: ghiChu,
+            message: reduced
+                ? `Đã xác nhận tích nhầm trên ${maDT}: tồn kho giảm số lượng hàng hỏng đã nhập lại.`
+                : `Đã sửa ${maDT}: hàng hỏng sẽ không nhập lại kho khi thu ngân xác nhận hoàn/đổi.`
+        });
+    } catch (error) {
+        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        res.status(400).json({ message: error.message || 'Không thể xác nhận tích nhầm.' });
     }
 };
 
@@ -343,6 +507,19 @@ const completeReturn = async (req, res) => {
                         INSERT GiaoDichKho(MaGD,MaKho,MaSP,MaNV,LoaiGD,SoLuong,DonGiaVon,ThanhTienVon,LoaiChungTu,MaChungTu,NgayGD,GhiChu)
                         VALUES(@MaGD,@MaKho,@MaSP,@MaNV,N'Nhập',@SoLuong,@DonGiaVon,@ThanhTienVon,N'DoiTra',@MaDT,GETDATE(),N'Nhập lại hàng khách trả đạt yêu cầu')`);
             }
+        } else {
+            for (let index = 0; index < returned.recordset.length; index += 1) {
+                const line = returned.recordset[index];
+                const maGD = await generateId(transaction, 'GiaoDichKho', 'MaGD', `GD${new Date().toISOString().slice(2, 10).replaceAll('-', '')}`);
+                await new sql.Request(transaction).input('MaGD', sql.VarChar, maGD)
+                    .input('MaKho', sql.VarChar, ticket.MaKho).input('MaSP', sql.VarChar, line.MaSP)
+                    .input('MaNV', sql.VarChar, req.user.MaNV)
+                    .input('DonGiaVon', sql.Decimal(18, 2), line.DonGiaVon)
+                    .input('MaDT', sql.VarChar, maDT).query(`
+                        INSERT GiaoDichKho(MaGD,MaKho,MaSP,MaNV,LoaiGD,SoLuong,DonGiaVon,ThanhTienVon,LoaiChungTu,MaChungTu,NgayGD,GhiChu)
+                        VALUES(@MaGD,@MaKho,@MaSP,@MaNV,N'Điều chỉnh',0,@DonGiaVon,0,N'DoiTra',@MaDT,GETDATE(),
+                          N'Loại bỏ/vứt hàng khách trả — không cộng tồn (đã trừ lúc bán)')`);
+            }
         }
         if (ticket.HinhThucXuLy === 'Hoàn tiền') {
             await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT)
@@ -391,5 +568,5 @@ const completeReturn = async (req, res) => {
 
 module.exports = {
     searchInvoices, listRecentInvoices, getInvoiceForReturn, listReturns, getReturn,
-    createReturn, submitReturn, inspectReturn, decideReturn, completeReturn
+    createReturn, submitReturn, inspectReturn, flagInspectMistake, decideReturn, completeReturn
 };

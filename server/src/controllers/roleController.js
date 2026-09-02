@@ -1,4 +1,5 @@
 const { sql, poolPromise } = require('../config/db');
+const { logAudit } = require('../services/auditLog');
 
 // Lấy danh sách vai trò
 const getRoles = async (req, res) => {
@@ -90,12 +91,10 @@ const updatePermissions = async (req, res) => {
             }
 
             // Ghi nhật ký
-            await new sql.Request(transaction)
-                .input('MaTK', sql.Int, req.user.MaTK)
-                .input('HanhDong', sql.NVarChar, 'Cập nhật phân quyền')
-                .input('BangLienQuan', sql.NVarChar, 'VaiTro_ChucNang')
-                .input('NoiDung', sql.NVarChar, 'Đã cập nhật lại ma trận phân quyền hệ thống')
-                .query('INSERT INTO NhatKy (MaTK, HanhDong, BangLienQuan, NoiDung, ThoiGian) VALUES (@MaTK, @HanhDong, @BangLienQuan, @NoiDung, GETDATE())');
+            await logAudit(transaction, {
+                user: req.user, req, action: 'Cập nhật phân quyền', table: 'VaiTro_ChucNang',
+                severity: 'Quan trọng', content: 'Đã cập nhật lại ma trận phân quyền hệ thống'
+            });
 
             await transaction.commit();
             res.json({ message: 'Cập nhật phân quyền thành công!' });

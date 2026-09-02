@@ -10,6 +10,7 @@ const { verifyToken, requirePermission } = require('../middlewares/authMiddlewar
 const router = express.Router();
 router.use(verifyToken);
 router.get('/dashboard', requirePermission('UC15'), controller.getDashboard);
+router.get('/history', requirePermission('UC15'), controller.getHistory);
 router.get('/reports/inventory', requirePermission('UC15'), reportController.getWarehouseReport);
 router.get('/inventory', requirePermission('UC15'), controller.getInventory);
 router.get('/inventory-counts', requirePermission('UC20'), inventoryCountController.listCounts);
@@ -21,6 +22,7 @@ router.get('/stock-issues/options', requirePermission('UC19'), stockIssueControl
 router.get('/stock-issues/source-receipts/:id', requirePermission('UC19'), stockIssueController.getSourceReceipt);
 router.get('/stock-issues', requirePermission('UC19'), stockIssueController.listIssues);
 router.post('/stock-issues', requirePermission('UC19'), stockIssueController.createIssue);
+router.post('/stock-issues/from-return/:id', requirePermission('UC19'), stockIssueController.createIssueFromReturn);
 router.get('/stock-issues/:id', requirePermission('UC19'), stockIssueController.getWarehouseIssueDetail);
 router.put('/stock-issues/:id', requirePermission('UC19'), stockIssueController.updateIssue);
 router.post('/stock-issues/:id/submit', requirePermission('UC19'), stockIssueController.submitIssue);
@@ -41,5 +43,6 @@ router.post('/receipts/:id/confirm', requirePermission('UC18'), receiptControlle
 router.get('/returns', requirePermission('UC21'), returnsController.listReturns);
 router.get('/returns/:id', requirePermission('UC21'), returnsController.getReturn);
 router.post('/returns/:id/inspect', requirePermission('UC21'), returnsController.inspectReturn);
+router.post('/returns/:id/flag-mistake', requirePermission('UC21'), returnsController.flagInspectMistake);
 
 module.exports = router;

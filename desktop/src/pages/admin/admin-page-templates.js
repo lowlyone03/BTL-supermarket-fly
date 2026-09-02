@@ -174,20 +174,59 @@
       <script src="../admin/permissions.js"></script>`,
 
     'audit-log.html': `
-      <section class="admin-module">
+      <section class="admin-module audit-trace">
         <header class="module-heading">
-          <div><p class="module-kicker">KIỂM SOÁT / NHẬT KÝ</p><h1>Dấu vết hệ thống</h1><p>Theo dõi người thao tác, hành động và dữ liệu đã thay đổi.</p></div>
-          <div class="heading-actions"><span class="record-count" id="logCount">0 bản ghi</span><button class="btn btn-secondary" onclick="loadLogs()"><svg aria-hidden="true"><use href="#i-refresh"/></svg> Tải lại</button></div>
-        </header>
-        <article class="surface-card data-surface">
-          <div class="table-toolbar audit-toolbar">
-            <label class="filter-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input type="text" id="logSearch" placeholder="Người dùng, hành động, nội dung..."></label>
-            <div class="filter-actions"><label class="date-filter"><small>Từ ngày</small><input type="date" id="logFrom"></label><label class="date-filter"><small>Đến ngày</small><input type="date" id="logTo"></label><button class="btn btn-secondary" onclick="clearLogFilters()">Xóa lọc</button></div>
+          <div>
+            <p class="module-kicker">KIỂM SOÁT / NHẬT KÝ</p>
+            <h1>Nhật ký hệ thống</h1>
+            <p>Ai đã làm gì, lúc nào, trên chứng từ nào. Bấm một dòng để xem ý nghĩa. Mặc định 7 ngày gần đây, ẩn lần đăng nhập. Không sửa hay xóa được.</p>
           </div>
-          <div class="table-container"><table><thead><tr><th>Thời gian</th><th>Người thao tác</th><th>Hành động</th><th>Dữ liệu</th><th>Mã bản ghi</th><th>Nội dung chi tiết</th></tr></thead><tbody id="logTableBody"></tbody></table></div>
+          <span class="record-count" id="logCount">0 bản ghi</span>
+        </header>
+        <article class="surface-card data-surface audit-surface">
+          <div class="table-toolbar audit-toolbar">
+            <label class="filter-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input type="text" id="logSearch" placeholder="Tìm người, việc làm, mã chứng từ..."></label>
+            <div class="filter-actions audit-filters">
+              <select id="logKind" class="audit-filter-wide" aria-label="Loại việc"></select>
+              <select id="logRole" aria-label="Vai trò"></select>
+              <select id="logActor" aria-label="Nhân viên"></select>
+              <select id="logAction" aria-label="Hành động"></select>
+              <div class="audit-daterange" role="group" aria-label="Khoảng ngày">
+                <label>Từ <input type="date" id="logFrom" data-keep-native="1" required></label>
+                <span aria-hidden="true">–</span>
+                <label>Đến <input type="date" id="logTo" data-keep-native="1" required></label>
+              </div>
+              <button class="btn btn-secondary" type="button" onclick="clearLogFilters()">Xóa lọc</button>
+              <button class="btn btn-secondary" id="auditReload" type="button"><svg aria-hidden="true"><use href="#i-refresh"/></svg> Tải lại</button>
+              <button class="btn btn-secondary" type="button" onclick="exportAuditCsv()">Xuất CSV</button>
+            </div>
+          </div>
+          <div class="audit-workspace" id="auditWorkspace">
+            <div class="table-container audit-table-wrap">
+              <table class="audit-table">
+                <thead>
+                  <tr>
+                    <th>Thời gian</th>
+                    <th>Người làm</th>
+                    <th>Việc đã làm</th>
+                    <th>Chứng từ</th>
+                    <th>Kết quả</th>
+                  </tr>
+                </thead>
+                <tbody id="logTableBody"></tbody>
+              </table>
+            </div>
+            <button type="button" class="audit-backdrop" id="auditBackdrop" hidden aria-label="Đóng chi tiết"></button>
+            <aside class="audit-detail" id="auditDetail" hidden></aside>
+          </div>
+          <div class="audit-pager">
+            <button type="button" class="btn btn-secondary" id="auditPrev">Trang trước</button>
+            <span id="auditPageLabel">—</span>
+            <button type="button" class="btn btn-secondary" id="auditNext">Trang sau</button>
+          </div>
         </article>
       </section>
-      <script src="../admin/audit-log.js"></script>`
+      <script src="../admin/audit-log.js?v=audit-ql-ui-3"></script>`,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = templates;

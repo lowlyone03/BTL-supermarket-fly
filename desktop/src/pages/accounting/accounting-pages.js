@@ -13,11 +13,22 @@
   const money = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
   const fmtDate = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
   const fmtDateTime = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
-  const reportDefaults = () => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    return { day: `${year}-${month}-${String(now.getDate()).padStart(2, '0')}`, month: `${year}-${month}`, quarter: `${year}-Q${Math.floor(now.getMonth() / 3) + 1}`, year: String(year) };
+  const reportDefaults = () => window.FLY_REPORT_PERIOD?.defaults?.() || (() => {
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+    const get = type => parts.find(part => part.type === type)?.value;
+    const year = get('year'); const month = get('month'); const day = get('day');
+    return { day: `${year}-${month}-${day}`, month: `${year}-${month}`, quarter: `${year}-Q${Math.floor((Number(month) - 1) / 3) + 1}`, year };
+  })();
+  const settlementFlow = (current = '') => {
+    const steps = [
+      { key: 'lap', label: 'Kế toán lập Phiếu chi', match: /chưa lập|phiếu chi bị từ chối/i },
+      { key: 'giao', label: 'Quản lý duyệt và giao tiền', match: /chờ quản lý|chờ giao/i },
+      { key: 'chi', label: 'Kế toán thanh toán NCC', match: /đã giao tiền|thất bại|chờ kế toán chi|chờ chi/i },
+      { key: 'tat', label: 'Công nợ tất toán', match: /đã tất toán|đã thanh toán/i }
+    ];
+    const active = steps.findIndex(step => step.match.test(current || '')) ;
+    const index = active < 0 ? (current ? 1 : 0) : active;
+    return `<div class="settlement-flow">${steps.map((step, stepIndex) => `<span class="${stepIndex < index ? 'done' : stepIndex === index ? 'active' : ''}">${esc(step.label)}</span>${stepIndex < steps.length - 1 ? '<i>→</i>' : ''}`).join('')}</div>`;
   };
   const csvCell = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
   const downloadCsv = (filename, rows) => {
@@ -25,6 +36,40 @@
     const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const hangDiDauText = row => {
+    if (row.HangDiDau) return row.HangDiDau;
+    const restock = Number(row.SLNhapLai || 0);
+    const scrap = Number(row.SLLoaiBo || row.SLKhongNhapLai || 0);
+    const pending = Math.max(0, Number(row.SLTra || 0) - restock - scrap);
+    const parts = [];
+    if (restock) parts.push(`Nhập lại kho bán ${restock}`);
+    if (scrap) parts.push(`Loại bỏ / vứt ${scrap} — không cộng tồn (đã trừ lúc bán)`);
+    if (pending) parts.push(`Chưa xử lý kho ${pending}`);
+    return parts.join(' · ') || '—';
+  };
+  const returnCsvRows = data => {
+    const summary = data?.summary || {};
+    const tickets = data?.tickets || [];
+    const products = data?.products || [];
+    return [
+      [],
+      ['ĐỔI TRẢ KHÁCH HÀNG'],
+      ['Số phiếu', summary.SoPhieu || 0],
+      ['Hoàn tiền / Đổi hàng', `${summary.SoHoanTien || 0} / ${summary.SoDoiHang || 0}`],
+      ['Tiền đã hoàn', summary.TienHoan || 0],
+      ['Chờ Thủ kho kiểm', summary.ChoKiemTra || 0],
+      ['Chờ Quản lý duyệt', summary.ChoDuyet || 0],
+      ['Chờ thu ngân xác nhận', summary.ChoThuNganXacNhan || 0],
+      ['Nhập lại kho bán (phiếu)', summary.NhapLaiKho || 0],
+      ['Loại bỏ / vứt (phiếu)', summary.KhongNhapLai || 0],
+      [],
+      ['Phiếu', 'Hóa đơn', 'Khách', 'Hình thức', 'Lý do', 'Tiền hoàn', 'Trạng thái', 'Trách nhiệm', 'Hàng đi đâu', 'Thu ngân lập', 'Thủ kho', 'Quản lý'],
+      ...tickets.map(row => [row.MaDT, row.MaHD, row.TenKH || 'Khách vãng lai', row.HinhThucXuLy, row.LyDo, row.SoTienHoan, row.TrangThai, row.BuocCanXuLy, hangDiDauText(row), row.NguoiLap, row.NguoiKiemTra, row.NguoiDuyet]),
+      [],
+      ['Sản phẩm', 'Mã SP', 'SL trả', 'Nhập lại kho', 'Loại bỏ / vứt', 'Hàng đi đâu', 'Lý do'],
+      ...products.map(row => [row.TenSP, row.MaSP, row.SLTra, row.SLNhapLai || 0, row.SLLoaiBo || row.SLKhongNhapLai || 0, hangDiDauText(row), row.LyDoMau])
+    ];
   };
   const payrollPeriodLabel = value => {
     const [year, month] = String(value || '').split('-');
@@ -48,13 +93,23 @@
     </div>`;
   };
   const api = async (context, path, options = {}) => {
-    const response = await fetch(`${context.apiBase}${path}`, {
-      ...options,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.token}`, ...(options.headers || {}) }
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.message || 'Không thể xử lý yêu cầu.');
-    return data;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 45000);
+    try {
+      const response = await fetch(`${context.apiBase}${path}`, {
+        ...options,
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.token}`, ...(options.headers || {}) }
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || 'Không thể xử lý yêu cầu.');
+      return data;
+    } catch (error) {
+      if (error.name === 'AbortError') throw new Error('Máy chủ phản hồi quá lâu. Hãy bấm Lập báo cáo để thử lại.');
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   };
   const heading = (kicker, title, subtitle, action = '') => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(kicker)}</p><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div>${action}</header>`;
   const matchClass = status => status === 'Đã khớp' ? 'ok' : status === 'Chênh lệch' ? 'cancelled' : 'draft';
@@ -63,19 +118,48 @@
     : status === 'Từ chối' || status === 'Thanh toán thất bại' ? 'cancelled'
       : status === 'Đã duyệt' ? 'ok' : status === 'Chờ duyệt' ? 'sent' : 'draft';
   const alertList = items => `<div class="report-alert-list">${items.map(item => `<article class="${esc(item.tone || '')}"><span class="report-alert-icon"><svg><use href="#${esc(item.icon)}"/></svg></span><div><strong>${esc(item.title)}</strong><small>${esc(item.detail)}</small></div>${item.value != null ? `<b>${esc(item.value)}</b>` : ''}</article>`).join('')}</div>`;
+  const stepClass = value => /chưa|chờ|kẹt/i.test(value || '') ? 'sent' : /từ chối|không nhập lại|nhầm|loại bỏ|vứt/i.test(value || '') ? 'cancelled' : /xong|nhập lại kho/i.test(value || '') ? 'ok' : 'draft';
+  const doiTraPanel = (data, options = {}) => {
+    const summary = data?.summary || {};
+    const tickets = data?.tickets || [];
+    const products = data?.products || [];
+    if (!Number(summary.SoPhieu || 0) && !tickets.length && !products.length) return '';
+    const ticketRows = tickets.length
+      ? tickets.map(row => `<tr class="${row.TrangThai === 'Đã duyệt' ? 'cashier-return-ready' : ''}"><td><strong>${esc(row.MaDT)}</strong><small>${esc(row.MaHD)} · ${esc(row.TenKH || 'Khách vãng lai')}</small></td><td>${esc(row.HinhThucXuLy)}<small>${esc(row.TrangThai)}</small></td><td class="report-return-reason">${esc(row.LyDo || '—')}</td><td class="num">${money(row.SoTienHoan)}</td><td class="report-return-duty"><span class="status-pill ${stepClass(row.BuocCanXuLy)}">${esc(row.BuocCanXuLy)}</span><small class="report-return-fate">Hàng: ${esc(hangDiDauText(row))}</small><div class="report-return-people"><span>Lập <b>${esc(row.NguoiLap || '—')}</b></span><span>Kho <b>${esc(row.NguoiKiemTra || '—')}</b></span><span>Duyệt <b>${esc(row.NguoiDuyet || '—')}</b></span></div></td></tr>`).join('')
+      : '<tr><td colspan="5" class="warehouse-empty">Kỳ này chưa có phiếu đổi trả.</td></tr>';
+    const productCard = options.showProducts === false ? '' : `<article class="warehouse-table-card report-return-products"><div class="warehouse-panel-title"><div><p>HÀNG KHÁCH TRẢ</p><h2>${esc(options.productTitle || 'Sản phẩm bị đổi trả nhiều')}</h2></div><span class="report-card-count">${products.length}</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>SẢN PHẨM</th><th>SL TRẢ</th><th>NHẬP LẠI</th><th>LOẠI BỎ / VỨT</th><th>HÀNG ĐI ĐÂU</th></tr></thead><tbody>${products.length ? products.map(row => `<tr><td><strong>${esc(row.TenSP)}</strong><small>${esc(row.MaSP)}${row.LyDoMau ? ` · ${esc(row.LyDoMau)}` : ''}</small></td><td class="num">${row.SLTra}</td><td class="num">${row.SLNhapLai || 0}</td><td class="num">${row.SLLoaiBo || row.SLKhongNhapLai || 0}</td><td class="report-return-fate">${esc(hangDiDauText(row))}</td></tr>`).join('') : '<tr><td colspan="5" class="warehouse-empty">Kỳ này chưa có hàng khách trả.</td></tr>'}</tbody></table></div></article>`;
+    return `<section class="report-return-block">
+      <div class="report-return-heading"><div><p>ĐỔI TRẢ VÀ TRÁCH NHIỆM</p><h2>${esc(options.title || 'Phiếu đổi trả trong kỳ')}</h2><span>${esc(options.subtitle || 'Cột trách nhiệm cho biết việc đang nằm ở bước nào. Hàng đi đâu: nhập lại kho bán (cộng tồn) hoặc loại bỏ/vứt (không cộng, đã trừ lúc bán).')}</span></div><b>${tickets.length} phiếu</b></div>
+      <div class="report-return-kpis">
+        <article><span>PHIẾU ĐỔI TRẢ</span><strong>${summary.SoPhieu || 0}</strong><small>${summary.SoHoanTien || 0} hoàn tiền · ${summary.SoDoiHang || 0} đổi hàng</small></article>
+        <article><span>TIỀN ĐÃ HOÀN</span><strong>${money(summary.TienHoan)}</strong><small>${summary.ChoThuNganXacNhan || 0} chờ thu ngân xác nhận</small></article>
+        <article><span>ĐANG KẸT BƯỚC</span><strong>${Number(summary.ChoKiemTra || 0) + Number(summary.ChoDuyet || 0) + Number(summary.ChoThuNganXacNhan || 0)}</strong><small>Thủ kho ${summary.ChoKiemTra || 0} · Quản lý ${summary.ChoDuyet || 0}</small></article>
+        <article><span>HÀNG ĐI ĐÂU</span><strong>${summary.NhapLaiKho || 0} · ${summary.KhongNhapLai || 0}</strong><small>Nhập lại kho bán · Loại bỏ/vứt (không cộng tồn)</small></article>
+      </div>
+      <div class="report-return-grid">
+        <article class="warehouse-table-card report-return-tickets"><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU / HĐ</th><th>HÌNH THỨC</th><th>LÝ DO</th><th>TIỀN HOÀN</th><th>TRÁCH NHIỆM / NGƯỜI XỬ LÝ</th></tr></thead><tbody>${ticketRows}</tbody></table></div></article>
+        ${productCard}
+      </div>
+    </section>`;
+  };
 
-  const managerPayableDetail = async (context, id) => {
+  const managerPayableDetail = async (context, id, onDone) => {
     try {
       const data = await api(context, `/admin/finance/payables/${id}`);
       const debt = data.payable;
       const rows = data.lines.map(line => `<tr><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)}</small></td><td class="num">${line.SoLuong}</td><td class="num">${money(line.DonGia)}</td><td class="num">${line.ThueSuat}%</td><td class="num">${money(line.ThanhTien)}</td></tr>`).join('');
       const overlay = document.createElement('div');
       overlay.className = 'warehouse-modal-backdrop';
-      overlay.innerHTML = `<div class="warehouse-modal order-detail-modal manager-payable-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">ĐIỀU HÀNH / HỒ SƠ CÔNG NỢ</p><h2>${esc(debt.MaCNPTra)}</h2></div><button class="warehouse-icon-button close" aria-label="Đóng">×</button></div><div class="warehouse-modal-body"><div class="manager-readonly-note"><svg><use href="#i-report"/></svg><div><strong>Quản lý đang xem ở chế độ giám sát</strong><span>Đối chiếu hóa đơn, lập Phiếu chi và cập nhật thanh toán vẫn do Kế toán thực hiện.</span></div></div><div class="warehouse-detail-grid"><div><span>NHÀ CUNG CẤP</span><strong>${esc(debt.TenNCC)}</strong></div><div><span>HÓA ĐƠN</span><strong>${esc(debt.SoHoaDon)}</strong></div><div><span>ĐƠN MUA</span><strong>${esc(debt.MaPO)}</strong></div><div><span>PHIẾU NHẬP</span><strong>${esc(debt.MaPN || '—')}</strong></div><div><span>NGÀY PHÁT SINH</span><strong>${fmtDate(debt.NgayPhatSinh)}</strong></div><div><span>HẠN THANH TOÁN</span><strong>${fmtDate(debt.HanThanhToan)}</strong></div></div><div class="manager-debt-amounts"><div><span>GIÁ TRỊ GHI NHẬN</span><strong>${money(debt.SoTienNo)}</strong></div><div><span>ĐÃ THANH TOÁN</span><strong>${money(debt.SoTienDaTra)}</strong></div><div><span>CÒN PHẢI TRẢ</span><strong>${money(debt.SoTienConLai)}</strong></div><div><span>TRẠNG THÁI</span><strong><i class="status-pill ${debtClass(debt.TrangThaiHienTai)}">${esc(debt.TrangThaiHienTai)}</i></strong></div></div><div class="warehouse-table-wrap warehouse-form-lines"><table class="warehouse-table"><thead><tr><th>MẶT HÀNG</th><th>SỐ LƯỢNG</th><th>ĐƠN GIÁ</th><th>THUẾ SUẤT</th><th>TIỀN HÀNG</th></tr></thead><tbody>${rows}</tbody></table></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Đóng</button><button class="warehouse-primary print-payable-detail"><svg><use href="#i-report"/></svg>Xem bản in</button></div></div>`;
+      const fundNote = debt.MaPhieu ? `<div class="manager-readonly-note"><svg><use href="#i-cash"/></svg><div><strong>Phiếu chi ${esc(debt.MaPhieu)} · ${esc(debt.BuocTatToan || debt.TrangThaiPhieuChi)}</strong><span>${debt.HinhThucCapQuy ? `Quản lý đã giao: ${esc(debt.HinhThucCapQuy)}${debt.NguoiDuyet ? ` · ${esc(debt.NguoiDuyet)}` : ''}${debt.NgayCapQuy ? ` · ${fmtDateTime(debt.NgayCapQuy)}` : ''}.` : 'Chưa giao tiền. Duyệt Phiếu chi đồng thời là bước giao quỹ cho Kế toán.'}${debt.GhiChuCapQuy ? ` ${esc(debt.GhiChuCapQuy)}` : ''}</span></div></div>` : '<div class="manager-readonly-note"><svg><use href="#i-report"/></svg><div><strong>Kế toán chưa lập Phiếu chi</strong><span>Công nợ chỉ giảm sau khi bạn giao tiền và Kế toán thanh toán thành công cho Nhà cung cấp.</span></div></div>';
+      overlay.innerHTML = `<div class="warehouse-modal order-detail-modal manager-payable-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">ĐIỀU HÀNH / HỒ SƠ CÔNG NỢ</p><h2>${esc(debt.MaCNPTra)}</h2></div><button class="warehouse-icon-button close" aria-label="Đóng">×</button></div><div class="warehouse-modal-body">${settlementFlow(debt.BuocTatToan)}${fundNote}<div class="warehouse-detail-grid"><div><span>NHÀ CUNG CẤP</span><strong>${esc(debt.TenNCC)}</strong></div><div><span>HÓA ĐƠN</span><strong>${esc(debt.SoHoaDon)}</strong></div><div><span>ĐƠN MUA</span><strong>${esc(debt.MaPO)}</strong></div><div><span>PHIẾU NHẬP</span><strong>${esc(debt.MaPN || '—')}</strong></div><div><span>NGÀY PHÁT SINH</span><strong>${fmtDate(debt.NgayPhatSinh)}</strong></div><div><span>HẠN THANH TOÁN</span><strong>${fmtDate(debt.HanThanhToan)}</strong></div></div><div class="manager-debt-amounts"><div><span>GIÁ TRỊ GHI NHẬN</span><strong>${money(debt.SoTienNo)}</strong></div><div><span>ĐÃ THANH TOÁN</span><strong>${money(debt.SoTienDaTra)}</strong></div><div><span>CÒN PHẢI TRẢ</span><strong>${money(debt.SoTienConLai)}</strong></div><div><span>TIẾN ĐỘ</span><strong><i class="status-pill ${debtClass(debt.TrangThaiHienTai)}">${esc(debt.BuocTatToan || debt.TrangThaiHienTai)}</i></strong></div></div><div class="warehouse-table-wrap warehouse-form-lines"><table class="warehouse-table"><thead><tr><th>MẶT HÀNG</th><th>SỐ LƯỢNG</th><th>ĐƠN GIÁ</th><th>THUẾ SUẤT</th><th>TIỀN HÀNG</th></tr></thead><tbody>${rows}</tbody></table></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Đóng</button>${debt.TrangThaiPhieuChi === 'Chờ duyệt' ? `<button class="warehouse-primary fund-payable" type="button">Duyệt và giao tiền</button>` : ''}<button class="warehouse-primary print-payable-detail"><svg><use href="#i-report"/></svg>Xem bản in</button></div></div>`;
       document.body.appendChild(overlay);
       const close = () => overlay.remove();
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
       overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+      overlay.querySelector('.fund-payable')?.addEventListener('click', () => {
+        close();
+        window.FLY_PAYMENT_VOUCHER?.openApproval(context, debt.MaPhieu, onDone);
+      });
       overlay.querySelector('.print-payable-detail').addEventListener('click', () => window.FLY_PRINT.show({
         title: 'BẢNG CHI TIẾT CÔNG NỢ NHÀ CUNG CẤP', number: debt.MaCNPTra,
         documentDate: new Date(), status: debt.TrangThaiHienTai,
@@ -331,7 +415,7 @@
       const overlay = document.createElement('div');
       overlay.className = 'warehouse-modal-backdrop';
       const defaultContent = debt.NoiDung || `Thanh toán toàn bộ công nợ ${debt.MaCNPTra} theo Hóa đơn ${debt.SoHoaDon}`;
-      overlay.innerHTML = `<div class="warehouse-modal payment-voucher-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">UC28 · PHIẾU CHI NHÀ CUNG CẤP</p><h2>${resubmit ? `Chỉnh sửa ${esc(debt.MaPhieu)}` : `Lập Phiếu chi cho ${esc(debt.MaCNPTra)}`}</h2><span>${esc(debt.TenNCC)} · Hạn ${fmtDate(debt.HanThanhToan)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="payment-voucher-source"><div><span>ĐƠN MUA</span><strong>${esc(debt.MaPO)}</strong></div><div><span>PHIẾU NHẬP</span><strong>${esc(debt.MaPN)}</strong></div><div><span>HÓA ĐƠN NCC</span><strong>${esc(debt.SoHoaDon)}</strong></div><div><span>ĐỐI CHIẾU</span><strong><i class="status-pill ${matchClass(debt.TrangThaiDoiChieu)}">${esc(debt.TrangThaiDoiChieu)}</i></strong></div></div><div class="manager-readonly-note"><svg><use href="#i-shield"></use></svg><div><strong>Số tiền Phiếu chi được khóa theo toàn bộ công nợ còn lại</strong><span>Không trả trước, không thanh toán từng phần. Sau khi gửi, Quản lý duyệt cũng chưa làm giảm công nợ.</span></div></div><div class="payment-voucher-amount"><span>SỐ TIỀN CHI</span><strong>${money(debt.SoTienConLai)}</strong><small>${esc(debt.MaCNPTra)} · ${esc(debt.TrangThaiCongNo)}</small></div><div class="warehouse-form-grid payment-voucher-fields"><div class="warehouse-field"><label>Phương thức *</label><select id="voucherMethod"><option ${debt.PhuongThuc === 'Tiền mặt' ? 'selected' : ''}>Tiền mặt</option><option ${debt.PhuongThuc === 'Chuyển khoản' || !debt.PhuongThuc ? 'selected' : ''}>Chuyển khoản</option></select></div><div class="warehouse-field"><label>Nội dung chi *</label><input id="voucherContent" maxlength="500" value="${esc(defaultContent)}"></div><div class="warehouse-field full"><label>Ghi chú</label><textarea id="voucherNote" maxlength="500" rows="3" placeholder="Thông tin bổ sung cho Quản lý kiểm tra">${esc(debt.GhiChu || '')}</textarea></div></div>${resubmit ? `<p class="payment-voucher-rejection"><strong>Lý do bị từ chối:</strong> ${esc(debt.LyDoTuChoi || '—')}</p>` : ''}</div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Hủy</button><button class="warehouse-primary submit-voucher" type="button">${resubmit ? 'Chỉnh sửa và gửi lại' : 'Lập và gửi Quản lý duyệt'}</button></div></div>`;
+      overlay.innerHTML = `<div class="warehouse-modal payment-voucher-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">UC28 · PHIẾU CHI NHÀ CUNG CẤP</p><h2>${resubmit ? `Chỉnh sửa ${esc(debt.MaPhieu)}` : `Lập Phiếu chi cho ${esc(debt.MaCNPTra)}`}</h2><span>${esc(debt.TenNCC)} · Hạn ${fmtDate(debt.HanThanhToan)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body">${settlementFlow('Chờ Quản lý giao tiền')}<div class="payment-voucher-source"><div><span>ĐƠN MUA</span><strong>${esc(debt.MaPO)}</strong></div><div><span>PHIẾU NHẬP</span><strong>${esc(debt.MaPN)}</strong></div><div><span>HÓA ĐƠN NCC</span><strong>${esc(debt.SoHoaDon)}</strong></div><div><span>ĐỐI CHIẾU</span><strong><i class="status-pill ${matchClass(debt.TrangThaiDoiChieu)}">${esc(debt.TrangThaiDoiChieu)}</i></strong></div></div><div class="manager-readonly-note"><svg><use href="#i-shield"></use></svg><div><strong>Số tiền khóa theo toàn bộ công nợ còn lại</strong><span>Không trả trước, không thanh toán từng phần. Sau khi gửi, Quản lý duyệt và giao tiền; bạn mới được chi cho Nhà cung cấp. Công nợ chưa giảm ở bước này.</span></div></div><div class="payment-voucher-amount"><span>SỐ TIỀN CHI</span><strong>${money(debt.SoTienConLai)}</strong><small>${esc(debt.MaCNPTra)} · ${esc(debt.TrangThaiCongNo)}</small></div><div class="warehouse-form-grid payment-voucher-fields"><div class="warehouse-field"><label>Phương thức *</label><select id="voucherMethod"><option ${debt.PhuongThuc === 'Tiền mặt' ? 'selected' : ''}>Tiền mặt</option><option ${debt.PhuongThuc === 'Chuyển khoản' || !debt.PhuongThuc ? 'selected' : ''}>Chuyển khoản</option></select></div><div class="warehouse-field"><label>Nội dung chi *</label><input id="voucherContent" maxlength="500" value="${esc(defaultContent)}"></div><div class="warehouse-field full"><label>Ghi chú</label><textarea id="voucherNote" maxlength="500" rows="3" placeholder="Thông tin bổ sung cho Quản lý kiểm tra">${esc(debt.GhiChu || '')}</textarea></div></div>${resubmit ? `<p class="payment-voucher-rejection"><strong>Lý do bị từ chối:</strong> ${esc(debt.LyDoTuChoi || '—')}</p>` : ''}</div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Hủy</button><button class="warehouse-primary submit-voucher" type="button">${resubmit ? 'Chỉnh sửa và gửi lại' : 'Lập và gửi Quản lý duyệt'}</button></div></div>`;
       document.body.appendChild(overlay);
       const close = () => overlay.remove();
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
@@ -360,7 +444,7 @@
       const debt = data.payable;
       const overlay = document.createElement('div');
       overlay.className = 'warehouse-modal-backdrop';
-      overlay.innerHTML = `<div class="warehouse-modal payment-result-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">THỰC HIỆN THANH TOÁN PHIẾU CHI</p><h2>${esc(debt.MaPhieu)}</h2><span>${esc(debt.TenNCC)} · ${money(debt.SoTienPhieuChi)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="manager-readonly-note"><svg><use href="#i-warning"></use></svg><div><strong>Đây là bước duy nhất được phép giảm công nợ</strong><span>Thanh toán thất bại chỉ ghi nhận kết quả và nguyên nhân; số tiền công nợ vẫn giữ nguyên để Kế toán thực hiện lại.</span></div></div><div class="payment-voucher-source"><div><span>PHƯƠNG THỨC</span><strong>${esc(debt.PhuongThuc)}</strong></div><div><span>CÔNG NỢ</span><strong>${esc(debt.MaCNPTra)}</strong></div><div><span>CÒN PHẢI TRẢ</span><strong>${money(debt.SoTienConLai)}</strong></div><div><span>QUẢN LÝ DUYỆT</span><strong>${esc(debt.NguoiDuyet || '—')}</strong></div></div><div class="warehouse-form-grid payment-voucher-fields"><div class="warehouse-field"><label>Kết quả giao dịch *</label><select id="paymentResult"><option value="success">Thanh toán thành công</option><option value="failed">Thanh toán thất bại</option></select></div><div class="warehouse-field bank-code-field"><label>Mã giao dịch/ủy nhiệm chi *</label><input id="paymentBankCode" maxlength="50" value="${esc(debt.MaGiaoDichNganHang || '')}" placeholder="Nhập mã giao dịch ngân hàng"></div><div class="warehouse-field full"><label id="paymentNoteLabel">Ghi chú thanh toán</label><textarea id="paymentNote" maxlength="500" rows="3" placeholder="Khi thất bại, bắt buộc ghi nguyên nhân để thực hiện lại"></textarea></div></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Hủy</button><button class="warehouse-primary submit-payment-result" type="button">Ghi nhận kết quả</button></div></div>`;
+      overlay.innerHTML = `<div class="warehouse-modal payment-result-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">THỰC HIỆN THANH TOÁN PHIẾU CHI</p><h2>${esc(debt.MaPhieu)}</h2><span>${esc(debt.TenNCC)} · ${money(debt.SoTienPhieuChi)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body">${settlementFlow(debt.BuocTatToan || 'đã giao tiền')}<div class="manager-readonly-note"><svg><use href="#i-cash"></use></svg><div><strong>Quản lý đã giao tiền, bạn chi cho Nhà cung cấp</strong><span>${debt.HinhThucCapQuy ? `${esc(debt.HinhThucCapQuy)}${debt.NguoiDuyet ? ` · ${esc(debt.NguoiDuyet)}` : ''}${debt.NgayCapQuy ? ` · ${fmtDateTime(debt.NgayCapQuy)}` : ''}. ` : ''}${debt.PhuongThuc === 'Tiền mặt' ? 'Đưa đủ tiền mặt đã nhận cho Nhà cung cấp rồi ghi nhận thành công.' : 'Chuyển khoản từ tài khoản cửa hàng, nhập mã giao dịch ngân hàng.'} Thất bại thì công nợ giữ nguyên để thực hiện lại.</span>${debt.GhiChuCapQuy ? `<small>${esc(debt.GhiChuCapQuy)}</small>` : ''}</div></div><div class="payment-voucher-source"><div><span>PHƯƠNG THỨC CHI NCC</span><strong>${esc(debt.PhuongThuc)}</strong></div><div><span>CÔNG NỢ</span><strong>${esc(debt.MaCNPTra)}</strong></div><div><span>CÒN PHẢI TRẢ</span><strong>${money(debt.SoTienConLai)}</strong></div><div><span>QUỸ ĐÃ NHẬN</span><strong>${esc(debt.HinhThucCapQuy || debt.NguoiDuyet || '—')}</strong></div></div><div class="warehouse-form-grid payment-voucher-fields"><div class="warehouse-field"><label>Kết quả giao dịch *</label><select id="paymentResult"><option value="success">Thanh toán thành công</option><option value="failed">Thanh toán thất bại</option></select></div><div class="warehouse-field bank-code-field"><label>Mã giao dịch/ủy nhiệm chi *</label><input id="paymentBankCode" maxlength="50" value="${esc(debt.MaGiaoDichNganHang || '')}" placeholder="Nhập mã giao dịch ngân hàng"></div><div class="warehouse-field full"><label id="paymentNoteLabel">Ghi chú thanh toán</label><textarea id="paymentNote" maxlength="500" rows="3" placeholder="Khi thất bại, bắt buộc ghi nguyên nhân để thực hiện lại"></textarea></div></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Hủy</button><button class="warehouse-primary submit-payment-result" type="button">Ghi nhận kết quả</button></div></div>`;
       document.body.appendChild(overlay);
       const close = () => overlay.remove();
       const resultSelect = overlay.querySelector('#paymentResult');
@@ -396,10 +480,12 @@
       root.querySelector('#accountingPayableBody').innerHTML = items.length ? items.map(item => {
         const due = Number(item.SoNgayConLai) <= 0;
         let action = `<span class="payment-voucher-wait">Còn ${item.SoNgayConLai} ngày</span>`;
-        if (!item.MaPhieu && due && Number(item.SoTienConLai) > 0) action = `<button class="warehouse-primary" data-create-voucher="${esc(item.MaCNPTra)}">Lập Phiếu chi</button>`;
+        if (!item.MaPhieu && Number(item.SoTienConLai) > 0) {
+          action = `<button class="warehouse-primary" data-create-voucher="${esc(item.MaCNPTra)}">${due ? 'Lập Phiếu chi' : 'Lập Phiếu chi sớm'}</button>`;
+        }
         else if (item.TrangThaiPhieuChi === 'Từ chối') action = `<button class="warehouse-secondary" data-resubmit-voucher="${esc(item.MaCNPTra)}">Sửa &amp; gửi lại</button>`;
         else if (['Đã duyệt', 'Thanh toán thất bại'].includes(item.TrangThaiPhieuChi)) action = `<button class="warehouse-primary" data-pay-voucher="${esc(item.MaCNPTra)}">${item.TrangThaiPhieuChi === 'Thanh toán thất bại' ? 'Thực hiện lại' : 'Thanh toán'}</button>`;
-        else if (item.TrangThaiPhieuChi === 'Chờ duyệt') action = '<span class="payment-voucher-wait">Chờ Quản lý</span>';
+        else if (item.TrangThaiPhieuChi === 'Chờ duyệt') action = '<span class="payment-voucher-wait">Chờ Quản lý giao tiền</span>';
         else if (item.TrangThaiPhieuChi === 'Thanh toán thành công') action = '<span class="status-pill ok">Đã tất toán</span>';
         return `<tr><td><strong>${esc(item.MaCNPTra)}</strong><small>Phát sinh ${fmtDate(item.NgayPhatSinh)}</small></td><td><strong>${esc(item.TenNCC)}</strong><small>${esc(item.MaNCC)}</small></td><td><button class="warehouse-link" data-invoice="${esc(item.MaHDMH)}">HĐ ${esc(item.SoHoaDon)}</button><small>${esc(item.MaPO)} · ${esc(item.MaPN)}</small></td><td><strong>${fmtDate(item.HanThanhToan)}</strong><small>${Number(item.SoNgayConLai) < 0 ? `Quá ${Math.abs(item.SoNgayConLai)} ngày` : Number(item.SoNgayConLai) === 0 ? 'Đến hạn hôm nay' : `Còn ${item.SoNgayConLai} ngày`}</small></td><td class="num"><strong>${money(item.SoTienConLai)}</strong><small>Gốc ${money(item.SoTienNo)}</small></td><td>${item.MaPhieu ? `<strong>${esc(item.MaPhieu)}</strong><small>${esc(item.PhuongThuc)}</small><span class="status-pill ${voucherClass(item.TrangThaiPhieuChi)}">${esc(item.TrangThaiPhieuChi)}</span>` : '<span class="status-pill draft">Chưa lập Phiếu chi</span>'}</td><td>${action}</td></tr>`;
       }).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có công nợ phù hợp.</td></tr>';
@@ -416,7 +502,7 @@
         root.querySelector('#voucherReady').textContent = data.summary.ChoThanhToan;
       } catch (error) { context.showToast(error.message, 'error'); }
     };
-    root.innerHTML = `${heading('KẾ TOÁN / UC28', 'Công nợ và Phiếu chi Nhà cung cấp', 'Lập đúng một Phiếu chi cho toàn bộ công nợ đến hạn; chỉ thanh toán thành công mới làm giảm công nợ.', '<button class="warehouse-secondary" id="backInvoices">Mở hồ sơ đối chiếu</button>')}<div class="accounting-flow"><span>Đối chiếu ba bên đã khớp</span><i>→</i><span>Công nợ đến hạn</span><i>→</i><strong>Lập Phiếu chi</strong><i>→</i><strong>Quản lý duyệt</strong><i>→</i><strong>Thanh toán thành công</strong></div><div class="warehouse-stats payment-voucher-stats"><article><span>CÒN PHẢI TRẢ</span><strong id="payableRemaining">0 đ</strong><small id="payableCount">0 khoản</small></article><article><span>CHỜ QUẢN LÝ DUYỆT</span><strong id="voucherWaiting">0</strong><small>Phê duyệt chưa giảm công nợ</small></article><article><span>SẴN SÀNG THANH TOÁN</span><strong id="voucherReady">0</strong><small>Đã duyệt hoặc cần thực hiện lại</small></article></div><article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"></use></svg><input id="accountingPayableSearch" placeholder="Tìm công nợ, Nhà cung cấp, hóa đơn hoặc Phiếu chi..."></label><div class="warehouse-toolbar-actions"><select id="accountingVoucherStatus"><option value="">Tất cả Phiếu chi</option><option>Chưa lập Phiếu chi</option><option>Chờ duyệt</option><option>Đã duyệt</option><option>Thanh toán thất bại</option><option>Thanh toán thành công</option><option>Từ chối</option></select><button class="warehouse-icon-button" id="refreshPayables"><svg><use href="#i-refresh"></use></svg></button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table payment-voucher-table"><thead><tr><th>CÔNG NỢ</th><th>NHÀ CUNG CẤP</th><th>BỘ CHỨNG TỪ</th><th>HẠN THANH TOÁN</th><th>CÒN LẠI</th><th>PHIẾU CHI</th><th>THAO TÁC</th></tr></thead><tbody id="accountingPayableBody"></tbody></table></div></article>`;
+    root.innerHTML = `${heading('KẾ TOÁN / UC28', 'Công nợ và Phiếu chi Nhà cung cấp', 'Lập đúng một Phiếu chi cho toàn bộ công nợ đến hạn. Sau khi Quản lý giao tiền, bạn thanh toán cho Nhà cung cấp; chỉ thành công mới giảm công nợ.', '<button class="warehouse-secondary" id="backInvoices">Mở hồ sơ đối chiếu</button>')}${settlementFlow()}<div class="warehouse-stats payment-voucher-stats"><article><span>CÒN PHẢI TRẢ</span><strong id="payableRemaining">0 đ</strong><small id="payableCount">0 khoản</small></article><article><span>CHỜ QUẢN LÝ GIAO TIỀN</span><strong id="voucherWaiting">0</strong><small>Duyệt Phiếu chi = giao quỹ</small></article><article><span>ĐÃ NHẬN TIỀN, CẦN CHI NCC</span><strong id="voucherReady">0</strong><small>Đã duyệt hoặc thanh toán thất bại</small></article></div><article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"></use></svg><input id="accountingPayableSearch" placeholder="Tìm công nợ, Nhà cung cấp, hóa đơn hoặc Phiếu chi..."></label><div class="warehouse-toolbar-actions"><select id="accountingVoucherStatus"><option value="">Tất cả Phiếu chi</option><option>Chưa lập Phiếu chi</option><option>Chờ duyệt</option><option>Đã duyệt</option><option>Thanh toán thất bại</option><option>Thanh toán thành công</option><option>Từ chối</option></select><button class="warehouse-icon-button" id="refreshPayables"><svg><use href="#i-refresh"></use></svg></button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table payment-voucher-table"><thead><tr><th>CÔNG NỢ</th><th>NHÀ CUNG CẤP</th><th>BỘ CHỨNG TỪ</th><th>HẠN THANH TOÁN</th><th>CÒN LẠI</th><th>PHIẾU CHI</th><th>THAO TÁC</th></tr></thead><tbody id="accountingPayableBody"></tbody></table></div></article>`;
     let timer;
     root.querySelector('#accountingPayableSearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250); });
     root.querySelector('#accountingVoucherStatus').addEventListener('change', load);
@@ -447,8 +533,10 @@
           <td><strong>${fmtDate(item.HanThanhToan)}</strong><small>${item.TrangThaiHienTai === 'Đã thanh toán' ? 'Đã hoàn tất' : item.SoNgayConLai < 0 ? `Quá ${Math.abs(item.SoNgayConLai)} ngày` : `Còn ${item.SoNgayConLai} ngày`}</small></td>
           <td class="num"><strong>${money(item.SoTienNo)}</strong><small>Đã trả ${money(item.SoTienDaTra)}</small></td>
           <td class="num"><strong>${money(item.SoTienConLai)}</strong></td>
-          <td><span class="status-pill ${debtClass(item.TrangThaiHienTai)}">${esc(item.TrangThaiHienTai)}</span></td>
-          <td><button class="warehouse-secondary manager-debt-detail" data-manager-debt="${esc(item.MaCNPTra)}">Xem hồ sơ</button></td>
+          <td><span class="status-pill ${debtClass(item.TrangThaiHienTai)}">${esc(item.TrangThaiHienTai)}</span><small>${esc(item.BuocTatToan || (item.MaPhieu ? item.TrangThaiPhieuChi : 'Chưa lập Phiếu chi'))}</small></td>
+          <td>${item.TrangThaiPhieuChi === 'Chờ duyệt'
+            ? `<button class="warehouse-primary manager-debt-detail" data-fund-voucher="${esc(item.MaPhieu)}">Giao tiền</button>`
+            : `<button class="warehouse-secondary manager-debt-detail" data-manager-debt="${esc(item.MaCNPTra)}">Xem</button>`}</td>
         </tr>`).join('') : '<tr><td colspan="8" class="warehouse-empty">Chưa phát sinh công nợ phải trả phù hợp với bộ lọc.</td></tr>';
       root.querySelector('#managerDebtCount').textContent = `${items.length} khoản hiển thị`;
     };
@@ -465,19 +553,23 @@
         root.querySelector('#managerDebtOverdue').textContent = money(summary.TongQuaHan);
         root.querySelector('#managerDebtTotalNote').textContent = `${summary.TongKhoan || 0} khoản đã ghi nhận`;
         root.querySelector('#managerDebtOverdueNote').textContent = `${summary.SoKhoanQuaHan || 0} khoản quá hạn`;
+        const fundHint = root.querySelector('#managerFundHint');
+        if (fundHint) fundHint.textContent = `${summary.ChoGiaoTien || 0} phiếu chờ giao tiền · ${summary.ChoKeToanChi || 0} phiếu chờ Kế toán chi NCC`;
         render();
       } catch (error) { context.showToast(error.message, 'error'); }
     };
 
-    root.innerHTML = `${heading('ĐIỀU HÀNH / TÀI CHÍNH', 'Theo dõi công nợ Nhà cung cấp', 'Giám sát toàn bộ nghĩa vụ phải trả của cửa hàng; dữ liệu chỉ phát sinh sau khi Kế toán xác nhận đối chiếu ba chứng từ.', '<button class="warehouse-primary" id="printManagerPayables"><svg><use href="#i-report"/></svg>In báo cáo công nợ</button>')}<div class="manager-readonly-note"><svg><use href="#i-shield"/></svg><div><strong>Phạm vi của Quản lý cửa hàng</strong><span>Được xem và in báo cáo toàn hệ thống. Kế toán chịu trách nhiệm đối chiếu hóa đơn, lập Phiếu chi và cập nhật số tiền đã thanh toán.</span></div></div><div class="warehouse-stats manager-debt-stats"><article><span>TỔNG GIÁ TRỊ GHI NHẬN</span><strong id="managerDebtTotal">0 đ</strong><small id="managerDebtTotalNote">0 khoản đã ghi nhận</small></article><article><span>ĐÃ THANH TOÁN</span><strong id="managerDebtPaid">0 đ</strong><small>Lũy kế thanh toán Nhà cung cấp</small></article><article><span>CÒN PHẢI TRẢ</span><strong id="managerDebtRemaining">0 đ</strong><small>Nghĩa vụ chưa hoàn tất</small></article><article class="attention"><span>ĐÃ QUÁ HẠN</span><strong id="managerDebtOverdue">0 đ</strong><small id="managerDebtOverdueNote">0 khoản quá hạn</small></article></div><article class="warehouse-table-card manager-debt-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"/></svg><input id="managerDebtSearch" placeholder="Tìm mã công nợ, Nhà cung cấp, hóa đơn hoặc Đơn mua..."></label><div class="warehouse-toolbar-actions"><span class="manager-debt-count" id="managerDebtCount">0 khoản hiển thị</span><select id="managerDebtStatus"><option value="">Tất cả trạng thái</option><option>Đang nợ</option><option>Quá hạn</option><option>Đã thanh toán</option></select><button class="warehouse-icon-button" id="refreshManagerDebt" title="Làm mới"><svg><use href="#i-refresh"/></svg></button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table manager-debt-table"><thead><tr><th>MÃ CÔNG NỢ</th><th>NHÀ CUNG CẤP</th><th>HỒ SƠ NGUỒN</th><th>HẠN THANH TOÁN</th><th>GIÁ TRỊ / ĐÃ TRẢ</th><th>CÒN LẠI</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody id="managerDebtBody"></tbody></table></div></article>`;
+    root.innerHTML = `${heading('ĐIỀU HÀNH / TÀI CHÍNH', 'Theo dõi công nợ Nhà cung cấp', 'Giám sát nghĩa vụ phải trả; khi Kế toán lập Phiếu chi, Quản lý duyệt đồng thời giao tiền để Kế toán tất toán với Nhà cung cấp.', '<button class="warehouse-primary" id="printManagerPayables"><svg><use href="#i-report"/></svg>In báo cáo công nợ</button>')}${settlementFlow()}<div class="manager-readonly-note"><svg><use href="#i-shield"/></svg><div><strong>Việc của Quản lý</strong><span>Đối chiếu hóa đơn do Kế toán làm. Khi Phiếu chi chờ duyệt, bạn giao tiền mặt hoặc ủy quyền chuyển khoản. Công nợ chỉ giảm sau khi Kế toán thanh toán thành công.</span><small id="managerFundHint">0 phiếu chờ giao tiền</small></div></div><div class="warehouse-stats manager-debt-stats"><article><span>TỔNG GIÁ TRỊ GHI NHẬN</span><strong id="managerDebtTotal">0 đ</strong><small id="managerDebtTotalNote">0 khoản đã ghi nhận</small></article><article><span>ĐÃ THANH TOÁN</span><strong id="managerDebtPaid">0 đ</strong><small>Lũy kế thanh toán Nhà cung cấp</small></article><article><span>CÒN PHẢI TRẢ</span><strong id="managerDebtRemaining">0 đ</strong><small>Nghĩa vụ chưa hoàn tất</small></article><article class="attention"><span>ĐÃ QUÁ HẠN</span><strong id="managerDebtOverdue">0 đ</strong><small id="managerDebtOverdueNote">0 khoản quá hạn</small></article></div><article class="warehouse-table-card manager-debt-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"/></svg><input id="managerDebtSearch" placeholder="Tìm mã công nợ, Nhà cung cấp, hóa đơn hoặc Đơn mua..."></label><div class="warehouse-toolbar-actions"><span class="manager-debt-count" id="managerDebtCount">0 khoản hiển thị</span><select id="managerDebtStatus"><option value="">Tất cả trạng thái</option><option>Đang nợ</option><option>Quá hạn</option><option>Đã thanh toán</option></select><button class="warehouse-icon-button" id="refreshManagerDebt" title="Làm mới"><svg><use href="#i-refresh"/></svg></button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table manager-debt-table"><thead><tr><th>MÃ CÔNG NỢ</th><th>NHÀ CUNG CẤP</th><th>HỒ SƠ NGUỒN</th><th>HẠN THANH TOÁN</th><th>GIÁ TRỊ / ĐÃ TRẢ</th><th>CÒN LẠI</th><th>TIẾN ĐỘ</th><th>THAO TÁC</th></tr></thead><tbody id="managerDebtBody"></tbody></table></div></article>`;
 
     let timer;
     root.querySelector('#managerDebtSearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250); });
     root.querySelector('#managerDebtStatus').addEventListener('change', load);
     root.querySelector('#refreshManagerDebt').addEventListener('click', load);
     root.addEventListener('click', event => {
+      const fund = event.target.closest('[data-fund-voucher]');
+      if (fund) return window.FLY_PAYMENT_VOUCHER?.openApproval(context, fund.dataset.fundVoucher, load);
       const detail = event.target.closest('[data-manager-debt]');
-      if (detail) managerPayableDetail(context, detail.dataset.managerDebt);
+      if (detail) managerPayableDetail(context, detail.dataset.managerDebt, load);
     });
     root.querySelector('#printManagerPayables').addEventListener('click', () => window.FLY_PRINT.show({
       title: 'BÁO CÁO TỔNG HỢP CÔNG NỢ NHÀ CUNG CẤP', number: `BC-CN-${new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date()).replaceAll('-', '')}`,
@@ -619,11 +711,15 @@
   const initStoreOperationsReports = async (root, context) => {
     let currentReport = null;
     root.innerHTML = `${heading('QUẢN LÝ / UC10', 'Báo cáo hoạt động cửa hàng', 'Tổng hợp doanh thu, thu–chi, ca bán, đổi trả, tồn thấp và công nợ quá hạn. Chi tiết lãi gộp 3 bước nằm ở báo cáo Kế toán.')}${periodFilterCard('<button class="warehouse-secondary" id="exportReportCsv" disabled>Xuất CSV</button><button class="warehouse-secondary" id="printFinancialReport" disabled>Xem bản in / PDF</button>')}`;
-    const selectedPeriod = bindPeriodUi(root, async () => {
-      const { type, period } = selectedPeriod();
-      root.querySelector('#loadFinancialReport').disabled = true;
+    const selectedPeriod = bindPeriodUi(root, () => { load(); });
+    const load = async () => {
+      const button = root.querySelector('#loadFinancialReport');
+      if (button) button.disabled = true;
       try {
-        currentReport = await api(context, `/admin/reports/store-operations?periodType=${encodeURIComponent(type)}&period=${encodeURIComponent(period)}`);
+        const { type, period } = selectedPeriod();
+        currentReport = await api(context, `/admin/reports/store-operations?periodType=${encodeURIComponent(type)}&period=${encodeURIComponent(period)}${root.dataset.reportLock === '1' ? '&lockPeriod=1' : ''}`);
+        window.FLY_REPORT_PERIOD?.syncFromReport(root, currentReport);
+        root.dataset.reportLock = '1';
         const s = currentReport.sales || {}; const f = currentReport.finance || {}; const a = currentReport.activity || {}; const alerts = currentReport.alerts || {};
         const p = currentReport.purchases || {}; const inv = currentReport.inventory || {};
         const cashiers = currentReport.cashiers || []; const daily = currentReport.daily || [];
@@ -634,7 +730,7 @@
         const visuals = ui();
         const charts = chartUi();
         const grossMargin = Number(s.DoanhThuThuan || 0) ? Number(s.LoiNhuanGop || 0) / Number(s.DoanhThuThuan) * 100 : 0;
-        root.querySelector('#financialReportBody').innerHTML = `<div class="financial-report-title"><div><p>KỲ BÁO CÁO</p><h2>${esc(currentReport.period.label)}</h2><span>${esc(currentReport.period.from)} đến ${esc(currentReport.period.to)}</span></div><span class="status-pill ok">Hoạt động cửa hàng</span></div>
+        root.querySelector('#financialReportBody').innerHTML = `${window.FLY_REPORT_PERIOD?.activeFallbackBanner(root, currentReport) || ''}<div class="financial-report-title"><div><p>KỲ BÁO CÁO</p><h2>${esc(currentReport.period.label)}</h2><span>${esc(currentReport.period.from)} đến ${esc(currentReport.period.to)}</span></div><span class="status-pill ok">Hoạt động cửa hàng</span></div>
           ${visuals.kpiGrid([
             { icon: 'i-trend', label: 'DOANH THU THUẦN', value: money(s.DoanhThuThuan), hint: `${s.SoHoaDon || 0} hóa đơn − ${money(s.TienHoan)} hoàn` },
             { icon: 'i-report', label: 'LỢI NHUẬN GỘP', value: money(s.LoiNhuanGop), hint: 'Chưa gồm lương, điện nước, thuê mặt bằng' },
@@ -658,20 +754,23 @@
               { icon: 'i-refresh', tone: Number(alerts.DoiTraDangXuLy) ? 'warning' : 'ok', title: `${alerts.DoiTraDangXuLy || 0} đổi trả đang xử lý`, detail: 'Theo dõi kiểm tra kho và phê duyệt', value: 'Đổi trả' }
             ])}</article>
           </div>
+          ${doiTraPanel(currentReport.doiTra, { title: 'Đổi trả toàn cửa hàng', subtitle: 'Hàng đi đâu: nhập lại kho bán (cộng tồn) hoặc loại bỏ/vứt (không cộng, đã trừ lúc bán). Không trừ kho lần nữa.', productTitle: 'SKU khách trả nhiều' })}
           <details class="report-detail-disclosure"><summary>Xem phân tích vận hành mở rộng</summary><div class="fly-dashboard-grid equal report-supporting-charts">
             ${charts.card({ kicker: 'ĐÓNG GÓP NHÂN SỰ', title: 'Doanh thu theo Thu ngân', subtitle: 'Doanh thu hóa đơn theo các ca mở trong kỳ', badge: `${cashiers.length} nhân viên`, className: 'ranking', chart: charts.horizontal({ items: cashiers.map(row => ({ label: row.TenNV, value: row.DoanhThuHoaDon, display: money(row.DoanhThuHoaDon) })), formatter: money, emptyText: 'Kỳ này chưa có ca bán hàng.' }) })}
             ${charts.card({ kicker: 'CƯỜNG ĐỘ VẬN HÀNH', title: 'Khối lượng chứng từ', subtitle: 'Bán hàng, mua hàng và kho trong cùng kỳ', badge: `${Number(a.SoHoaDon || 0) + Number(a.SoDonMua || 0) + Number(a.SoPhieuNhap || 0) + Number(a.SoPhieuXuat || 0)} hồ sơ`, className: 'operations', chart: charts.columns({ labels: ['Ca', 'Hóa đơn', 'Đổi trả', 'Đơn mua', 'Phiếu nhập', 'Phiếu xuất', 'Kiểm kê'], series: [{ name: 'Số lượng', values: [a.SoCaMo, a.SoHoaDon, a.SoDoiTra, a.SoDonMua, a.SoPhieuNhap, a.SoPhieuXuat, a.SoKiemKe], color: '#5376c6' }], formatter: qty, emptyText: 'Kỳ này chưa phát sinh hoạt động.' }) })}
           </div><div class="financial-report-sections"><article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>MUA HÀNG</p><h2>Đơn mua và nhập kho</h2></div></div><div class="report-metric-list"><div><span>Đơn mua hợp lệ</span><strong>${p.SoDonMua || 0} · ${money(p.GiaTriDonMua)}</strong></div><div><span>Phiếu nhập xác nhận</span><strong>${p.SoPhieuNhap || 0} · ${money(p.GiaTriNhap)}</strong></div></div></article><article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>THU – CHI</p><h2>Dòng tiền chứng từ</h2></div></div><div class="report-metric-list"><div><span>Phiếu thu thực nộp</span><strong>${money(f.PhieuThuThucNop)}</strong></div><div><span>Đã thanh toán NCC</span><strong>${money(f.DaThanhToanNCC)}</strong></div></div></article><article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>BIẾN ĐỘNG KHO</p><h2>Nhập, xuất và điều chỉnh</h2></div></div><div class="report-metric-list"><div><span>Nhập / xuất</span><strong>${qty(inv.SoLuongNhap)} / ${qty(inv.SoLuongXuat)}</strong></div><div><span>Điều chỉnh ròng</span><strong>${qty(inv.DieuChinhRong)}</strong></div></div></article></div></details>`;
-        window.FLY_REPORT_LAYOUT?.enhance(root.querySelector('#financialReportBody'), { actor: 'Quản lý', analysisTitle: 'Hiệu quả kinh doanh và vận hành cửa hàng' });
-        root.querySelector('#printFinancialReport').disabled = false;
-        root.querySelector('#exportReportCsv').disabled = false;
+        try { window.FLY_REPORT_LAYOUT?.enhance(root.querySelector('#financialReportBody'), { actor: 'Quản lý', analysisTitle: 'Hiệu quả kinh doanh và vận hành cửa hàng' }); } catch (error) { console.warn(error); }
+        const printBtn = root.querySelector('#printFinancialReport');
+        const exportBtn = root.querySelector('#exportReportCsv');
+        if (printBtn) printBtn.disabled = false;
+        if (exportBtn) exportBtn.disabled = false;
       } catch (error) {
         context.showToast(error.message, 'error');
         const body = root.querySelector('#financialReportBody');
         if (body) body.innerHTML = `<div class="welcome-card"><h2>Không lập được báo cáo</h2><p>${esc(error.message)}</p></div>`;
       }
-      finally { const button = root.querySelector('#loadFinancialReport'); if (button) button.disabled = false; }
-    });
+      finally { const live = root.querySelector('#loadFinancialReport'); if (live) live.disabled = false; }
+    };
     root.querySelector('#printFinancialReport').addEventListener('click', () => {
       if (!currentReport) return;
       window.FLY_PRINT.show({
@@ -689,10 +788,10 @@
     });
     root.querySelector('#exportReportCsv').addEventListener('click', () => {
       if (!currentReport) return;
-      const rows = [['BÁO CÁO HOẠT ĐỘNG CỬA HÀNG', currentReport.period.label], ['Doanh thu thuần', currentReport.sales.DoanhThuThuan], ['Lợi nhuận gộp', currentReport.sales.LoiNhuanGop], ['Phiếu thu thực nộp', currentReport.finance.PhieuThuThucNop], ['Phiếu chi', currentReport.finance.TongPhieuChi], [], ['Ngày', 'Số hóa đơn', 'Doanh thu thuần', 'Lãi gộp'], ...currentReport.daily.map(row => [fmtDate(row.Ngay), row.SoHoaDon, row.DoanhThuThuan, row.LoiNhuanGop])];
+      const rows = [['BÁO CÁO HOẠT ĐỘNG CỬA HÀNG', currentReport.period.label], ['Doanh thu thuần', currentReport.sales.DoanhThuThuan], ['Lợi nhuận gộp', currentReport.sales.LoiNhuanGop], ['Phiếu thu thực nộp', currentReport.finance.PhieuThuThucNop], ['Phiếu chi', currentReport.finance.TongPhieuChi], [], ['Ngày', 'Số hóa đơn', 'Doanh thu thuần', 'Lãi gộp'], ...currentReport.daily.map(row => [fmtDate(row.Ngay), row.SoHoaDon, row.DoanhThuThuan, row.LoiNhuanGop]), ...returnCsvRows(currentReport.doiTra)];
       downloadCsv(`hoat-dong-cua-hang-${currentReport.period.period}.csv`, rows);
     });
-    await root.querySelector('#loadFinancialReport').click();
+    await load();
   };
 
   const initFinancialReports = async (root, context) => {
@@ -724,7 +823,7 @@
       const grossMargin = Number(s.DoanhThuThuan || 0) ? Number(s.LoiNhuanGop || 0) / Number(s.DoanhThuThuan) * 100 : 0;
       const reconciliationMatched = reconciliation.find(row => row.TrangThaiDoiChieu === 'Đã khớp') || {};
       const reconciliationPending = reconciliation.reduce((sum, row) => sum + (row.TrangThaiDoiChieu === 'Đã khớp' ? 0 : Number(row.SoHoaDon || 0)), 0);
-      root.querySelector('#financialReportBody').innerHTML = `<div class="financial-report-title"><div><p>KỲ BÁO CÁO</p><h2>${esc(data.period.label)}</h2><span>${esc(data.period.from)} đến ${esc(data.period.to)}</span></div><span class="status-pill ok">Đã tổng hợp</span></div>
+      root.querySelector('#financialReportBody').innerHTML = `${window.FLY_REPORT_PERIOD?.activeFallbackBanner(root, data) || ''}<div class="financial-report-title"><div><p>KỲ BÁO CÁO</p><h2>${esc(data.period.label)}</h2><span>${esc(data.period.from)} đến ${esc(data.period.to)}</span></div><span class="status-pill ok">Đã tổng hợp</span></div>
         ${visuals.kpiGrid([
           { icon: 'i-trend', label: 'DOANH THU THUẦN', value: money(s.DoanhThuThuan), hint: `${s.SoHoaDon || 0} hóa đơn − ${money(s.TienHoan)} hoàn tiền` },
           { icon: 'i-cash', label: 'PHIẾU THU THỰC NỘP', value: money(f.PhieuThuThucNop), hint: `${f.SoPhieuThu || 0} Phiếu thu bàn giao ca` },
@@ -748,6 +847,7 @@
             { icon: 'i-trend', tone: Number(s.DoanhThuThuan) ? 'ok' : '', title: `Lợi nhuận gộp ${money(s.LoiNhuanGop)}`, detail: `Biên lãi gộp ${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(grossMargin)}%`, value: 'Báo cáo' }
           ])}</article>
         </div>
+        ${doiTraPanel(data.doiTra, { title: 'Hoàn tiền ảnh hưởng doanh thu thuần', subtitle: 'Tiền hoàn đã trừ khỏi doanh thu thuần. Hàng loại bỏ/vứt không hoàn giá vốn vào tồn; hàng nhập lại mới cộng tồn bán.', productTitle: 'Hàng trả làm giảm doanh thu' })}
         <details class="report-detail-disclosure accounting-detail"><summary>Xem công thức lãi gộp và dữ liệu đối soát chi tiết</summary>
           <div class="gross-profit-steps"><div class="step"><div><span>DOANH THU HÓA ĐƠN</span><strong>${money(s.DoanhThuHoaDon)}</strong></div><b>−</b><div><span>TIỀN HOÀN</span><strong>${money(s.TienHoan)}</strong></div><b>=</b><div class="mid"><span>DOANH THU THUẦN</span><strong>${money(s.DoanhThuThuan)}</strong></div></div><div class="step"><div><span>GIÁ VỐN HÓA ĐƠN</span><strong>${money(s.GiaVonHoaDon)}</strong></div><b>−</b><div><span>GV HÀNG TRẢ NHẬP LẠI</span><strong>${money(s.GiaVonHangTraNhapLai)}</strong></div><b>+</b><div><span>GV HÀNG GIAO ĐỔI</span><strong>${money(s.GiaVonHangGiaoDoi)}</strong></div><b>=</b><div class="mid"><span>GIÁ VỐN THUẦN</span><strong>${money(s.GiaVonHangBanThuan)}</strong></div></div><div class="step"><div class="mid"><span>DOANH THU THUẦN</span><strong>${money(s.DoanhThuThuan)}</strong></div><b>−</b><div class="mid"><span>GIÁ VỐN THUẦN</span><strong>${money(s.GiaVonHangBanThuan)}</strong></div><b>=</b><div class="result"><span>LỢI NHUẬN GỘP</span><strong>${money(s.LoiNhuanGop)}</strong></div></div></div>
           <div class="financial-report-sections"><article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>MUA HÀNG &amp; THUẾ</p><h2>Chứng từ đầu vào</h2></div></div><div class="report-metric-list"><div><span>Đơn mua / Phiếu nhập</span><strong>${p.SoDonMua || 0} / ${p.SoPhieuNhap || 0}</strong></div><div><span>Tiền hàng / Thuế đầu vào</span><strong>${money(p.TienHangMua)} / ${money(p.ThueDauVao)}</strong></div></div></article><article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>NHẬP – XUẤT – TỒN</p><h2>Biến động hàng hóa</h2></div></div><div class="report-metric-list"><div><span>Tồn đầu / cuối kỳ</span><strong>${Number(inv.SoLuongDauKy || 0).toLocaleString('vi-VN')} / ${Number(inv.SoLuongCuoiKy || 0).toLocaleString('vi-VN')}</strong></div><div><span>Nhập / xuất</span><strong>${Number(inv.SoLuongNhap || 0).toLocaleString('vi-VN')} / ${Number(inv.SoLuongXuat || 0).toLocaleString('vi-VN')}</strong></div></div></article><article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>THU – CHI</p><h2>Tổng hợp chứng từ</h2></div></div><div class="report-metric-list"><div><span>Phiếu thu hệ thống / thực nộp</span><strong>${money(f.PhieuThuTheoHeThong)} / ${money(f.PhieuThuThucNop)}</strong></div><div><span>Phiếu chi / đã thanh toán</span><strong>${money(f.TongPhieuChi)} / ${money(f.DaThanhToanNCC)}</strong></div></div></article></div>
@@ -758,10 +858,13 @@
       root.querySelector('#exportReportCsv').disabled = false;
     };
     const load = async () => {
-      const { type, period } = selectedPeriod();
-      root.querySelector('#loadFinancialReport').disabled = true;
+      const button = root.querySelector('#loadFinancialReport');
+      if (button) button.disabled = true;
       try {
-        currentReport = await api(context, `${endpoint}?periodType=${encodeURIComponent(type)}&period=${encodeURIComponent(period)}`);
+        const { type, period } = selectedPeriod();
+        currentReport = await api(context, `${endpoint}?periodType=${encodeURIComponent(type)}&period=${encodeURIComponent(period)}${root.dataset.reportLock === '1' ? '&lockPeriod=1' : ''}`);
+        window.FLY_REPORT_PERIOD?.syncFromReport(root, currentReport);
+        root.dataset.reportLock = '1';
         render(currentReport);
       } catch (error) {
         context.showToast(error.message, 'error');
@@ -789,10 +892,70 @@
     });
     root.querySelector('#exportReportCsv').addEventListener('click', () => {
       if (!currentReport) return;
-      const rows = [['BÁO CÁO', currentReport.period.label], ['Chỉ tiêu', 'Giá trị'], ['Doanh thu hóa đơn', currentReport.sales.DoanhThuHoaDon], ['Tiền hoàn', currentReport.sales.TienHoan], ['Doanh thu thuần', currentReport.sales.DoanhThuThuan], ['Giá vốn hóa đơn', currentReport.sales.GiaVonHoaDon], ['Giá vốn hàng trả nhập lại', currentReport.sales.GiaVonHangTraNhapLai], ['Giá vốn hàng giao đổi', currentReport.sales.GiaVonHangGiaoDoi], ['Giá vốn thuần', currentReport.sales.GiaVonHangBanThuan], ['Lợi nhuận gộp', currentReport.sales.LoiNhuanGop], [], ['Ngày', 'Số hóa đơn', 'Doanh thu hóa đơn', 'Tiền hoàn', 'Doanh thu thuần', 'Giá vốn thuần', 'Lợi nhuận gộp'], ...currentReport.daily.map(row => [fmtDate(row.Ngay), row.SoHoaDon, row.DoanhThuHoaDon, row.TienHoan, row.DoanhThuThuan, row.GiaVonHangBanThuan, row.LoiNhuanGop])];
+      const rows = [['BÁO CÁO', currentReport.period.label], ['Chỉ tiêu', 'Giá trị'], ['Doanh thu hóa đơn', currentReport.sales.DoanhThuHoaDon], ['Tiền hoàn', currentReport.sales.TienHoan], ['Doanh thu thuần', currentReport.sales.DoanhThuThuan], ['Giá vốn hóa đơn', currentReport.sales.GiaVonHoaDon], ['Giá vốn hàng trả nhập lại', currentReport.sales.GiaVonHangTraNhapLai], ['Giá vốn hàng giao đổi', currentReport.sales.GiaVonHangGiaoDoi], ['Giá vốn thuần', currentReport.sales.GiaVonHangBanThuan], ['Lợi nhuận gộp', currentReport.sales.LoiNhuanGop], [], ['Ngày', 'Số hóa đơn', 'Doanh thu hóa đơn', 'Tiền hoàn', 'Doanh thu thuần', 'Giá vốn thuần', 'Lợi nhuận gộp'], ...currentReport.daily.map(row => [fmtDate(row.Ngay), row.SoHoaDon, row.DoanhThuHoaDon, row.TienHoan, row.DoanhThuThuan, row.GiaVonHangBanThuan, row.LoiNhuanGop]), ...returnCsvRows(currentReport.doiTra)];
       downloadCsv(`bao-cao-${currentReport.period.period}.csv`, rows);
     });
     await load();
+  };
+
+  const payrollAction = item => {
+    if (item.TrangThai === 'Đã thanh toán') return item.MaGiaoDichNganHang || item.MaGiaoDich ? esc(item.MaGiaoDichNganHang || item.MaGiaoDich) : '<span class="status-pill ok">Đã chi</span>';
+    if (item.TrangThaiPhieu === 'Chờ duyệt') return '<span class="payment-voucher-wait">Chờ Quản lý giao quỹ</span>';
+    if (item.TrangThaiPhieu === 'Từ chối') return `<button class="warehouse-secondary" data-resubmit-payroll="${esc(item.MaPhieu)}" data-employee="${esc(item.MaNV)}">Sửa &amp; gửi lại</button>`;
+    if (['Đã duyệt', 'Thanh toán thất bại'].includes(item.TrangThaiPhieu)) {
+      return `<button class="warehouse-primary" data-pay-payroll="${esc(item.MaPhieu)}" data-method="${esc(item.PhuongThucPhieu || '')}" data-late="${item.CoChiTre ? '1' : '0'}">${item.TrangThaiPhieu === 'Thanh toán thất bại' ? 'Thực hiện lại' : 'Chi lương'}</button>`;
+    }
+    if (item.TrangThai === 'Đã khóa') {
+      return `<label class="payroll-method"><input type="radio" name="pay-${esc(item.MaNV)}" value="Tiền mặt"> TM</label>
+        <label class="payroll-method"><input type="radio" name="pay-${esc(item.MaNV)}" value="Chuyển khoản" checked> CK</label>
+        <button class="warehouse-secondary" data-create-payroll="${esc(item.MaNV)}">Lập phiếu</button>`;
+    }
+    return '—';
+  };
+
+  const payrollDetailModal = async (context, month, maNV) => {
+    try {
+      const data = await api(context, `/accounting/payroll/${month}/${maNV}/details`);
+      const overlay = document.createElement('div');
+      overlay.className = 'warehouse-modal-backdrop';
+      overlay.innerHTML = `<div class="warehouse-modal" style="width:min(920px,96vw)"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">CHI TIẾT BẢNG LƯƠNG</p><h2>${esc(data.item.TenNV)}</h2><span>${esc(month)} · nghỉ lễ ${money(data.item.LuongNgayLe)} · tăng ca ${money(data.item.LuongTangCa)} · tổng ${money(data.item.TongLuong)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NGÀY</th><th>LOẠI NGÀY</th><th>LOẠI GIỜ</th><th>HỆ SỐ</th><th>PHÚT NGÀY</th><th>PHÚT ĐÊM</th><th>THÀNH TIỀN</th></tr></thead><tbody>${(data.lines || []).length ? data.lines.map(line => `<tr><td>${esc(line.NgayCong || '')}</td><td>${esc(line.LoaiNgay || '')}</td><td>${esc(line.LoaiGio || '')}</td><td class="num">${Number(line.HeSoApDung || line.HeSoBanDem || 0).toFixed(2)}</td><td class="num">${line.PhutNgay}</td><td class="num">${line.PhutDem}</td><td class="num">${money(line.ThanhTien)}</td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Không có dòng chi tiết.</td></tr>'}</tbody></table></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Đóng</button></div></div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', () => overlay.remove()));
+    } catch (error) {
+      context.showToast(error.message, 'error');
+    }
+  };
+
+  const payrollPayModal = async (context, maPhieu, method, onDone, warnLate) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'warehouse-modal-backdrop';
+    overlay.innerHTML = `<div class="warehouse-modal payment-result-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">CHI LƯƠNG</p><h2>${esc(maPhieu)}</h2><span>${esc(method)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="manager-readonly-note"><svg><use href="#i-cash"></use></svg><div><strong>Quản lý đã giao quỹ, bạn mới được chi</strong><span>${method === 'Tiền mặt' ? 'Đưa đủ tiền mặt đã nhận. Không bắt buộc mã giao dịch.' : 'Chuyển khoản từ tài khoản cửa hàng, bắt buộc mã giao dịch ngân hàng.'} Thất bại thì dùng lại cùng phiếu, không lập phiếu 2. Chỉ chi thành công mới chuyển bảng lương Đã thanh toán.</span></div></div>${warnLate ? '<p class="warehouse-modal-note"><strong>Cảnh báo tất toán:</strong> từ ngày 8 của tháng chi; sau mùng 10 vẫn chi được nhưng phải ghi lý do chi trễ.</p>' : ''}<div class="warehouse-form-grid payment-voucher-fields"><div class="warehouse-field"><label>Kết quả *</label><select id="payrollPayResult"><option value="success">Chi thành công</option><option value="failed">Chi thất bại</option></select></div><div class="warehouse-field bank-code-field"><label>Mã giao dịch ngân hàng *</label><input id="payrollBankCode" maxlength="50" placeholder="Bắt buộc khi chuyển khoản thành công"></div><div class="warehouse-field full late-reason-field" ${warnLate ? '' : 'hidden'}><label>Lý do chi trễ *</label><textarea id="payrollLateNote" maxlength="500" rows="2" placeholder="Bắt buộc nếu chi sau mùng 10"></textarea></div><div class="warehouse-field full"><label id="payrollPayNoteLabel">Ghi chú</label><textarea id="payrollPayNote" maxlength="500" rows="2"></textarea></div></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Hủy</button><button class="warehouse-primary submit-payroll-pay" type="button">Ghi nhận kết quả</button></div></div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    const resultSelect = overlay.querySelector('#payrollPayResult');
+    const bankField = overlay.querySelector('.bank-code-field');
+    const sync = () => {
+      const failed = resultSelect.value === 'failed';
+      bankField.hidden = method !== 'Chuyển khoản';
+      overlay.querySelector('#payrollPayNoteLabel').textContent = failed ? 'Nguyên nhân thất bại *' : 'Ghi chú';
+    };
+    resultSelect.addEventListener('change', sync); sync();
+    overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+    overlay.querySelector('.submit-payroll-pay').addEventListener('click', async event => {
+      const success = resultSelect.value === 'success';
+      const bankCode = overlay.querySelector('#payrollBankCode').value.trim();
+      const note = overlay.querySelector('#payrollPayNote').value.trim();
+      const lateNote = overlay.querySelector('#payrollLateNote').value.trim();
+      if (success && method === 'Chuyển khoản' && !bankCode) return context.showToast('Vui lòng nhập mã giao dịch ngân hàng.', 'error');
+      if (!success && !note) return context.showToast('Chi thất bại phải ghi nguyên nhân.', 'error');
+      event.currentTarget.disabled = true;
+      try {
+        const result = await api(context, `/accounting/payroll-vouchers/${maPhieu}/pay`, {
+          method: 'POST', body: JSON.stringify({ ThanhCong: success, MaGiaoDichNganHang: bankCode, GhiChuThanhToan: note, GhiChuTreHan: lateNote })
+        });
+        context.showToast(result.message, success ? 'success' : 'error'); close(); await onDone();
+      } catch (error) { context.showToast(error.message, 'error'); event.currentTarget.disabled = false; }
+    });
   };
 
   const initPayroll = async (root, context) => {
@@ -800,10 +963,18 @@
     const load = async () => {
       try {
         const data = await api(context, `/accounting/payroll/${month}`);
-        root.innerHTML = `${heading('KẾ TOÁN / LƯƠNG', `Bảng lương ${payrollPeriodLabel(month)}`, 'Chỉ sử dụng lượt công đã được Quản lý duyệt; ca đêm được tách theo từng phút.')}
-          <article class="warehouse-table-card"><div class="warehouse-toolbar">${payrollPeriodPicker(month)}<div class="warehouse-toolbar-actions"><button class="warehouse-secondary" id="buildPayroll">Lập / tính lại</button><button class="warehouse-primary" id="lockPayroll" ${data.period?.TrangThai === 'Kế toán đã lập' ? '' : 'disabled'}>Khóa kỳ lương</button></div></div>
-          <div class="warehouse-panel-title"><div><p>TRẠNG THÁI KỲ</p><h2>${esc(data.period?.TrangThai || 'Chưa lập')}</h2></div><span class="status-pill ${data.period?.TrangThai === 'Đã thanh toán' ? 'ok' : 'sent'}">${data.items.length} nhân viên</span></div>
-          <div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NHÂN VIÊN</th><th>GIỜ NGÀY</th><th>GIỜ ĐÊM</th><th>LƯƠNG NGÀY</th><th>LƯƠNG ĐÊM</th><th>TỔNG LƯƠNG</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><strong>${esc(item.TenNV)}</strong><small>${esc(item.MaNV)}</small></td><td class="num">${(item.PhutNgay / 60).toFixed(2)}</td><td class="num">${(item.PhutDem / 60).toFixed(2)}</td><td class="num">${money(item.LuongCoBan)}</td><td class="num">${money(item.LuongBanDem)}</td><td class="num"><strong>${money(item.TongLuong)}</strong></td><td><span class="status-pill ${item.TrangThai === 'Đã thanh toán' ? 'ok' : 'draft'}">${esc(item.TrangThai)}</span></td><td>${item.TrangThai === 'Đã khóa' ? `<button class="warehouse-secondary pay-salary" data-employee="${item.MaNV}">Ghi nhận trả lương</button>` : item.MaGiaoDich ? esc(item.MaGiaoDich) : '—'}</td></tr>`).join('') : '<tr><td colspan="8" class="warehouse-empty">Chưa có bảng lương. Hãy duyệt công trước rồi chọn “Lập / tính lại”.</td></tr>'}</tbody></table></div></article>`;
+        const due = data.summary?.NgayTraDuKien || data.period?.NgayTraDuKien;
+        const warn = data.warning || {};
+        const banner = warn.late
+          ? `<div class="approval-center-note"><strong>Chi trễ sau mùng 10 (${fmtDate(due)}).</strong><span>Vẫn được chi; bắt buộc ghi lý do chi trễ. Không phạt, không BHXH.</span></div>`
+          : warn.warn
+            ? `<div class="approval-center-note"><strong>Sắp đến hạn tất toán ${fmtDate(due)}.</strong><span>Cảnh báo từ ngày 8. Lập phiếu → Quản lý duyệt quỹ → Kế toán chi.</span></div>`
+            : '';
+        root.innerHTML = `${heading('KẾ TOÁN / LƯƠNG', `Bảng lương ${payrollPeriodLabel(month)}`, 'Công đã duyệt + hệ số BLLĐ (150/200/300/330/390) + 8 giờ nghỉ lễ hưởng lương. Tất toán mùng 10 tháng sau. Không BHXH, không trừ lãi gộp.')}
+          ${banner}
+          <article class="warehouse-table-card"><div class="warehouse-toolbar">${payrollPeriodPicker(month)}<div class="warehouse-toolbar-actions"><button class="warehouse-secondary" id="buildPayroll">Lập / tính lại</button><button class="warehouse-primary" id="lockPayroll" ${data.period?.TrangThai === 'Kế toán đã lập' ? '' : 'disabled'}>Khóa kỳ lương</button><button class="warehouse-primary" id="batchPayrollVouchers" ${data.period?.TrangThai === 'Đã khóa' ? '' : 'disabled'}>Lập phiếu chi hàng loạt</button></div></div>
+          <div class="warehouse-panel-title"><div><p>TRẠNG THÁI KỲ</p><h2>${esc(data.period?.TrangThai || 'Chưa lập')}</h2><small>Ngày tất toán dự kiến: ${fmtDate(due)} · ${data.summary?.SoNgayLe || 0} ngày lễ trong kỳ · lương ngày lễ ${money(data.summary?.TongLuongNgayLe)}</small></div><span class="status-pill ${data.period?.TrangThai === 'Đã thanh toán' ? 'ok' : 'sent'}">${data.items.length} nhân viên</span></div>
+          <div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NHÂN VIÊN</th><th>GIỜ NGÀY</th><th>GIỜ ĐÊM</th><th>LƯƠNG NGÀY LỄ</th><th>TĂNG CA</th><th>TỔNG LƯƠNG</th><th>KÊNH / PHIẾU</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><button class="warehouse-link" data-payroll-detail="${esc(item.MaNV)}"><strong>${esc(item.TenNV)}</strong></button><small>${esc(item.MaNV)}</small></td><td class="num">${(item.PhutNgay / 60).toFixed(2)}</td><td class="num">${(item.PhutDem / 60).toFixed(2)}</td><td class="num">${money(item.LuongNgayLe)}</td><td class="num">${money(item.LuongTangCa)}</td><td class="num"><strong>${money(item.TongLuong)}</strong></td><td>${item.MaPhieu ? `<strong>${esc(item.MaPhieu)}</strong><small>${esc(item.PhuongThucPhieu || item.PhuongThucChi || '')}</small>` : 'Chưa lập phiếu'}</td><td><span class="status-pill ${item.TrangThai === 'Đã thanh toán' ? 'ok' : item.TrangThaiPhieu === 'Từ chối' || item.TrangThaiPhieu === 'Thanh toán thất bại' ? 'cancelled' : 'draft'}">${esc(item.TrangThaiPhieu || item.TrangThai)}</span></td><td>${payrollAction(item)}</td></tr>`).join('') : '<tr><td colspan="9" class="warehouse-empty">Chưa có bảng lương. Duyệt hết công chờ, khai báo đủ Tết âm / Giỗ Tổ, rồi chọn “Lập / tính lại”.</td></tr>'}</tbody></table></div></article>`;
         const changePeriod = () => {
           month = `${root.querySelector('#payrollYearSelect').value}-${root.querySelector('#payrollMonthSelect').value}`;
           load();
@@ -815,15 +986,49 @@
           catch (error) { context.showToast(error.message, 'error'); }
         });
         root.querySelector('#lockPayroll').addEventListener('click', async () => {
-          if (!window.confirm(`Khóa kỳ lương ${month}? Sau khi khóa không thể tính lại.`)) return;
+          if (!window.confirm(`Khóa kỳ lương ${month}? Sau khi khóa không tính lại; lịch lễ các ngày trong kỳ bị khóa.`)) return;
           try { const result = await api(context, `/accounting/payroll/${month}/lock`, { method: 'POST' }); context.showToast(result.message, 'success'); await load(); }
           catch (error) { context.showToast(error.message, 'error'); }
         });
-        root.querySelectorAll('.pay-salary').forEach(button => button.addEventListener('click', async () => {
-          const code = window.prompt(`Nhập mã giao dịch trả lương cho ${button.dataset.employee}:`);
-          if (!code) return;
-          try { const result = await api(context, `/accounting/payroll/${month}/${button.dataset.employee}/pay`, { method: 'POST', body: JSON.stringify({ MaGiaoDich: code }) }); context.showToast(result.message, 'success'); await load(); }
+        const createFor = async (maNV, method) => {
+          const result = await api(context, `/accounting/payroll/${month}/payment-vouchers`, {
+            method: 'POST', body: JSON.stringify({ items: [{ MaNV: maNV, PhuongThuc: method }] })
+          });
+          context.showToast(result.message, 'success'); await load();
+        };
+        root.querySelector('#batchPayrollVouchers').addEventListener('click', async () => {
+          const pending = data.items.filter(item => item.TrangThai === 'Đã khóa' && !item.MaPhieu);
+          if (!pending.length) return context.showToast('Không còn nhân viên khóa chưa có phiếu.', 'error');
+          const method = window.prompt('Phương thức hàng loạt cho mọi người chưa có phiếu: nhập "Tiền mặt" hoặc "Chuyển khoản"', 'Chuyển khoản');
+          if (!method || !['Tiền mặt', 'Chuyển khoản'].includes(method.trim())) return;
+          try {
+            const result = await api(context, `/accounting/payroll/${month}/payment-vouchers`, {
+              method: 'POST', body: JSON.stringify({ items: pending.map(item => ({ MaNV: item.MaNV, PhuongThuc: method.trim() })) })
+            });
+            context.showToast(result.message, 'success'); await load();
+          } catch (error) { context.showToast(error.message, 'error'); }
+        });
+        root.querySelectorAll('[data-create-payroll]').forEach(button => button.addEventListener('click', async () => {
+          const method = root.querySelector(`input[name="pay-${button.dataset.createPayroll}"]:checked`)?.value;
+          if (!method) return context.showToast('Chọn Tiền mặt hoặc Chuyển khoản. Không tách hai kênh.', 'error');
+          try { await createFor(button.dataset.createPayroll, method); }
           catch (error) { context.showToast(error.message, 'error'); }
+        }));
+        root.querySelectorAll('[data-resubmit-payroll]').forEach(button => button.addEventListener('click', async () => {
+          const method = window.prompt('Phương thức gửi lại (Tiền mặt hoặc Chuyển khoản):', 'Chuyển khoản');
+          if (!method || !['Tiền mặt', 'Chuyển khoản'].includes(method.trim())) return;
+          try {
+            const result = await api(context, `/accounting/payroll-vouchers/${button.dataset.resubmitPayroll}/resubmit`, {
+              method: 'POST', body: JSON.stringify({ PhuongThuc: method.trim() })
+            });
+            context.showToast(result.message, 'success'); await load();
+          } catch (error) { context.showToast(error.message, 'error'); }
+        }));
+        root.querySelectorAll('[data-payroll-detail]').forEach(button => button.addEventListener('click', () => {
+          payrollDetailModal(context, month, button.dataset.payrollDetail);
+        }));
+        root.querySelectorAll('[data-pay-payroll]').forEach(button => button.addEventListener('click', () => {
+          payrollPayModal(context, button.dataset.payPayroll, button.dataset.method, load, Boolean(warn.late || warn.warn));
         }));
       } catch (error) {
         root.innerHTML = `<div class="welcome-card"><h2>Không thể tải bảng lương</h2><p>${esc(error.message)}</p></div>`;

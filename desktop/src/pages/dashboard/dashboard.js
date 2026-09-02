@@ -10,6 +10,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let toastTimer;
   let pendingTotal = 0;
   let navigationVersion = 0;
+  let currentNav = null;
+  let inboxStamp = '';
+  let inboxItems = [];
+  let inboxTimer = 0;
 
   window.showToast = (message, type = 'success') => {
     clearTimeout(toastTimer);
@@ -72,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const enhanceSelect = select => {
     if (!(select instanceof HTMLSelectElement) || select.dataset.uiEnhanced === 'true') return;
-    if (select.closest('.cashier-payment-modal')) return;
+    if (select.closest('.cashier-payment-modal') || select.closest('.fly-vi-date')) return;
     select.dataset.uiEnhanced = 'true';
     const wrapper = document.createElement('div');
     wrapper.className = 'custom-select-control';
@@ -139,6 +143,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('managerApprovalNav').style.display = isManager ? '' : 'none';
   document.getElementById('managerPayablesNav').style.display = isManager ? '' : 'none';
   document.getElementById('managerWorkforceNav').style.display = isManager ? '' : 'none';
+  const holidaysNav = document.getElementById('managerHolidaysNav');
+  if (holidaysNav) holidaysNav.style.display = isManager ? '' : 'none';
   document.getElementById('managerReportNav').style.display = isManager ? '' : 'none';
   if (isManager) document.getElementById('navGroupSystem').style.display = 'block';
   if (isWarehouse) document.getElementById('navGroupWarehouse').style.display = 'block';
@@ -176,6 +182,103 @@ document.addEventListener('DOMContentLoaded', () => {
   }).format(new Date()).replace(',', '');
   const formatMoney = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
 
+  const seenKey = () => `fly_inbox_seen_${user.MaNV || 'nv'}`;
+  const readSeen = () => {
+    try { return new Set(JSON.parse(localStorage.getItem(seenKey()) || '[]')); }
+    catch { return new Set(); }
+  };
+  const writeSeen = ids => localStorage.setItem(seenKey(), JSON.stringify([...ids].slice(-200)));
+  const fmtInboxTime = value => value
+    ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: HANOI_TIME_ZONE }).format(new Date(value))
+    : '';
+  const workspaceBusy = () => Boolean(
+    document.querySelector('.warehouse-modal-backdrop')
+    || document.querySelector('#pwdModal[style*="flex"]')
+    || contentArea.querySelector('input:focus, textarea:focus')
+  );
+  const pageContext = () => ({
+    token,
+    apiBase: API_BASE,
+    showToast: window.showToast,
+    navigate: nextTarget => {
+      const nextNav = pageNavItems.find(item => item.dataset.target === nextTarget);
+      if (nextNav) openPage(nextNav);
+    }
+  });
+  const setNavBadge = (target, count) => {
+    const nav = pageNavItems.find(item => item.dataset.target === target);
+    if (!nav) return;
+    let badge = nav.querySelector('.nav-badge');
+    if (!badge && count) {
+      badge = document.createElement('b');
+      badge.className = 'nav-badge';
+      nav.appendChild(badge);
+    }
+    if (!badge) return;
+    badge.textContent = String(count).padStart(2, '0');
+    badge.style.display = count ? '' : (badge.id ? '' : 'none');
+  };
+  const renderInboxPanel = () => {
+    const list = document.getElementById('notificationList');
+    const hint = document.getElementById('notificationHint');
+    const heading = document.getElementById('notificationHeading');
+    if (!list) return;
+    hint.textContent = window._flyInboxHint || 'Việc liên quan đến vai trò của bạn.';
+    heading.textContent = inboxItems.length ? `${inboxItems.length} việc đang chờ bạn` : 'Không có việc tồn';
+    list.innerHTML = inboxItems.length
+      ? inboxItems.map(item => `<li><button class="notification-item ${escapeHtml(item.tone || 'info')}" type="button" data-inbox-target="${escapeHtml(item.target)}"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span>${item.at ? `<time>${fmtInboxTime(item.at)}</time>` : ''}</button></li>`).join('')
+      : '<li class="notification-empty">Hiện không có việc mới. Khi người trước xong bước của họ, việc sẽ hiện ở đây.</li>';
+  };
+  const applyInbox = (data, { announce = false } = {}) => {
+    const items = data.items || [];
+    const previous = new Set(inboxItems.map(item => item.id));
+    const seen = readSeen();
+    const fresh = items.filter(item => !previous.has(item.id) && !seen.has(item.id) && inboxStamp);
+    inboxItems = items;
+    inboxStamp = data.stamp || items.map(item => item.id).join('|');
+    window._flyInboxHint = data.hint;
+    pendingTotal = Number(data.urgent || items.filter(item => item.tone === 'urgent').length);
+    const unread = items.filter(item => !seen.has(item.id)).length;
+    const countEl = document.getElementById('notificationCount');
+    const dot = document.getElementById('notificationDot');
+    countEl.textContent = String(unread);
+    countEl.classList.toggle('visible', unread > 0);
+    dot.classList.toggle('visible', unread > 0);
+    const byTarget = items.reduce((map, item) => {
+      map[item.target] = (map[item.target] || 0) + 1;
+      return map;
+    }, {});
+    setNavBadge('manager-purchase-approvals', byTarget['manager-purchase-approvals'] || 0);
+    setNavBadge('purchasing-inbox', byTarget['purchasing-inbox'] || 0);
+    setNavBadge('warehouse-returns', byTarget['warehouse-returns'] || 0);
+    setNavBadge('warehouse-receiving', byTarget['warehouse-receiving'] || 0);
+    setNavBadge('accounting-settlements', byTarget['accounting-settlements'] || 0);
+    setNavBadge('cashier-returns', byTarget['cashier-returns'] || 0);
+    if (!document.getElementById('notificationPanel').hidden) renderInboxPanel();
+    if (announce && fresh.length) {
+      const extra = fresh.length > 1 ? ` và ${fresh.length - 1} việc khác` : '';
+      window.showToast(`Việc mới: ${fresh[0].title}${extra}`, 'success');
+      const currentTarget = currentNav?.dataset.target;
+      const shouldReload = fresh.some(item => item.target === currentTarget || (currentTarget === 'home' && item.target === 'manager-purchase-approvals'));
+      if (shouldReload && !workspaceBusy()) refreshCurrentPage();
+    }
+  };
+  const refreshCurrentPage = async () => {
+    if (!currentNav) return;
+    const target = currentNav.dataset.target;
+    const pageName = target.split('/').pop();
+    if (target === 'home') return loadOverview();
+    if (window.FLY_ROLE_PAGES?.templates?.[pageName]) {
+      try { await window.FLY_ROLE_PAGES.init(pageName, pageContext()); }
+      catch (error) { console.warn(error); }
+    }
+  };
+  const loadInbox = async ({ announce = false } = {}) => {
+    try {
+      const data = await apiGet('/notifications');
+      applyInbox(data, { announce });
+    } catch { /* giữ inbox cũ nếu API tạm lỗi */ }
+  };
   const updatePendingIndicators = total => {
     pendingTotal = Number(total || 0);
     document.getElementById('approvalNavBadge').textContent = String(pendingTotal).padStart(2, '0');
@@ -201,7 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (loadVersion !== navigationVersion) return;
       const summary = data.summary;
       const pending = data.pendingApprovals;
-      updatePendingIndicators(pending.TongChoDuyet);
+      document.getElementById('approvalNavBadge').textContent = String(pending.TongChoDuyet || 0).padStart(2, '0');
 
       const warehousePending = Number(pending.PhieuXuat || 0) + Number(pending.KiemKe || 0);
       const financePending = Number(pending.DoiTra || 0) + Number(pending.PhieuChi || 0);
@@ -286,13 +389,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const resolvePageHtml = async pageName => {
     if (window.FLY_ROLE_PAGES?.templates?.[pageName]) return window.FLY_ROLE_PAGES.templates[pageName];
     if (window.FLY_ADMIN_TEMPLATES?.[pageName]) return window.FLY_ADMIN_TEMPLATES[pageName];
-    if (window.flyDesktop?.loadAdminPage) {
+    const isAdminPage = String(pageName || '').endsWith('.html');
+    if (isAdminPage && window.flyDesktop?.loadAdminPage) {
       try { return await window.flyDesktop.loadAdminPage(pageName); }
       catch (error) { console.warn('IPC page loader unavailable, using HTTP fallback:', error.message); }
     }
-    const response = await fetch(`../admin/${pageName}`);
-    if (!response.ok) throw new Error('Không thể tải nội dung trang quản trị.');
-    return response.text();
+    if (isAdminPage) {
+      const response = await fetch(`../admin/${pageName}`);
+      if (!response.ok) throw new Error('Không thể tải nội dung trang quản trị.');
+      return response.text();
+    }
+    throw new Error('Không tải được màn hình này. Hãy đóng ứng dụng rồi chạy lại npm start.');
   };
 
   const executeFragmentScripts = async () => {
@@ -318,6 +425,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const openPage = async navItem => {
     closeSelectMenu();
+    currentNav = navItem;
     const target = navItem.dataset.target;
     setActiveNav(target);
     if (target === 'home') return loadOverview();
@@ -332,15 +440,7 @@ document.addEventListener('DOMContentLoaded', () => {
       contentArea.innerHTML = pageHtml;
       await executeFragmentScripts();
       if (window.FLY_ROLE_PAGES?.templates?.[pageName]) {
-        await window.FLY_ROLE_PAGES.init(pageName, {
-          token,
-          apiBase: API_BASE,
-          showToast: window.showToast,
-          navigate: nextTarget => {
-            const nextNav = pageNavItems.find(item => item.dataset.target === nextTarget);
-            if (nextNav) openPage(nextNav);
-          }
-        });
+        await window.FLY_ROLE_PAGES.init(pageName, pageContext());
       }
     } catch (error) {
       if (pageVersion !== navigationVersion) return;
@@ -393,11 +493,39 @@ document.addEventListener('DOMContentLoaded', () => {
     profileMenu.hidden = !profileMenu.hidden;
   });
   document.addEventListener('click', () => { profileMenu.hidden = true; });
-  document.getElementById('notificationButton').addEventListener('click', () => {
-    if (isWarehouse) return window.showToast('Cảnh báo kho được tổng hợp theo tồn tối thiểu của từng mặt hàng.', 'success');
-    if (isPurchasing) return window.showToast('Đề nghị mới từ kho được hiển thị trong mục Đề nghị từ kho.', 'success');
-    window.showToast(pendingTotal ? `Có ${pendingTotal} nghiệp vụ đang chờ Quản lý quyết định.` : 'Hiện không có nghiệp vụ chờ duyệt.', 'success');
+  const notificationPanel = document.getElementById('notificationPanel');
+  const notificationButton = document.getElementById('notificationButton');
+  const closeInboxPanel = () => {
+    notificationPanel.hidden = true;
+    notificationButton.setAttribute('aria-expanded', 'false');
+  };
+  const openInboxPanel = () => {
+    profileMenu.hidden = true;
+    renderInboxPanel();
+    notificationPanel.hidden = false;
+    notificationButton.setAttribute('aria-expanded', 'true');
+    writeSeen(new Set([...readSeen(), ...inboxItems.map(item => item.id)]));
+    document.getElementById('notificationCount').classList.remove('visible');
+    document.getElementById('notificationDot').classList.remove('visible');
+  };
+  notificationButton.addEventListener('click', event => {
+    event.stopPropagation();
+    if (notificationPanel.hidden) openInboxPanel();
+    else closeInboxPanel();
   });
+  document.getElementById('notificationClose').addEventListener('click', event => {
+    event.stopPropagation();
+    closeInboxPanel();
+  });
+  notificationPanel.addEventListener('click', event => {
+    event.stopPropagation();
+    const button = event.target.closest('[data-inbox-target]');
+    if (!button) return;
+    closeInboxPanel();
+    const nav = pageNavItems.find(item => item.dataset.target === button.dataset.inboxTarget);
+    if (nav) openPage(nav);
+  });
+  document.addEventListener('click', closeInboxPanel);
 
   document.getElementById('globalSearchForm').addEventListener('submit', async event => {
     event.preventDefault();
@@ -448,6 +576,10 @@ document.addEventListener('DOMContentLoaded', () => {
       window.showToast(data.message, 'success');
     } catch (error) { window.showToast(error.message, 'error'); }
   });
+
+  loadInbox();
+  clearInterval(inboxTimer);
+  inboxTimer = setInterval(() => loadInbox({ announce: true }), 12000);
 
   if (isManager) {
     loadOverview();

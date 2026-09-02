@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { calculateGrossProfit, evaluateThreeWayMatch, isRestockAccepted, isEqualValueExchange } = require('./src/services/financialRules');
+const { calculateGrossProfit, evaluateThreeWayMatch, isRestockAccepted, looksUnsellable, isEqualValueExchange } = require('./src/services/financialRules');
 const { resolveReportingPeriod } = require('./src/services/reportingPeriod');
 
 const test = (name, run) => {
@@ -145,6 +145,9 @@ test('UC27 chặn công nợ khi tổng tiền thuế header lệch tổng dòng
 test('Chỉ hàng đạt yêu cầu mới được tính nhập lại kho', () => {
     assert.equal(isRestockAccepted('Đạt yêu cầu, được nhập lại kho. Bao bì còn nguyên.'), true);
     assert.equal(isRestockAccepted('Không đạt, không nhập lại kho. Hàng hỏng.'), false);
+    assert.equal(looksUnsellable('hỏng'), true);
+    assert.equal(looksUnsellable('Hàng hỏng / lỗi cửa hàng'), true);
+    assert.equal(looksUnsellable('Khách đổi ý'), false);
 });
 
 test('Kỳ báo cáo ngày có đúng hai biên ngày', () => {

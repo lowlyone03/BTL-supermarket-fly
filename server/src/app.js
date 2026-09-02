@@ -26,9 +26,11 @@ const purchasingRoutes = require('./routes/purchasingRoutes');
 const supplierRoutes = require('./routes/supplierRoutes');
 const accountingRoutes = require('./routes/accountingRoutes');
 const cashierRoutes = require('./routes/cashierRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 // Định tuyến API
 app.use('/api/auth', authRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/roles', roleRoutes);

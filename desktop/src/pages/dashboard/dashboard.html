@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Điều hành - Supermarket Fly</title>
   <link rel="stylesheet" href="dashboard.css">
-  <link rel="stylesheet" href="../admin/admin.css">
-  <link rel="stylesheet" href="../warehouse/warehouse.css?v=product-images-1">
+  <link rel="stylesheet" href="../admin/admin.css?v=audit-ui-3">
+  <link rel="stylesheet" href="../warehouse/warehouse.css?v=payroll-engine-2">
   <link rel="stylesheet" href="../workforce/workforce.css?v=attendance-overtime-1">
-  <link rel="stylesheet" href="../cashier/cashier.css?v=product-images-1">
+  <link rel="stylesheet" href="../cashier/cashier.css?v=stock-fate-1">
   <link rel="stylesheet" href="../shared/locale-ui.css?v=vi-date-3">
   <link rel="stylesheet" href="../shared/ui-polish.css?v=ui-polish-1">
-  <link rel="stylesheet" href="../shared/report-charts.css?v=report-dashboard-11">
+  <link rel="stylesheet" href="../shared/report-charts.css?v=report-dashboard-13">
   <link rel="stylesheet" href="../shared/product-images.css?v=products-1">
   <link rel="stylesheet" href="overview-modern.css?v=overview-1">
 </head>
@@ -72,11 +72,13 @@
         <a href="#" class="nav-item" id="managerApprovalNav" data-target="manager-purchase-approvals"><svg><use href="#i-approve"/></svg><span>Trung tâm phê duyệt</span><b class="nav-badge" id="approvalNavBadge">0</b></a>
         <a href="#" class="nav-item" id="managerPayablesNav" data-target="manager-payables"><svg><use href="#i-report"/></svg><span>Theo dõi công nợ</span></a>
         <a href="#" class="nav-item" id="managerWorkforceNav" data-target="manager-workforce"><svg><use href="#i-calendar"/></svg><span>Phân ca &amp; chấm công</span></a>
+        <a href="#" class="nav-item" id="managerHolidaysNav" data-target="manager-holidays"><svg><use href="#i-calendar"/></svg><span>Ngày lễ năm</span></a>
         <a href="#" class="nav-item" id="managerReportNav" data-target="manager-reports"><svg><use href="#i-report"/></svg><span>Báo cáo cửa hàng</span></a>
 
         <div class="nav-group" id="navGroupWarehouse" style="display:none">
           <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span>Lịch làm việc</span></a>
           <a href="#" class="nav-item" data-target="warehouse-home"><svg><use href="#i-grid"/></svg><span>Tổng quan kho</span></a>
+          <a href="#" class="nav-item" data-target="warehouse-history"><svg><use href="#i-log"/></svg><span>Lịch sử kho</span></a>
           <div class="nav-group-title">QUẢN LÝ KHO</div>
           <a href="#" class="nav-item" data-target="warehouse-inventory"><svg><use href="#i-inventory"/></svg><span>Tồn kho &amp; cảnh báo</span></a>
           <a href="#" class="nav-item" data-target="warehouse-inventory-counts"><svg><use href="#i-approve"/></svg><span>Kiểm kê kho</span></a>
@@ -148,7 +150,15 @@
           <input id="globalSearch" type="search" placeholder="Tìm nhân viên, tài khoản, chức năng..." autocomplete="off">
         </form>
         <div class="topbar-actions">
-          <button class="notification-button" id="notificationButton" title="Thông báo"><svg><use href="#i-bell"/></svg><i id="notificationDot"></i></button>
+          <button class="notification-button" id="notificationButton" type="button" title="Thông báo" aria-haspopup="true" aria-expanded="false"><svg><use href="#i-bell"/></svg><b id="notificationCount" hidden>0</b><i id="notificationDot"></i></button>
+          <div class="notification-panel" id="notificationPanel" hidden>
+            <header>
+              <div><p>THÔNG BÁO CỦA BẠN</p><h2 id="notificationHeading">Việc cần xử lý</h2></div>
+              <button class="warehouse-icon-button" id="notificationClose" type="button" aria-label="Đóng">×</button>
+            </header>
+            <p class="notification-hint" id="notificationHint"></p>
+            <ul id="notificationList"></ul>
+          </div>
           <span class="topbar-divider"></span>
           <button class="profile-button" id="profileButton">
             <span class="avatar" id="userInitials">QL</span>
@@ -182,22 +192,22 @@
   </div>
 
   <script src="../shared/escape-key.js"></script>
-  <script src="../shared/locale-ui.js?v=vi-date-4"></script>
+  <script src="../shared/locale-ui.js?v=history-native-date-1"></script>
   <script src="../shared/search-tools.js?v=search-1"></script>
   <script src="../shared/product-images.js?v=products-1"></script>
   <script src="../shared/report-charts.js?v=charts-4"></script>
   <script src="../shared/report-layout.js?v=layout-3"></script>
-  <script src="../shared/print-documents.js?v=print-report-4"></script>
-  <script src="../admin/admin-page-templates.js"></script>
-  <script src="../warehouse/warehouse-pages.js?v=product-images-1"></script>
+  <script src="../shared/print-documents.js?v=print-skins-1"></script>
+  <script src="../admin/admin-page-templates.js?v=audit-ui-3"></script>
+  <script src="../warehouse/warehouse-pages.js?v=history-ui-1"></script>
   <script src="../warehouse/supplier-pages.js"></script>
-  <script src="../warehouse/purchase-order-pages.js?v=uc28-ui-vi-1"></script>
+  <script src="../warehouse/purchase-order-pages.js?v=payroll-engine-2"></script>
   <script src="../warehouse/receipt-pages.js?v=ui-vi-date-1"></script>
-  <script src="../warehouse/stock-issue-pages.js?v=uc19-uc06-1"></script>
-  <script src="../accounting/accounting-pages.js?v=report-dashboard-5"></script>
-  <script src="../workforce/workforce-pages.js?v=attendance-overtime-1"></script>
-  <script src="../cashier/cashier-pages.js?v=product-images-1"></script>
-  <script src="../shared/role-reports.js?v=report-dashboard-6"></script>
-  <script src="dashboard.js?v=overview-products-1"></script>
+  <script src="../warehouse/stock-issue-pages.js?v=scrap-issue-1"></script>
+  <script src="../accounting/accounting-pages.js?v=payroll-engine-2"></script>
+  <script src="../workforce/workforce-pages.js?v=payroll-engine-2"></script>
+  <script src="../cashier/cashier-pages.js?v=stock-fate-1"></script>
+  <script src="../shared/role-reports.js?v=report-fix-3"></script>
+  <script src="dashboard.js?v=payroll-engine-2"></script>
 </body>
 </html>

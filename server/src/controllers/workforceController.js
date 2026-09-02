@@ -6,6 +6,7 @@ const {
 } = require('../services/shiftScheduler');
 const { splitDayNightMinutes } = require('../services/timeService');
 const { closeOpenAttendance } = require('../services/attendanceSync');
+const { logAudit } = require('../services/auditLog');
 
 const clean = (value, max = 120) => String(value ?? '').trim().slice(0, max);
 const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
@@ -207,10 +208,10 @@ const autoSchedule = async (req, res) => {
                                    DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS TIME),GioKetThuc),CAST(@NgayLam AS DATETIME)))
                         FROM LoaiCa WHERE MaLoaiCa=@MaLoaiCa`);
         }
-        await request().input('MaTK', sql.Int, req.user.MaTK).input('NoiDung', sql.NVarChar,
-            `Tự động phân ${generated.length} lượt: thu ngân xoay ca và hành chính 7h30–17h30`)
-            .query(`INSERT NhatKy (MaTK,HanhDong,BangLienQuan,NoiDung,ThoiGian)
-                    VALUES (@MaTK,N'Phân ca tự động',N'LichLamViec',@NoiDung,GETDATE())`);
+        await logAudit(transaction, {
+            user: req.user, req, action: 'Phân ca tự động', table: 'LichLamViec', recordId: `${from}_${to}`,
+            uc: 'UC30', content: `Tự động phân ${generated.length} lượt: thu ngân xoay ca và hành chính 7h30–17h30`
+        });
         await transaction.commit();
         res.status(201).json({
             message: `Đã tạo bản nháp ${cashierGenerated.length} lượt thu ngân và ${officeGenerated.length} lượt hành chính (${CASHIER_TEAM_SIZE} thu ngân + ${OFFICE_TEAM_SIZE} khối văn phòng).`,
@@ -442,11 +443,11 @@ const approveAttendance = async (req, res) => {
                     SoPhutDuocDuyet=@Minutes,NguoiDuyet=@NguoiDuyet,GhiChu=@GhiChu,
                     NgayDuyet=GETDATE(),TrangThai=N'Đã duyệt'
                 WHERE MaChamCong=@Id`);
-        await new sql.Request(transaction).input('MaTK', sql.Int, req.user.MaTK)
-            .input('MaBanGhi', sql.VarChar, String(id))
-            .input('NoiDung', sql.NVarChar, `Duyệt ${approvedMinutes}/${actualMinutes} phút thực tế cho ${row.MaNV}; ${includeOvertime ? `có ${approvedOvertime} phút tăng ca tính lương` : 'không tính tăng ca'}`)
-            .query(`INSERT NhatKy(MaTK,HanhDong,BangLienQuan,MaBanGhi,NoiDung,ThoiGian)
-                    VALUES(@MaTK,N'Duyệt chấm công',N'ChamCong',@MaBanGhi,@NoiDung,GETDATE())`);
+        await logAudit(transaction, {
+            user: req.user, req, action: 'Duyệt chấm công', table: 'ChamCong', recordId: String(id), uc: 'UC32',
+            severity: 'Quan trọng',
+            content: `Duyệt ${approvedMinutes}/${actualMinutes} phút thực tế cho ${row.MaNV}; ${includeOvertime ? `có ${approvedOvertime} phút tăng ca tính lương` : 'không tính tăng ca'}`
+        });
         await transaction.commit();
         res.json({
             message: includeOvertime

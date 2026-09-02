@@ -11,11 +11,21 @@ const moneyMatches = (left, right, tolerance = MONEY_TOLERANCE) => Math.abs(numb
 // Thủ kho ghi "Đạt yêu cầu, được nhập lại kho" hoặc "Không đạt, không nhập lại kho".
 // Dùng "ược nhập lại kho" để khỏi phụ thuộc LOWER() với chữ Đ, và loại nhánh "không nhập lại".
 const RESTOCK_ACCEPTED_SQL = `(dt.KetQuaKiemTra LIKE N'%ược nhập lại kho%' AND dt.KetQuaKiemTra NOT LIKE N'%không nhập lại%')`;
+const RESTOCK_REJECTED_SQL = `(dt.KetQuaKiemTra LIKE N'%không nhập lại%')`;
+const STOCK_FATE_SQL = `
+    CASE
+      WHEN dt.KetQuaKiemTra IS NULL OR LTRIM(RTRIM(dt.KetQuaKiemTra))=N'' THEN N'Chưa kiểm kho'
+      WHEN ${RESTOCK_ACCEPTED_SQL} THEN N'Nhập lại kho bán'
+      WHEN ${RESTOCK_REJECTED_SQL} THEN N'Loại bỏ / vứt — không cộng tồn (đã trừ lúc bán)'
+      ELSE N'Chưa rõ xử lý kho'
+    END`;
 
 const isRestockAccepted = text => {
     const value = String(text || '');
     return /ược nhập lại kho/i.test(value) && !/không nhập lại/i.test(value);
 };
+
+const looksUnsellable = text => /hỏng|hết hạn|kém chất|lỗi cửa hàng|không bán/i.test(String(text || ''));
 
 // Chương 6 quy ước dòng "Hàng giao đổi" chỉ dùng khi đổi ngang giá.
 // Nếu khác giá, nghiệp vụ phải hoàn hàng cũ và lập hóa đơn bán mới.
@@ -174,7 +184,10 @@ const evaluateThreeWayMatch = ({ invoice, invoiceLines = [], receipt, receiptLin
 module.exports = {
     MONEY_TOLERANCE,
     RESTOCK_ACCEPTED_SQL,
+    RESTOCK_REJECTED_SQL,
+    STOCK_FATE_SQL,
     isRestockAccepted,
+    looksUnsellable,
     isEqualValueExchange,
     roundMoney,
     moneyMatches,

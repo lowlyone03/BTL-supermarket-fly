@@ -1,4 +1,6 @@
 const { sql, poolPromise } = require('../config/db');
+const { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS } = require('../services/invoiceReturnSql');
+const { logAudit } = require('../services/auditLog');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 const POINT_EARN_UNIT = Math.max(1, Number(process.env.POINT_EARN_UNIT || 10000));
@@ -123,16 +125,23 @@ const listInvoices = async (req, res) => {
             .input('Search', sql.NVarChar, `%${search}%`)
             .input('TrangThai', sql.NVarChar, status).query(`
             SELECT TOP 80 hd.MaHD,hd.NgayLap,hd.TongTienHang,hd.TienGiamGia,hd.TienDiemQuyDoi,
-                   hd.TongThanhToan,hd.TrangThai,hd.MaKH,kh.TenKH,kh.SDT,ca.MaCa
+                   hd.TongThanhToan,hd.TrangThai,hd.MaKH,kh.TenKH,kh.SDT,ca.MaCa,
+                   ${INVOICE_RETURN_COLUMNS}
             FROM HoaDon hd
             JOIN CaLamViec ca ON ca.MaCa=hd.MaCa
             LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
+            ${INVOICE_RETURN_APPLY}
             WHERE hd.MaNV=@MaNV
-              AND (@TrangThai=N'' OR hd.TrangThai=@TrangThai)
+              AND (
+                    @TrangThai=N''
+                    OR (@TrangThai=N'Có đổi trả' AND COALESCE(dt.SoPhieu,0)>0)
+                    OR (@TrangThai NOT IN (N'', N'Có đổi trả') AND hd.TrangThai=@TrangThai)
+                  )
               AND (@Search=N'%%' OR hd.MaHD LIKE @Search COLLATE Latin1_General_100_CI_AI OR kh.TenKH LIKE @Search COLLATE Latin1_General_100_CI_AI OR kh.SDT LIKE @Search COLLATE Latin1_General_100_CI_AI)
             ORDER BY hd.NgayLap DESC`);
         res.json({ items: result.recordset });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ message: 'Không thể tải danh sách hóa đơn.' });
     }
 };
@@ -252,6 +261,10 @@ const createInvoice = async (req, res) => {
                     INSERT ChiTietHoaDon(MaHD,MaSP,SoLuong,DonGia,GiamGia,ThanhTien,DonGiaVon,ThanhTienVon)
                     VALUES(@MaHD,@MaSP,@SoLuong,@DonGia,@GiamGia,@ThanhTien,0,0)`);
         }
+        await logAudit(transaction, {
+            user: req.user, req, action: 'Lập hóa đơn nháp', table: 'HoaDon', recordId: maHD, uc: 'UC24',
+            content: `${calc.lines.length} sản phẩm, ${Number(calc.TongThanhToan).toLocaleString('vi-VN')}đ. Chưa thu tiền, chưa trừ tồn.`
+        });
         await transaction.commit();
         res.status(201).json({ message: `Đã lưu hóa đơn nháp ${maHD}.`, MaHD: maHD, ...calc });
     } catch (error) {
@@ -266,20 +279,47 @@ const getInvoice = async (req, res) => {
         const pool = await poolPromise;
         const header = await pool.request().input('MaHD', sql.VarChar, clean(req.params.id, 20))
             .input('MaNV', sql.VarChar, req.user.MaNV).query(`
-            SELECT hd.*,kh.TenKH,kh.SDT,nv.TenNV,ca.MaQuay
+            SELECT hd.*,kh.TenKH,kh.SDT,nv.TenNV,ca.MaQuay,
+                   ${INVOICE_RETURN_COLUMNS}
             FROM HoaDon hd JOIN NhanVien nv ON nv.MaNV=hd.MaNV
             JOIN CaLamViec ca ON ca.MaCa=hd.MaCa
             LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
+            ${INVOICE_RETURN_APPLY}
             WHERE hd.MaHD=@MaHD AND hd.MaNV=@MaNV`);
         if (!header.recordset.length) return res.status(404).json({ message: 'Không tìm thấy hóa đơn.' });
-        const [lines, payments] = await Promise.all([
+        const [lines, payments, returns] = await Promise.all([
             pool.request().input('MaHD', sql.VarChar, req.params.id).query(`
-                SELECT ct.*,sp.TenSP,sp.DonViTinh,sp.MaVach FROM ChiTietHoaDon ct
+                SELECT ct.*,sp.TenSP,sp.DonViTinh,sp.MaVach,
+                       ISNULL((
+                           SELECT SUM(dtct.SoLuong) FROM ChiTietDoiTra dtct
+                           JOIN PhieuDoiTra dt ON dt.MaDT=dtct.MaDT
+                           WHERE dt.MaHD=@MaHD AND dtct.MaSP=ct.MaSP AND dtct.LoaiDong=N'Hàng khách trả'
+                             AND dt.TrangThai=N'Hoàn thành'
+                       ),0) AS SLDaTra,
+                       ct.SoLuong - ISNULL((
+                           SELECT SUM(dtct.SoLuong) FROM ChiTietDoiTra dtct
+                           JOIN PhieuDoiTra dt ON dt.MaDT=dtct.MaDT
+                           WHERE dt.MaHD=@MaHD AND dtct.MaSP=ct.MaSP AND dtct.LoaiDong=N'Hàng khách trả'
+                             AND dt.TrangThai NOT IN (N'Từ chối', N'Đã hủy')
+                       ),0) AS SLConDoiTra
+                FROM ChiTietHoaDon ct
                 JOIN SanPham sp ON sp.MaSP=ct.MaSP WHERE ct.MaHD=@MaHD ORDER BY sp.TenSP`),
             pool.request().input('MaHD', sql.VarChar, req.params.id).query(`
-                SELECT * FROM ThanhToan WHERE MaHD=@MaHD ORDER BY NgayTT`)
+                SELECT * FROM ThanhToan WHERE MaHD=@MaHD ORDER BY NgayTT`),
+            pool.request().input('MaHD', sql.VarChar, req.params.id).query(`
+                SELECT dt.MaDT,dt.HinhThucXuLy,dt.TrangThai,dt.SoTienHoan,dt.NgayLap,dt.LyDo,dt.MaCaHoan,
+                       nv.TenNV NguoiLap
+                FROM PhieuDoiTra dt
+                JOIN NhanVien nv ON nv.MaNV=dt.MaNV_Lap
+                WHERE dt.MaHD=@MaHD
+                ORDER BY dt.NgayLap`)
         ]);
-        res.json({ invoice: header.recordset[0], lines: lines.recordset, payments: payments.recordset });
+        res.json({
+            invoice: header.recordset[0],
+            lines: lines.recordset,
+            payments: payments.recordset,
+            returns: returns.recordset
+        });
     } catch (error) {
         res.status(500).json({ message: 'Không thể tải hóa đơn.' });
     }
@@ -296,6 +336,10 @@ const cancelInvoice = async (req, res) => {
                   AND NOT EXISTS(SELECT 1 FROM ThanhToan WHERE MaHD=@MaHD AND TrangThai=N'Thành công');
                 SELECT @@ROWCOUNT affected;`);
         if (!result.recordset[0].affected) return res.status(400).json({ message: 'Không thể hủy hóa đơn đã thanh toán hoặc không còn ở trạng thái Nháp.' });
+        await logAudit(pool, {
+            user: req.user, req, action: 'Hủy hóa đơn nháp', table: 'HoaDon', recordId: req.params.id, uc: 'UC24',
+            severity: 'Cảnh báo', content: req.body.LyDo ? `Lý do: ${clean(req.body.LyDo, 300)}` : 'Hủy hóa đơn nháp, tiền và tồn không đổi.'
+        });
         res.json({ message: 'Đã hủy hóa đơn nháp.' });
     } catch (error) {
         res.status(400).json({ message: error.message });
@@ -335,6 +379,12 @@ const addPayment = async (req, res) => {
                 INSERT ThanhToan(MaTT,MaHD,PhuongThuc,MaGiaoDich,SoTien,NgayTT,TrangThai,NgayXacNhan)
                 VALUES(@MaTT,@MaHD,@PhuongThuc,@MaGiaoDich,@SoTien,GETDATE(),@TrangThai,
                     CASE WHEN @TrangThai IN(N'Thành công',N'Thất bại') THEN GETDATE() END)`);
+        await logAudit(transaction, {
+            user: req.user, req, action: 'Thu tiền hóa đơn', table: 'HoaDon', recordId: req.params.id, uc: 'UC25',
+            result: status === 'Thành công' ? 'Thành công' : 'Thất bại',
+            severity: 'Quan trọng',
+            content: `${method} ${amount.toLocaleString('vi-VN')}đ${transactionCode ? `, mã GD ${transactionCode}` : ''}. Trạng thái: ${status}.`
+        });
         await transaction.commit();
         res.status(201).json({ message: `Đã ghi nhận thanh toán ${status.toLowerCase()}.`, MaTT: maTT });
     } catch (error) {
@@ -413,10 +463,12 @@ const completeInvoice = async (req, res) => {
                                 ELSE N'Thường' END
                         WHERE MaKH=@MaKH`);
         }
-        await new sql.Request(transaction).input('MaTK', sql.Int, req.user.MaTK)
-            .input('MaHD', sql.VarChar, invoice.MaHD)
-            .query(`INSERT NhatKy(MaTK,HanhDong,BangLienQuan,MaBanGhi,NoiDung,ThoiGian)
-                    VALUES(@MaTK,N'Hoàn thành hóa đơn',N'HoaDon',@MaHD,N'Đã thanh toán đủ, xuất kho và ghi nhận doanh thu',GETDATE())`);
+        await logAudit(transaction, {
+            user: req.user, req, action: 'Hoàn thành hóa đơn bán hàng', table: 'HoaDon', recordId: invoice.MaHD,
+            uc: 'UC25', severity: 'Quan trọng',
+            content: `Đã thu đủ ${Number(invoice.TongThanhToan).toLocaleString('vi-VN')}đ; tồn kho đã trừ; ghi doanh thu ca.`,
+            after: { MaHD: invoice.MaHD, TongThanhToan: invoice.TongThanhToan, TrangThai: 'Hoàn thành' }
+        });
         await transaction.commit();
         res.json({ message: `Hóa đơn ${invoice.MaHD} đã hoàn thành.`, MaHD: invoice.MaHD, DiemCong: diemCong });
     } catch (error) {

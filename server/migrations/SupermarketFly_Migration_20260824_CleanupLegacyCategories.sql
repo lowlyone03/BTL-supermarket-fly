@@ -1,0 +1,18 @@
+USE [SupermarketFlyDB];
+GO
+SET XACT_ABORT ON;
+BEGIN TRANSACTION;
+
+DELETE dm
+FROM dbo.DanhMuc dm
+WHERE NOT EXISTS (SELECT 1 FROM dbo.SanPham sp WHERE sp.MaDM=dm.MaDM);
+
+COMMIT TRANSACTION;
+GO
+
+SELECT dm.MaDM,dm.TenDM,COUNT(sp.MaSP) AS SoSanPham
+FROM dbo.DanhMuc dm
+LEFT JOIN dbo.SanPham sp ON sp.MaDM=dm.MaDM
+GROUP BY dm.MaDM,dm.TenDM
+ORDER BY dm.MaDM;
+GO

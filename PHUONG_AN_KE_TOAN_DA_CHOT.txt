@@ -1,0 +1,614 @@
+PHƯƠNG ÁN KẾ TOÁN ĐÃ CHỐT
+HỆ THỐNG QUẢN LÝ NỘI BỘ SUPERMARKET FLY
+================================================================================
+
+Tài liệu này ghi PHƯƠNG ÁN ĐANG CHẠY TRONG MÃ NGUỒN và các quyết định đã chốt
+với nhóm (31/08/2026 và 01/09/2026). Chỉ ghi những gì có bằng chứng trong code,
+migration SQL, tài liệu đề tài và hội thoại làm việc. Không phải kế hoạch mong
+muốn chưa được chọn.
+
+Ngày lập tài liệu: 02/09/2026
+Phạm vi code: thư mục supermarket-fly (server Node.js + ứng dụng desktop)
+Tài liệu gốc không bị đè: PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt vẫn giữ nguyên
+ở thư mục BTL. File này là bản giải trình cập nhật sau lần sửa tháng 9/2026.
+
+
+--------------------------------------------------------------------------------
+1. TÊN HỆ THỐNG VÀ VAI TRÒ
+--------------------------------------------------------------------------------
+
+Tên hệ thống
+  Supermarket Fly (trong giao diện: "Supermarket FLY · Hà Nội").
+  Đây là hệ thống quản lý NỘI BỘ một cửa hàng, một kho logic "Kho cửa hàng".
+  Khách hàng và Nhà cung cấp là đối tượng dữ liệu, không đăng nhập.
+
+Năm actor nội bộ (viết tắt dùng trong tài liệu này)
+
+  QL  Quản lý cửa hàng     1 người
+      Điều hành, phê duyệt, giao quỹ Phiếu chi, xem công nợ và báo cáo cửa hàng.
+      Tài khoản thường dùng khi test: admin / 123
+
+  KT  Nhân viên kế toán    1 người
+      Đối chiếu hóa đơn mua (UC27), lập/thanh toán Phiếu chi (UC28),
+      lập/xác nhận Phiếu thu ca (UC29), báo cáo nội bộ, bảng lương tháng (UC33).
+      Tài khoản thường dùng khi test: ketoan / 123
+
+  TN  Nhân viên bán hàng kiêm thu ngân    8 người
+      Mở/đóng ca, bán hàng POS, thanh toán đủ tại quầy, đổi trả, báo cáo bán hàng.
+      Tài khoản thường dùng khi test: thungan / 123 (và thungan02..thungan08)
+
+  TK  Nhân viên kho / Thủ kho    1 người
+      Nhận hàng, phiếu nhập, xuất thủ công, kiểm kê, kiểm hàng đổi trả.
+      Tài khoản thường dùng khi test: thukho / 123
+
+  MH  Nhân viên mua hàng    1 người
+      Nhà cung cấp, đơn mua hàng, báo cáo mua hàng.
+      Tài khoản thường dùng khi test: muahang / 123
+
+Số lượng nhân viên không làm tăng số actor trên Use Case. Mỗi actor là một loại
+vai trò. Hệ thống không mở actor Nhân sự riêng; lương nằm ở KT (UC33), phân ca
+và duyệt công nằm ở QL (UC30, UC32).
+
+
+--------------------------------------------------------------------------------
+2. BỐI CẢNH LẦN THAY ĐỔI NÀY (31/08/2026 ĐẾN 02/09/2026)
+--------------------------------------------------------------------------------
+
+2.1. Nhóm đang xem xét "kế toán mini" trong nội bộ
+
+  Ngày 31/08/2026 nhóm đưa file Word "Kế hoạch 2 phương án kế toán" (Plan A mini
+  / Plan B kiểu ERP-MISA thu gọn). Hiện trạng code lúc đó ĐÃ CÓ kế toán nghiệp
+  vụ: đối chiếu ba chứng từ, công nợ NCC, Phiếu chi, Phiếu thu ca, giá vốn và
+  lãi gộp, bảng lương UC30-UC33. CHƯA CÓ sổ cái Nợ/Có, TaiKhoanKeToan, ButToan,
+  kỳ kế toán, khóa sổ.
+
+  Nhóm chốt hướng mở rộng: Plan A hiệu chỉnh (giữ VAT bán, TSCĐ, sao kê, LCTT;
+  cắt chi phí trả trước 242 và kho theo lô). Quyết định này được ghi ở file
+  PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt. Đến ngày lập tài liệu này, các bảng
+  TaiKhoanKeToan / ButToan / KyKeToan VẪN CHƯA TỒN TẠI trong CSDL. Đó là hướng
+  tiếp theo, không phải phần đã code xong.
+
+2.2. Sự cố báo cáo tháng 9/2026
+
+  Ngày 01/09/2026 (mùng 1), màn báo cáo cửa hàng hiện biểu đồ trống. Nguyên nhân
+  đã xác minh:
+  - Bộ lọc mặc định lấy tháng theo ngày máy (tháng 9), trong khi hóa đơn mẫu
+    nằm ở tháng 8.
+  - Lần sau, giao diện gọi lại nút "Lập báo cáo" lúc nút đang disabled: trình
+    duyệt không bắn sự kiện click, trang đứng mãi ở chữ "Đang tải báo cáo...".
+
+  Đã sửa: múi giờ VN, mặc định lùi tháng khi ngày 1-3, API tự chuyển kỳ có dữ
+  liệu, tham số lockPeriod, banner cảnh báo, gọi thẳng hàm load(), timeout 45 giây.
+
+2.3. Thiếu nghiệp vụ QL giao tiền cho KT
+
+  Cùng ngày 01/09/2026, màn "Theo dõi công nợ" của QL chỉ xem số liệu, chưa có
+  bước giao quỹ. Nhóm yêu cầu: khi QL đưa tiền (tiền mặt hoặc ủy quyền chuyển
+  khoản) cho KT để tất toán NCC, hệ thống phải ghi nhận bước đó; KT chỉ được
+  chi NCC sau khi đã nhận quỹ.
+
+  Đã sửa: duyệt Phiếu chi ĐỒNG THỜI là giao quỹ. Thêm cột HinhThucCapQuy,
+  NgayCapQuy, GhiChuCapQuy. Khớp hình thức giao quỹ với PhuongThuc trên phiếu.
+  Công nợ không giảm ở bước duyệt.
+
+2.4. Lập Phiếu chi trước hạn
+
+  Code cho phép lập phiếu khi chưa đến HanThanhToan (nút "Lập Phiếu chi sớm").
+  Thông điệp API ghi "Tất toán trước hạn". Vẫn khóa số tiền = toàn bộ SoTienConLai.
+  Đây là điều chỉnh so với câu chữ cũ "lập khi đến hạn" trong tài liệu chức năng
+  mới; hạn 30-45 ngày vẫn dùng để xếp hạng / cảnh báo quá hạn, không còn là
+  điều kiện CHẶN lập phiếu.
+
+
+--------------------------------------------------------------------------------
+3. PHƯƠNG ÁN KẾ TOÁN ĐÃ CHỐT (ĐANG CHẠY)
+--------------------------------------------------------------------------------
+
+Hệ thống hiện tại là KẾ TOÁN NGHIỆP VỤ NỘI BỘ, không phải phần mềm kế toán
+tổng hợp. Mỗi nghiệp vụ kinh tế chỉ ghi nhận khi chứng từ đạt trạng thái hợp lệ.
+Không nhập lại cùng một số liệu hai lần. Phiếu thu ca KHÔNG sinh doanh thu lần
+hai vì doanh thu đã ghi lúc hóa đơn Hoàn thành.
+
+Ba cột tiền tệ / công nợ đã chốt:
+
+  A. BÁN HÀNG (TN)
+     Khách thanh toán ĐỦ tại quầy. Không bán chịu, không công nợ phải thu KH.
+     Hóa đơn Hoàn thành -> trừ tồn, giao dịch kho Xuất bán, ghi DonGiaVon /
+     ThanhTienVon trên dòng hàng. Lãi trên báo cáo là LÃI GỘP:
+       Doanh thu thuần = tổng thanh toán HĐ hoàn thành - tiền hoàn đã hoàn thành
+       Giá vốn hàng bán thuần = giá vốn HĐ - giá vốn hàng trả nhập lại + giá vốn hàng giao đổi
+       Lợi nhuận gộp = Doanh thu thuần - Giá vốn hàng bán thuần
+     Bảng lương KHÔNG trừ vào chỉ tiêu lãi gộp.
+
+  B. QUỸ CA (TN -> KT)  — UC29
+     TienMatHeThong = tiền mặt thu thành công trong ca TRỪ hoàn tiền mặt đã
+     hoàn thành trong ca. QR / thẻ / CK không vào số tiền mặt bàn giao.
+     KT lập đúng một Phiếu thu / một ca, ghi SoTienTheoHeThong và SoTienThucNop,
+     ChenhLech = ThucNop - TheoHeThong. Có chênh lệch bắt buộc lý do trên phiếu,
+     không lập biên bản riêng.
+
+  C. CÔNG NỢ NCC (KT + QL)  — UC27, UC28, UC09
+     Chỉ ghi nợ sau đối chiếu ba bên KHỚP. Thanh toán TOÀN BỘ MỘT LẦN.
+     Không trả trước, không trả từng phần, một công nợ tối đa một Phiếu chi.
+     Công nợ CHỈ GIẢM khi KT ghi nhận thanh toán THÀNH CÔNG.
+     Lập phiếu / duyệt / giao quỹ KHÔNG giảm SoTienConLai.
+
+Hướng mở rộng đã chốt ngày 31/08/2026 (CHƯA CODE, xem mục 9):
+  Nếu nhóm làm tiếp "kế toán mini", sẽ bổ sung lõi hạch toán Nợ/Có (Plan A hiệu
+  chỉnh): VAT bán 33311, VAT mua 1331, TSCĐ + khấu hao, import sao kê, LCTT thu
+  gọn. Cắt 242 (cửa hàng thanh toán 30-45 ngày, không trả trước 12 tháng) và
+  kho theo lô/FEFO. Không làm Plan B đầy đủ kiểu ERP. Use Case kế toán tổng hợp
+  nếu có sẽ đánh từ UC34 trở đi (UC30-UC33 đã dùng cho lịch, chấm công, lương).
+
+
+--------------------------------------------------------------------------------
+4. CHUỖI CHỨNG TỪ MUA HÀNG VÀ CÔNG NỢ NCC
+--------------------------------------------------------------------------------
+
+4.1. Trước khi có công nợ
+
+  MH lập Đơn mua hàng. QL duyệt đơn (UC05). TK nhận hàng, chỉ SoLuongChapNhan
+  được nhập kho. KT tiếp nhận Hóa đơn GTGT NCC (có thể trước hoặc sau phiếu
+  nhập). KT đối chiếu ba chứng từ: Đơn mua + Phiếu nhập + Hóa đơn.
+
+  Điều kiện khớp (financialRules.evaluateThreeWayMatch):
+  cùng NCC, cùng đơn, chủng loại, số lượng hóa đơn = SoLuongChapNhan, đơn giá
+  hóa đơn khớp đơn mua và phiếu nhập, thành tiền = số lượng x đơn giá, tiền thuế
+  đúng theo ThueSuat trên dòng hóa đơn mua.
+
+  Nếu LỆCH: HoaDonMuaHang.TrangThaiDoiChieu = "Chênh lệch", GhiChuChenhLech
+  được ghi, KHÔNG insert CongNoPhaiTra.
+
+  Nếu KHỚP:
+    HoaDonMuaHang.TrangThaiDoiChieu = "Đã khớp"
+    HoaDonMuaHang.TrangThai = "Đã ghi nhận"
+    Insert CongNoPhaiTra:
+      SoTienNo     = TongCong hóa đơn (tiền hàng + thuế)
+      SoTienDaTra  = 0
+      SoTienConLai = SoTienNo
+      TrangThai    = "Đang nợ"
+      HanThanhToan = ngày đối chiếu + SoNgayThanhToan (ràng buộc 30 đến 45 ngày
+                     trên DonMuaHang)
+    Mỗi hóa đơn chỉ một công nợ (MaHDMH UNIQUE).
+
+  Số liệu lúc này:
+    Nợ NCC TĂNG (SoTienConLai = SoTienNo).
+    Tiền mặt / ngân hàng cửa hàng CHƯA đổi.
+    Chưa có Phiếu chi.
+
+4.2. Bước 1 — KT lập Phiếu chi (UC28)
+
+  Màn hình: Kế toán / Công nợ Nhà cung cấp (accounting-payables).
+
+  Điều kiện:
+    TrangThaiDoiChieu = "Đã khớp", có MaPO và MaPN.
+    SoTienConLai > 0, chưa tất toán.
+    Chưa tồn tại Phiếu chi cho MaCongNo (ràng buộc UNIQUE).
+    Có thể lập SỚM, trước HanThanhToan.
+
+  KT chọn PhuongThuc: "Tiền mặt" hoặc "Chuyển khoản".
+  SoTien phiếu = toàn bộ SoTienConLai (khóa, không sửa lẻ).
+  TrangThai phiếu = "Chờ duyệt".
+  MaGiaoDichNganHang = NULL. MaNV_Duyet = NULL.
+
+  Số liệu lúc này:
+    CongNoPhaiTra KHÔNG ĐỔI (SoTienConLai giữ nguyên).
+    Thông điệp API: "Công nợ chưa thay đổi".
+    Nếu lập trước hạn: thêm "Tất toán trước hạn".
+    BuocTatToan hiện: "Chờ Quản lý giao tiền".
+    QL nhận thông báo: "Phiếu chi chờ duyệt và giao tiền".
+
+4.3. Bước 2 — QL duyệt ĐỒNG THỜI giao quỹ (UC09)
+
+  Màn hình:
+    Điều hành / Trung tâm phê duyệt (manager-purchase-approvals), nút
+    "Duyệt và giao tiền".
+    Hoặc xem hồ sơ tại Điều hành / Theo dõi công nợ (manager-payables).
+
+  Nếu TỪ CHỐI: bắt buộc LyDo. TrangThai phiếu = "Từ chối".
+    HinhThucCapQuy / NgayCapQuy / GhiChuCapQuy = NULL.
+    Công nợ GIỮ NGUYÊN. KT được "Sửa và gửi lại" trên CÙNG một phiếu
+    (không tạo phiếu thứ hai).
+
+  Nếu DUYỆT:
+    QL chọn HinhThucCapQuy đúng một trong hai giá trị:
+      "Tiền mặt"
+      "Ủy quyền chuyển khoản"
+    Và có thể ghi GhiChuCapQuy.
+
+    Ràng buộc khớp PhuongThuc phiếu:
+      PhuongThuc = "Tiền mặt"     -> bắt buộc HinhThucCapQuy = "Tiền mặt"
+        (QL giao đủ tiền mặt cho KT)
+      PhuongThuc = "Chuyển khoản" -> bắt buộc HinhThucCapQuy = "Ủy quyền chuyển khoản"
+        (QL ủy quyền KT dùng tài khoản ngân hàng cửa hàng)
+
+    Ghi:
+      TrangThai     = "Đã duyệt"
+      MaNV_Duyet    = QL
+      NgayDuyet     = GETDATE()
+      NgayCapQuy    = GETDATE()
+      HinhThucCapQuy, GhiChuCapQuy
+
+  Ý nghĩa nghiệp vụ:
+    Đây là bước CHUYỂN QUỸ NỘI BỘ QL -> KT để đi tất toán.
+    Đây KHÔNG phải bước trả tiền cho NCC.
+    Nhật ký hệ thống ghi: "Đã giao tiền (...) cho Kế toán tất toán ...; chưa giảm công nợ".
+
+  Số liệu lúc này:
+    SoTienConLai VẪN GIỮ NGUYÊN.
+    SoTienDaTra VẪN = 0 (nếu chưa từng trả).
+    HoaDonMuaHang.TrangThai vẫn "Đã ghi nhận", chưa "Đã thanh toán".
+    BuocTatToan: "Quản lý đã giao tiền, chờ chi NCC" (màn KT)
+                 "Đã giao tiền, chờ Kế toán chi" (màn QL)
+    KT nhận thông báo: "Quản lý đã giao tiền, cần thanh toán NCC".
+
+4.4. Bước 3 — KT thanh toán NCC
+
+  Màn hình: Kế toán / Công nợ Nhà cung cấp, nút "Thanh toán" (hoặc "Thực hiện lại"
+  nếu lần trước thất bại).
+
+  Điều kiện:
+    TrangThai phiếu thuộc {"Đã duyệt", "Thanh toán thất bại"}.
+    SoTien phiếu vẫn bằng SoTienConLai và > 0.
+
+  KT chọn kết quả ThanhCong true/false.
+
+  Nếu THẤT BẠI:
+    Bắt buộc GhiChuThanhToan (nguyên nhân).
+    TrangThai phiếu = "Thanh toán thất bại".
+    Công nợ GIỮ NGUYÊN. Có thể bấm "Thực hiện lại" trên CÙNG phiếu.
+    Thông điệp: "Công nợ giữ nguyên và có thể thực hiện lại trên Phiếu chi này."
+
+  Nếu THÀNH CÔNG:
+    Nếu PhuongThuc = "Chuyển khoản": bắt buộc MaGiaoDichNganHang (mã GD ngân hàng
+    hoặc ủy nhiệm chi). Tiền mặt không bắt buộc mã GD.
+    UPDATE PhieuChi.TrangThai = "Thanh toán thành công"
+    UPDATE CongNoPhaiTra:
+      SoTienDaTra  = SoTienNo
+      SoTienConLai = 0
+      TrangThai    = "Đã tất toán"
+    UPDATE HoaDonMuaHang.TrangThai = "Đã thanh toán"
+
+  Số liệu lúc này (chỉ khi thành công):
+    Công nợ GIẢM về 0 (tất toán toàn bộ một lần).
+    Quyền chi NCC đã thực hiện (tiền mặt đã đưa NCC, hoặc tiền đã chuyển khoản).
+    BuocTatToan = "Đã tất toán".
+
+4.5. Bảng trạng thái — ai làm gì — số liệu tăng/giảm
+
+  Trạng thái phiếu          Ai xử lý tiếp              SoTienConLai
+  ------------------------------------------------------------------------
+  (chưa có phiếu)           KT lập phiếu               giữ nguyên (đang nợ)
+  Chờ duyệt                 QL duyệt + giao quỹ        giữ nguyên
+  Từ chối                   KT sửa và gửi lại          giữ nguyên
+  Đã duyệt                  KT chi NCC                 giữ nguyên
+  Thanh toán thất bại       KT thực hiện lại           giữ nguyên
+  Thanh toán thành công     xong                       = 0  (GIẢM)
+
+  Trạng thái công nợ riêng (cột TrangThai trên CongNoPhaiTra):
+    Đang nợ / Quá hạn (hệ thống tự cập nhật khi HanThanhToan < hôm nay và
+    SoTienConLai > 0) / Đã tất toán.
+
+  Điểm bắt buộc khi giải trình:
+    Công nợ CHƯA giảm khi chỉ lập phiếu.
+    Công nợ CHƯA giảm khi QL duyệt và giao tiền.
+    Công nợ CHỈ giảm khi KT ghi nhận thanh toán thành công.
+
+4.6. Những việc hệ thống không cho phép (đã code)
+
+  Trả trước NCC khi chưa có công nợ khớp.
+  Thanh toán từng phần (số tiền phiếu luôn = toàn bộ còn lại).
+  Tạo phiếu chi thứ hai cho cùng một MaCongNo.
+  Giảm nợ khi giao dịch thất bại.
+  KT bấm thanh toán khi phiếu còn Chờ duyệt hoặc Từ chối.
+  QL duyệt khi ba chứng từ chưa khớp, hoặc số tiền phiếu lệch SoTienConLai.
+  QL chọn sai cấp quỹ so với PhuongThuc phiếu.
+
+
+--------------------------------------------------------------------------------
+5. PHIẾU THU CA (KHÔNG TRỘN VỚI PHIẾU CHI)
+--------------------------------------------------------------------------------
+
+Phiếu thu và Phiếu chi là HAI nghiệp vụ khác nhau.
+
+  Phiếu thu  UC29   Tiền mặt TN bàn giao theo ca cho KT. Đối soát quỹ ca.
+  Phiếu chi  UC28   Thanh toán công nợ NCC. Đi qua QL giao quỹ rồi KT chi NCC.
+
+Mỗi ca cá nhân tối đa một Phiếu thu (MaCa UNIQUE).
+KT lập phiếu ở màn "Ca & Phiếu thu", xác nhận sau.
+Xác nhận Phiếu thu KHÔNG cộng thêm doanh thu, KHÔNG giảm công nợ NCC.
+QR / thẻ / CK đối soát bằng báo cáo giao dịch điện tử, không đưa vào tiền mặt
+bàn giao.
+
+Hoàn tiền mặt đã xong trong ca đã nằm trong snapshot TienMatHeThong lúc đóng ca.
+Duyệt đổi trả của TK/QL sau đó không chuyển tiền sang ca khác và không sửa
+Phiếu thu đã chốt.
+
+
+--------------------------------------------------------------------------------
+6. BÁO CÁO: KỲ, MÚI GIỜ, LOCKPERIOD, BANNER
+--------------------------------------------------------------------------------
+
+6.1. Múi giờ
+
+  Kỳ báo cáo dùng lịch Asia/Ho_Chi_Minh (viết tắt VN), không dùng múi giờ máy
+  theo UTC. Server: reportingPeriod.js (vietnamCalendar, resolveReportingPeriod).
+  Desktop: locale-ui.js (vietnamNow, FLY_REPORT_PERIOD).
+  Ngày tháng trên bảng kế toán / công nợ format vi-VN kèm timeZone Asia/Ho_Chi_Minh.
+
+  Loại kỳ: ngày (YYYY-MM-DD), tháng (YYYY-MM), quý (YYYY-Q1..Q4), năm (YYYY).
+  Mốc [From, ToExclusive): ví dụ tháng 08/2026 = từ 2026-08-01 đến trước 2026-09-01.
+
+6.2. Mặc định lùi tháng khi ngày 1-3
+
+  Hàm reportPeriodDefaults: nếu ngày VN <= 3 thì ô THÁNG (và QUÝ/NĂM gắn với tháng
+  đó) lùi về tháng trước. Ví dụ mùng 1/9/2026: ô tháng mặc định 2026-08.
+  Ô NGÀY vẫn để ngày hiện tại (2026-09-01) vì người dùng có thể xem đúng ngày.
+
+  Mục đích: đầu tháng cửa hàng thường chưa có chứng từ mới, số liệu vẫn ở tháng
+  trước. Tránh vào màn là biểu đồ trống.
+
+6.3. API tự chuyển kỳ có dữ liệu
+
+  resolveReportPeriod trong reportController.js:
+  - Tính kỳ người dùng yêu cầu.
+  - Lấy mốc phát sinh gần nhất từ: HoaDon Hoàn thành, PhieuDoiTra Hoàn thành,
+    GiaoDichKho, DonMuaHang (khác Nháp/Từ chối).
+  - Nếu query có lockPeriod=1, hoặc không có mốc phát sinh: GIỮ kỳ yêu cầu.
+  - Chỉ tự chuyển khi đang xem kỳ HIỆN TẠI (tháng hiện tại hoặc ngày hôm nay)
+    VÀ kỳ đó không có HoaDon hoàn thành + GiaoDichKho + DonMuaHang hợp lệ.
+  - Kỳ mới = kỳ cùng loại của mốc phát sinh gần nhất (nếu không có dùng tháng).
+  - Trả về fallbackFrom = kỳ ban đầu, để giao diện hiện banner.
+
+  Ví dụ đã kiểm (01/09/2026): gọi tháng 2026-09 không khóa kỳ -> API trả
+  "Tháng 08/2026" kèm fallbackFrom "Tháng 09/2026".
+
+6.4. lockPeriod (khóa kỳ trên giao diện)
+
+  Lần tải đầu: KHÔNG gửi lockPeriod, để API được phép chuyển kỳ có dữ liệu.
+  Sau khi vẽ xong: root.dataset.reportLock = "1".
+  Các lần bấm "Lập báo cáo" tiếp theo: gửi lockPeriod=1, GIỮ đúng kỳ người dùng
+  chọn (kể cả kỳ trống).
+
+  Như vậy: vào trang không bị kẹt loading / không bị trống do mặc định sai;
+  vẫn xem được tháng mới trống nếu chủ động chọn lại rồi bấm Lập báo cáo.
+
+  Áp dụng: báo cáo cửa hàng (QL), báo cáo nội bộ (KT), báo cáo kho (TK),
+  báo cáo bán hàng (TN), báo cáo mua hàng (MH).
+
+6.5. Banner fallback
+
+  Nếu API trả fallbackFrom.label khác period.label, giao diện chèn khối
+  .report-period-fallback:
+    "[kỳ yêu cầu] chưa có chứng từ để vẽ biểu đồ"
+    "Đang mở [kỳ có dữ liệu] — kỳ gần nhất còn dữ liệu. Chọn lại kỳ trống rồi
+     bấm Lập báo cáo nếu bạn muốn xem kỳ hiện tại."
+
+  Đồng thời FLY_REPORT_PERIOD.syncFromReport cập nhật ô lọc cho khớp kỳ API trả.
+
+6.6. Sửa lỗi kẹt "Đang tải báo cáo..."
+
+  Không còn click nút đang disabled.
+  Hàm load() được gọi thẳng.
+  Fetch timeout 45 giây: hiện "Máy chủ phản hồi quá lâu..." thay vì xoay mãi.
+  Nút "Lập báo cáo" type="button" để tránh submit form.
+
+6.7. Nội dung báo cáo kế toán (không đổi bản chất lần này)
+
+  Vẫn là báo cáo nghiệp vụ: doanh thu thuần, giá vốn thuần, lãi GỘP, phiếu thu
+  thực nộp, phiếu chi / đã chi NCC thành công, tuổi nợ, đổi trả (bước đang kẹt,
+  hàng đi đâu). Không phải Nhật ký chung / Sổ cái / CĐPS / BCđKT.
+
+
+--------------------------------------------------------------------------------
+7. THÔNG BÁO THEO VAI TRÒ (LẦN NÀY, LIÊN QUAN KẾ TOÁN)
+--------------------------------------------------------------------------------
+
+API GET /api/notifications, chuông trên header, tự làm mới khoảng 12 giây.
+Không cần Ctrl+R để biết việc người trước vừa gửi.
+
+  QL  Phiếu chi chờ duyệt và giao tiền (nhảy sang manager-payables),
+      đơn mua / phiếu xuất / kiểm kê / đổi trả / chấm công chờ duyệt.
+  KT  Ca đã chốt cần Phiếu thu; hóa đơn chờ đối chiếu;
+      "Quản lý đã giao tiền, cần thanh toán NCC"; cảnh báo công nợ quá hạn.
+  MH / TK / TN  việc đúng vai trò (không lặp lại chi tiết ở đây).
+
+
+--------------------------------------------------------------------------------
+8. DANH SÁCH THAY ĐỔI KỸ THUẬT LẦN NÀY
+--------------------------------------------------------------------------------
+
+8.1. CSDL / migration
+
+  File mới:
+    server/migrations/SupermarketFly_Migration_20260901_PaymentFundHandover.sql
+    Thêm ba cột trên PhieuChi nếu chưa có:
+      HinhThucCapQuy  NVARCHAR(40) NULL
+      NgayCapQuy      DATETIME NULL
+      GhiChuCapQuy    NVARCHAR(500) NULL
+
+  CreateDB.sql (bản đầy đủ) đã gồm ba cột trên bảng PhieuChi, kèm UNIQUE MaCongNo.
+
+  Đảm bảo runtime: paymentVoucherController.ensureFundColumns() ALTER TABLE nếu
+  CSDL cũ chưa chạy migration. adminController gọi hàm này trước khi đọc công nợ.
+
+8.2. Server — nghiệp vụ phiếu chi / công nợ
+
+  server/src/controllers/paymentVoucherController.js
+    FUND_METHODS, ensureFundColumns
+    BuocTatToan theo trạng thái phiếu
+    createVoucher: cho lập sớm, thông điệp công nợ chưa đổi
+    decideVoucher (approve/reject): bắt HinhThucCapQuy khi duyệt, khớp PhuongThuc,
+      ghi NgayCapQuy, CongNoDaGiam: false
+    payVoucher: chỉ giảm nợ khi ThanhCong = true
+
+  server/src/controllers/adminController.js
+    getPayablesOverview / getPayableDetail: join PhieuChi, BuocTatToan,
+      tóm tắt ChoGiaoTien / ChoKeToanChi
+    Hàng phê duyệt vẫn liệt kê Phiếu chi Chờ duyệt
+
+  server/src/controllers/notificationController.js
+    QL: tiêu đề phiếu chi "chờ duyệt và giao tiền"
+    KT: tiêu đề "Quản lý đã giao tiền, cần thanh toán NCC"
+
+  server/src/routes/accountingRoutes.js  (giữ)
+    GET  /accounting/payables
+    GET  /accounting/payables/:id
+    POST /accounting/payables/:id/payment-voucher
+    POST /accounting/payment-vouchers/:id/resubmit
+    POST /accounting/payment-vouchers/:id/pay
+
+  server/src/routes/adminRoutes.js  (giữ)
+    GET  /admin/finance/payables
+    GET  /admin/finance/payables/:id
+    GET  /admin/approvals/payment-vouchers/:id
+    POST /admin/approvals/payment-vouchers/:id/approve
+    POST /admin/approvals/payment-vouchers/:id/reject
+
+8.3. Server — báo cáo
+
+  File mới: server/src/services/reportingPeriod.js
+  Sửa: server/src/controllers/reportController.js
+    bindPeriod dùng NVARCHAR ngày (From / ToExclusive)
+    resolveReportPeriod, fallbackFrom, lockPeriod
+    getFinancialReport, getStoreOperationsReport, báo cáo kho / bán hàng / mua hàng
+    đều đi qua cùng hàm kỳ
+
+8.4. Desktop — UI kế toán / QL / báo cáo
+
+  desktop/src/pages/accounting/accounting-pages.js
+    settlementFlow 4 bước: lập phiếu -> QL duyệt giao tiền -> KT chi NCC -> tất toán
+    Màn KT: nút "Lập Phiếu chi sớm", "Chờ Quản lý giao tiền", form thanh toán hiện
+    quỹ đã nhận (HinhThucCapQuy, NgayCapQuy, GhiChuCapQuy)
+    Màn QL: tiến độ, nút duyệt/giao, ghi chú quỹ
+    Báo cáo: syncFromReport, reportLock, timeout 45s, gọi load() thẳng
+
+  desktop/src/pages/warehouse/purchase-order-pages.js
+    Modal UC09 "Duyệt và giao tiền cho Kế toán"
+    Select HinhThucCapQuy, textarea GhiChuCapQuy, xác nhận công nợ chưa giảm
+
+  desktop/src/pages/shared/locale-ui.js
+    vietnamNow, reportPeriodDefaults (lùi tháng ngày 1-3),
+    FLY_REPORT_PERIOD (defaults, set, syncFromReport, activeFallbackBanner),
+    nút Lập báo cáo type="button"
+
+  desktop/src/pages/shared/role-reports.js
+    lockPeriod, syncFromReport, loadReport() thẳng, timeout 45s
+    (kho, thu ngân, mua hàng)
+
+  desktop/src/pages/warehouse/warehouse.css
+    .settlement-flow, .report-period-fallback
+
+  desktop/src/pages/dashboard/dashboard.html
+    cache-bust script accounting-pages.js?v=report-fix-3 (và locale-ui / role-reports)
+
+  desktop/src/pages/dashboard/dashboard.js
+    Chuông thông báo /notifications, điều hướng đúng màn theo target
+
+8.5. Không sửa trong lần này (vẫn dùng như cũ)
+
+  Lõi đối chiếu ba bên, công thức lãi gộp, lương, POS, tồn kho, đổi trả
+  (trừ phần đã sửa trước đó ngày 31/08 về in hóa đơn / hàng đi đâu — không lặp
+  lại ở đây). Không thêm bảng TaiKhoanKeToan / ButToan.
+
+
+--------------------------------------------------------------------------------
+9. ĐÃ LÀM ĐƯỢC  /  CHƯA LÀM  /  KHÔNG THUỘC PHẠM VI
+--------------------------------------------------------------------------------
+
+ĐÃ LÀM ĐƯỢC (đang chạy, có thể demo)
+
+  Đối chiếu ba chứng từ; chỉ khớp mới sinh công nợ.
+  Một công nợ — một Phiếu chi — thanh toán toàn bộ một lần.
+  Lập phiếu sớm trước hạn; số tiền khóa bằng còn lại.
+  QL duyệt = giao quỹ (Tiền mặt / Ủy quyền CK, khớp PhuongThuc).
+  KT mới được chi NCC sau khi đã duyệt; thất bại giữ nợ, thành công mới tất toán.
+  Phiếu thu ca tách biệt, không ghi doanh thu lần hai.
+  Báo cáo 5 actor theo kỳ VN; tự chuyển kỳ có dữ liệu; lockPeriod; banner;
+  không kẹt loading đầu tháng.
+  Thông báo theo actor, gồm việc giao quỹ / chi NCC.
+  Bảng lương tháng (UC33) và lịch/chấm công (UC30-UC32) đã có từ trước.
+  Lãi GỘP, giá vốn dòng hóa đơn, tuổi nợ, cảnh báo quá hạn.
+
+CHƯA LÀM (đã chốt HƯỚNG ngày 31/08, chưa có trong CSDL/API)
+
+  Danh mục TaiKhoanKeToan, KyKeToan, ButToan / ChiTietButToan.
+  Tự động định khoản Nợ/Có từ bán, mua, kho, lương, chi.
+  Nhật ký chung, Sổ cái, Cân đối phát sinh, khóa kỳ kế toán.
+  VAT trên POS (SanPham.ThueSuat / ChiTietHoaDon.TienThue) — hóa đơn BÁN hiện
+  chưa lưu thuế; chỉ hóa đơn MUA có ThueSuat/TienThue.
+  TSCĐ và khấu hao tháng.
+  Import sao kê ngân hàng và đối chiếu 112.
+  LCTT thu gọn.
+  Chi phí vận hành (điện, nước, thuê mặt bằng) như một chứng từ riêng.
+  Số dư đầu kỳ 111/112/156/331/411/421.
+
+KHÔNG THUỘC PHẠM VI (nhóm đã cắt hoặc không mở)
+
+  Chi phí trả trước 242 và lịch phân bổ 12 tháng.
+  Kho theo lô / FEFO / TonKhoTheoLo.
+  Nhiều cửa hàng, actor Nhân sự mới.
+  Bán chịu / TK131 / công nợ phải thu khách hàng.
+  Hóa đơn điện tử nhà nước, tờ khai thuế pháp lý đầy đủ.
+  Trả trước NCC, trả nợ từng phần, nhiều phiếu chi cho một khoản nợ.
+  Giảm công nợ lúc lập phiếu hoặc lúc QL duyệt.
+
+
+--------------------------------------------------------------------------------
+10. CÁCH KIỂM TRA THỦ CÔNG (NGẮN)
+--------------------------------------------------------------------------------
+
+Chuẩn bị: mở API server, mở lại HẲN ứng dụng desktop (F5 có thể chưa tải JS mới).
+Mật khẩu mặc định: 123.
+
+A. Báo cáo không kẹt / đúng kỳ
+
+  1. Đăng nhập admin (QL).
+  2. Menu "Báo cáo cửa hàng".
+  3. Đầu tháng (ngày 1-3): ô Tháng phải là tháng trước; nếu API vừa chuyển kỳ
+     sẽ có banner vàng. Biểu đồ không đứng mãi ở "Đang tải báo cáo...".
+  4. Muốn xem kỳ trống: chọn đúng tháng hiện tại, bấm "Lập báo cáo"
+     (lúc này lockPeriod=1, kỳ không tự nhảy).
+  5. Đăng nhập ketoan, menu "Báo cáo nội bộ" — cùng cơ chế kỳ.
+
+B. Công nợ: lập sớm — giao quỹ — chi NCC — tất toán
+
+  1. Đăng nhập ketoan. Menu "Đối chiếu hóa đơn": chỉ dùng hồ sơ Đã khớp.
+  2. Menu "Công nợ Nhà cung cấp": chọn khoản còn SoTienConLai > 0, chưa có phiếu.
+     Nếu còn hạn: nút "Lập Phiếu chi sớm". Chọn Tiền mặt hoặc Chuyển khoản, gửi.
+     Kiểm tra cột còn lại KHÔNG giảm. Dòng chữ "Chờ Quản lý giao tiền".
+  3. Đăng nhập admin. Chuông thông báo hoặc "Trung tâm phê duyệt":
+     nút "Duyệt và giao tiền".
+     Nếu phiếu Tiền mặt: để "Tiền mặt — giao đủ cho Kế toán".
+     Nếu phiếu Chuyển khoản: để "Ủy quyền chuyển khoản".
+     Bấm duyệt, xác nhận. Kiểm tra SoTienConLai VẪN GIỮ.
+  4. Đăng nhập ketoan. Chuông: "Quản lý đã giao tiền, cần thanh toán NCC".
+     Nút "Thanh toán". Ghi thành công (nếu CK: nhập mã GD).
+     Kiểm tra SoTienConLai = 0, trạng thái Đã tất toán.
+  5. Thử nhánh thất bại: ở bước 4 chọn thất bại + lý do — nợ không giảm, nút
+     "Thực hiện lại" còn.
+
+C. Từ chối / sai cấp quỹ
+
+  QL từ chối phải có lý do; KT sửa trên CÙNG phiếu.
+  Nếu chọn Ủy quyền CK cho phiếu Tiền mặt (hoặc ngược lại), API trả lỗi, không
+  duyệt.
+
+D. Phiếu thu không lẫn với phiếu chi
+
+  Đăng nhập ketoan, "Ca & Phiếu thu": chỉ ca Đã chốt. Lập phiếu thu không làm
+  thay SoTienConLai NCC.
+
+
+--------------------------------------------------------------------------------
+11. TÀI LIỆU LIÊN QUAN (KHÔNG ĐÈ)
+--------------------------------------------------------------------------------
+
+  d:\UDTHTKT\BTL\PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt
+    Phạm vi mở rộng Plan A hiệu chỉnh (VAT, TSCĐ, sao kê, LCTT; cắt 242).
+  TaiLieu_Du_An\01_Yeu_Cau_Nghiep_Vu\Cac_chuc_nang_moi_chot_hom_nay_Supermarket_Fly.txt
+    Tách Phiếu thu / Phiếu chi; không giảm nợ khi duyệt; tất toán một lần.
+  TaiLieu_Du_An\01_Yeu_Cau_Nghiep_Vu\CAP_NHAT_CHI_TIET_PHAN_MOI_SO_VOI_WORD_Supermarket_Fly.txt
+    Số bảng / UC so với Word gốc (UC30-UC33 đã dùng cho nhân sự).
+
+Hết tài liệu.

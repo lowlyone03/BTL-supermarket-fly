@@ -1,0 +1,126 @@
+TIN NHẮN VÒNG 2 — TEST CÁC PHẦN HỆ THỐNG ĐÃ MỞ RỘNG SO VỚI WORD
+
+Mọi người chỉ làm vòng này sau khi đã mở được app và test đơn giản xong.
+Mật khẩu tất cả tài khoản: 123
+
+Hệ thống vẫn có 5 vai trò cũ, không có actor mới. Phần mới cần test kỹ là:
+- UC30–UC33: phân ca, chấm công, duyệt công, bảng lương.
+- Ảnh sản phẩm bắt buộc.
+- Chuyến giao hàng giữa Mua hàng và Kho.
+- Tìm kiếm tiếng Việt không dấu.
+- Báo cáo biểu đồ/CSV/PDF của đủ 5 vai trò.
+
+Mỗi người mở file:
+HUONG_DAN_KIEM_THU_TOAN_BO_HE_THONG_SUPERMARKET_FLY.txt
+và tìm đúng mã ca kiểm thử được giao dưới đây.
+
+===============================================================================
+NGƯỜI 1 — QUẢN LÝ
+===============================================================================
+Tài khoản: admin
+
+Test:
+- MGR-22 đến MGR-30: sản phẩm, ảnh và tìm kiếm.
+- WF-01 đến WF-12: tạo/công bố lịch, trùng nhân viên, trùng quầy,
+  quá 48 giờ, nghỉ dưới 12 giờ và lịch tự động.
+- WF-22 đến WF-29: duyệt công, tăng ca, ca qua đêm và nghỉ trưa.
+- RPT-01 đến RPT-08: báo cáo Quản lý.
+
+Đặc biệt phải thử thêm sản phẩm không có ảnh, ảnh giả đổi đuôi, ảnh trên 5 MB,
+và sửa sản phẩm nhưng không chọn ảnh mới.
+
+===============================================================================
+NGƯỜI 2 — MUA HÀNG
+===============================================================================
+Tài khoản: muahang
+
+Test:
+- WF-13 đến WF-20: xem lịch, check-in/check-out và các lần bấm lặp.
+- P2P-18 đến P2P-23: gửi NCC, tạo chuyến giao, ETA sai, số kiện sai,
+  tạo chuyến trùng và đánh dấu xe đến hai lần.
+- RPT-21 đến RPT-26: báo cáo Mua hàng, CSV và PDF.
+
+Không tự xác nhận nhập kho; phần đó do Người 3 test.
+
+===============================================================================
+NGƯỜI 3 — THỦ KHO
+===============================================================================
+Tài khoản: thukho
+
+Test:
+- WF-13 đến WF-20: xem lịch và chấm công cá nhân.
+- WH-06 đến WH-19: nhận đủ/thiếu/từ chối, xác nhận phiếu nhập một lần,
+  giao tiếp phần còn lại và thử hai cửa sổ xác nhận.
+- RPT-09 đến RPT-14: KPI/biểu đồ/bảng/CSV/PDF báo cáo kho.
+- Kiểm tra ảnh cùng một sản phẩm ở tồn kho có khớp ảnh Người 1 tạo hay không.
+
+Không sửa tồn trực tiếp trong database.
+
+===============================================================================
+NGƯỜI 4 — THU NGÂN
+===============================================================================
+Tài khoản: thungan
+
+Test:
+- WF-13 đến WF-21: lịch, check-in, check-out, ca tăng cường.
+- POS-01 đến POS-10: phải bị chặn khi chưa có lịch/chưa check-in;
+  không được check-out khi ca POS còn mở.
+- POS-17 đến POS-42: ảnh hàng, tồn, thanh toán tiền mặt/QR/hỗn hợp,
+  thiếu/trùng mã giao dịch, hoàn tất hai lần và in hóa đơn.
+- RET-01 đến RET-24: hoàn tiền có/không nhập lại, hoàn điện tử,
+  đổi ngang giá và chặn đổi lệch dù chỉ 1 đồng.
+- RPT-15 đến RPT-20: báo cáo chỉ có dữ liệu của chính Thu ngân đó.
+
+===============================================================================
+NGƯỜI 5 — KẾ TOÁN
+===============================================================================
+Tài khoản: ketoan
+
+Test:
+- WF-13 đến WF-20: lịch/chấm công cá nhân.
+- ACC-01 đến ACC-12: UC27, lần lượt làm lệch sản phẩm, số lượng,
+  đơn giá, thuế suất, tiền thuế và tổng tiền. Mọi trường hợp lệch phải bị chặn
+  và không được sinh công nợ.
+- ACC-13 đến ACC-32: công nợ, Phiếu chi, Phiếu thu ca và tiền mặt sau hoàn.
+- PAY-01 đến PAY-12: lập kỳ, khóa kỳ, trả lương, mã giao dịch và bấm hai lần.
+- RPT-27 đến RPT-32: báo cáo Kế toán.
+
+Lưu ý: bảng lương không được trừ vào “lãi gộp”.
+
+===============================================================================
+NGƯỜI 6 — KIỂM TRA CHÉO TOÀN HỆ THỐNG
+===============================================================================
+Tài khoản: lần lượt admin, muahang, thukho, thungan, ketoan
+
+Test:
+- GEN-08: tìm có dấu/không dấu, gõ nhanh, Escape và Ctrl+K.
+- SEC-01 đến SEC-05: menu/quyền, truy cập ngoài quyền, double click và dữ liệu nguy hiểm.
+- RPT-01 đến RPT-42: báo cáo của 5 actor, đổi kỳ, responsive, CSV/PDF.
+- CON-01 đến CON-10: hai cửa sổ, mất kết nối, tải lại sau POST và làm tròn tiền.
+
+Sau khi Người 1–5 hoàn thành, Người 6 dùng MỘT máy và MỘT database để chạy
+E2E-01 đến E2E-10. Không ghép dữ liệu từ sáu máy khác nhau.
+
+===============================================================================
+CÁCH BÁO KẾT QUẢ
+===============================================================================
+
+PASS-Nx-V2 nếu toàn bộ phần được giao đạt.
+
+Nếu lỗi, gửi đúng mẫu:
+FAIL-Nx-V2
+Mã test:
+Tài khoản:
+Màn hình:
+Dữ liệu/mã chứng từ:
+Các bước đã làm:
+Kết quả mong đợi:
+Kết quả thực tế:
+Ảnh/video:
+
+Nếu không làm tiếp được vì thiếu dữ liệu đầu vào, gửi:
+BLOCKED-Nx-V2
+Mã test:
+Đang thiếu mã/lịch/chứng từ nào:
+
+Không tự sửa database để biến BLOCKED thành PASS.

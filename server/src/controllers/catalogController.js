@@ -1,4 +1,5 @@
 const { sql, poolPromise } = require('../config/db');
+const { logAudit } = require('../services/auditLog');
 const { storedPathFor, deleteUploadedProductImage } = require('../middlewares/productImageUpload');
 
 const text = (value, max, fallback = null) => {
@@ -14,16 +15,8 @@ const number = (value, label, { integer = false, min = 0 } = {}) => {
     return parsed;
 };
 
-const writeAudit = async (request, user, action, tableName, recordId, content) => {
-    await request
-        .input('LogMaTK', sql.Int, user.MaTK)
-        .input('LogHanhDong', sql.NVarChar, action)
-        .input('LogBang', sql.NVarChar, tableName)
-        .input('LogMaBanGhi', sql.VarChar, recordId)
-        .input('LogNoiDung', sql.NVarChar, content)
-        .query(`INSERT INTO NhatKy (MaTK,HanhDong,BangLienQuan,MaBanGhi,NoiDung,ThoiGian)
-                VALUES (@LogMaTK,@LogHanhDong,@LogBang,@LogMaBanGhi,@LogNoiDung,GETDATE())`);
-};
+const writeAudit = (request, user, action, tableName, recordId, content) =>
+    logAudit(request, { user, action, table: tableName, recordId, content, uc: 'UC04' });
 
 const getCategories = async (_req, res) => {
     try {

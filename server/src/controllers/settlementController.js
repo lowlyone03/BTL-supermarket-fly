@@ -1,4 +1,5 @@
 const { sql, poolPromise } = require('../config/db');
+const { logAudit } = require('../services/auditLog');
 
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
 
@@ -95,6 +96,11 @@ const createReceipt = async (req, res) => {
                         LyDoChenhLech,NoiDung,TrangThai)
                     VALUES(@MaPT,@MaCa,@MaNV,GETDATE(),@HeThong,@ThucNop,@LyDo,
                         N'Bàn giao tiền mặt cuối ca',N'Nháp')`);
+        await logAudit(transaction, {
+            user: req.user, req, action: 'Lập Phiếu thu cuối ca', table: 'PhieuThu', recordId: maPT, uc: 'UC29',
+            severity: 'Quan trọng',
+            content: `Ca ${maCa}; hệ thống ${Number(row.TienMatHeThong).toLocaleString('vi-VN')}đ; thực nộp ${Number(row.TienThucNop).toLocaleString('vi-VN')}đ`
+        });
         await transaction.commit();
         res.status(201).json({ message: `Đã lập Phiếu thu ${maPT}.`, MaPT: maPT });
     } catch (error) {
@@ -123,10 +129,11 @@ const confirmReceipt = async (req, res) => {
             .query(`UPDATE PhieuThu SET TrangThai=N'Đã xác nhận',NgayXacNhan=GETDATE() WHERE MaPT=@MaPT`);
         await new sql.Request(transaction).input('MaCa', sql.VarChar, receipt.recordset[0].MaCa)
             .query(`UPDATE CaLamViec SET TrangThaiDoiSoat=N'Đã đối soát' WHERE MaCa=@MaCa`);
-        await new sql.Request(transaction).input('MaTK', sql.Int, req.user.MaTK)
-            .input('MaPT', sql.VarChar, maPT)
-            .query(`INSERT NhatKy(MaTK,HanhDong,BangLienQuan,MaBanGhi,NoiDung,ThoiGian)
-                    VALUES(@MaTK,N'Xác nhận Phiếu thu',N'PhieuThu',@MaPT,N'Đã đối soát tiền mặt cuối ca',GETDATE())`);
+        await logAudit(transaction, {
+            user: req.user, req, action: 'Xác nhận Phiếu thu', table: 'PhieuThu', recordId: maPT, uc: 'UC29',
+            severity: 'Quan trọng',
+            content: `Đã đối soát tiền mặt cuối ca ${receipt.recordset[0].MaCa}`
+        });
         await transaction.commit();
         res.json({ message: `Đã xác nhận Phiếu thu ${maPT}.` });
     } catch (error) {

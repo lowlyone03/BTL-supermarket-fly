@@ -1,5 +1,7 @@
 const { sql, poolPromise } = require('../config/db');
 const { closeOpenAttendance } = require('../services/attendanceSync');
+const { ensureFundColumns } = require('./paymentVoucherController');
+const { ensurePayrollSchema } = require('../services/payrollSchema');
 
 const clean = (value, max = 120) => String(value ?? '').trim().slice(0, max);
 
@@ -63,7 +65,8 @@ const getDashboard = async (req, res) => {
 const getApprovalQueues = async (req, res) => {
     try {
         const pool = await poolPromise;
-        const [warehouse, finance] = await Promise.all([
+        await ensurePayrollSchema(pool);
+        const [warehouse, finance, payroll] = await Promise.all([
             pool.request().query(`
                 SELECT N'Phiếu xuất kho' AS LoaiHoSo,px.MaPX AS MaHoSo,px.NgayXuat AS NgayLap,
                        nv.TenNV AS NguoiLap,px.LoaiXuat AS NoiDung,px.TrangThai
@@ -85,9 +88,17 @@ const getApprovalQueues = async (req, res) => {
                        COALESCE(dt.LyDo,N'Đề nghị đổi trả'),dt.SoTienHoan,dt.TrangThai
                 FROM PhieuDoiTra dt JOIN NhanVien nv ON nv.MaNV=dt.MaNV_Lap
                 WHERE dt.TrangThai=N'Chờ duyệt'
-                ORDER BY NgayLap DESC`)
+                ORDER BY NgayLap DESC`),
+            pool.request().query(`
+                    SELECT pcl.MaPhieu,pcl.MaKy,nv.TenNV,pcl.SoTien,pcl.PhuongThuc,pcl.NgayLap,lap.TenNV AS NguoiLap,
+                           N'Phiếu chi lương' AS LoaiHoSo, pcl.MaPhieu AS MaHoSo, nv.TenNV AS NoiDung
+                    FROM PhieuChiLuong pcl
+                    JOIN NhanVien nv ON nv.MaNV=pcl.MaNV
+                    JOIN NhanVien lap ON lap.MaNV=pcl.MaNV_Lap
+                    WHERE pcl.TrangThai=N'Chờ duyệt'
+                    ORDER BY pcl.NgayLap DESC`)
         ]);
-        res.json({ warehouse: warehouse.recordset, finance: finance.recordset });
+        res.json({ warehouse: warehouse.recordset, finance: finance.recordset, payroll: payroll.recordset });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải trung tâm phê duyệt.' });
@@ -101,6 +112,7 @@ const getPayablesOverview = async (req, res) => {
         const keyword = clean(req.query.search);
         const status = clean(req.query.status, 30);
         const pool = await poolPromise;
+        await ensureFundColumns(pool);
         const [itemsResult, summaryResult] = await Promise.all([
             pool.request()
                 .input('TuKhoa', sql.NVarChar, keyword)
@@ -111,15 +123,30 @@ const getPayablesOverview = async (req, res) => {
                         SELECT cn.MaCNPTra,cn.MaNCC,ncc.TenNCC,cn.MaHDMH,hd.SoHoaDon,
                                hd.MaPO,hd.MaPN,cn.SoTienNo,cn.SoTienDaTra,cn.SoTienConLai,
                                cn.NgayPhatSinh,cn.HanThanhToan,cn.GhiChu,
+                               pc.MaPhieu,pc.PhuongThuc,pc.SoTien AS SoTienPhieuChi,
+                               pc.TrangThai AS TrangThaiPhieuChi,pc.HinhThucCapQuy,pc.NgayCapQuy,
+                               pc.GhiChuCapQuy,nvDuyet.TenNV AS NguoiDuyet,nvLap.TenNV AS NguoiLap,
                                DATEDIFF(DAY,CONVERT(date,GETDATE()),cn.HanThanhToan) AS SoNgayConLai,
                                CASE
                                    WHEN cn.SoTienConLai=0 THEN N'Đã thanh toán'
                                    WHEN cn.HanThanhToan<CONVERT(date,GETDATE()) THEN N'Quá hạn'
                                    ELSE N'Đang nợ'
-                               END AS TrangThaiHienTai
+                               END AS TrangThaiHienTai,
+                               CASE
+                                   WHEN cn.SoTienConLai=0 OR pc.TrangThai=N'Thanh toán thành công' THEN N'Đã tất toán'
+                                   WHEN pc.TrangThai=N'Thanh toán thất bại' THEN N'Thanh toán thất bại, Kế toán làm lại'
+                                   WHEN pc.TrangThai=N'Đã duyệt' THEN N'Đã giao tiền, chờ Kế toán chi'
+                                   WHEN pc.TrangThai=N'Chờ duyệt' THEN N'Chờ Quản lý giao tiền'
+                                   WHEN pc.TrangThai=N'Từ chối' THEN N'Phiếu chi bị từ chối'
+                                   WHEN pc.MaPhieu IS NULL THEN N'Kế toán chưa lập Phiếu chi'
+                                   ELSE pc.TrangThai
+                               END AS BuocTatToan
                         FROM CongNoPhaiTra cn
                         JOIN NhaCungCap ncc ON ncc.MaNCC=cn.MaNCC
                         JOIN HoaDonMuaHang hd ON hd.MaHDMH=cn.MaHDMH
+                        LEFT JOIN PhieuChi pc ON pc.MaCongNo=cn.MaCNPTra
+                        LEFT JOIN NhanVien nvLap ON nvLap.MaNV=pc.MaNV
+                        LEFT JOIN NhanVien nvDuyet ON nvDuyet.MaNV=pc.MaNV_Duyet
                     )
                     SELECT * FROM DuLieuCongNo
                     WHERE (@TrangThai=N'' OR TrangThaiHienTai=@TrangThai)
@@ -136,7 +163,9 @@ const getPayablesOverview = async (req, res) => {
                        COALESCE(SUM(CASE WHEN SoTienConLai>0 AND HanThanhToan<CONVERT(date,GETDATE())
                                          THEN SoTienConLai ELSE 0 END),0) AS TongQuaHan,
                        SUM(CASE WHEN SoTienConLai>0 AND HanThanhToan<CONVERT(date,GETDATE())
-                                THEN 1 ELSE 0 END) AS SoKhoanQuaHan
+                                THEN 1 ELSE 0 END) AS SoKhoanQuaHan,
+                       (SELECT COUNT(*) FROM PhieuChi WHERE TrangThai=N'Chờ duyệt') AS ChoGiaoTien,
+                       (SELECT COUNT(*) FROM PhieuChi WHERE TrangThai IN (N'Đã duyệt', N'Thanh toán thất bại')) AS ChoKeToanChi
                 FROM CongNoPhaiTra`)
         ]);
         res.json({ items: itemsResult.recordset, summary: summaryResult.recordset[0] });
@@ -149,6 +178,7 @@ const getPayablesOverview = async (req, res) => {
 const getPayableDetail = async (req, res) => {
     try {
         const pool = await poolPromise;
+        await ensureFundColumns(pool);
         const header = await pool.request()
             .input('MaCN', sql.VarChar, clean(req.params.id, 20))
             .query(`
@@ -156,12 +186,28 @@ const getPayableDetail = async (req, res) => {
                        cn.MaHDMH,hd.SoHoaDon,hd.MaPO,hd.MaPN,hd.NgayHoaDon,
                        cn.SoTienNo,cn.SoTienDaTra,cn.SoTienConLai,cn.NgayPhatSinh,
                        cn.HanThanhToan,cn.GhiChu,
+                       pc.MaPhieu,pc.PhuongThuc,pc.SoTien AS SoTienPhieuChi,
+                       pc.TrangThai AS TrangThaiPhieuChi,pc.HinhThucCapQuy,pc.NgayCapQuy,
+                       pc.GhiChuCapQuy,pc.NoiDung,pc.MaGiaoDichNganHang,
+                       nvLap.TenNV AS NguoiLap,nvDuyet.TenNV AS NguoiDuyet,
                        CASE WHEN cn.SoTienConLai=0 THEN N'Đã thanh toán'
                             WHEN cn.HanThanhToan<CONVERT(date,GETDATE()) THEN N'Quá hạn'
-                            ELSE N'Đang nợ' END AS TrangThaiHienTai
+                            ELSE N'Đang nợ' END AS TrangThaiHienTai,
+                       CASE
+                           WHEN cn.SoTienConLai=0 OR pc.TrangThai=N'Thanh toán thành công' THEN N'Đã tất toán'
+                           WHEN pc.TrangThai=N'Thanh toán thất bại' THEN N'Thanh toán thất bại, Kế toán làm lại'
+                           WHEN pc.TrangThai=N'Đã duyệt' THEN N'Đã giao tiền, chờ Kế toán chi'
+                           WHEN pc.TrangThai=N'Chờ duyệt' THEN N'Chờ Quản lý giao tiền'
+                           WHEN pc.TrangThai=N'Từ chối' THEN N'Phiếu chi bị từ chối'
+                           WHEN pc.MaPhieu IS NULL THEN N'Kế toán chưa lập Phiếu chi'
+                           ELSE pc.TrangThai
+                       END AS BuocTatToan
                 FROM CongNoPhaiTra cn
                 JOIN NhaCungCap ncc ON ncc.MaNCC=cn.MaNCC
                 JOIN HoaDonMuaHang hd ON hd.MaHDMH=cn.MaHDMH
+                LEFT JOIN PhieuChi pc ON pc.MaCongNo=cn.MaCNPTra
+                LEFT JOIN NhanVien nvLap ON nvLap.MaNV=pc.MaNV
+                LEFT JOIN NhanVien nvDuyet ON nvDuyet.MaNV=pc.MaNV_Duyet
                 WHERE cn.MaCNPTra=@MaCN`);
         if (!header.recordset.length) {
             return res.status(404).json({ message: 'Không tìm thấy khoản công nợ.' });

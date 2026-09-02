@@ -1,0 +1,550 @@
+HUONG DAN TEST CHI TIET TUNG CHUC NANG + LUONG NGOAI LE
+SUPERMARKET FLY  |  UC01-UC33  |  5 actor  |  cap nhat 31/08/2026
+
+Tai khoan (mat khau 123):
+  admin     Quan ly
+  muahang   Mua hang
+  thukho    Thu kho
+  thungan   Thu ngan (them thungan02..thungan08 neu can 2 quay)
+  ketoan    Ke toan
+
+Cach dung:
+- Muc 0: quy tac sau MOI lan test ngoai le.
+- Muc 1: chay P0 truoc. Bao cao 29/08: CSDL mau THIEU phieu doi tra hoan thanh va Phieu chi.
+  Phai TU TAO du lieu that, khong doi so cai khi P0 chua PASS tren CUNG mot CSDL.
+- Muc 2 tro di: tung chuc nang = Luong dung + Ngoai le.
+- Ma ca [POS-21]... la ma day du trong
+  HUONG_DAN_KIEM_THU_TOAN_BO_HE_THONG_SUPERMARKET_FLY.txt
+
+
+================================================================================
+0. SAU MOI CA NGOAI LE PHAI KIEM 5 DIEM
+================================================================================
+
+Thao tac bi chan chua du. Con phai xac nhan:
+
+  1) Khong sinh them chung tu ngoai y muon.
+  2) Trang thai chung tu cu khong doi.
+  3) Ton kho / so kho khong doi.
+  4) Tien, cong no, diem khach khong doi.
+  5) Tai lai trang hoac bam nut 2 lan van khong lot.
+
+Ghi FAIL neu giao dien bao thanh cong nhung ton/tien/diem sai.
+
+
+================================================================================
+1. P0 — CHAY TRUOC, TREN CUNG MOT CSDL
+================================================================================
+
+Thu tu bat buoc:
+
+  P0-A  Quyen 5 actor khong lot chuc nang ngoai quyen          GEN/SEC
+  P0-B  Lich -> cham cong -> duyet cong -> bang luong          E2E-09
+  P0-C  Lich/check-in -> mo POS -> ban -> dong ca -> Phieu thu E2E-02
+  P0-D  Mua -> giao -> nhap -> UC27 -> cong no -> Phieu chi    E2E-01 + E2E-08
+  P0-E  Doi tra -> ton -> ket -> DT thuan -> GV thuan -> lai gop
+        (nhap lai / khong nhap lai / doi ngang gia / chan lech 1 dong)
+                                                               E2E-03, 04, 05
+  P0-F  Double click / 2 cua so khong ghi trung tien, ton,
+        cong no, bang luong                                    CON-01 den CON-06
+
+Chua PASS P0 thi KHONG ket luan nghiem thu, KHONG gan loi hach toan so cai.
+
+Du lieu con thieu theo bao cao 29/08:
+  - 0 phieu doi tra hoan thanh  -> phai chay E2E-03/04/05 de co
+  - 0 Phieu chi                 -> phai chay E2E-08 de co
+  Cong no moi sinh thuong CHUA den han 30-45 ngay. De test Phieu chi ngay:
+  chi duoc doi HanThanhToan cua DUNG 1 ma TEST da ghi lai, tren CSDL test.
+
+
+================================================================================
+2. DANG NHAP / PHAN QUYEN / TIM KIEM     UC01, UC02
+================================================================================
+
+LUONG DUNG
+- GEN-01: 5 tai khoan dang nhap mat khau 123, dung dashboard, dung menu.
+- GEN-05: dang xuat, Back/tai lai khong vao lai duoc du lieu.
+- GEN-08: tim co dau / khong dau, Escape xoa o, Ctrl+K o dashboard.
+- SEC-01: menu dung vai tro (xem muc 8 file cap nhat Word).
+
+NGOAI LE
+- GEN-02  Sai mat khau nhieu lan     -> khong tao phien, khong lo tai khoan co/khong
+- GEN-03  Trong / toan space         -> chi ro truong, khong treo
+- GEN-04  Tai khoan khoa / nghi viec -> tu choi ro ly do; mo lai thi vao duoc
+- GEN-06  Token het han              -> bat dang nhap lai, khong lo du lieu
+- GEN-07  Cat server giua chung      -> bao mat ket noi, khong luu thanh cong gia
+- SEC-02  Thu ngan mo man Quan ly    -> 403, khong chi an nut
+- SEC-03  Gui lai API bang token sai vai tro -> 403, chung tu khong doi
+- SEC-04  Double click Tao/Duyet/Thanh toan/Hoan tat -> chi 1 ban ghi
+- SEC-05  Nhao HTML/nhay/chuoi dai   -> hien van ban, khong chay script
+
+
+================================================================================
+3. QUAN LY: TAI KHOAN, NHAN VIEN, SAN PHAM, KHUYEN MAI     UC02-UC04
+================================================================================
+
+LUONG DUNG
+- MGR-01  Dung 12 nhan vien / 12 tai khoan.
+- MGR-02  Tao TK cho NV chua co TK; username chu thuong khong dau; MK 123.
+- MGR-06  Khoa / mo TK, co nhat ky.
+- MGR-09  Reset MK: MK cu sai, 123 dung.
+- MGR-11  Nhat ky: thoi gian, nguoi, hanh dong, ma chung tu. Khong sua/xoa (MGR-13).
+- MGR-14  Tao NV TEST, chuc danh khong phai Quan ly.
+- MGR-19  Tao danh muc.
+- MGR-22  Tao SP: ma, ten, DVT, gia, ton toi thieu, ANH bat buoc JPG/PNG/WebP <=5MB.
+- MGR-27  KM % hop le; MGR-28 KM tien co dinh.
+
+NGOAI LE
+- MGR-03  Username <3 ky tu / co dau / trung     -> chan
+- MGR-04  1 NV 2 tai khoan                       -> chan
+- MGR-05  Gan vai tro Ke toan cho NV Thu ngan    -> chan
+- MGR-07  Admin tu khoa / tu doi vai tro minh    -> chan, khong mat quan tri
+- MGR-08  Tao them Quan ly                       -> chan, chi 1 Quan ly
+- MGR-15  Trung SDT/email NV                     -> chan, khong tao do dang
+- MGR-16  Chuc danh/trang thai la                -> chi 5 vai tro + Dang lam / Nghi
+- MGR-18  Tu cho Quan ly dang nhap nghi viec     -> chan
+- MGR-20  Danh muc thieu/trung ma                -> chan
+- MGR-21  Vo hieu DM dang co SP hoat dong        -> chan
+- MGR-23  Trung ma SP / ma vach                  -> chan
+- MGR-24  Gia/ton am, sai dinh dang              -> chan
+- MGR-25  Vo hieu SP: chung tu cu con, khong them vao HD moi
+- MGR-26  Khong anh / anh gia doi duoi / >5MB    -> chan, khong de tep rac
+          Sua SP khong chon anh moi              -> GIU anh cu
+- MGR-29  KM % >100, ngay KT < ngay BD, trung ma -> chan
+
+
+================================================================================
+4. PHAN CA / CHAM CONG / DUYET CONG     UC30-UC32     P0-B
+================================================================================
+
+LUONG DUNG
+- WF-01  Admin tao lich 1 ca hop le (Thu ngan = ca QUAY + quay; van phong = HANH_CHINH).
+- WF-02  Cong bo khi du dinh bien.
+- WF-09  Phan ca tu dong: khong trung nguoi/quay, <=48h/tuan, nghi >=12h giua 2 ca.
+- WF-13  4 NV (muahang, thukho, thungan, ketoan) xem lich ca nhan.
+- WF-14  Check-in dung lich da cong bo.
+- WF-17  Check-out khi KHONG con ca POS mo.
+- WF-23  Admin duyet cham cong binh thuong.
+- WF-28  Ca dem 22:00-06:00 tach phut dem, he so 1,30.
+- WF-29  Ca hanh chinh 07:30-17:30 TRU nghi 11:30-13:30 = 8 gio tinh luong.
+
+NGOAI LE
+- WF-03  Cong bo thieu dinh bien              -> chan, chi ro ca thieu nguoi
+- WF-04  Trung NV cung ngay                   -> chan
+- WF-05  Trung quay o ca chinh                -> chan
+- WF-06  Ca chinh khong chon quay             -> chan
+- WF-07  >48 gio/tuan                         -> chan
+- WF-08  Nghi giua 2 ca <12 gio               -> chan
+- WF-10  Tao tu dong >31 ngay                 -> chan
+- WF-11  Sua/xoa lich da cong bo trai quy tac -> chan (hoac phai ly do dieu chinh)
+- WF-12  Xep Thu ngan vao ca van phong        -> chan
+- WF-15  Check-in khong lich / chua cong bo   -> chan, khong tao cham cong rong
+- WF-16  Check-in 2 lan                       -> chan / khong nhan doi
+- WF-18  Check-out khi con ca POS mo          -> chan, yeu cau chot ca truoc
+- WF-19  Check-out chua check-in              -> chan
+- WF-20  Check-out 2 lan                      -> chan
+- WF-21  Ca TANG CUONG thu mo POS             -> KHONG mo quay POS doc lap
+- WF-24  Duyet lai ban da duyet               -> chan, phut khong doi
+- WF-25  Duyet tang ca khong ghi chu          -> chan
+- WF-26  Phut tang ca duyet > thuc te         -> chan
+- WF-27  Khoang cham cong >16 gio             -> chan/canh bao, khong tinh luong sai
+
+
+================================================================================
+5. MUA HANG: NCC, DE NGHI, DON MUA, CHUYEN GIAO     UC11-UC14 + UC05, UC16
+================================================================================
+
+LUONG DUNG (chuoi E2E-01)
+1. thukho: Ton kho -> tao De nghi 2 SP cham ton toi thieu -> Gui.
+2. muahang: De nghi tu kho -> Tiep nhan -> Lap Don mua, SoNgayThanhToan 30-45
+   -> Gui Quan ly.
+3. admin: Trung tam phe duyet -> Duyet PO.
+4. muahang: Gui NCC, NCC xac nhan, tao ThongBaoGiaoHang (so phieu, xe, tai xe, ETA, so kien).
+
+NGOAI LE — NCC
+- PUR-02  Thieu ma/ten/MST                 -> chan
+- PUR-03  Trung ma NCC / MST               -> chan
+- PUR-04  Email/SDT sai                    -> chan
+- PUR-05  Vo hieu NCC: khong dung PO moi, lich su cu con
+- PUR-07  Actor khac sua NCC               -> 403
+
+NGOAI LE — De nghi
+- P2P-02  Khong dong / SP trung / SL 0 am le / SP ngung  -> chan
+- P2P-03  Sua/huy de nghi sai trang thai / sai tac gia   -> chan
+- P2P-06  Tra kho bo sung khong ly do                    -> chan
+- P2P-07  Tiep nhan 2 lan                                -> khong nhan doi
+
+NGOAI LE — Don mua
+- P2P-09  SP khong thuoc de nghi              -> chan
+- P2P-10  SL vuot phan con lai de nghi        -> chan, de nghi khong bi tieu SL
+- P2P-11  29 ngay hoac 46 ngay                -> chan; chi 30-45
+- P2P-12  Trung SP, SL 0/am/le, gia am, CK am hoac >100 -> chan
+- P2P-16  Tu choi / yeu cau sua khong ly do   -> chan
+- P2P-17  Duyet/tu choi lai don da xu ly      -> chan
+
+NGOAI LE — Chuyen giao
+- P2P-20  ETA truoc gio xuat phat             -> chan
+- P2P-21  So kien am / thap phan              -> chan
+- P2P-22  Tao chuyen 2 khi chuyen 1 chua kiem nhan -> chan
+- P2P-23  Danh dau xe den 2 lan               -> chan
+
+
+================================================================================
+6. KHO: NHAN HANG, PHIEU NHAP, TON     UC15, UC17, UC18     P0-D
+================================================================================
+
+LUONG DUNG
+- WH-01  Xem ton, canh bao ton thap, anh SP, tim ma/ten/khong dau/ma vach.
+- WH-06  Nhan DU: SoLuongGiao = ChapNhan + TuChoi; TuChoi=0.
+- WH-07  Nhan MOT PHAN: co hang tu choi + ly do; CHI ChapNhan cong ton.
+- WH-13  Xac nhan Phieu nhap: tang ton, DonGiaBinhQuan, GiaoDichKho loai Nhap
+         trong CUNG transaction. Phieu da xac nhan khong sua.
+
+NGOAI LE
+- WH-04  Actor khac sua ton truc tiep         -> khong co nut; API 403
+- WH-05  Ton khong am
+- WH-08  Giao != ChapNhan + TuChoi            -> chan, khong luu
+- WH-09  Tu choi hang khong ly do             -> chan
+- WH-10  Giao vuot SL con phai giao           -> chan
+- WH-11  Dong trung / SP ngoai don            -> chan
+- WH-12  So am, so le, gia am                 -> chan
+- WH-14  Xac nhan phieu nhap 2 lan            -> ton chi cong 1 lan
+- WH-15  Sua phieu da xac nhan                -> chan, so da nhap giu nguyen
+- WH-16  Giao tiep phan con thieu             -> don "Giao mot phan" neu con thieu
+- WH-18  Mat ket noi luc xac nhan             -> hoan toan xong HOAC chua doi, khong nua vung
+- WH-19  2 cua so cung xac nhan               -> 1 lan thanh cong, ton +1 lan
+
+
+================================================================================
+7. KHO: XUAT THU CONG + KIEM KE     UC19, UC06, UC20, UC07
+================================================================================
+
+LUONG DUNG XUAT (E2E-06)
+  thukho lap nhap (Noi bo / Huy / Tra NCC) -> Gui duyet
+  -> admin duyet -> TON VAN CHUA GIAM
+  -> thukho Xac nhan xuat -> ton giam 1 lan + so kho.
+Tu choi co ly do: ton khong doi.
+
+NGOAI LE XUAT
+- WHI-04  Tra NCC khong PN nguon / SP ngoai nguon -> chan
+- WHI-05  Khong dong, trung SP, SL 0/am/le        -> chan
+- WHI-09  Tu choi khong ly do / duyet sai TT      -> chan
+- WHI-11  Ton khong du luc xac nhan               -> chan, khong am ton
+- WHI-12  Xac nhan 2 lan                          -> khong tru 2 lan
+- WHI-13  muahang/thungan xac nhan xuat           -> 403
+
+LUONG DUNG KIEM KE (E2E-07)
+  Tao dot -> nhap SL thuc te moi dong
+  -> Khong lech: hoan thanh, khong dieu chinh
+  -> Co lech + ly do: Cho duyet; TON HE THONG CHUA DOI
+  -> admin duyet: ton dieu chinh 1 lan + so kho loai Dieu chinh
+     Khong tao "phieu de nghi dieu chinh" roi.
+
+NGOAI LE KIEM KE
+- INV-03  Chua kiem het dong                   -> khong cho gui
+- INV-04  Trung dong / SL thuc te am le / tinh trang la -> chan
+- INV-05  Co lech thieu ly do                  -> chan
+- INV-09  Tu choi khong ly do                  -> chan
+- INV-10  Ton doi trong luc cho duyet (ban/nhap cung SP)
+          -> duyet CHAN vi snapshot lech, khong ghi de ton moi
+- INV-11  Duyet 2 lan                          -> khong dieu chinh 2 lan
+
+
+================================================================================
+8. THU NGAN: CA + POS + THANH TOAN     UC22-UC25     P0-C
+================================================================================
+
+Dieu kien mo POS (chat hon Word goc):
+  Lich da cong bo + check-in + CA CHINH (khong phai tang cuong) + quay + tien dau ca.
+
+LUONG DUNG
+- POS-01  Mo ca: 1 ca mo, dung NV/ngay/quay/tien dau. Tien dau >=0, <= 1 ty.
+- POS-11  Tao khach: ten + SDT; diem khoi tao dung.
+- POS-17  Hoa don NHAP 2 SP, SL nguyen duong trong ton. Ton CHUA tru.
+- POS-23  KM hop le: tong khong am.
+- POS-25  Dung diem: so nguyen, 1 diem = 1.000d mac dinh; tong khong am.
+- POS-28  Tra tien mat DU 1 lan -> Hoan thanh: tru ton, so xuat ban, luu DonGiaVon,
+          cong diem (mac dinh 10.000d = 1 diem).
+- POS-29  Hon hop TM + QR, QR co ma GD duy nhat, tong thanh cong = phai tra.
+- POS-07  Chot ca: khong con HD nhap / TT cho.
+          Tien thuc nop = Tien cuoi - Tien dau
+          Tien mat he thong = TM thu thanh cong - hoan TM da hoan tat
+          Chenh lech = Thuc nop - He thong
+          QR/the/CK KHONG vao ket.
+
+NGOAI LE — CA
+- POS-02  Mo ca khong lich            -> chan
+- POS-03  Mo ca chua check-in         -> chan
+- POS-04  Mo ca bang lich tang cuong  -> chan
+- POS-05  Mo ca thu 2                 -> chan, ca dau van mo
+- POS-06  Tien dau am / qua 1 ty / sai dinh dang -> chan
+- POS-08  Chot con HD nhap            -> chan, chi ro ma HD
+- POS-09  Chot con TT cho xu ly       -> chan
+- POS-10  Tien cuoi < tien dau        -> chan (thuc nop am), ca van mo
+
+NGOAI LE — KHACH / GIO
+- POS-12  Thieu ten                   -> chan
+- POS-13  Trung SDT                   -> khong tao 2 khach
+- POS-15  Sua diem tu ho so           -> KHONG cho; diem chi qua ban/doi tra
+- POS-18  Ban khi khong ca mo         -> chan
+- POS-19  Them cung SP 2 lan          -> gop SL hoac chan; backend khong 2 dong
+- POS-20  SL 0 / am / thap phan       -> chan
+- POS-21  SL > ton                    -> chan, ton khong doi
+- POS-22  SP ngung hoat dong          -> khong them HD moi
+- POS-24  KM chua toi / het han / sai pham vi -> khong chon duoc
+- POS-26  Diem cho khach le / qua so du / so le -> chan, diem khong doi
+- POS-27  Huy HD da thanh toan        -> chan; chi huy duoc nhap
+
+NGOAI LE — THANH TOAN (P0 tien)
+- POS-30  QR/the/CK thieu ma GD       -> chan
+- POS-31  Trung ma GD dien tu         -> GD sau chan
+- POS-32  So tien 0 / am              -> chan
+- POS-33  Tong TT thanh cong < phai tra -> KHONG hoan tat; ton/diem/DT chua doi
+          (khong ban chiu, khong no khach)
+- POS-34  Tong TT > phai tra          -> chan, khong tao so du am
+- POS-35  Co GD that bai + GD OK du tien -> chi cong khoan thanh cong
+- POS-36  Con GD cho xu ly            -> khong hoan tat du so "co ve du"
+- POS-37  2 thu ngan tranh ton cuoi   -> lan sau chan, ton khong am, khong ghi DT nua chung
+- POS-38  Hoan tat 2 lan              -> tru ton / DT / diem CHI 1 lan
+- POS-39  Thu ngan khac hoan tat HD/ca nguoi khac -> chan
+
+
+================================================================================
+9. DOI TRA LIEN 3 ACTOR     UC26, UC21, UC08     P0-E
+================================================================================
+
+LUONG CHUAN (CSDL mau THUONG CHUA CO — phai tu tao):
+  Thu ngan lap -> Thu kho kiem tra -> Quan ly duyet
+  -> DUNG thu ngan lap phieu, co CA DANG MO, moi hoan tat.
+  Hoan/giao doi ghi vao ca DANG MO, khong mo lai ca cu, khong sua Phieu thu da doi soat.
+
+Nhanh A — Hoan tien, nhap lai kho (E2E-03 / RET-13)
+  Kho: "Dat yeu cau, duoc nhap lai kho"
+  Hoan TM: ton +, so nhap tra, ket ca -, DT thuan -, GV thuan - (tru GV hang tra).
+
+Nhanh B — Hoan tien, KHONG nhap lai (E2E-04 / RET-14)
+  Tien hoan van ghi; TON KHONG TANG; KHONG tru GV hang tra khoi GV thuan.
+
+Nhanh C — Doi NGANG GIA (E2E-05 / RET-20)
+  Tong gia hang giao doi = tong gia hang khach tra.
+  Hang tra +ton neu kho chap nhan; hang giao doi -ton; cong GV hang giao doi.
+  Khong thu/hoan chenh lech.
+
+Cong thuc lai gop (3 bao cao ca / QL / KT phai cung so):
+  DT thuan = DT HD hoan thanh - Tien hoan
+  GV thuan = GV HD - GV hang tra nhap lai + GV hang giao doi
+  Lai gop  = DT thuan - GV thuan
+
+NGOAI LE
+- RET-02  Tra tu HD chua hoan thanh           -> chan
+- RET-03  Thieu ly do / khong dong / SP ngoai HD / SL 0 am / vuot SL con tra -> chan
+- RET-06  Kho kiem sai TT / 2 lan / khong ket qua -> chan, ton khong doi
+- RET-09  QL tu choi khong ly do              -> chan
+- RET-10  Duyet sai TT / 2 lan                -> khong 2 giao dich
+- RET-11  Thu ngan khac hoan tat              -> chan; chi tac gia
+- RET-12  Tac gia khong co ca mo              -> chan
+- RET-16  Hoan dien tu thieu / trung ma       -> chan, phieu chua xong
+- RET-17  Hoan tat 2 lan                      -> khong hoan/ton/DT 2 lan
+- RET-18  Tra tiep vuot SL con lai            -> chan theo TONG da tra
+- RET-21  Doi lech DUNG 1 dong                -> KHOA nut hoan tat + backend tu choi
+          Dung: hoan hang cu roi lap HD ban moi
+- RET-22  Hang giao doi thieu ton / ngung     -> chan, hang tra chua doi
+- RET-23  Dong giao doi trung / SL le 0 am    -> chan
+- RET-08  QL tu choi CO ly do                 -> khong hoan, khong doi ton
+
+
+================================================================================
+10. KE TOAN: UC27 DOI CHIEU 3 CHUNG TU     P0-D
+================================================================================
+
+LUONG DUNG
+1. ketoan: Doi chieu hoa don -> Tiep nhan HD (dung PN da xac nhan).
+2. Luu: trang thai Cho doi chieu, CONG NO CHUA SINH.
+3. Bam Doi chieu: bang so sanh SP, SL dat/nhan/HD, 3 muc gia, thue suat,
+   tien thue luu vs tinh lai, tong hang, tong thue, tong cong.
+4. Tat ca khop + xac nhan -> 1 CongNoPhaiTra, SoTienNo = TongCong HD,
+   han = ngay sinh + SoNgayThanhToan (30-45).
+
+Cong thuc dong:
+  Tien hang = SL HD x Don gia HD
+  Tien thue = Tien hang x Thue suat / 100
+  Tong cong = Tong hang + Tong thue
+  Tong hang HD phai = Tong Phieu nhap truoc thue (chi SoLuongChapNhan)
+
+NGOAI LE — lech 1 truong la CHAN, khong sinh no
+- ACC-03  Chua danh dau xac nhan doi chieu
+- ACC-04  Lech san pham
+- ACC-05  Lech so luong
+- ACC-06  Lech don gia (PO / PN / HD)
+- ACC-07  Thue suat 8% vs 10%
+- ACC-08  Thue suat dung nhung tien thue sai   (khong du so SP-SL-gia)
+- ACC-09  Lech tong hang / tong cong
+- ACC-10  1 PN dung cho 2 HD
+- ACC-11  Trung so HD / PN khac PO hoac NCC
+- ACC-12  Doi chieu 2 lan / double click       -> dung 1 cong no
+
+
+================================================================================
+11. KE TOAN: CONG NO + PHIEU CHI     UC28, UC09     P0-D
+================================================================================
+
+LUONG DUNG (E2E-08) — CSDL mau THUONG CHUA CO Phieu chi, phai tu tao
+1. Cong no Da khop 3 ben, DA DEN HAN, chua co Phieu chi.
+2. ketoan lap Phieu chi = TOAN BO con lai, TM hoac CK, gui duyet.
+3. admin duyet: cong no CHUA GIAM.
+4. ketoan thanh toan that bai + ly do: no giu nguyen, xu ly lai tren CUNG phieu.
+5. ketoan thanh toan thanh cong + ma GD ngan hang duy nhat:
+   no = 0, Da tat toan.
+
+NGOAI LE
+- ACC-15  Chua den han                         -> chan
+- ACC-16  Tra truoc / tra 1 phan / nhieu phieu -> chan
+- ACC-17  Thieu noi dung / PTTT la             -> chan
+- ACC-18  Phieu chi thu 2 cung cong no         -> chan
+- ACC-21  Tu choi khong ly do / so tien sai    -> chan
+- ACC-24  Thieu/trung ma GD hoac xac nhan 2 lan -> khong giam no 2 lan
+- ACC-20  Tu choi CO ly do: sua/gui lai DUNG phieu cu, khong tao phieu moi
+
+
+================================================================================
+12. KE TOAN: PHIEU THU CA     UC29     P0-C
+================================================================================
+
+LUONG DUNG
+- ACC-25  Xem ca Da chot: snapshot tien dau/cuoi, TM HT, thuc nop, chenh, thu ngan.
+- ACC-26  1 ca = 1 Phieu thu; xac nhan xong doi soat xong.
+- ACC-27  Chenh = 0: khong bat ly do.
+- ACC-29  Chenh != 0 + ly do tren Phieu thu: luu duoc. Khong lap bien ban rieng.
+- ACC-32  Sau hoan TM: TM HT = TM thu OK - hoan TM xong.
+          Hoan QR/the/CK khong vao ket.
+
+NGOAI LE
+- ACC-28  Chenh != 0 THIEU ly do               -> chan
+- ACC-30  Phieu thu ca chua dong               -> chan
+- ACC-31  2 Phieu thu 1 ca                     -> chan, tong phieu khong nhan doi
+- Phieu thu KHONG ghi doanh thu lan 2 (khong +511).
+
+
+================================================================================
+13. KE TOAN: BANG LUONG     UC33     P0-B
+================================================================================
+
+LUONG DUNG
+1. Chi ChamCong Da duyet moi vao luong.
+2. ketoan chon thang -> Lap / tinh lai.
+   Mac dinh 55.000d/gio, he so dem 1,30.
+   Gio ngay * 55000 + gio dem * 55000 * 1.30.
+   Nghi trua hanh chinh khong tra.
+3. Khoa ky. Sau khoa khong tinh lai.
+4. Tra tung NV + ma GD bat buoc.
+5. Het NV da tra -> Ky Da thanh toan.
+BANG LUONG KHONG TRU VAO LAI GOP.
+
+NGOAI LE
+- PAY-02  Cong chua duyet khong vao tien
+- PAY-06  Lap lai ky Da lap: cap nhat, khong nhan doi dong NV
+- PAY-08  Tinh lai ky Da khoa / Da tra         -> chan
+- PAY-10  Tra thieu ma GD                      -> chan
+- PAY-11  Tra 1 NV 2 lan                       -> chan, tong da tra khong doi
+
+
+================================================================================
+14. BAO CAO 5 ACTOR     UC10, UC15, UC22, UC29 + man mua hang
+================================================================================
+
+LUONG DUNG — cung 1 ky (E2E-10)
+Moi man: 6 KPI -> 3 bieu do -> bang doi soat. Loc Ngay/Thang/Quy/Nam.
+CSV / PDF / man hinh CUNG so. Ky rong: empty state, khong NaN, khong so gia.
+
+Giao diem bat buoc:
+- Lai gop QL = lai gop KT (cong thuc muc 9).
+- Phieu thu / cong no / Phieu chi: KT = QL.
+- Nhap-xuat-ton: Kho = QL.
+- Gia tri mua: Mua hang = QL (khong tinh don Nhap/Tu choi).
+- DT thu ngan = so CA NHAN; tong cac thu ngan = so QL (hoa don hoan thanh trong ky).
+
+NGOAI LE / SAI PHO BIEN
+- RPT-08  Ky khong du lieu van ve so gia       -> FAIL
+- CSV lech man hinh / PDF lech CSV             -> FAIL
+- Thu ngan thay DT cua nguoi khac              -> FAIL quyen
+- Tru luong vao "lai gop"                      -> FAIL pham vi
+- Donut danh muc tu phan bo tien hoan khi chua co chi tiet dong -> FAIL (de trong, dung so gia)
+
+
+================================================================================
+15. DONG THOI / ROLLBACK     CON     P0-F
+================================================================================
+
+- CON-01  2 thu ngan tranh ton cuoi     -> 1 HD xong, ton khong am
+- CON-02  2 cua so duyet cung chung tu  -> 1 lan chuyen TT
+- CON-03  2 cua so xac nhan PN          -> ton +1 lan
+- CON-04  2 cua so hoan tat doi tra     -> hoan/ton 1 lan
+- CON-05  2 cua so UC27                 -> 1 cong no
+- CON-06  2 cua so chi cung no          -> 1 GD thanh cong, no khong am
+- CON-07  Mat ket noi giua POST         -> all-or-nothing, khong nua vung
+- CON-08  Tai lai sau POST thanh cong   -> khong nhan ban chung tu
+- CON-09  Vo hieu SP/NCC / doi ton luc cho -> buoc cuoi kiem lai, khong tin snapshot mu
+- CON-10  So lon, thue le               -> khong tran/NaN; tong dong = tong dau
+
+
+================================================================================
+16. 10 CHUOI E2E (1 MAY, 1 CSDL, DANG NHAP LAN LUOT)
+================================================================================
+
+E2E-01  De nghi -> PO -> duyet -> chuyen giao -> nhap 1 phan -> UC27 khop -> 1 cong no
+E2E-02  Lich -> check-in -> mo ca -> ban hon hop -> in HD -> chot ca -> Phieu thu -> check-out
+E2E-03  Hoan TM + nhap lai kho + doi chieu lai gop
+E2E-04  Hoan TM + KHONG nhap lai (ton khong +, GV hang tra khong tru)
+E2E-05  Doi ngang gia; sau do thu lech 1 dong phai CHAN
+E2E-06  Xuat kho: duyet chua tru ton; xac nhan moi tru; nhanh tu choi ton giu
+E2E-07  Kiem ke lech: duyet moi dieu chinh; ton doi luc cho -> chan
+E2E-08  Phieu chi: duyet chua giam no; that bai giu no; thanh cong no = 0
+E2E-09  Cham cong -> duyet -> lap luong -> khoa -> tra het NV
+E2E-10  Cung thang, 5 bao cao, giao diem muc 14
+
+Khong ghep ket qua tu 6 may / 6 database.
+
+
+================================================================================
+17. THU TU GOI Y TRONG 1 BUOI
+================================================================================
+
+Sang:
+  npm run test:next     (nen: 16 quy tac + anh + lich; FAIL thi chua test tay)
+  npm start
+  GEN + SEC + MGR anh SP (P0-A)
+
+Giua:
+  WF cong bo lich hom nay cho thungan + HANH_CHINH
+  E2E-02 (P0-C tien/ca) roi E2E-01 (P0-D ton/cong no)
+
+Chieu:
+  E2E-03, 04, 05 (P0-E doi tra — TAO du lieu dang thieu)
+  E2E-08 Phieu chi (TAO du lieu dang thieu; no phai den han)
+  E2E-09 luong (P0-B)
+  CON-01, 04, 05, 06 (P0-F)
+  E2E-10 bao cao
+
+Mau ghi 1 ca:
+  Ma ca / TK / man hinh / ma chung tu / du lieu dau / mong doi / thuc te
+  / doi chieu cheo / PASS-FAIL-BLOCKED / Critical neu sai tien-ton-no-ca-luong
+
+
+================================================================================
+18. FILE LIEN QUAN
+================================================================================
+
+Buoc day du tung ma ca:
+  HUONG_DAN_KIEM_THU_TOAN_BO_HE_THONG_SUPERMARKET_FLY.txt
+
+Lai gop + UC27 ngan:
+  HUONG_DAN_KIEM_THU_UC10_UC27_UC29.md
+
+Lich -> POS -> luong:
+  HUONG_DAN_TEST_PHAN_CA_POS_LUONG.md
+
+Test don gian 6 nguoi (chua E2E):
+  HUONG_DAN_TEST_DON_GIAN_CHO_6_NGUOI.md
+
+Phan moi so voi Word:
+  ..\CAP_NHAT_CHI_TIET_PHAN_MOI_SO_VOI_WORD_Supermarket_Fly.txt

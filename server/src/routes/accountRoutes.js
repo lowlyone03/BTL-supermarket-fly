@@ -12,6 +12,8 @@ router.post('/', accountController.createAccount);
 router.patch('/:maTK/toggle-status', accountController.toggleAccountStatus);
 router.patch('/:maTK/reset-password', accountController.resetPassword);
 router.put('/:maTK/role', accountController.updateAccountRole);
+router.get('/audit-log/filters', accountController.getAuditFilters);
+router.get('/audit-log/export', accountController.exportAuditLogs);
 router.get('/audit-log', accountController.getAuditLogs);
 
 module.exports = router;

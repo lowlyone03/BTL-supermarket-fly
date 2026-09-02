@@ -6,6 +6,40 @@ const addDays = (value, days) => {
     return isoDate(date);
 };
 
+const vietnamCalendar = (now = new Date()) => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).formatToParts(now);
+    const get = type => parts.find(part => part.type === type)?.value;
+    const year = Number(get('year'));
+    const month = get('month');
+    const day = get('day');
+    const quarter = Math.floor((Number(month) - 1) / 3) + 1;
+    return {
+        year,
+        month,
+        day,
+        quarter,
+        date: `${year}-${month}-${day}`,
+        monthPeriod: `${year}-${month}`,
+        quarterPeriod: `${year}-Q${quarter}`,
+        yearPeriod: String(year)
+    };
+};
+
+const currentPeriodDefaults = (now = new Date()) => {
+    const calendar = vietnamCalendar(now);
+    return {
+        day: calendar.date,
+        month: calendar.monthPeriod,
+        quarter: calendar.quarterPeriod,
+        year: calendar.yearPeriod
+    };
+};
+
 const assertYear = value => {
     const year = Number(value);
     if (!Number.isInteger(year) || year < 2000 || year > 2100) throw new Error('Năm báo cáo không hợp lệ.');
@@ -14,9 +48,8 @@ const assertYear = value => {
 
 const resolveReportingPeriod = (query = {}, now = new Date()) => {
     const periodType = String(query.periodType || 'month').trim().toLowerCase();
-    const currentYear = now.getFullYear();
-    const currentMonth = pad(now.getMonth() + 1);
-    const period = String(query.period || `${currentYear}-${currentMonth}`).trim();
+    const defaults = currentPeriodDefaults(now);
+    const period = String(query.period || defaults[periodType] || defaults.month).trim();
     let from;
     let toExclusive;
     let label;
@@ -60,4 +93,20 @@ const resolveReportingPeriod = (query = {}, now = new Date()) => {
     return { periodType, period, from, toExclusive, to: addDays(toExclusive, -1), label };
 };
 
-module.exports = { resolveReportingPeriod };
+const activityFromStamp = stamp => {
+    if (!stamp) return null;
+    const date = new Date(stamp);
+    if (Number.isNaN(date.getTime())) return null;
+    const year = date.getFullYear();
+    const month = pad(date.getMonth() + 1);
+    const day = pad(date.getDate());
+    const quarter = Math.floor((Number(month) - 1) / 3) + 1;
+    return {
+        day: `${year}-${month}-${day}`,
+        month: `${year}-${month}`,
+        quarter: `${year}-Q${quarter}`,
+        year: String(year)
+    };
+};
+
+module.exports = { resolveReportingPeriod, vietnamCalendar, currentPeriodDefaults, activityFromStamp };

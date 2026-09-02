@@ -42,4 +42,22 @@ assert.match(html, /Chi tiết số liệu trong kỳ/);
 assert.match(html, /In \/ Lưu PDF|BÁO CÁO QUẢN TRỊ/);
 assert.doesNotMatch(html, /undefined|NaN/);
 
-console.log('PRINT REPORT PASS: A4 có thương hiệu, KPI, SVG xu hướng và bảng chi tiết.');
+const official = window.FLY_PRINT.build({
+    variant: 'report',
+    skin: 'official',
+    title: 'BÁO CÁO HOẠT ĐỘNG CỬA HÀNG',
+    number: '2026-08',
+    documentDate: '2026-08-31',
+    fields: [{ label: 'Từ ngày', value: '2026-08-01' }],
+    columns: [{ label: 'Ngày', key: 'Ngay', format: 'date' }],
+    rows,
+    totals: [{ label: 'Doanh thu thuần', value: 5118000, format: 'money' }]
+});
+assert.match(official, /CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM/);
+assert.match(official, /Độc lập - Tự do - Hạnh phúc/);
+assert.match(official, /Hà Nội, ngày/);
+assert.match(official, /Times New Roman/);
+assert.doesNotMatch(official, /linear-gradient\(120deg,#174a37/);
+assert.doesNotMatch(official, /undefined|NaN/);
+
+console.log('PRINT REPORT PASS: A4 có thương hiệu, KPI, SVG xu hướng, bảng chi tiết và bản giấy trắng mực đen.');

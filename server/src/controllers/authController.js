@@ -1,6 +1,7 @@
 const { sql, poolPromise } = require('../config/db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { logAudit } = require('../services/auditLog');
 
 const login = async (req, res) => {
     try {
@@ -56,12 +57,13 @@ const login = async (req, res) => {
 
         // (Tùy chọn) Thêm vào bảng NhatKy nếu cần. Giả định có bảng NhatKy:
         try {
-            await pool.request()
-                .input('MaTK', sql.Int, user.MaTK)
-                .input('HanhDong', sql.NVarChar, 'Đăng nhập')
-                .query('INSERT INTO NhatKy (MaTK, HanhDong, ThoiGian) VALUES (@MaTK, @HanhDong, GETDATE())');
+            await logAudit(pool, {
+                user: { MaTK: user.MaTK }, req,
+                action: 'Đăng nhập', table: 'TaiKhoan', recordId: String(user.MaTK),
+                content: `${user.TenNV} (${user.TenVaiTro}) đăng nhập thành công.`
+            });
         } catch (err) {
-            console.log('Lỗi ghi nhật ký (Có thể bảng NhatKy chưa đúng cấu trúc):', err.message);
+            console.log('Lỗi ghi nhật ký đăng nhập:', err.message);
         }
 
         const permissionResult = await pool.request()
@@ -130,13 +132,10 @@ const changePassword = async (req, res) => {
             .query('UPDATE TaiKhoan SET MatKhauHash = @MatKhauHash WHERE MaTK = @MaTK');
 
         // Ghi nhật ký
-        await pool.request()
-            .input('MaTK_Log', sql.Int, maTK)
-            .input('HanhDong', sql.NVarChar, 'Đổi mật khẩu')
-            .input('BangLienQuan', sql.NVarChar, 'TaiKhoan')
-            .input('MaBanGhi', sql.VarChar, maTK.toString())
-            .input('NoiDung', sql.NVarChar, 'Người dùng tự đổi mật khẩu')
-            .query('INSERT INTO NhatKy (MaTK, HanhDong, BangLienQuan, MaBanGhi, NoiDung, ThoiGian) VALUES (@MaTK_Log, @HanhDong, @BangLienQuan, @MaBanGhi, @NoiDung, GETDATE())');
+        await logAudit(pool, {
+            user: req.user, req, action: 'Đổi mật khẩu', table: 'TaiKhoan', recordId: String(maTK),
+            severity: 'Cảnh báo', content: 'Người dùng tự đổi mật khẩu. Nhật ký không lưu mật khẩu.'
+        });
 
         res.json({ message: 'Đổi mật khẩu thành công!' });
     } catch (error) {

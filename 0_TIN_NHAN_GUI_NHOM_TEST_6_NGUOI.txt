@@ -3,6 +3,12 @@ KỊCH BẢN GỬI NHÓM VÀ HƯỚNG DẪN 6 NGƯỜI TEST SUPERMARKET FLY
 Bạn là người phát triển. Sáu người còn lại là người test.
 Bạn chỉ cần làm theo đúng thứ tự và sao chép các tin nhắn bên dưới.
 
+PHƯƠNG ÁN ĐÃ CHỐT:
+- Mỗi người tải một bản dự án về máy mình.
+- Mỗi người restore một bản database .bak trên máy mình.
+- Sáu database độc lập, không kết nối vào database trên máy người phát triển.
+- Test của người nào không làm thay đổi dữ liệu của người khác hoặc dữ liệu gốc của dự án.
+
 ================================================================================
 PHẦN 1 — TRƯỚC KHI NHẮN VÀO NHÓM
 ================================================================================
@@ -50,14 +56,8 @@ Chưa cần tải gì cho đến khi mình gửi tin nhắn tiếp theo.
 
 Bạn chờ cả sáu người trả lời.
 
-Nếu nhiều người không biết SQL Server/SSMS, chọn CÁCH DỄ NHẤT:
-
-- Chỉ chạy dự án trên máy của bạn.
-- Sáu người không cần tải dự án.
-- Mỗi người ngồi vào máy bạn hoặc điều khiển qua phần mềm chia sẻ màn hình.
-- Mỗi người đăng nhập tài khoản được giao và test trong 15–20 phút.
-
-Nếu cả sáu máy đã có Node.js, SQL Server Express và SSMS, tiếp tục Tin nhắn số 2.
+Bạn hỗ trợ cài các phần mềm còn thiếu trước buổi test. Khi sáu máy đã có Node.js, SQL Server Express,
+SSMS và ODBC Driver 17 thì tiếp tục Tin nhắn số 2.
 
 ================================================================================
 PHẦN 3 — TIN NHẮN SỐ 2: GỬI FILE
@@ -73,6 +73,9 @@ https://github.com/lowlyone03/BTL-supermarket-fly/archive/refs/tags/test-team-v3
 
 2. Database:
 <LINK_DATABASE>
+
+Mỗi người sẽ có một database riêng trên máy của mình. Không ai kết nối vào database trên máy
+người phát triển và dữ liệu các bạn tạo trong lúc test không ảnh hưởng lẫn nhau.
 
 Sau khi tải xong:
 - Giải nén ZIP dự án vào D:\SupermarketFlyTest.
@@ -356,3 +359,42 @@ LƯU Ý CUỐI
 Đây là vòng test đơn giản để xác nhận sáu khu vực chính dùng được. Nó chưa thay thế kiểm thử toàn bộ
 luồng mua → nhập → đối chiếu → bán → đổi trả → quyết toán. Sau khi vòng đơn giản ổn, mới tổ chức một
 buổi test liên actor trên cùng một máy/database bằng tài liệu đầy đủ.
+
+================================================================================
+PHẦN 14 — SAU VÒNG ĐƠN GIẢN, TEST NHỮNG GÌ KHÁC SO VỚI BẢN WORD
+================================================================================
+
+Hệ thống hiện tại vẫn có đúng 5 actor cũ, không thêm actor mới. Tuy nhiên phạm vi đã tăng từ
+UC01–UC29 lên UC01–UC33 và CSDL tăng từ 35 lên 45 bảng.
+
+Những phần mở rộng cần test thêm:
+
+1. Quản lý: UC30 phân ca và UC32 duyệt chấm công/lương tạm tính.
+2. Mua hàng, Thủ kho, Thu ngân, Kế toán: UC31 xem lịch và chấm công cá nhân.
+3. Kế toán: UC33 lập, khóa và thanh toán bảng lương.
+4. Quản lý tạo sản phẩm: bắt buộc có ảnh; Kho và POS phải thấy cùng ảnh.
+5. Mua hàng và Kho: chuyến giao hàng được theo dõi riêng trước khi kiểm nhận/nhập kho.
+6. Cả 5 actor: tìm kiếm tiếng Việt có dấu/không dấu và báo cáo biểu đồ/CSV/PDF.
+7. Thu ngân: chỉ mở POS sau khi có lịch đã công bố và đã check-in.
+
+Sau khi cả sáu người báo PASS vòng đơn giản, gửi tiếp nguyên file:
+
+1_TIN_NHAN_VONG_2_TEST_PHAN_KHAC_SO_VOI_WORD.txt
+
+Muốn biết vì sao phải test các mục này và actor nào chịu ảnh hưởng, đọc file:
+
+DOI_CHIEU_HE_THONG_HIEN_TAI_VOI_TAI_LIEU_GOC_2026-08-31.md
+
+Thứ tự gửi đúng:
+
+Bước 1: Gửi file 0_TIN_NHAN_GUI_NHOM_TEST_6_NGUOI.txt và chạy vòng đơn giản.
+Bước 2: Gom PASS/FAIL/BLOCKED và sửa lỗi Critical/High.
+Bước 3: Gửi file 1_TIN_NHAN_VONG_2_TEST_PHAN_KHAC_SO_VOI_WORD.txt.
+Bước 4: Mỗi người mở tài liệu full và tìm đúng mã test được giao.
+Bước 5: Người 6 chạy E2E-01 đến E2E-10 trên MỘT máy và MỘT database.
+
+Không ghép kết quả E2E từ sáu database khác nhau vì mã chứng từ và số tồn không nối tiếp nhau.
+
+Sau khi test xong, các bạn không cần gửi lại database và không cần restore về ban đầu. Nếu có một lỗi
+khó tái hiện liên quan tiền/tồn/công nợ, mình sẽ nhắn riêng để xin file backup database của đúng người
+gặp lỗi. Database trên máy người phát triển không bị thay đổi trong toàn bộ quá trình này.

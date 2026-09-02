@@ -1,4 +1,5 @@
 const { sql, poolPromise } = require('../config/db');
+const { logAudit } = require('../services/auditLog');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 const conditionValues = new Set(['Bình thường', 'Hỏng', 'Hết hạn']);
@@ -18,15 +19,8 @@ const datePrefix = prefix => {
     return `${prefix}${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
 };
 
-const writeAudit = async (transaction, user, action, recordId, content) => {
-    await new sql.Request(transaction)
-        .input('MaTK', sql.Int, user.MaTK)
-        .input('HanhDong', sql.NVarChar, action)
-        .input('MaBanGhi', sql.VarChar, recordId)
-        .input('NoiDung', sql.NVarChar, content)
-        .query(`INSERT NhatKy(MaTK,HanhDong,BangLienQuan,MaBanGhi,NoiDung,ThoiGian)
-                VALUES(@MaTK,@HanhDong,N'KiemKe',@MaBanGhi,@NoiDung,GETDATE())`);
-};
+const writeAudit = (transaction, user, action, recordId, content) =>
+    logAudit(transaction, { user, action, table: 'KiemKe', recordId, content, uc: 'UC20', severity: 'Quan trọng' });
 
 const getWarehouse = async request => {
     const result = await request.query(`SELECT TOP 1 MaKho,TenKho,DiaChi
@@ -104,7 +98,8 @@ const getCountDetail = ownerOnly => async (req, res) => {
         const lines = await pool.request()
             .input('MaKK', sql.VarChar, req.params.id)
             .input('MaKho', sql.VarChar, header.recordset[0].MaKho)
-            .query(`SELECT ct.*,sp.TenSP,sp.MaVach,sp.DonViTinh,dm.TenDM,tk.SLTon SLTonHienTai
+            .query(`SELECT ct.*,sp.TenSP,sp.MaVach,sp.DonViTinh,sp.TonKhoToiThieu,dm.TenDM,
+                           ISNULL(tk.SLTon,0) SLTonHienTai, ISNULL(tk.SLDatMua,0) SLDatMua
                     FROM ChiTietKiemKe ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
                     JOIN DanhMuc dm ON dm.MaDM=sp.MaDM
                     LEFT JOIN TonKho tk ON tk.MaKho=@MaKho AND tk.MaSP=ct.MaSP
@@ -122,24 +117,65 @@ const createCount = async (req, res) => {
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         const warehouse = await getWarehouse(new sql.Request(transaction));
         const MaKK = await generateId(transaction, 'KiemKe', 'MaKK', datePrefix('KK'));
+        const scoped = Object.prototype.hasOwnProperty.call(req.body || {}, 'products');
+        const productIds = scoped
+            ? [...new Set((Array.isArray(req.body.products) ? req.body.products : [])
+                .map(id => clean(id, 20)).filter(Boolean))]
+            : [];
+        if (scoped && !productIds.length) throw new Error('Hãy chọn ít nhất một mặt hàng để kiểm tra số lượng thực tế.');
+        const note = clean(req.body.GhiChu, 500)
+            || (scoped ? 'Kiểm tra số lượng thực tế trước khi lập đề nghị mua hàng.' : null);
         await new sql.Request(transaction)
             .input('MaKK', sql.VarChar, MaKK)
             .input('MaKho', sql.VarChar, warehouse.MaKho)
             .input('MaNV', sql.VarChar, req.user.MaNV)
-            .input('GhiChu', sql.NVarChar, clean(req.body.GhiChu, 500) || null)
+            .input('GhiChu', sql.NVarChar, note)
             .query(`INSERT KiemKe(MaKK,MaKho,MaNV,NgayKiemKe,TrangThai,GhiChu)
-                    VALUES(@MaKK,@MaKho,@MaNV,GETDATE(),N'Đang kiểm',@GhiChu);
-                    INSERT ChiTietKiemKe(MaKK,MaSP,SLHeThong,SLThucTe,ChenhLech,NguyenNhan,KetQuaDoiChieu,TinhTrangHang)
-                    SELECT @MaKK,tk.MaSP,tk.SLTon,tk.SLTon,0,NULL,N'Khớp',N'Bình thường'
-                    FROM TonKho tk JOIN SanPham sp ON sp.MaSP=tk.MaSP
-                    WHERE tk.MaKho=@MaKho AND sp.TrangThai=N'Đang bán';
-                    SELECT @@ROWCOUNT SoDong;`);
+                    VALUES(@MaKK,@MaKho,@MaNV,GETDATE(),N'Đang kiểm',@GhiChu)`);
+        if (scoped) {
+            for (const MaSP of productIds) {
+                const inserted = await new sql.Request(transaction)
+                    .input('MaKK', sql.VarChar, MaKK)
+                    .input('MaKho', sql.VarChar, warehouse.MaKho)
+                    .input('MaSP', sql.VarChar, MaSP)
+                    .query(`INSERT ChiTietKiemKe(MaKK,MaSP,SLHeThong,SLThucTe,ChenhLech,NguyenNhan,KetQuaDoiChieu,TinhTrangHang)
+                            SELECT @MaKK,sp.MaSP,ISNULL(tk.SLTon,0),ISNULL(tk.SLTon,0),0,NULL,N'Khớp',N'Bình thường'
+                            FROM SanPham sp
+                            LEFT JOIN TonKho tk ON tk.MaSP=sp.MaSP AND tk.MaKho=@MaKho
+                            WHERE sp.MaSP=@MaSP AND sp.TrangThai=N'Đang bán';
+                            SELECT @@ROWCOUNT affected;`);
+                if (!Number(inserted.recordset[0]?.affected) && !Number(inserted.rowsAffected?.[0])) {
+                    const exists = await new sql.Request(transaction)
+                        .input('MaKK', sql.VarChar, MaKK)
+                        .input('MaSP', sql.VarChar, MaSP)
+                        .query('SELECT 1 ok FROM ChiTietKiemKe WHERE MaKK=@MaKK AND MaSP=@MaSP');
+                    if (!exists.recordset.length) throw new Error(`Sản phẩm ${MaSP} không tồn tại hoặc đã ngừng bán.`);
+                }
+            }
+        } else {
+            await new sql.Request(transaction)
+                .input('MaKK', sql.VarChar, MaKK)
+                .input('MaKho', sql.VarChar, warehouse.MaKho)
+                .query(`INSERT ChiTietKiemKe(MaKK,MaSP,SLHeThong,SLThucTe,ChenhLech,NguyenNhan,KetQuaDoiChieu,TinhTrangHang)
+                        SELECT @MaKK,tk.MaSP,tk.SLTon,tk.SLTon,0,NULL,N'Khớp',N'Bình thường'
+                        FROM TonKho tk JOIN SanPham sp ON sp.MaSP=tk.MaSP
+                        WHERE tk.MaKho=@MaKho AND sp.TrangThai=N'Đang bán'`);
+        }
         const lineCount = await new sql.Request(transaction).input('MaKK', sql.VarChar, MaKK)
             .query('SELECT COUNT(*) SoDong FROM ChiTietKiemKe WHERE MaKK=@MaKK');
         if (!Number(lineCount.recordset[0].SoDong)) throw new Error('Kho chưa có sản phẩm để kiểm kê.');
-        await writeAudit(transaction, req.user, 'Tạo đợt kiểm kê', MaKK, `Chụp số tồn hệ thống của ${lineCount.recordset[0].SoDong} mặt hàng`);
+        await writeAudit(transaction, req.user, 'Tạo đợt kiểm kê', MaKK,
+            scoped
+                ? `Kiểm tra số lượng thực tế ${lineCount.recordset[0].SoDong} mặt hàng trước khi lập đề nghị`
+                : `Chụp số tồn hệ thống của ${lineCount.recordset[0].SoDong} mặt hàng`);
         await transaction.commit();
-        res.status(201).json({ message: 'Đã tạo đợt kiểm kê và lấy số tồn hệ thống.', MaKK });
+        res.status(201).json({
+            message: scoped
+                ? 'Đã lập đợt kiểm kê để kiểm tra số lượng thực tế và phẩm chất hàng.'
+                : 'Đã tạo đợt kiểm kê và lấy số tồn hệ thống.',
+            MaKK,
+            scoped: Boolean(scoped)
+        });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);

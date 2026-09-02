@@ -1,5 +1,6 @@
 const { sql, poolPromise } = require('../config/db');
 const bcrypt = require('bcrypt');
+const { logAudit, listAuditLogs, listAuditFilters } = require('../services/auditLog');
 
 // Lấy danh sách tài khoản
 const getAccounts = async (req, res) => {
@@ -82,13 +83,10 @@ const createAccount = async (req, res) => {
         const newMaTK = result.recordset[0].NewMaTK;
 
         // Ghi nhật ký
-        await pool.request()
-            .input('MaTK', sql.Int, req.user.MaTK)
-            .input('HanhDong', sql.NVarChar, 'Tạo tài khoản')
-            .input('BangLienQuan', sql.NVarChar, 'TaiKhoan')
-            .input('MaBanGhi', sql.VarChar, newMaTK.toString())
-            .input('NoiDung', sql.NVarChar, `Tạo tài khoản ${TenDangNhap} cho nhân viên ${MaNV}`)
-            .query('INSERT INTO NhatKy (MaTK, HanhDong, BangLienQuan, MaBanGhi, NoiDung, ThoiGian) VALUES (@MaTK, @HanhDong, @BangLienQuan, @MaBanGhi, @NoiDung, GETDATE())');
+        await logAudit(pool, {
+            user: req.user, req, action: 'Tạo tài khoản', table: 'TaiKhoan', recordId: String(newMaTK),
+            severity: 'Cảnh báo', content: `Tạo tài khoản ${TenDangNhap} cho nhân viên ${MaNV}. Mật khẩu không được ghi nhật ký.`
+        });
 
         res.status(201).json({ message: 'Tạo tài khoản thành công với mật khẩu mặc định là 123' });
     } catch (error) {
@@ -128,13 +126,10 @@ const toggleAccountStatus = async (req, res) => {
             .query('UPDATE TaiKhoan SET TrangThai = @TrangThai WHERE MaTK = @MaTK');
 
         // Ghi nhật ký
-        await pool.request()
-            .input('MaTK_Log', sql.Int, req.user.MaTK)
-            .input('HanhDong', sql.NVarChar, `${actionStr} tài khoản`)
-            .input('BangLienQuan', sql.NVarChar, 'TaiKhoan')
-            .input('MaBanGhi', sql.VarChar, maTK.toString())
-            .input('NoiDung', sql.NVarChar, `${actionStr} tài khoản ${username}`)
-            .query('INSERT INTO NhatKy (MaTK, HanhDong, BangLienQuan, MaBanGhi, NoiDung, ThoiGian) VALUES (@MaTK_Log, @HanhDong, @BangLienQuan, @MaBanGhi, @NoiDung, GETDATE())');
+        await logAudit(pool, {
+            user: req.user, req, action: `${actionStr} tài khoản`, table: 'TaiKhoan', recordId: String(maTK),
+            severity: 'Cảnh báo', content: `${actionStr} tài khoản ${username}`
+        });
 
         res.json({ message: `${actionStr} tài khoản thành công!` });
     } catch (error) {
@@ -166,13 +161,10 @@ const resetPassword = async (req, res) => {
             .query('UPDATE TaiKhoan SET MatKhauHash = @MatKhauHash WHERE MaTK = @MaTK');
 
         // Ghi nhật ký
-        await pool.request()
-            .input('MaTK_Log', sql.Int, req.user.MaTK)
-            .input('HanhDong', sql.NVarChar, 'Đặt lại mật khẩu')
-            .input('BangLienQuan', sql.NVarChar, 'TaiKhoan')
-            .input('MaBanGhi', sql.VarChar, maTK.toString())
-            .input('NoiDung', sql.NVarChar, `Đặt lại mật khẩu cho tài khoản ${account.recordset[0].TenDangNhap}`)
-            .query('INSERT INTO NhatKy (MaTK, HanhDong, BangLienQuan, MaBanGhi, NoiDung, ThoiGian) VALUES (@MaTK_Log, @HanhDong, @BangLienQuan, @MaBanGhi, @NoiDung, GETDATE())');
+        await logAudit(pool, {
+            user: req.user, req, action: 'Đặt lại mật khẩu', table: 'TaiKhoan', recordId: String(maTK),
+            severity: 'Cảnh báo', content: `Đặt lại mật khẩu cho tài khoản ${account.recordset[0].TenDangNhap}. Mật khẩu không được ghi nhật ký.`
+        });
 
         res.json({ message: 'Đặt lại mật khẩu thành công (mặc định: 123)' });
     } catch (error) {
@@ -245,13 +237,10 @@ const updateAccountRole = async (req, res) => {
         }
 
         // Ghi nhật ký
-        await pool.request()
-            .input('MaTK_Log', sql.Int, req.user.MaTK)
-            .input('HanhDong', sql.NVarChar, 'Đổi vai trò')
-            .input('BangLienQuan', sql.NVarChar, 'TaiKhoan')
-            .input('MaBanGhi', sql.VarChar, maTK.toString())
-            .input('NoiDung', sql.NVarChar, `Cập nhật vai trò tài khoản ID ${maTK} thành ${role.recordset[0].TenVaiTro}`)
-            .query('INSERT INTO NhatKy (MaTK, HanhDong, BangLienQuan, MaBanGhi, NoiDung, ThoiGian) VALUES (@MaTK_Log, @HanhDong, @BangLienQuan, @MaBanGhi, @NoiDung, GETDATE())');
+        await logAudit(pool, {
+            user: req.user, req, action: 'Đổi vai trò', table: 'TaiKhoan', recordId: String(maTK),
+            severity: 'Quan trọng', content: `Cập nhật vai trò tài khoản thành ${role.recordset[0].TenVaiTro}`
+        });
 
         res.json({ message: 'Cập nhật vai trò thành công!' });
     } catch (error) {
@@ -261,21 +250,51 @@ const updateAccountRole = async (req, res) => {
 };
 
 // Lấy nhật ký hệ thống
+// Lấy nhật ký hệ thống (chỉ Quản lý — đã chặn ở router)
 const getAuditLogs = async (req, res) => {
     try {
-        const pool = await poolPromise;
-        const result = await pool.request().query(`
-            SELECT nk.MaNK, nk.HanhDong, nk.BangLienQuan, nk.MaBanGhi, nk.NoiDung,
-                   nk.ThoiGian, t.TenDangNhap, n.TenNV
-            FROM NhatKy nk
-            LEFT JOIN TaiKhoan t ON nk.MaTK = t.MaTK
-            LEFT JOIN NhanVien n ON t.MaNV = n.MaNV
-            ORDER BY nk.ThoiGian DESC
-        `);
-        res.json(result.recordset);
+        const data = await listAuditLogs(req.query);
+        res.json(data);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Lỗi server' });
+        res.status(500).json({ message: error.message || 'Không thể tải nhật ký hệ thống.' });
+    }
+};
+
+const getAuditFilters = async (_req, res) => {
+    try {
+        res.json(await listAuditFilters());
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Không thể tải bộ lọc nhật ký.' });
+    }
+};
+
+const exportAuditLogs = async (req, res) => {
+    try {
+        const data = await listAuditLogs({ ...req.query, page: 1, pageSize: 500 });
+        const header = ['Thời gian', 'Người', 'Vai trò', 'Việc làm', 'Chứng từ', 'Kết quả', 'Giải thích', 'Chi tiết'];
+        const lines = [header.join(',')];
+        const csv = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
+        for (const row of data.items) {
+            lines.push([
+                row.ThoiGian ? new Date(row.ThoiGian).toISOString() : '',
+                row.TenNV || row.TenDangNhap || '',
+                row.TenVaiTro || '',
+                row.viecLam || row.HanhDong || '',
+                row.doiTuongMa || '',
+                row.ketQuaHienThi || '',
+                row.giaiThich || '',
+                row.NoiDung || ''
+            ].map(csv).join(','));
+        }
+        const body = '\uFEFF' + lines.join('\r\n');
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="nhat-ky-he-thong.csv"');
+        res.send(body);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Không thể xuất nhật ký.' });
     }
 };
 
@@ -285,5 +304,7 @@ module.exports = {
     toggleAccountStatus,
     resetPassword,
     updateAccountRole,
-    getAuditLogs
+    getAuditLogs,
+    getAuditFilters,
+    exportAuditLogs
 };
