@@ -8,6 +8,14 @@ const {
     holidayRestLine, summarize, lateWarning, mondayKey
 } = require('../services/payrollEngine');
 
+const assertAccountant = (req, res) => {
+    if (String(req.user?.TenVaiTro || '').trim() === 'Kế toán') return true;
+    res.status(403).json({
+        message: 'Chỉ Kế toán được lập, khóa và chi bảng lương. Quản lý duyệt công và duyệt phiếu chi/giao quỹ; không lập kỳ lương.'
+    });
+    return false;
+};
+
 const voucherSelect = `
     SELECT pcl.MaPhieu,pcl.MaKy,pcl.MaNV,pcl.MaBangLuong,pcl.SoTien,pcl.PhuongThuc,pcl.TrangThai,
            pcl.NoiDung,pcl.GhiChu,pcl.MaNV_Lap,pcl.NgayLap,pcl.MaNV_Duyet,pcl.NgayDuyet,pcl.LyDoTuChoi,
@@ -55,6 +63,7 @@ const insertDetail = async (transaction, maBangLuong, line) => {
 };
 
 const build = async (req, res) => {
+    if (!assertAccountant(req, res)) return;
     const month = String(req.params.month || '');
     if (!validMonth(month)) return res.status(400).json({ message: 'Kỳ lương không hợp lệ.' });
     const bounds = periodBounds(month);
@@ -218,17 +227,25 @@ const get = async (req, res) => {
         ]);
         const items = rows.recordset;
         const unpaid = items.some(item => item.TrangThai !== 'Đã thanh toán');
-        const payDate = dateKey(period.recordset[0]?.NgayTraDuKien) || bounds.paymentDate;
+        const storedPay = period.recordset[0] ? dateKey(period.recordset[0].NgayTraDuKien) : '';
+        const locked = ['Đã khóa', 'Đã thanh toán'].includes(period.recordset[0]?.TrangThai);
+        if (period.recordset[0] && !locked && storedPay !== bounds.paymentDate) {
+            await pool.request().input('MaKy', sql.VarChar, month).input('Pay', sql.Date, bounds.paymentDate)
+                .query('UPDATE KyLuong SET NgayTraDuKien=@Pay, NgayTatToan=10 WHERE MaKy=@MaKy');
+        }
+        const payDate = bounds.paymentDate;
         const warning = lateWarning(payDate, unpaid);
         const soNgayLeNghi = items.reduce((sum, item) => sum + Math.round(Number(item.PhutLe || 0) / 480), 0);
         const periodRow = period.recordset[0] ? {
             ...period.recordset[0],
             TuNgay: dateKey(period.recordset[0].TuNgay),
             DenNgay: dateKey(period.recordset[0].DenNgay),
-            NgayTraDuKien: payDate
+            NgayTraDuKien: payDate,
+            NgayTraDuKienLuu: storedPay || payDate
         } : null;
         res.json({
             period: periodRow,
+            canWrite: String(req.user?.TenVaiTro || '').trim() === 'Kế toán',
             items,
             vouchers: vouchers.recordset,
             holidays,
@@ -272,6 +289,7 @@ const getDetails = async (req, res) => {
 };
 
 const lock = async (req, res) => {
+    if (!assertAccountant(req, res)) return;
     const month = String(req.params.month || '');
     if (!validMonth(month)) return res.status(400).json({ message: 'Kỳ lương không hợp lệ.' });
     const bounds = periodBounds(month);

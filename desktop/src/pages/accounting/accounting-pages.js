@@ -75,23 +75,15 @@
     const [year, month] = String(value || '').split('-');
     return year && month ? `tháng ${month}/${year}` : String(value || '');
   };
-  const payrollPeriodPicker = value => {
-    const [selectedYearText, selectedMonthText] = String(value || '').split('-');
-    const selectedYear = Number(selectedYearText) || new Date().getFullYear();
-    const selectedMonth = Number(selectedMonthText) || new Date().getMonth() + 1;
-    const currentYear = new Date().getFullYear();
-    const years = Array.from(new Set([
-      ...Array.from({ length: 13 }, (_, index) => currentYear - 10 + index),
-      selectedYear
-    ])).sort((left, right) => left - right);
-    return `<div class="payroll-period-picker" aria-label="Chọn kỳ lương">
-      <label class="payroll-period-field"><span>Tháng</span><select id="payrollMonthSelect">${Array.from({ length: 12 }, (_, index) => {
-        const number = index + 1;
-        return `<option value="${String(number).padStart(2, '0')}" ${number === selectedMonth ? 'selected' : ''}>Tháng ${number}</option>`;
-      }).join('')}</select></label>
-      <label class="payroll-period-field"><span>Năm</span><select id="payrollYearSelect">${years.map(year => `<option value="${year}" ${year === selectedYear ? 'selected' : ''}>${year}</option>`).join('')}</select></label>
-    </div>`;
+  const payrollDayLabel = value => {
+    const match = String(value || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return match ? `${Number(match[3])}/${Number(match[2])}/${match[1]}` : (value ? fmtDate(value) : '—');
   };
+  const payrollPeriodPicker = value => `<div class="payroll-period-picker" data-keep-native aria-label="Chọn kỳ lương">
+      <label class="payroll-period-field payroll-month-field"><span>Kỳ lương</span>
+        <input type="month" id="payrollMonthInput" data-keep-native min="2020-01" max="2100-12" value="${esc(value)}">
+      </label>
+    </div>`;
   const api = async (context, path, options = {}) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 45000);
@@ -898,19 +890,79 @@
     await load();
   };
 
-  const payrollAction = item => {
+  const payrollAction = (item, canWrite) => {
+    if (!canWrite) return '<span class="payroll-muted">Chỉ Kế toán thao tác</span>';
     if (item.TrangThai === 'Đã thanh toán') return item.MaGiaoDichNganHang || item.MaGiaoDich ? esc(item.MaGiaoDichNganHang || item.MaGiaoDich) : '<span class="status-pill ok">Đã chi</span>';
     if (item.TrangThaiPhieu === 'Chờ duyệt') return '<span class="payment-voucher-wait">Chờ Quản lý giao quỹ</span>';
     if (item.TrangThaiPhieu === 'Từ chối') return `<button class="warehouse-secondary" data-resubmit-payroll="${esc(item.MaPhieu)}" data-employee="${esc(item.MaNV)}">Sửa &amp; gửi lại</button>`;
     if (['Đã duyệt', 'Thanh toán thất bại'].includes(item.TrangThaiPhieu)) {
-      return `<button class="warehouse-primary" data-pay-payroll="${esc(item.MaPhieu)}" data-method="${esc(item.PhuongThucPhieu || '')}" data-late="${item.CoChiTre ? '1' : '0'}">${item.TrangThaiPhieu === 'Thanh toán thất bại' ? 'Thực hiện lại' : 'Chi lương'}</button>`;
+      return `<button class="warehouse-primary" data-pay-payroll="${esc(item.MaPhieu)}" data-method="${esc(item.PhuongThucPhieu || '')}">${item.TrangThaiPhieu === 'Thanh toán thất bại' ? 'Thực hiện lại' : 'Chi lương'}</button>`;
     }
     if (item.TrangThai === 'Đã khóa') {
       return `<label class="payroll-method"><input type="radio" name="pay-${esc(item.MaNV)}" value="Tiền mặt"> TM</label>
         <label class="payroll-method"><input type="radio" name="pay-${esc(item.MaNV)}" value="Chuyển khoản" checked> CK</label>
         <button class="warehouse-secondary" data-create-payroll="${esc(item.MaNV)}">Lập phiếu</button>`;
     }
-    return '—';
+    return '<span class="payroll-muted">Khóa kỳ rồi mới lập phiếu</span>';
+  };
+
+  const payrollRowStatus = item => {
+    if (item.TrangThai === 'Đã thanh toán' || item.TrangThaiPhieu === 'Thanh toán thành công') {
+      return `<span class="status-pill ok">Đã thanh toán</span><small>Phiếu đã chi</small>`;
+    }
+    if (item.TrangThaiPhieu === 'Chờ duyệt') {
+      return `<span class="status-pill sent">Phiếu chờ QL</span><small>Kỳ đã khóa · chờ giao quỹ</small>`;
+    }
+    if (item.TrangThaiPhieu === 'Từ chối') {
+      return `<span class="status-pill cancelled">Phiếu bị từ chối</span><small>Sửa trên cùng phiếu</small>`;
+    }
+    if (item.TrangThaiPhieu === 'Thanh toán thất bại') {
+      return `<span class="status-pill cancelled">Chi thất bại</span><small>Thực hiện lại cùng phiếu</small>`;
+    }
+    if (item.TrangThaiPhieu === 'Đã duyệt') {
+      return `<span class="status-pill sent">QL đã giao quỹ</span><small>Kế toán chi lương</small>`;
+    }
+    if (item.TrangThai === 'Đã khóa') {
+      return `<span class="status-pill draft">Kỳ đã khóa</span><small>Chưa lập phiếu chi</small>`;
+    }
+    return `<span class="status-pill draft">Bảng chờ khóa</span><small>Kỳ chưa khóa — chưa phải phiếu</small>`;
+  };
+
+  const payrollNextStep = (data, dueLabel) => {
+    const status = data.period?.TrangThai || '';
+    const items = data.items || [];
+    const vouchers = data.vouchers || [];
+    const warn = data.warning || {};
+    if (!status) {
+      return { title: 'Bước tiếp theo: lập bảng lương', text: 'Kế toán bấm “Lập / tính lại”. Quản lý không lập kỳ. Cần duyệt hết chấm công chờ và đủ lịch lễ năm.' };
+    }
+    if (status === 'Kế toán đã lập') {
+      return { title: 'Bước tiếp theo: khóa kỳ lương', text: 'Kiểm tra giờ công và lương ngày lễ, rồi bấm “Khóa kỳ lương” (chỉ Kế toán). Sau khóa không tính lại.' };
+    }
+    if (status === 'Đã khóa') {
+      const missing = items.filter(item => item.TrangThai === 'Đã khóa' && !item.MaPhieu).length;
+      if (missing) {
+        return { title: 'Bước tiếp theo: lập phiếu chi', text: `Kỳ đã khóa. Lập phiếu cho ${missing} nhân viên còn thiếu — mỗi người một kênh Tiền mặt hoặc Chuyển khoản, không tách hai kênh.` };
+      }
+      const waitingQl = vouchers.filter(item => item.TrangThai === 'Chờ duyệt').length;
+      if (waitingQl) {
+        return { title: 'Bước tiếp theo: chờ Quản lý giao quỹ', text: `${waitingQl} phiếu đang chờ duyệt. Kế toán chưa chi. Quản lý mở Trung tâm phê duyệt → Phiếu chi lương.` };
+      }
+      const waitingPay = vouchers.filter(item => ['Đã duyệt', 'Thanh toán thất bại'].includes(item.TrangThai)).length;
+      if (waitingPay) {
+        return { title: 'Bước tiếp theo: Kế toán chi lương', text: `Quản lý đã giao quỹ. Chi ${waitingPay} phiếu. CK bắt buộc mã giao dịch. Thất bại thì làm lại trên cùng phiếu.` };
+      }
+    }
+    if (status === 'Đã thanh toán') {
+      return { title: 'Kỳ đã thanh toán', text: `Tất toán dự kiến ${dueLabel}. Không trừ lãi gộp, không BHXH.` };
+    }
+    if (warn.late) {
+      return { title: 'Chi trễ sau mùng 10', text: `Hạn ${dueLabel}. Vẫn chi được; bắt buộc ghi lý do chi trễ.` };
+    }
+    if (warn.warn) {
+      return { title: 'Sắp đến hạn tất toán mùng 10', text: `Hạn ${dueLabel}. Cảnh báo từ ngày 8. Lập phiếu → QL giao quỹ → Kế toán chi.` };
+    }
+    return { title: 'Bảng lương tháng', text: `Tất toán dự kiến ${dueLabel}.` };
   };
 
   const payrollDetailModal = async (context, month, maNV) => {
@@ -959,45 +1011,58 @@
   };
 
   const initPayroll = async (root, context) => {
+    const canWrite = String(context.user?.TenVaiTro || '').trim() === 'Kế toán';
     let month = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
-    const load = async () => {
-      try {
-        const data = await api(context, `/accounting/payroll/${month}`);
-        const due = data.summary?.NgayTraDuKien || data.period?.NgayTraDuKien;
-        const warn = data.warning || {};
-        const banner = warn.late
-          ? `<div class="approval-center-note"><strong>Chi trễ sau mùng 10 (${fmtDate(due)}).</strong><span>Vẫn được chi; bắt buộc ghi lý do chi trễ. Không phạt, không BHXH.</span></div>`
-          : warn.warn
-            ? `<div class="approval-center-note"><strong>Sắp đến hạn tất toán ${fmtDate(due)}.</strong><span>Cảnh báo từ ngày 8. Lập phiếu → Quản lý duyệt quỹ → Kế toán chi.</span></div>`
-            : '';
-        root.innerHTML = `${heading('KẾ TOÁN / LƯƠNG', `Bảng lương ${payrollPeriodLabel(month)}`, 'Công đã duyệt + hệ số BLLĐ (150/200/300/330/390) + 8 giờ nghỉ lễ hưởng lương. Tất toán mùng 10 tháng sau. Không BHXH, không trừ lãi gộp.')}
-          ${banner}
-          <article class="warehouse-table-card"><div class="warehouse-toolbar">${payrollPeriodPicker(month)}<div class="warehouse-toolbar-actions"><button class="warehouse-secondary" id="buildPayroll">Lập / tính lại</button><button class="warehouse-primary" id="lockPayroll" ${data.period?.TrangThai === 'Kế toán đã lập' ? '' : 'disabled'}>Khóa kỳ lương</button><button class="warehouse-primary" id="batchPayrollVouchers" ${data.period?.TrangThai === 'Đã khóa' ? '' : 'disabled'}>Lập phiếu chi hàng loạt</button></div></div>
-          <div class="warehouse-panel-title"><div><p>TRẠNG THÁI KỲ</p><h2>${esc(data.period?.TrangThai || 'Chưa lập')}</h2><small>Ngày tất toán dự kiến: ${fmtDate(due)} · ${data.summary?.SoNgayLe || 0} ngày lễ trong kỳ · lương ngày lễ ${money(data.summary?.TongLuongNgayLe)}</small></div><span class="status-pill ${data.period?.TrangThai === 'Đã thanh toán' ? 'ok' : 'sent'}">${data.items.length} nhân viên</span></div>
-          <div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NHÂN VIÊN</th><th>GIỜ NGÀY</th><th>GIỜ ĐÊM</th><th>LƯƠNG NGÀY LỄ</th><th>TĂNG CA</th><th>TỔNG LƯƠNG</th><th>KÊNH / PHIẾU</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><button class="warehouse-link" data-payroll-detail="${esc(item.MaNV)}"><strong>${esc(item.TenNV)}</strong></button><small>${esc(item.MaNV)}</small></td><td class="num">${(item.PhutNgay / 60).toFixed(2)}</td><td class="num">${(item.PhutDem / 60).toFixed(2)}</td><td class="num">${money(item.LuongNgayLe)}</td><td class="num">${money(item.LuongTangCa)}</td><td class="num"><strong>${money(item.TongLuong)}</strong></td><td>${item.MaPhieu ? `<strong>${esc(item.MaPhieu)}</strong><small>${esc(item.PhuongThucPhieu || item.PhuongThucChi || '')}</small>` : 'Chưa lập phiếu'}</td><td><span class="status-pill ${item.TrangThai === 'Đã thanh toán' ? 'ok' : item.TrangThaiPhieu === 'Từ chối' || item.TrangThaiPhieu === 'Thanh toán thất bại' ? 'cancelled' : 'draft'}">${esc(item.TrangThaiPhieu || item.TrangThai)}</span></td><td>${payrollAction(item)}</td></tr>`).join('') : '<tr><td colspan="9" class="warehouse-empty">Chưa có bảng lương. Duyệt hết công chờ, khai báo đủ Tết âm / Giỗ Tổ, rồi chọn “Lập / tính lại”.</td></tr>'}</tbody></table></div></article>`;
-        const changePeriod = () => {
-          month = `${root.querySelector('#payrollYearSelect').value}-${root.querySelector('#payrollMonthSelect').value}`;
-          load();
-        };
-        root.querySelector('#payrollMonthSelect').addEventListener('change', changePeriod);
-        root.querySelector('#payrollYearSelect').addEventListener('change', changePeriod);
-        root.querySelector('#buildPayroll').addEventListener('click', async () => {
+    let loadSeq = 0;
+    let latest = { items: [], warning: {}, period: null };
+
+    const ensureShell = () => {
+      if (root.dataset.payrollShell === '1') return;
+      root.dataset.payrollShell = '1';
+      root.innerHTML = `${heading('KẾ TOÁN / LƯƠNG', `Bảng lương ${payrollPeriodLabel(month)}`, 'Công đã duyệt · hệ số BLLĐ (150/200/300/330/390) · 8 giờ nghỉ lễ hưởng lương. Tất toán mùng 10 tháng sau. Không BHXH, không trừ lãi gộp.')}
+        <p class="payroll-role-help">Kế toán lập và khóa bảng lương. Quản lý không lập kỳ — sau khi khóa, Kế toán lập phiếu chi rồi Quản lý duyệt và giao quỹ. Kế toán mới chi lương cho nhân viên.</p>
+        <div id="payrollStepBanner"></div>
+        <article class="warehouse-table-card"><div class="warehouse-toolbar">${payrollPeriodPicker(month)}<div class="warehouse-toolbar-actions" id="payrollToolbarActions"></div></div>
+        <div id="payrollPeriodStatus"></div>
+        <div class="warehouse-table-wrap"><table class="warehouse-table payroll-table"><thead><tr>
+          <th>Nhân viên<small>Bấm hàng để xem hệ số</small></th>
+          <th title="Giờ làm trong ca, ban ngày (không gồm 8 giờ nghỉ lễ)">Giờ ngày<small>Trong ca</small></th>
+          <th title="Giờ làm 22h–6h, hệ số 130% ngày thường">Giờ đêm<small>22h–6h</small></th>
+          <th title="Mỗi ngày lễ trong kỳ: 8 × lương giờ, kể cả không đi làm">Lương ngày lễ<small>8 giờ/ngày lễ</small></th>
+          <th title="Giờ ngoài ca đã được Quản lý duyệt">Tăng ca<small>QL đã duyệt</small></th>
+          <th>Tổng lương</th>
+          <th title="Mỗi nhân viên / kỳ chỉ một kênh: tiền mặt hoặc chuyển khoản">Kênh / phiếu<small>TM hoặc CK</small></th>
+          <th title="Trạng thái kỳ khác trạng thái phiếu chi từng người">Trạng thái<small>Kỳ vs phiếu</small></th>
+          <th>Thao tác</th>
+        </tr></thead><tbody id="payrollTableBody"><tr><td colspan="9" class="warehouse-empty">Đang tải bảng lương...</td></tr></tbody></table></div></article>`;
+      const title = root.querySelector('.warehouse-heading h1');
+      if (title) title.id = 'payrollPageTitle';
+      root.querySelector('#payrollMonthInput').addEventListener('change', event => {
+        const next = event.currentTarget.value;
+        if (!/^\d{4}-\d{2}$/.test(next) || next === month) return;
+        month = next;
+        load();
+      });
+      root.addEventListener('click', async event => {
+        const build = event.target.closest('#buildPayroll');
+        if (build) {
+          if (!canWrite) return context.showToast('Chỉ Kế toán được lập / tính lại bảng lương.', 'error');
           try { const result = await api(context, `/accounting/payroll/${month}/build`, { method: 'POST' }); context.showToast(result.message, 'success'); await load(); }
           catch (error) { context.showToast(error.message, 'error'); }
-        });
-        root.querySelector('#lockPayroll').addEventListener('click', async () => {
+          return;
+        }
+        const lock = event.target.closest('#lockPayroll');
+        if (lock) {
+          if (!canWrite) return context.showToast('Chỉ Kế toán được khóa kỳ lương.', 'error');
           if (!window.confirm(`Khóa kỳ lương ${month}? Sau khi khóa không tính lại; lịch lễ các ngày trong kỳ bị khóa.`)) return;
           try { const result = await api(context, `/accounting/payroll/${month}/lock`, { method: 'POST' }); context.showToast(result.message, 'success'); await load(); }
           catch (error) { context.showToast(error.message, 'error'); }
-        });
-        const createFor = async (maNV, method) => {
-          const result = await api(context, `/accounting/payroll/${month}/payment-vouchers`, {
-            method: 'POST', body: JSON.stringify({ items: [{ MaNV: maNV, PhuongThuc: method }] })
-          });
-          context.showToast(result.message, 'success'); await load();
-        };
-        root.querySelector('#batchPayrollVouchers').addEventListener('click', async () => {
-          const pending = data.items.filter(item => item.TrangThai === 'Đã khóa' && !item.MaPhieu);
+          return;
+        }
+        const batch = event.target.closest('#batchPayrollVouchers');
+        if (batch) {
+          if (!canWrite) return context.showToast('Chỉ Kế toán được lập phiếu chi lương.', 'error');
+          const pending = (latest.items || []).filter(item => item.TrangThai === 'Đã khóa' && !item.MaPhieu);
           if (!pending.length) return context.showToast('Không còn nhân viên khóa chưa có phiếu.', 'error');
           const method = window.prompt('Phương thức hàng loạt cho mọi người chưa có phiếu: nhập "Tiền mặt" hoặc "Chuyển khoản"', 'Chuyển khoản');
           if (!method || !['Tiền mặt', 'Chuyển khoản'].includes(method.trim())) return;
@@ -1007,31 +1072,93 @@
             });
             context.showToast(result.message, 'success'); await load();
           } catch (error) { context.showToast(error.message, 'error'); }
-        });
-        root.querySelectorAll('[data-create-payroll]').forEach(button => button.addEventListener('click', async () => {
-          const method = root.querySelector(`input[name="pay-${button.dataset.createPayroll}"]:checked`)?.value;
+          return;
+        }
+        const create = event.target.closest('[data-create-payroll]');
+        if (create) {
+          const method = root.querySelector(`input[name="pay-${create.dataset.createPayroll}"]:checked`)?.value;
           if (!method) return context.showToast('Chọn Tiền mặt hoặc Chuyển khoản. Không tách hai kênh.', 'error');
-          try { await createFor(button.dataset.createPayroll, method); }
-          catch (error) { context.showToast(error.message, 'error'); }
-        }));
-        root.querySelectorAll('[data-resubmit-payroll]').forEach(button => button.addEventListener('click', async () => {
+          try {
+            const result = await api(context, `/accounting/payroll/${month}/payment-vouchers`, {
+              method: 'POST', body: JSON.stringify({ items: [{ MaNV: create.dataset.createPayroll, PhuongThuc: method }] })
+            });
+            context.showToast(result.message, 'success'); await load();
+          } catch (error) { context.showToast(error.message, 'error'); }
+          return;
+        }
+        const resubmit = event.target.closest('[data-resubmit-payroll]');
+        if (resubmit) {
           const method = window.prompt('Phương thức gửi lại (Tiền mặt hoặc Chuyển khoản):', 'Chuyển khoản');
           if (!method || !['Tiền mặt', 'Chuyển khoản'].includes(method.trim())) return;
           try {
-            const result = await api(context, `/accounting/payroll-vouchers/${button.dataset.resubmitPayroll}/resubmit`, {
+            const result = await api(context, `/accounting/payroll-vouchers/${resubmit.dataset.resubmitPayroll}/resubmit`, {
               method: 'POST', body: JSON.stringify({ PhuongThuc: method.trim() })
             });
             context.showToast(result.message, 'success'); await load();
           } catch (error) { context.showToast(error.message, 'error'); }
-        }));
-        root.querySelectorAll('[data-payroll-detail]').forEach(button => button.addEventListener('click', () => {
-          payrollDetailModal(context, month, button.dataset.payrollDetail);
-        }));
-        root.querySelectorAll('[data-pay-payroll]').forEach(button => button.addEventListener('click', () => {
-          payrollPayModal(context, button.dataset.payPayroll, button.dataset.method, load, Boolean(warn.late || warn.warn));
-        }));
+          return;
+        }
+        const pay = event.target.closest('[data-pay-payroll]');
+        if (pay) {
+          const warn = latest.warning || {};
+          return payrollPayModal(context, pay.dataset.payPayroll, pay.dataset.method, load, Boolean(warn.late || warn.warn));
+        }
+        if (event.target.closest('button, input, label, select, textarea, a')) return;
+        const row = event.target.closest('tr[data-employee]');
+        const detail = event.target.closest('[data-payroll-detail]');
+        const maNV = detail?.dataset.payrollDetail || row?.dataset.employee;
+        if (maNV) payrollDetailModal(context, month, maNV);
+      });
+    };
+
+    const load = async () => {
+      const seq = ++loadSeq;
+      try {
+        ensureShell();
+        const title = root.querySelector('#payrollPageTitle');
+        if (title) title.textContent = `Bảng lương ${payrollPeriodLabel(month)}`;
+        const monthInput = root.querySelector('#payrollMonthInput');
+        if (monthInput && monthInput.value !== month) monthInput.value = month;
+        const data = await api(context, `/accounting/payroll/${month}`);
+        if (seq !== loadSeq) return;
+        latest = data;
+        const due = data.summary?.NgayTraDuKien || data.period?.NgayTraDuKien;
+        const dueLabel = payrollDayLabel(due);
+        const write = canWrite && data.canWrite !== false;
+        const step = payrollNextStep(data, dueLabel);
+        const warn = data.warning || {};
+        root.querySelector('#payrollStepBanner').innerHTML = `<div class="approval-center-note payroll-next-step"><strong>${esc(step.title)}</strong><span>${esc(step.text)}${warn.late ? ` Chi sau ${dueLabel} phải ghi lý do trễ.` : warn.warn ? ` Cảnh báo từ ngày 8.` : ''}</span></div>`;
+        const actions = root.querySelector('#payrollToolbarActions');
+        if (!write) {
+          actions.innerHTML = '<span class="payroll-muted">Chỉ Kế toán được lập / khóa kỳ. Quản lý duyệt công và giao quỹ trên phiếu chi lương.</span>';
+        } else {
+          const periodStatus = data.period?.TrangThai || '';
+          const canBuild = periodStatus !== 'Đã khóa' && periodStatus !== 'Đã thanh toán';
+          const canLock = periodStatus === 'Kế toán đã lập';
+          const canVoucher = periodStatus === 'Đã khóa';
+          actions.innerHTML = `<button class="warehouse-secondary" id="buildPayroll" ${canBuild ? '' : 'disabled'} title="Chỉ kế toán">Lập / tính lại · chỉ kế toán</button>
+            <button class="warehouse-primary" id="lockPayroll" ${canLock ? '' : 'disabled'} title="Chỉ kế toán">Khóa kỳ lương · chỉ kế toán</button>
+            <button class="warehouse-primary" id="batchPayrollVouchers" ${canVoucher ? '' : 'disabled'} title="Chỉ kế toán">Lập phiếu chi hàng loạt</button>`;
+        }
+        const periodStatus = data.period?.TrangThai || 'Chưa lập';
+        root.querySelector('#payrollPeriodStatus').innerHTML = `<div class="warehouse-panel-title"><div><p>TRẠNG THÁI KỲ (cả bảng)</p><h2>${esc(periodStatus)}</h2><small>Ngày tất toán dự kiến: ${dueLabel} (mùng 10 tháng sau) · ${data.summary?.SoNgayLe || 0} ngày lễ · lương lễ ${money(data.summary?.TongLuongNgayLe)}</small></div><span class="status-pill ${periodStatus === 'Đã thanh toán' ? 'ok' : 'sent'}">${data.items.length} nhân viên</span></div>`;
+        const body = root.querySelector('#payrollTableBody');
+        body.innerHTML = data.items.length
+          ? data.items.map(item => `<tr data-employee="${esc(item.MaNV)}"><td><button class="warehouse-link" data-payroll-detail="${esc(item.MaNV)}"><strong>${esc(item.TenNV)}</strong></button><small>${esc(item.MaNV)}</small></td><td class="num">${(item.PhutNgay / 60).toFixed(2)}</td><td class="num">${(item.PhutDem / 60).toFixed(2)}</td><td class="num">${money(item.LuongNgayLe)}</td><td class="num">${money(item.LuongTangCa)}</td><td class="num"><strong>${money(item.TongLuong)}</strong></td><td>${item.MaPhieu ? `<strong>${esc(item.MaPhieu)}</strong><small>${esc(item.PhuongThucPhieu || item.PhuongThucChi || '')}</small>` : 'Chưa lập phiếu'}</td><td>${payrollRowStatus(item)}</td><td>${payrollAction(item, write)}</td></tr>`).join('')
+          : '<tr><td colspan="9" class="warehouse-empty">Chưa có bảng lương. Duyệt hết công chờ, khai báo đủ Tết âm / Giỗ Tổ, rồi chọn “Lập / tính lại”.</td></tr>';
       } catch (error) {
-        root.innerHTML = `<div class="welcome-card"><h2>Không thể tải bảng lương</h2><p>${esc(error.message)}</p></div>`;
+        if (seq !== loadSeq) return;
+        try { ensureShell(); } catch { /* ignore */ }
+        const banner = root.querySelector('#payrollStepBanner');
+        const message = error.message || 'Không thể tải bảng lương.';
+        const denied = /quyền/i.test(message);
+        if (banner) {
+          banner.innerHTML = `<div class="approval-center-note"><strong>${denied ? 'Không đủ quyền' : 'Không tải được kỳ này'}</strong><span>${esc(message)} Chỉ Kế toán lập và khóa kỳ. Quản lý duyệt công và giao quỹ.</span></div>`;
+          const body = root.querySelector('#payrollTableBody');
+          if (body) body.innerHTML = `<tr><td colspan="9" class="warehouse-empty">${esc(message)}</td></tr>`;
+        } else {
+          root.innerHTML = `<div class="welcome-card"><h2>${denied ? 'Không đủ quyền xem bảng lương' : 'Không thể tải bảng lương'}</h2><p>${esc(message)}</p><p>Chỉ Kế toán (UC33) lập và khóa kỳ. Quản lý duyệt công và duyệt phiếu chi/giao quỹ.</p></div>`;
+        }
       }
     };
     await load();

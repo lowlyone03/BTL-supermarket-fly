@@ -5,7 +5,8 @@ const payroll = require('../controllers/payrollController');
 const payrollVoucher = require('../controllers/payrollVoucherController');
 const paymentVoucher = require('../controllers/paymentVoucherController');
 const reportController = require('../controllers/reportController');
-const { verifyToken, requirePermission } = require('../middlewares/authMiddleware');
+const { verifyToken, requireRole, requirePermission } = require('../middlewares/authMiddleware');
+const accountantPayroll = [requireRole('Kế toán'), requirePermission('UC33')];
 
 const router = express.Router();
 router.use(verifyToken);
@@ -28,13 +29,13 @@ router.get('/shift-settlements/:id', requirePermission('UC29'), settlement.getSh
 router.post('/shift-settlements/:id/receipt', requirePermission('UC29'), settlement.createReceipt);
 router.post('/shift-receipts/:id/confirm', requirePermission('UC29'), settlement.confirmReceipt);
 router.get('/reports/financial-summary', requirePermission('UC29'), reportController.getFinancialReport);
-router.get('/payroll/:month', requirePermission('UC33'), payroll.get);
-router.post('/payroll/:month/build', requirePermission('UC33'), payroll.build);
-router.post('/payroll/:month/lock', requirePermission('UC33'), payroll.lock);
-router.post('/payroll/:month/payment-vouchers', requirePermission('UC33'), payrollVoucher.createVouchers);
-router.get('/payroll/:month/:employee/details', requirePermission('UC33'), payroll.getDetails);
-router.post('/payroll/:month/:employee/pay', requirePermission('UC33'), payroll.pay);
-router.post('/payroll-vouchers/:id/resubmit', requirePermission('UC33'), payrollVoucher.resubmitVoucher);
-router.post('/payroll-vouchers/:id/pay', requirePermission('UC33'), payrollVoucher.payVoucher);
+router.get('/payroll/:month', accountantPayroll, payroll.get);
+router.post('/payroll/:month/build', accountantPayroll, payroll.build);
+router.post('/payroll/:month/lock', accountantPayroll, payroll.lock);
+router.post('/payroll/:month/payment-vouchers', accountantPayroll, payrollVoucher.createVouchers);
+router.get('/payroll/:month/:employee/details', accountantPayroll, payroll.getDetails);
+router.post('/payroll/:month/:employee/pay', accountantPayroll, payroll.pay);
+router.post('/payroll-vouchers/:id/resubmit', accountantPayroll, payrollVoucher.resubmitVoucher);
+router.post('/payroll-vouchers/:id/pay', accountantPayroll, payrollVoucher.payVoucher);
 
 module.exports = router;

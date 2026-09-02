@@ -24,23 +24,11 @@
     const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`;
   };
-  const payrollPeriodPicker = value => {
-    const [selectedYearText, selectedMonthText] = String(value || '').split('-');
-    const selectedYear = Number(selectedYearText) || new Date().getFullYear();
-    const selectedMonth = Number(selectedMonthText) || new Date().getMonth() + 1;
-    const currentYear = new Date().getFullYear();
-    const years = Array.from(new Set([
-      ...Array.from({ length: 13 }, (_, index) => currentYear - 10 + index),
-      selectedYear
-    ])).sort((left, right) => left - right);
-    return `<div class="payroll-period-picker" aria-label="Chọn tháng tạm tính lương">
-      <label class="payroll-period-field"><span>Tháng</span><select id="workforcePayrollMonth">${Array.from({ length: 12 }, (_, index) => {
-        const number = index + 1;
-        return `<option value="${String(number).padStart(2, '0')}" ${number === selectedMonth ? 'selected' : ''}>Tháng ${number}</option>`;
-      }).join('')}</select></label>
-      <label class="payroll-period-field"><span>Năm</span><select id="workforcePayrollYear">${years.map(year => `<option value="${year}" ${year === selectedYear ? 'selected' : ''}>${year}</option>`).join('')}</select></label>
+  const payrollPeriodPicker = value => `<div class="payroll-period-picker workforce-payroll-filter" data-keep-native aria-label="Chọn tháng tạm tính lương">
+      <label class="payroll-period-field payroll-month-field"><span>Tháng tạm tính</span>
+        <input type="month" id="workforcePayrollMonth" data-keep-native min="2020-01" max="2100-12" value="${esc(value)}">
+      </label>
     </div>`;
-  };
   const addDays = (date, count) => { const value = new Date(date); value.setDate(value.getDate() + count); return value; };
   const mondayOf = date => { const value = new Date(date); const offset = (value.getDay() + 6) % 7; return addDays(value, -offset); };
   const shortDate = value => new Intl.DateTimeFormat('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' }).format(new Date(`${value}T00:00:00`));
@@ -279,7 +267,7 @@
           openEditModal(context, setup, employee, button.dataset.day, byEmployeeDay.get(`${employee.MaNV}|${button.dataset.day}`), load);
         }));
         root.querySelector('#loadPayroll').addEventListener('click', async () => {
-          payrollMonth = `${root.querySelector('#workforcePayrollYear').value}-${root.querySelector('#workforcePayrollMonth').value}`;
+          payrollMonth = root.querySelector('#workforcePayrollMonth').value;
           await loadPayroll();
         });
         await loadPayroll();

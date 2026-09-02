@@ -76,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const enhanceSelect = select => {
     if (!(select instanceof HTMLSelectElement) || select.dataset.uiEnhanced === 'true') return;
-    if (select.closest('.cashier-payment-modal') || select.closest('.fly-vi-date')) return;
+    if (select.closest('.cashier-payment-modal') || select.closest('.fly-vi-date') || select.closest('[data-keep-native]') || select.closest('.payroll-period-picker') || select.closest('.accounting-payroll') || select.closest('.workforce-payroll-filter')) return;
     select.dataset.uiEnhanced = 'true';
     const wrapper = document.createElement('div');
     wrapper.className = 'custom-select-control';
@@ -198,6 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
   );
   const pageContext = () => ({
     token,
+    user,
     apiBase: API_BASE,
     showToast: window.showToast,
     navigate: nextTarget => {

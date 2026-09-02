@@ -19,6 +19,9 @@ const loadVoucher = async (connection, id) => {
 };
 
 const createVouchers = async (req, res) => {
+    if (String(req.user?.TenVaiTro || '').trim() !== 'Kế toán') {
+        return res.status(403).json({ message: 'Chỉ Kế toán được lập Phiếu chi lương.' });
+    }
     const month = String(req.params.month || '');
     if (!validMonth(month)) return res.status(400).json({ message: 'Kỳ lương không hợp lệ.' });
     const items = Array.isArray(req.body.items) ? req.body.items : [];
@@ -81,6 +84,9 @@ const createVouchers = async (req, res) => {
 };
 
 const resubmitVoucher = async (req, res) => {
+    if (String(req.user?.TenVaiTro || '').trim() !== 'Kế toán') {
+        return res.status(403).json({ message: 'Chỉ Kế toán được gửi lại Phiếu chi lương.' });
+    }
     const maPhieu = clean(req.params.id, 30);
     const method = clean(req.body.PhuongThuc, 30);
     const note = clean(req.body.GhiChu, 500);
@@ -118,6 +124,9 @@ const resubmitVoucher = async (req, res) => {
 };
 
 const payVoucher = async (req, res) => {
+    if (String(req.user?.TenVaiTro || '').trim() !== 'Kế toán') {
+        return res.status(403).json({ message: 'Chỉ Kế toán được chi lương sau khi Quản lý đã giao quỹ.' });
+    }
     const maPhieu = clean(req.params.id, 30);
     if (typeof req.body.ThanhCong !== 'boolean') {
         return res.status(400).json({ message: 'Phải ghi nhận rõ kết quả chi lương thành công hoặc thất bại.' });
