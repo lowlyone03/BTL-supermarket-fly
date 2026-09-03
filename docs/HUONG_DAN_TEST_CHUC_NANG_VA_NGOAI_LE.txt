@@ -547,4 +547,4 @@ Test don gian 6 nguoi (chua E2E):
   HUONG_DAN_TEST_DON_GIAN_CHO_6_NGUOI.md
 
 Phan moi so voi Word:
-  ..\CAP_NHAT_CHI_TIET_PHAN_MOI_SO_VOI_WORD_Supermarket_Fly.txt
+  ..\..\TaiLieu_Du_An\01_Yeu_Cau_Nghiep_Vu\CAP_NHAT_CHI_TIET_PHAN_MOI_SO_VOI_WORD_Supermarket_Fly.txt

@@ -1,4 +1,5 @@
 KỊCH BẢN GỬI NHÓM VÀ HƯỚNG DẪN 6 NGƯỜI TEST SUPERMARKET FLY
+(File này và các hướng dẫn test khác nằm trong thư mục docs/)
 
 Bạn là người phát triển. Sáu người còn lại là người test.
 Bạn chỉ cần làm theo đúng thứ tự và sao chép các tin nhắn bên dưới.

@@ -76,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const enhanceSelect = select => {
     if (!(select instanceof HTMLSelectElement) || select.dataset.uiEnhanced === 'true') return;
-    if (select.closest('.cashier-payment-modal') || select.closest('.fly-vi-date') || select.closest('[data-keep-native]') || select.closest('.payroll-period-picker') || select.closest('.accounting-payroll') || select.closest('.workforce-payroll-filter')) return;
+    if (select.closest('.cashier-payment-modal') || select.closest('.fly-vi-date') || select.closest('[data-keep-native]') || select.closest('.payroll-period-picker') || select.closest('.accounting-payroll') || select.closest('.workforce-payroll-filter') || select.closest('.manager-holidays') || select.closest('.accounting-history') || select.closest('.payroll-fund-queue') || select.closest('.financial-report-filter') || select.closest('.store-pnl-filter')) return;
     select.dataset.uiEnhanced = 'true';
     const wrapper = document.createElement('div');
     wrapper.className = 'custom-select-control';

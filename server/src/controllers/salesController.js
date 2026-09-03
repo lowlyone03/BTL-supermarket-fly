@@ -1,6 +1,7 @@
 const { sql, poolPromise } = require('../config/db');
 const { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS } = require('../services/invoiceReturnSql');
 const { logAudit } = require('../services/auditLog');
+const { assertCashierDuty, CashierDutyError } = require('../services/cashierDuty');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 const POINT_EARN_UNIT = Math.max(1, Number(process.env.POINT_EARN_UNIT || 10000));
@@ -15,12 +16,19 @@ const generateId = async (transaction, table, column, prefix) => {
     return `${prefix}${String(last ? Number(last.slice(prefix.length)) + 1 : 1).padStart(4, '0')}`;
 };
 
-const getActiveShift = async (request, maNV, lock = false) => {
+const getActiveShift = async (connection, maNV, lock = false) => {
+    const { shift } = await assertCashierDuty(connection, maNV, 'sell');
+    const request = new sql.Request(connection);
     const result = await request.input('MaNV', sql.VarChar, maNV).query(`
         SELECT TOP 1 ca.MaCa,ca.MaNV,ca.MaQuay,ca.ThoiGianBatDau
         FROM CaLamViec ca ${lock ? 'WITH (UPDLOCK,HOLDLOCK)' : ''}
         WHERE ca.MaNV=@MaNV AND ca.TrangThai=N'Đang mở' AND ca.ThoiGianKetThuc IS NULL`);
-    if (!result.recordset.length) throw new Error('Bạn phải mở ca bán hàng trước khi sử dụng POS.');
+    if (!result.recordset.length) {
+        throw new CashierDutyError('Bạn phải mở ca bán hàng trong khung giờ ca đã công bố trước khi sử dụng POS.', 403);
+    }
+    if (shift && result.recordset[0].MaCa !== shift.MaCa) {
+        throw new CashierDutyError('Ca POS đang mở không khớp lịch đã công bố. Không bán tiếp.', 403);
+    }
     return result.recordset[0];
 };
 
@@ -149,7 +157,7 @@ const listInvoices = async (req, res) => {
 const quoteInvoice = async (req, res) => {
     try {
         const pool = await poolPromise;
-        await getActiveShift(pool.request(), req.user.MaNV);
+        await getActiveShift(pool, req.user.MaNV);
         const calc = await calculateInvoice(
             pool,
             req.body.lines,
@@ -166,7 +174,7 @@ const quoteInvoice = async (req, res) => {
             lines: calc.lines
         });
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        res.status(error.status || 400).json({ message: error.message });
     }
 };
 
@@ -235,7 +243,7 @@ const createInvoice = async (req, res) => {
     const transaction = new sql.Transaction(await poolPromise);
     try {
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
-        const shift = await getActiveShift(new sql.Request(transaction), req.user.MaNV, true);
+        const shift = await getActiveShift(transaction, req.user.MaNV, true);
         const maKH = clean(req.body.MaKH, 20) || null;
         const maKM = clean(req.body.MaKM, 20) || null;
         const calc = await calculateInvoice(transaction, req.body.lines, maKM, req.body.DiemSuDung, maKH);
@@ -270,7 +278,7 @@ const createInvoice = async (req, res) => {
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);
-        res.status(400).json({ message: error.message });
+        res.status(error.status || 400).json({ message: error.message });
     }
 };
 
@@ -358,6 +366,7 @@ const addPayment = async (req, res) => {
         if (!['Thành công', 'Thất bại'].includes(status)) throw new Error('Trạng thái thanh toán không hợp lệ.');
         if (method !== 'Tiền mặt' && status === 'Thành công' && !transactionCode) throw new Error('Thanh toán điện tử thành công phải có mã giao dịch.');
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        await getActiveShift(transaction, req.user.MaNV, true);
         const invoice = await new sql.Request(transaction).input('MaHD', sql.VarChar, clean(req.params.id, 20))
             .input('MaNV', sql.VarChar, req.user.MaNV).query(`
                 SELECT hd.MaHD,hd.TongThanhToan FROM HoaDon hd WITH(UPDLOCK,HOLDLOCK)
@@ -389,7 +398,7 @@ const addPayment = async (req, res) => {
         res.status(201).json({ message: `Đã ghi nhận thanh toán ${status.toLowerCase()}.`, MaTT: maTT });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
-        res.status(400).json({ message: error.message.includes('UX_ThanhToan_MaGiaoDich')
+        res.status(error.status || 400).json({ message: error.message.includes('UX_ThanhToan_MaGiaoDich')
             ? 'Mã giao dịch điện tử đã được sử dụng.' : error.message });
     }
 };
@@ -398,6 +407,7 @@ const completeInvoice = async (req, res) => {
     const transaction = new sql.Transaction(await poolPromise);
     try {
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        await getActiveShift(transaction, req.user.MaNV, true);
         const invoiceResult = await new sql.Request(transaction).input('MaHD', sql.VarChar, clean(req.params.id, 20))
             .input('MaNV', sql.VarChar, req.user.MaNV).query(`
                 SELECT hd.* FROM HoaDon hd WITH(UPDLOCK,HOLDLOCK)
@@ -474,7 +484,7 @@ const completeInvoice = async (req, res) => {
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);
-        res.status(400).json({ message: error.message });
+        res.status(error.status || 400).json({ message: error.message });
     }
 };
 

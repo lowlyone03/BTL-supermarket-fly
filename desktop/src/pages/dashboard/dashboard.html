@@ -6,12 +6,12 @@
   <title>Điều hành - Supermarket Fly</title>
   <link rel="stylesheet" href="dashboard.css">
   <link rel="stylesheet" href="../admin/admin.css?v=audit-ui-3">
-  <link rel="stylesheet" href="../warehouse/warehouse.css?v=payroll-ui-1">
-  <link rel="stylesheet" href="../workforce/workforce.css?v=attendance-overtime-1">
-  <link rel="stylesheet" href="../cashier/cashier.css?v=stock-fate-1">
+  <link rel="stylesheet" href="../warehouse/warehouse.css?v=payroll-attend-1">
+  <link rel="stylesheet" href="../workforce/workforce.css?v=cashier-duty-1">
+  <link rel="stylesheet" href="../cashier/cashier.css?v=cashier-duty-1">
   <link rel="stylesheet" href="../shared/locale-ui.css?v=vi-date-3">
   <link rel="stylesheet" href="../shared/ui-polish.css?v=ui-polish-1">
-  <link rel="stylesheet" href="../shared/report-charts.css?v=report-dashboard-13">
+  <link rel="stylesheet" href="../shared/report-charts.css?v=store-pnl-1">
   <link rel="stylesheet" href="../shared/product-images.css?v=products-1">
   <link rel="stylesheet" href="overview-modern.css?v=overview-1">
 </head>
@@ -110,6 +110,7 @@
           <a href="#" class="nav-item" data-target="accounting-reports"><svg><use href="#i-report"/></svg><span>Báo cáo nội bộ</span></a>
           <div class="nav-group-title">NHÂN SỰ MỞ RỘNG</div>
           <a href="#" class="nav-item" data-target="accounting-payroll"><svg><use href="#i-team"/></svg><span>Bảng lương tháng</span></a>
+          <a href="#" class="nav-item" data-target="accounting-history"><svg><use href="#i-log"/></svg><span>Lịch sử hoạt động</span></a>
         </div>
 
         <div class="nav-group" id="navGroupCashier" style="display:none">
@@ -192,7 +193,7 @@
   </div>
 
   <script src="../shared/escape-key.js"></script>
-  <script src="../shared/locale-ui.js?v=payroll-month-native-1"></script>
+  <script src="../shared/locale-ui.js?v=store-pnl-1"></script>
   <script src="../shared/search-tools.js?v=search-1"></script>
   <script src="../shared/product-images.js?v=products-1"></script>
   <script src="../shared/report-charts.js?v=charts-4"></script>
@@ -201,13 +202,14 @@
   <script src="../admin/admin-page-templates.js?v=audit-ui-3"></script>
   <script src="../warehouse/warehouse-pages.js?v=history-ui-1"></script>
   <script src="../warehouse/supplier-pages.js"></script>
-  <script src="../warehouse/purchase-order-pages.js?v=payroll-ui-1"></script>
+  <script src="../warehouse/purchase-order-pages.js?v=payroll-fund-2"></script>
   <script src="../warehouse/receipt-pages.js?v=ui-vi-date-1"></script>
   <script src="../warehouse/stock-issue-pages.js?v=scrap-issue-1"></script>
-  <script src="../accounting/accounting-pages.js?v=payroll-ui-1"></script>
-  <script src="../workforce/workforce-pages.js?v=payroll-ui-1"></script>
-  <script src="../cashier/cashier-pages.js?v=stock-fate-1"></script>
+  <script src="../accounting/store-pnl.js?v=store-pnl-1"></script>
+  <script src="../accounting/accounting-pages.js?v=payroll-attend-1"></script>
+  <script src="../workforce/workforce-pages.js?v=cashier-duty-1"></script>
+  <script src="../cashier/cashier-pages.js?v=cashier-duty-1"></script>
   <script src="../shared/role-reports.js?v=report-fix-3"></script>
-  <script src="dashboard.js?v=payroll-ui-1"></script>
+  <script src="dashboard.js?v=store-pnl-1"></script>
 </body>
 </html>

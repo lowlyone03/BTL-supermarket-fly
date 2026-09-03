@@ -928,3 +928,21 @@
   .warehouse-history-card { grid-template-columns: 40px minmax(0, 1fr); }
   .warehouse-history-stats > article > div strong { font-size: 26px; }
 }
+
+.report-compile-hint { margin:-6px 0 16px; padding:10px 14px; border:1px solid #d7e4dc; border-radius:12px; background:#f4faf6; color:#3d5448; font-size:13px; line-height:1.5; }
+.payroll-fund-banner { display:grid; grid-template-columns:1fr; gap:12px; margin-bottom:14px; }
+.payroll-fund-banner > div, .payroll-fund-banner.empty { padding:14px 16px; border:1px solid #cfe3d7; border-radius:16px; background:#f3faf6; }
+.payroll-fund-banner.empty { grid-template-columns:1fr; }
+.payroll-fund-banner p { margin:0; color:#6f8a7c; font-size:10px; font-weight:850; letter-spacing:.08em; }
+.payroll-fund-banner strong, .payroll-fund-banner small { display:block; }
+.payroll-fund-banner strong { margin:4px 0 2px; color:#1f4d39; font-size:18px; }
+.payroll-ky-card { margin:0 16px 16px; padding:14px 16px 8px; border:1px solid #d8e2dc; border-radius:16px; background:#fbfcfb; }
+.payroll-ky-card header { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:8px; }
+.payroll-ky-card header p { margin:0; color:#74857c; font-size:10px; font-weight:850; letter-spacing:.1em; }
+.payroll-ky-card header h3 { margin:4px 0 0; }
+.payroll-ky-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.payroll-ky-fund, .payroll-ky-need { margin:0 0 10px; color:#4d6358; font-size:13px; }
+.payroll-ky-recipient { margin:0 0 8px; color:#2a4337; font-size:13px; }
+.payroll-fund-note { margin:0 16px 8px; color:#4d6358; font-size:13px; }
+.payroll-build-hint { margin:8px 0 0; color:#4d6358; font-size:13px; line-height:1.45; }
+.accounting-history-filters { align-items:flex-end; gap:10px; flex-wrap:wrap; }

@@ -1,0 +1,156 @@
+PHAM VI KE TOAN NOI BO DA CHOT LAI
+SUPERMARKET FLY  |  31/08/2026 (buoi toi)
+
+Nhom chot: VAT ban hang, TSCD, import sao ke, LCTT KHONG DUOC CAT.
+Chi cat chi phi tra truoc (242) vi cua hang thanh toan trong 30-45 ngay,
+khong tra truoc 12 thang. Kho theo lo/FEFO van cat (viet lai kho, khong phai bao cao).
+
+
+================================================================================
+1. VI SAO LAN TRUOC TUNG DE XUAT CAT VAT BAN
+================================================================================
+
+Do la ly do KY THUAT, khong phai ly do nghiep vu.
+
+Hoa don BAN (POS) hien tai:
+  ChiTietHoaDon: SoLuong, DonGia, GiamGia, ThanhTien, DonGiaVon, ThanhTienVon
+  KHONG co ThueSuat, TienThue.
+  TongThanhToan = so tien khach tra.
+
+Hoa don MUA da co:
+  ChiTietHoaDonMuaHang: ThueSuat, TienThue
+  UC27 doi chieu thue.
+
+Neu dua 33311 vao So cai ma POS khong luu thue, so VAT dau ra la so ao,
+bao cao thue khong kiem chung duoc. Viec DUNG: bo sung thue tren POS,
+roi moi dinh khoan. Khong cat VAT ban.
+
+File Word Plan A cung viet: neu da dua 1331 va 33311 vao danh muc thi phai
+hach toan VAT nhat quan ca mua lan ban. Nhom dung voi Word o diem nay.
+
+
+================================================================================
+2. GIU / CAT
+================================================================================
+
+GIU (bat buoc voi DN)
+- Loi hach toan No/Co, ky, Nhat ky chung, So cai, CDPS, KQKD, BCDKT mini.
+- VAT BAN 33311  <-- uu tien ke toan so 1.
+- VAT MUA 1331 (da co du lieu tren HD mua).
+- Bang luong UC33: dinh khoan 642/334, tra luong 334/111 hoac 112.
+- Chi phi van hanh TRONG KY: dien, nuoc, thue mat bang, VP (ghi thang 642).
+- TSCD + khau hao thang (211/214, No 642 / Co 214).
+- Import sao ke ngan hang + doi chieu 112 (QR/the/CK POS, Phieu chi, tra luong).
+- LCTT thu gon: lay tu phat sinh 111 va 112 sau khi so cai du.
+
+CAT
+- Chi phi tra truoc 242 + lich phan bo 12 thang.
+  Ly do nhom: thanh toan 30-45 ngay, khong tra truoc dai han.
+  Thue mat bang / dien nuoc tra trong ky -> No 642 (+ 1331 neu co HD) / Co 111 hoac 112.
+- Kho theo lo / FEFO / TonKhoTheoLo.
+  Ly do: dung moi nhap-xuat-doi tra-gia von; do la viet lai kho.
+
+KHONG MO
+- Actor Nhan su moi, nhieu cua hang, ban chiu / TK131.
+- Hoa don dien tu nha nuoc, ke khai thue day du bieu mau phap ly.
+  Chi lam bang ke VAT dau vao / dau ra / chenh lech theo ky o muc do an.
+
+
+================================================================================
+3. CACH LAM VAT BAN (QUAN TRONG NHAT)
+================================================================================
+
+Chot gia niem yet: GiaBan TREN QUAY DA GOM VAT (pho bien sieu thi).
+Khach van tra TongThanhToan nhu hien tai. Khong cong them mot lan thue o POS.
+
+Bo sung:
+  SanPham.ThueSuat          mac dinh 0 / 5 / 8 / 10
+  ChiTietHoaDon.ThueSuat    copy luc ban, khong sua sau khi HD hoan thanh
+  ChiTietHoaDon.TienThue
+  HoaDon.TienThue           tong thue cac dong
+
+Tach khi ghi so (sau KM va diem):
+  Tien thue dong = round( ThanhTienSauGiam x ThueSuat / (100 + ThueSuat) )
+  Doanh thu 511  = ThanhTienSauGiam - Tien thue dong
+
+But toan HD hoan thanh:
+  No 111 va/hoac 112     TongThanhToan (theo ThanhToan thanh cong)
+  Co 511                 tong doanh thu chua VAT
+  Co 33311               tong VAT dau ra
+  No 632 / Co 156        gia von nhu hien tai (DonGiaVon)
+
+Doi tra hoan tien:
+  No 5212, No 33311 / Co 111 hoac 112
+  Neu nhap lai kho: No 156 / Co 632
+  Dao dung thue suat da luu tren dong HD goc, khong lay thue suat SP luc tra.
+
+Hai mat hang thue suat khac nhau tren 1 HD phai tach 33311 theo dong.
+In hoa don: hien thanh tien da gom VAT + tien thue / doanh thu chua thue de Ke toan doi soat.
+
+Khong tuyen bo thay phan mem ke khai thue.
+
+
+================================================================================
+4. TSCD, SAO KE, LCTT — LAM DUNG MUC, KHONG LAM 14 PHAN HE MISA
+================================================================================
+
+TSCD
+- Nhom: may POS, may tinh, tu dong, tu lanh, dieu hoa, may in hoa don...
+- Nguyen gia, ngay su dung, so thang khau hao, bo phan.
+- Cuoi ky: No 642 / Co 214. Gia tri con lai = nguyen gia - khau hao luy ke.
+- Mua TSCD trong ky: No 211 / Co 111, 112 hoac 331.
+
+Import sao ke
+- Tai khoan ngan hang cua cua hang (khong phai TK ke toan 112).
+- Import CSV/Excel: ngay, so tien, dien giai, ma GD neu co.
+- Khop tu dong: MaGiaoDich POS/Phieu chi/tra luong, hoac so tien + ngay.
+- Trang thai: Chua khop / Khop tu dong / Khop thu cong / Chenh lech.
+- So 112 van lay tu but toan, khong lay thuan tu file sao ke.
+
+LCTT thu gon
+- Khong can bang rieng neu 111/112 da du but toan.
+- Hoat dong: ban hang, tra NCC, chi phi, luong.
+- Dau tu: mua TSCD.
+- Tai chinh: neu co (thuong do an 1 cua hang se it).
+- Tong 3 nhom = bien dong quy + NH trong ky.
+- Lam SAU sao ke va TSCD, neu lam truoc se thieu so.
+
+
+================================================================================
+5. LO TRINH (~9-11 TUAN SAU KHI P0 PASS)
+================================================================================
+
+0   E2E P0: tien, ton, no, ca, luong  PASS tren 1 CSDL
+1   Schema so cai + COA (co 1331, 33311, 211, 214, 334)
+2   VAT tren POS + in HD + dao thue khi doi tra
+3   Engine dinh khoan tu dong (ban/mua/kho/luong/chi)
+4   Nhat ky, So cai, CDPS, KQKD
+5   Import sao ke + doi chieu 112
+6   TSCD + khau hao thang
+7   Ket chuyen 911, khoa so, LCTT, BCDKT
+8-9 Test 1 thang xuyen + sua Word/ERD (UC tu 34, khong dung UC30-33)
+
+UC goi y (khong trung 30-33):
+  UC34 Tai khoan ke toan
+  UC35 Ky ke toan / so du dau ky
+  UC36 Chi phi van hanh trong ky
+  UC37 Tu dong sinh but toan
+  UC38 Nhat ky chung / So cai
+  UC39 Khoa ky
+  UC40 Thue GTGT dau vao / dau ra / tong hop ky
+  UC41 TSCD va khau hao
+  UC42 Import sao ke va doi chieu ngan hang
+  UC43 Bao cao KQKD, BCDKT, LCTT mini
+
+
+================================================================================
+6. TIEU CHI NGHIEM THU VAT (KHONG DUOC BO)
+================================================================================
+
+- 1 HD 2 dong thue suat khac nhau: 33311 dung tung dong.
+- KM + diem tru TRUOC khi tinh VAT; No 111/112 = so khach tra.
+- Hoan tien dao 511 va 33311; khong nhap lai kho thi khong dao 632.
+- Bang ke ky: dau ra tu HD ban hoan thanh, dau vao tu HD mua da khop (+ chi phi co HD).
+- In lai HD khong sinh but toan thue lan 2.
+- Sao ke khop duoc cac GD co MaGiaoDich; lech co trang thai ro.
+- Khau hao thang chay 1 lan/ky; LCTT khop bien dong 111+112.

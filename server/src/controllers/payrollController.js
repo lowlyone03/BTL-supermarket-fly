@@ -1,12 +1,14 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
 const { ensurePayrollSchema } = require('../services/payrollSchema');
+const { snapshotFund } = require('../services/payrollFund');
 const { seedFixedHolidays } = require('./holidayController');
 const {
     validMonth, dateKey, periodBounds, employedOn, loadRates, loadHolidays,
     holidaySet, validateLunarCalendar, pendingAttendance, computeShiftLines,
-    holidayRestLine, summarize, lateWarning, mondayKey
+    holidayRestLine, workMinutesOf, summarize, lateWarning, mondayKey
 } = require('../services/payrollEngine');
+const { vietnamCalendar } = require('../services/reportingPeriod');
 
 const assertAccountant = (req, res) => {
     if (String(req.user?.TenVaiTro || '').trim() === 'Kế toán') return true;
@@ -66,7 +68,14 @@ const build = async (req, res) => {
     if (!assertAccountant(req, res)) return;
     const month = String(req.params.month || '');
     if (!validMonth(month)) return res.status(400).json({ message: 'Kỳ lương không hợp lệ.' });
+    const todayCal = vietnamCalendar();
+    if (month > todayCal.monthPeriod) {
+        return res.status(400).json({
+            message: `Không lập bảng lương tháng ${month}: kỳ chưa tới (hiện tại ${todayCal.monthPeriod}).`
+        });
+    }
     const bounds = periodBounds(month);
+    const attendTo = month === todayCal.monthPeriod ? todayCal.date : bounds.endKey;
     const pool = await poolPromise;
     await ensurePayrollSchema(pool);
     await seedFixedHolidays(pool, bounds.year);
@@ -83,7 +92,7 @@ const build = async (req, res) => {
         if (voucherBlock.recordset.length) {
             throw new Error(`Kỳ ${month} đã có Phiếu chi lương ${voucherBlock.recordset[0].MaPhieu}. Không tính lại.`);
         }
-        const pending = await pendingAttendance(transaction, bounds.startKey, bounds.endKey);
+        const pending = await pendingAttendance(transaction, bounds.startKey, attendTo);
         if (pending.length) {
             const sample = pending.slice(0, 8).map(row => `${row.TenNV} (${row.NgayLam})`).join(', ');
             throw new Error(`Còn ${pending.length} lượt chấm công chờ duyệt trong kỳ ${month}: ${sample}${pending.length > 8 ? '…' : ''}. Quản lý hãy duyệt công (UC32) trước khi Kế toán lập bảng lương.`);
@@ -131,7 +140,8 @@ const build = async (req, res) => {
                    OR (nv.NgayNghiViec IS NOT NULL AND nv.NgayNghiViec>=@Start)`);
 
         const attendance = await new sql.Request(transaction)
-            .input('Year', sql.Int, bounds.year).input('MonthNum', sql.Int, bounds.monthNumber).query(`
+            .input('Year', sql.Int, bounds.year).input('MonthNum', sql.Int, bounds.monthNumber)
+            .input('AttendTo', sql.Date, attendTo).query(`
                 SELECT cc.MaChamCong,l.MaNV,nv.TenNV,l.MaLoaiCa,lc.NhomCa,
                        CONVERT(varchar(10),l.NgayLam,23) NgayLam,
                        COALESCE(cc.ThoiGianVaoDuocDuyet,cc.ThoiGianVao) BatDau,
@@ -147,24 +157,33 @@ const build = async (req, res) => {
                     WHERE MaNV=l.MaNV AND NgayHieuLuc<=CONVERT(date,COALESCE(cc.ThoiGianVaoDuocDuyet,cc.ThoiGianVao))
                     ORDER BY NgayHieuLuc DESC) ml
                 WHERE cc.TrangThai=N'Đã duyệt'
+                  AND l.NgayLam <= @AttendTo
                   AND COALESCE(cc.ThoiGianRaDuocDuyet,cc.ThoiGianRa) >= DATEFROMPARTS(@Year,@MonthNum,1)
                   AND COALESCE(cc.ThoiGianVaoDuocDuyet,cc.ThoiGianVao) < DATEADD(month,1,DATEFROMPARTS(@Year,@MonthNum,1))`);
 
+        const employeeMap = new Map(employees.recordset.map(emp => [emp.MaNV, emp]));
         const grouped = new Map();
-        for (const emp of employees.recordset) {
-            grouped.set(emp.MaNV, { ...emp, details: [] });
-        }
         for (const row of attendance.recordset) {
-            if (!grouped.has(row.MaNV)) grouped.set(row.MaNV, {
-                MaNV: row.MaNV, TenNV: row.TenNV, TrangThai: 'Đang làm việc',
-                NgayNghiViec: null, LuongGio: Number(row.LuongGio), details: []
-            });
+            if (!grouped.has(row.MaNV)) {
+                const emp = employeeMap.get(row.MaNV);
+                grouped.set(row.MaNV, {
+                    MaNV: row.MaNV,
+                    TenNV: emp?.TenNV || row.TenNV,
+                    TrangThai: emp?.TrangThai || 'Đang làm việc',
+                    NgayNghiViec: emp?.NgayNghiViec || null,
+                    LuongGio: Number(emp?.LuongGio || row.LuongGio || 55000),
+                    details: []
+                });
+            }
             grouped.get(row.MaNV).details.push(...computeShiftLines(row, bounds, holidays, rates, weekDays));
         }
+        let builtCount = 0;
         for (const item of grouped.values()) {
+            if (workMinutesOf(item.details) <= 0) continue;
             const luongGio = Number(item.LuongGio || 55000);
             for (const holiday of periodHolidays) {
                 const day = dateKey(holiday.NgayDuongLich);
+                if (day > attendTo) continue;
                 if (!employedOn(item, day)) continue;
                 item.details.push(holidayRestLine(day, luongGio));
             }
@@ -186,18 +205,22 @@ const build = async (req, res) => {
                            0,0,@TongLuong,N'Chờ khóa')`);
             const maBangLuong = inserted.recordset[0].MaBangLuong;
             for (const line of item.details) await insertDetail(transaction, maBangLuong, line);
+            builtCount += 1;
         }
-        const holidayRestCount = periodHolidays.length;
+        const holidayRestCount = periodHolidays.filter(row => dateKey(row.NgayDuongLich) <= attendTo).length;
         await logAudit(transaction, {
             user: req.user, req, action: 'Lập bảng lương tháng', table: 'KyLuong', recordId: month, uc: 'UC33',
             severity: 'Quan trọng',
-            content: `Đã lập bảng lương ${month}; tất toán dự kiến ${bounds.paymentDate} (mùng 10); ${holidayRestCount} ngày lễ nghỉ hưởng lương; không BHXH, không trừ lãi gộp.`
+            content: `Đã lập bảng lương ${month}; ${builtCount} NV có công đã duyệt; tất toán ${bounds.paymentDate}; ${holidayRestCount} ngày lễ (chỉ cộng cho NV đã đi làm).`
         });
         await transaction.commit();
         res.status(201).json({
-            message: `Đã lập bảng lương ${month}. Ngày tất toán dự kiến ${bounds.paymentDate} (mùng 10 tháng sau). ${holidayRestCount} ngày lễ trong kỳ được cộng 8 giờ hưởng lương.`,
+            message: builtCount
+                ? `Đã lập bảng lương ${month}: ${builtCount} nhân viên có chấm công đã duyệt. Lương lễ 8 giờ chỉ cộng cho những người này. Tất toán dự kiến ${bounds.paymentDate}.`
+                : `Đã lập kỳ ${month} nhưng bảng trống: chưa có nhân viên nào có chấm công đã duyệt (phút công > 0) đến ${attendTo}. Không cộng lương lễ cho cả cửa hàng.`,
             NgayTraDuKien: bounds.paymentDate,
-            SoNgayLe: holidayRestCount
+            SoNgayLe: holidayRestCount,
+            SoNhanVien: builtCount
         });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
@@ -243,13 +266,20 @@ const get = async (req, res) => {
             NgayTraDuKien: payDate,
             NgayTraDuKienLuu: storedPay || payDate
         } : null;
+        const fund = await snapshotFund(pool, month);
+        const todayCal = vietnamCalendar();
+        const canBuild = month <= todayCal.monthPeriod && !locked;
         res.json({
             period: periodRow,
+            built: Boolean(periodRow),
+            canBuild,
             canWrite: String(req.user?.TenVaiTro || '').trim() === 'Kế toán',
+            attendanceRule: 'Chưa bấm Lập thì chưa có số. Chỉ nhân viên đã chấm công (đã duyệt) trong tháng mới có mặt. Lương lễ 8 giờ chỉ cộng khi đã có công thật — không đưa cả cửa hàng vào vì ngày lễ.',
             items,
             vouchers: vouchers.recordset,
             holidays,
             warning,
+            fund,
             summary: {
                 SoNhanVien: items.length,
                 TongLuong: items.reduce((sum, item) => sum + Number(item.TongLuong || 0), 0),
@@ -258,7 +288,9 @@ const get = async (req, res) => {
                 SoDongLeNghi: soNgayLeNghi,
                 NgayTraDuKien: payDate,
                 ChoDuyet: vouchers.recordset.filter(item => item.TrangThai === 'Chờ duyệt').length,
-                ChoChi: vouchers.recordset.filter(item => ['Đã duyệt', 'Thanh toán thất bại'].includes(item.TrangThai)).length
+                ChoChi: vouchers.recordset.filter(item => ['Đã duyệt', 'Thanh toán thất bại'].includes(item.TrangThai)).length,
+                SoTienMatCon: Number(fund.fund?.SoTienMatCon || 0),
+                SoTienCKCon: Number(fund.fund?.SoTienCKCon || 0)
             }
         });
     } catch (error) {
@@ -312,10 +344,10 @@ const lock = async (req, res) => {
         await logAudit(transaction, {
             user: req.user, req, action: 'Khóa kỳ lương', table: 'KyLuong', recordId: month, uc: 'UC33',
             severity: 'Cảnh báo',
-            content: `Đã khóa kỳ lương ${month}. Lịch lễ các ngày trong kỳ bị khóa. Chưa chi lương — Kế toán lập Phiếu chi lương rồi Quản lý duyệt và giao quỹ.`
+            content: `Đã khóa kỳ lương ${month}. Lịch lễ các ngày trong kỳ bị khóa. Chưa chi lương — Kế toán lập phiếu, Quản lý duyệt rồi giao quỹ chung một lần.`
         });
         await transaction.commit();
-        res.json({ message: `Đã khóa kỳ lương ${month}. Kế toán lập phiếu chi (TM hoặc CK), Quản lý duyệt và giao quỹ, rồi Kế toán mới chi.` });
+        res.json({ message: `Đã khóa kỳ lương ${month}. Kế toán lập phiếu chi (TM hoặc CK), Quản lý duyệt từng người (hoặc duyệt tất cả), rồi giao quỹ chung một lần. Kế toán chi từng người từ quỹ đó.` });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         res.status(400).json({ message: error.message });

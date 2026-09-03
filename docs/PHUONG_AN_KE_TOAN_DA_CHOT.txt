@@ -9,8 +9,8 @@ muốn chưa được chọn.
 
 Ngày lập tài liệu: 02/09/2026
 Phạm vi code: thư mục supermarket-fly (server Node.js + ứng dụng desktop)
-Tài liệu gốc không bị đè: PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt vẫn giữ nguyên
-ở thư mục BTL. File này là bản giải trình cập nhật sau lần sửa tháng 9/2026.
+Tài liệu gốc không bị đè: PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt (cùng thư mục
+docs/). File này là bản giải trình cập nhật sau lần sửa tháng 9/2026.
 
 
 --------------------------------------------------------------------------------
@@ -604,7 +604,7 @@ D. Phiếu thu không lẫn với phiếu chi
 11. TÀI LIỆU LIÊN QUAN (KHÔNG ĐÈ)
 --------------------------------------------------------------------------------
 
-  d:\UDTHTKT\BTL\PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt
+  supermarket-fly/docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt
     Phạm vi mở rộng Plan A hiệu chỉnh (VAT, TSCĐ, sao kê, LCTT; cắt 242).
   TaiLieu_Du_An\01_Yeu_Cau_Nghiep_Vu\Cac_chuc_nang_moi_chot_hom_nay_Supermarket_Fly.txt
     Tách Phiếu thu / Phiếu chi; không giảm nợ khi duyệt; tất toán một lần.

@@ -24,6 +24,8 @@ router.get('/finance/payables/:id', requirePermission('UC10'), adminController.g
 router.get('/finance/sales-shifts', requirePermission('UC10'), adminController.getSalesShifts);
 router.get('/reports/financial-summary', requirePermission('UC10'), reportController.getFinancialReport);
 router.get('/reports/store-operations', requirePermission('UC10'), reportController.getStoreOperationsReport);
+router.get('/reports/store-profit-loss', requirePermission('UC10'), reportController.getStoreProfitLossReport);
+router.post('/reports/store-profit-loss/plan', requirePermission('UC10'), reportController.postStoreProfitLossPlan);
 router.get('/catalog/categories', requirePermission('UC04'), catalogController.getCategories);
 router.post('/catalog/categories', requirePermission('UC04'), catalogController.createCategory);
 router.put('/catalog/categories/:id', requirePermission('UC04'), catalogController.updateCategory);
@@ -53,7 +55,10 @@ router.post('/approvals/stock-issues/:id/reject', requirePermission('UC06'), sto
 router.get('/approvals/payment-vouchers/:id', requirePermission('UC09'), paymentVoucherController.getApprovalDetail);
 router.post('/approvals/payment-vouchers/:id/approve', requirePermission('UC09'), paymentVoucherController.approveVoucher);
 router.post('/approvals/payment-vouchers/:id/reject', requirePermission('UC09'), paymentVoucherController.rejectVoucher);
+router.get('/approvals/payroll-board', requirePermission('UC09'), payrollVoucherController.listBoard);
 router.get('/approvals/payroll-vouchers', requirePermission('UC09'), payrollVoucherController.listPending);
+router.post('/approvals/payroll-vouchers/approve-all', requirePermission('UC09'), payrollVoucherController.approveAll);
+router.post('/approvals/payroll-fund/:month/handover', requirePermission('UC09'), payrollVoucherController.handOverFund);
 router.get('/approvals/payroll-vouchers/:id', requirePermission('UC09'), payrollVoucherController.getApprovalDetail);
 router.post('/approvals/payroll-vouchers/:id/approve', requirePermission('UC09'), payrollVoucherController.approveVoucher);
 router.post('/approvals/payroll-vouchers/:id/reject', requirePermission('UC09'), payrollVoucherController.rejectVoucher);

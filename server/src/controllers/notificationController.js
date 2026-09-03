@@ -1,6 +1,7 @@
 const { sql, poolPromise } = require('../config/db');
 const { ensurePayrollSchema } = require('../services/payrollSchema');
 const { vietnamCalendar } = require('../services/reportingPeriod');
+const { listInboxForEmployee } = require('../services/storeProfitLoss');
 
 const roleOf = user => String(user?.TenVaiTro || '').trim();
 
@@ -23,6 +24,18 @@ const listForRole = async (pool, user) => {
     const maNV = user.MaNV;
     const items = [];
     const q = () => pool.request();
+
+    try {
+        const notices = await listInboxForEmployee(pool, maNV);
+        items.push(...many(notices, r => row(
+            `pnl:${r.MaTB}`,
+            r.DichDen || (role === 'Quản lý' ? 'manager-reports' : ''),
+            r.TieuDe,
+            r.NoiDung,
+            r.NgayGui,
+            'urgent'
+        )));
+    } catch { /* bảng thông báo chưa có thì bỏ qua */ }
 
     const schedule = await q().input('MaNV', sql.VarChar, maNV).query(`
         SELECT TOP 1 l.MaLich, lc.TenCa, l.BatDauDuKien, cc.ThoiGianVao
@@ -176,8 +189,11 @@ const listForRole = async (pool, user) => {
                        ORDER BY pc.NgayDuyet DESC`),
             q().query(`SELECT COUNT(*) SoLuong FROM CongNoPhaiTra
                        WHERE SoTienConLai>0 AND HanThanhToan<CONVERT(date,GETDATE())`),
-            q().query(`SELECT TOP 8 pcl.MaPhieu, pcl.NgayDuyet, pcl.SoTien, nv.TenNV, pcl.MaKy, pcl.TrangThai
-                       FROM PhieuChiLuong pcl JOIN NhanVien nv ON nv.MaNV=pcl.MaNV
+            q().query(`SELECT TOP 8 pcl.MaPhieu, pcl.NgayDuyet, pcl.SoTien, nv.TenNV, pcl.MaKy, pcl.TrangThai, pcl.PhuongThuc,
+                              q.SoTienMatCon, q.SoTienCKCon, q.SoTienCKGiao
+                       FROM PhieuChiLuong pcl
+                       JOIN NhanVien nv ON nv.MaNV=pcl.MaNV
+                       LEFT JOIN QuyLuongKy q ON q.MaKy=pcl.MaKy
                        WHERE pcl.TrangThai IN (N'Đã duyệt', N'Thanh toán thất bại')
                        ORDER BY pcl.NgayDuyet DESC`)
         ]);
@@ -188,9 +204,18 @@ const listForRole = async (pool, user) => {
                 `${r.SoHoaDon} · ${r.TenNCC} · ${r.TrangThaiDoiChieu}`, r.NgayTiepNhan, 'urgent')),
             ...many(pay.recordset, r => row(`pc-pay:${r.MaPhieu}`, 'accounting-payables', 'Quản lý đã giao tiền, cần thanh toán NCC',
                 `${r.MaPhieu} · ${r.TenNCC}`, r.NgayDuyet, 'urgent')),
-            ...many(payrollPay.recordset, r => row(`pcl-pay:${r.MaPhieu}`, 'accounting-payroll',
-                r.TrangThai === 'Thanh toán thất bại' ? 'Chi lương thất bại, thực hiện lại trên cùng phiếu' : 'Quản lý đã giao quỹ lương, cần chi',
-                `${r.MaPhieu} · ${r.TenNV} · kỳ ${r.MaKy}`, r.NgayDuyet, 'urgent'))
+            ...many(payrollPay.recordset, r => {
+                const ready = r.PhuongThuc === 'Tiền mặt'
+                    ? Number(r.SoTienMatCon || 0) >= Number(r.SoTien || 0)
+                    : Number(r.SoTienCKCon || 0) >= Number(r.SoTien || 0);
+                const title = r.TrangThai === 'Thanh toán thất bại'
+                    ? 'Chi lương thất bại, thực hiện lại trên cùng phiếu'
+                    : ready
+                        ? 'Quản lý đã giao quỹ chung, cần chi lương'
+                        : 'Phiếu lương đã duyệt, chờ Quản lý giao quỹ chung';
+                return row(`pcl-pay:${r.MaPhieu}`, 'accounting-payroll', title,
+                    `${r.MaPhieu} · ${r.TenNV} · kỳ ${r.MaKy}`, r.NgayDuyet, 'urgent');
+            })
         );
         const overdueCount = Number(overdue.recordset[0]?.SoLuong || 0);
         if (overdueCount) {

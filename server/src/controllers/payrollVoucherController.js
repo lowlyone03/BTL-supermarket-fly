@@ -1,11 +1,10 @@
 const { sql, poolPromise } = require('../config/db');
-const { logAudit } = require('../services/auditLog');
+const { logAudit, listAuditLogs } = require('../services/auditLog');
 const { ensurePayrollSchema } = require('../services/payrollSchema');
-const {
-    validMonth, VALID_METHODS, FUND_METHODS, dateKey, voucherMaPhieu
-} = require('../services/payrollEngine');
+const { validMonth, VALID_METHODS, dateKey, voucherMaPhieu } = require('../services/payrollEngine');
 const { voucherSelect } = require('./payrollController');
 const { vietnamCalendar } = require('../services/reportingPeriod');
+const { loadFund, snapshotFund, listPayouts } = require('../services/payrollFund');
 
 const clean = (value, max = 120, fallback = null) => String(value ?? '').trim().slice(0, max) || fallback;
 
@@ -69,7 +68,7 @@ const createVouchers = async (req, res) => {
                     VALUES(@MaPhieu,@MaKy,@MaNV,@MaBangLuong,@SoTien,@PhuongThuc,N'Chờ duyệt',@NoiDung,@MaNVLap);
                     UPDATE BangLuong SET PhuongThucChi=@PhuongThuc WHERE MaBangLuong=@MaBangLuong;`);
             await writeAudit(transaction, req.user, 'Lập Phiếu chi lương', maPhieu,
-                `Kỳ ${month} · ${row.TenNV} · ${method} · ${soTien} — chưa thanh toán, chờ Quản lý duyệt và giao quỹ.`);
+                `Kỳ ${month} · ${row.TenNV} · ${method} · ${soTien} — chưa thanh toán, chờ Quản lý duyệt. Giao quỹ chung sau khi duyệt xong kỳ.`);
             created.push({ MaPhieu: maPhieu, MaNV: maNV, TenNV: row.TenNV, SoTien: soTien, PhuongThuc: method });
         }
         await transaction.commit();
@@ -123,9 +122,26 @@ const resubmitVoucher = async (req, res) => {
     }
 };
 
+const insertPayoutHistory = async (transaction, payload) => {
+    await new sql.Request(transaction)
+        .input('MaKy', sql.VarChar, payload.MaKy)
+        .input('MaPhieu', sql.VarChar, payload.MaPhieu)
+        .input('MaNV', sql.VarChar, payload.MaNV)
+        .input('SoTien', sql.Decimal(18, 2), payload.SoTien)
+        .input('PhuongThuc', sql.NVarChar, payload.PhuongThuc)
+        .input('Bank', sql.VarChar, payload.MaGiaoDichNganHang)
+        .input('MatCon', sql.Decimal(18, 2), payload.SoTienMatCon)
+        .input('CKCon', sql.Decimal(18, 2), payload.SoTienCKCon)
+        .input('MaNVKT', sql.VarChar, payload.MaNV_KT)
+        .input('ThanhCong', sql.Bit, payload.ThanhCong ? 1 : 0)
+        .input('GhiChu', sql.NVarChar, payload.GhiChu)
+        .query(`INSERT LichSuChiLuong(MaKy,MaPhieu,MaNV,SoTien,PhuongThuc,MaGiaoDichNganHang,SoTienMatCon,SoTienCKCon,MaNV_KT,ThanhCong,GhiChu)
+                VALUES(@MaKy,@MaPhieu,@MaNV,@SoTien,@PhuongThuc,@Bank,@MatCon,@CKCon,@MaNVKT,@ThanhCong,@GhiChu)`);
+};
+
 const payVoucher = async (req, res) => {
     if (String(req.user?.TenVaiTro || '').trim() !== 'Kế toán') {
-        return res.status(403).json({ message: 'Chỉ Kế toán được chi lương sau khi Quản lý đã giao quỹ.' });
+        return res.status(403).json({ message: 'Chỉ Kế toán được chi lương sau khi Quản lý đã giao quỹ chung.' });
     }
     const maPhieu = clean(req.params.id, 30);
     if (typeof req.body.ThanhCong !== 'boolean') {
@@ -151,7 +167,7 @@ const payVoucher = async (req, res) => {
         if (!current.recordset.length) throw new Error('Không tìm thấy Phiếu chi lương.');
         const voucher = current.recordset[0];
         if (!['Đã duyệt', 'Thanh toán thất bại'].includes(voucher.TrangThai)) {
-            throw new Error('Phiếu chi lương phải được Quản lý duyệt và giao quỹ trước khi Kế toán chi.');
+            throw new Error('Phiếu chi lương phải được Quản lý duyệt trước khi Kế toán chi từ quỹ chung.');
         }
         if (voucher.TrangThaiLuong === 'Đã thanh toán' || voucher.TrangThai === 'Thanh toán thành công') {
             throw new Error('Phiếu này đã chi thành công. Cấm chi lần hai.');
@@ -167,6 +183,32 @@ const payVoucher = async (req, res) => {
         const late = today > due;
         if (success && late && !lateNote) {
             throw new Error(`Chi sau ngày tất toán ${due} (mùng 10). Hãy ghi lý do chi trễ.`);
+        }
+        const fundRow = await new sql.Request(transaction).input('MaKy', sql.VarChar, voucher.MaKy)
+            .query('SELECT * FROM QuyLuongKy WITH(UPDLOCK,HOLDLOCK) WHERE MaKy=@MaKy');
+        const fund = fundRow.recordset[0] || null;
+        let matCon = Number(fund?.SoTienMatCon || 0);
+        let ckCon = Number(fund?.SoTienCKCon || 0);
+        const amount = Number(voucher.SoTien);
+        if (success) {
+            if (voucher.PhuongThuc === 'Tiền mặt') {
+                if (!fund || matCon < amount) {
+                    throw new Error('Chưa có quỹ chung tiền mặt, hoặc số quỹ còn không đủ. Quản lý phải giao quỹ chung một lần cho kỳ này.');
+                }
+                matCon = Math.round((matCon - amount) * 100) / 100;
+            } else {
+                if (!fund || Number(fund.SoTienCKGiao || 0) <= 0) {
+                    throw new Error('Quản lý chưa ủy quyền chuyển khoản chung cho kỳ này. Không chi từng người trước khi có ủy quyền chung.');
+                }
+                if (ckCon < amount) {
+                    throw new Error('Quỹ ủy quyền chuyển khoản còn lại không đủ. Quản lý hãy giao bổ sung quỹ chung.');
+                }
+                ckCon = Math.round((ckCon - amount) * 100) / 100;
+            }
+            await new sql.Request(transaction).input('MaKy', sql.VarChar, voucher.MaKy)
+                .input('MatCon', sql.Decimal(18, 2), matCon)
+                .input('CKCon', sql.Decimal(18, 2), ckCon)
+                .query('UPDATE QuyLuongKy SET SoTienMatCon=@MatCon,SoTienCKCon=@CKCon,NgayCapNhat=GETDATE() WHERE MaKy=@MaKy');
         }
         const merged = clean([voucher.GhiChu, paymentNote].filter(Boolean).join(' | '), 500);
         await new sql.Request(transaction).input('Id', sql.VarChar, maPhieu)
@@ -190,20 +232,37 @@ const payVoucher = async (req, res) => {
                 IF EXISTS (SELECT 1 FROM PhieuChiLuong WHERE MaKy=@MaKy AND CoChiTre=1)
                     UPDATE KyLuong SET CoChiTre=1 WHERE MaKy=@MaKy;`);
         }
+        await insertPayoutHistory(transaction, {
+            MaKy: voucher.MaKy,
+            MaPhieu: maPhieu,
+            MaNV: voucher.MaNV,
+            SoTien: amount,
+            PhuongThuc: voucher.PhuongThuc,
+            MaGiaoDichNganHang: voucher.PhuongThuc === 'Chuyển khoản' ? bankCode : null,
+            SoTienMatCon: matCon,
+            SoTienCKCon: ckCon,
+            MaNV_KT: req.user.MaNV,
+            ThanhCong: success,
+            GhiChu: success
+                ? (late ? `Chi trễ: ${lateNote}` : paymentNote)
+                : paymentNote
+        });
         await writeAudit(transaction, req.user,
-            success ? 'Chi lương thành công' : 'Ghi nhận chi lương thất bại',
+            success ? 'Chi lương từ quỹ chung' : 'Ghi nhận chi lương thất bại',
             maPhieu,
             success
-                ? `Đã chi ${voucher.PhuongThuc} ${Number(voucher.SoTien)} cho ${voucher.TenNV} kỳ ${voucher.MaKy}${late ? `; trễ hạn, lý do: ${lateNote}` : ''}.`
-                : `Chi lương thất bại; bảng lương giữ Đã khóa. Lý do: ${paymentNote}`);
+                ? `Đã chi ${voucher.PhuongThuc} ${amount} cho ${voucher.TenNV} kỳ ${voucher.MaKy} từ quỹ chung. TM còn ${matCon}; CK còn ${ckCon}.${late ? ` Trễ hạn, lý do: ${lateNote}` : ''}`
+                : `Chi lương thất bại; quỹ chung không trừ. Bảng lương giữ Đã khóa. Lý do: ${paymentNote}`);
         await transaction.commit();
         res.json({
             message: success
-                ? `Đã chi lương thành công cho ${voucher.TenNV}. Bảng lương chuyển Đã thanh toán.`
-                : 'Đã ghi nhận chi lương thất bại. Dùng lại cùng phiếu, không tạo phiếu mới.',
+                ? `Đã chi lương thành công cho ${voucher.TenNV} từ quỹ chung. Quỹ còn: TM ${matCon}, CK ${ckCon}.`
+                : 'Đã ghi nhận chi lương thất bại. Quỹ chung không bị trừ. Dùng lại cùng phiếu.',
             MaPhieu: maPhieu,
             TrangThai: success ? 'Thanh toán thành công' : 'Thanh toán thất bại',
-            CoChiTre: success && late
+            CoChiTre: success && late,
+            SoTienMatCon: matCon,
+            SoTienCKCon: ckCon
         });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
@@ -219,21 +278,43 @@ const getApprovalDetail = async (req, res) => {
         if (!voucher) return res.status(404).json({ message: 'Không tìm thấy Phiếu chi lương.' });
         const siblings = await pool.request().input('MaKy', sql.VarChar, voucher.MaKy).query(`
             SELECT PhuongThuc,TrangThai,COUNT(*) SoPhieu,SUM(SoTien) TongTien
-            FROM PhieuChiLuong WHERE MaKy=@MaKy AND TrangThai=N'Chờ duyệt'
+            FROM PhieuChiLuong WHERE MaKy=@MaKy
             GROUP BY PhuongThuc,TrangThai`);
         const period = await pool.request().input('MaKy', sql.VarChar, voucher.MaKy)
             .query('SELECT * FROM KyLuong WHERE MaKy=@MaKy');
         const employee = await pool.request().input('MaNV', sql.VarChar, voucher.MaNV)
             .query('SELECT MaNV,TenNV,ChucVu FROM NhanVien WHERE MaNV=@MaNV');
+        const fund = await snapshotFund(pool, voucher.MaKy);
         res.json({
             voucher: { ...voucher, TenNV: employee.recordset[0]?.TenNV, ChucVu: employee.recordset[0]?.ChucVu },
             batch: siblings.recordset,
-            period: period.recordset[0] || null
+            period: period.recordset[0] || null,
+            fund
         });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải hồ sơ Phiếu chi lương.' });
     }
+};
+
+const approveOne = async (transaction, user, maPhieu) => {
+    const current = await new sql.Request(transaction).input('Id', sql.VarChar, maPhieu).query(`
+        SELECT pcl.*,nv.TenNV FROM PhieuChiLuong pcl WITH(UPDLOCK,HOLDLOCK)
+        JOIN NhanVien nv ON nv.MaNV=pcl.MaNV
+        WHERE pcl.MaPhieu=@Id`);
+    if (!current.recordset.length) throw new Error('Không tìm thấy Phiếu chi lương.');
+    const voucher = current.recordset[0];
+    if (voucher.TrangThai !== 'Chờ duyệt') throw new Error(`Phiếu ${maPhieu} không còn ở trạng thái Chờ duyệt.`);
+    await new sql.Request(transaction).input('Id', sql.VarChar, maPhieu)
+        .input('MaNV', sql.VarChar, user.MaNV)
+        .query(`UPDATE PhieuChiLuong SET MaNV_Duyet=@MaNV,NgayDuyet=GETDATE(),LyDoTuChoi=NULL,
+                TrangThai=N'Đã duyệt' WHERE MaPhieu=@Id`);
+    await logAudit(transaction, {
+        user, action: 'Duyệt Phiếu chi lương', table: 'PhieuChiLuong', recordId: maPhieu,
+        uc: 'UC09', severity: 'Quan trọng',
+        content: `Đã duyệt ${voucher.MaPhieu} (${voucher.TenNV}, ${voucher.PhuongThuc} ${Number(voucher.SoTien)}). Chưa giao quỹ — Quản lý giao quỹ chung một lần cho kỳ ${voucher.MaKy}.`
+    });
+    return voucher;
 };
 
 const decideVoucher = approved => async (req, res) => {
@@ -243,13 +324,16 @@ const decideVoucher = approved => async (req, res) => {
     try {
         const maPhieu = clean(req.params.id, 30);
         const reason = clean(req.body.LyDo, 500);
-        const fundMethod = clean(req.body.HinhThucCapQuy, 40);
-        const fundNote = clean(req.body.GhiChuCapQuy, 500);
         if (!approved && !reason) throw new Error('Từ chối Phiếu chi lương phải ghi lý do.');
-        if (approved && !FUND_METHODS.has(fundMethod)) {
-            throw new Error('Quản lý phải chọn cách giao quỹ: Tiền mặt hoặc Ủy quyền chuyển khoản.');
-        }
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        if (approved) {
+            const voucher = await approveOne(transaction, req.user, maPhieu);
+            await transaction.commit();
+            return res.json({
+                message: `Đã duyệt Phiếu chi lương ${maPhieu} (${voucher.TenNV}). Chưa giao quỹ. Sau khi duyệt xong kỳ, bấm Giao quỹ chung một lần.`,
+                MaPhieu: maPhieu, TrangThai: 'Đã duyệt'
+            });
+        }
         const current = await new sql.Request(transaction).input('Id', sql.VarChar, maPhieu).query(`
             SELECT pcl.*,nv.TenNV FROM PhieuChiLuong pcl WITH(UPDLOCK,HOLDLOCK)
             JOIN NhanVien nv ON nv.MaNV=pcl.MaNV
@@ -257,41 +341,122 @@ const decideVoucher = approved => async (req, res) => {
         if (!current.recordset.length) throw new Error('Không tìm thấy Phiếu chi lương.');
         const voucher = current.recordset[0];
         if (voucher.TrangThai !== 'Chờ duyệt') throw new Error('Phiếu chi lương không còn ở trạng thái Chờ duyệt.');
-        if (approved && voucher.PhuongThuc === 'Tiền mặt' && fundMethod !== 'Tiền mặt') {
-            throw new Error('Phiếu chi lương tiền mặt: Quản lý phải giao đủ tiền mặt cho Kế toán.');
-        }
-        if (approved && voucher.PhuongThuc === 'Chuyển khoản' && fundMethod !== 'Ủy quyền chuyển khoản') {
-            throw new Error('Phiếu chi lương chuyển khoản: Quản lý ủy quyền cho Kế toán dùng tài khoản cửa hàng.');
-        }
-        const tmTotal = approved && voucher.PhuongThuc === 'Tiền mặt'
-            ? (await new sql.Request(transaction).input('MaKy', sql.VarChar, voucher.MaKy).query(`
-                SELECT COALESCE(SUM(SoTien),0) Tong FROM PhieuChiLuong
-                WHERE MaKy=@MaKy AND PhuongThuc=N'Tiền mặt' AND TrangThai=N'Chờ duyệt'`)).recordset[0].Tong
-            : 0;
         await new sql.Request(transaction).input('Id', sql.VarChar, maPhieu)
             .input('MaNV', sql.VarChar, req.user.MaNV)
-            .input('LyDo', sql.NVarChar, approved ? null : reason)
-            .input('TrangThai', sql.NVarChar, approved ? 'Đã duyệt' : 'Từ chối')
-            .input('HinhThucCapQuy', sql.NVarChar, approved ? fundMethod : null)
-            .input('GhiChuCapQuy', sql.NVarChar, approved ? fundNote : null)
+            .input('LyDo', sql.NVarChar, reason)
             .query(`UPDATE PhieuChiLuong SET MaNV_Duyet=@MaNV,NgayDuyet=GETDATE(),LyDoTuChoi=@LyDo,
-                    TrangThai=@TrangThai,HinhThucCapQuy=@HinhThucCapQuy,
-                    NgayCapQuy=CASE WHEN @TrangThai=N'Đã duyệt' THEN GETDATE() ELSE NULL END,
-                    GhiChuCapQuy=@GhiChuCapQuy WHERE MaPhieu=@Id`);
+                    TrangThai=N'Từ chối' WHERE MaPhieu=@Id`);
         await logAudit(transaction, {
-            user: req.user, action: approved ? 'Duyệt Phiếu chi lương và giao quỹ' : 'Từ chối Phiếu chi lương',
+            user: req.user, action: 'Từ chối Phiếu chi lương',
             table: 'PhieuChiLuong', recordId: maPhieu, uc: 'UC09', severity: 'Quan trọng',
-            content: approved
-                ? `Đã duyệt ${voucher.MaPhieu} (${voucher.TenNV}, ${voucher.PhuongThuc} ${Number(voucher.SoTien)}). ${voucher.PhuongThuc === 'Tiền mặt' ? `Giao quỹ TM đợt (các phiếu TM chờ duyệt kỳ ${voucher.MaKy}): ${Number(tmTotal)}.` : 'Ủy quyền chuyển khoản.'} Bảng lương chưa Đã thanh toán.`
-                : `Từ chối ${voucher.MaPhieu}. Lý do: ${reason}. Kế toán sửa trên cùng phiếu.`
+            content: `Từ chối ${voucher.MaPhieu}. Lý do: ${reason}. Kế toán sửa trên cùng phiếu.`
+        });
+        await transaction.commit();
+        res.json({ message: `Đã từ chối Phiếu chi lương ${maPhieu}.`, MaPhieu: maPhieu, TrangThai: 'Từ chối' });
+    } catch (error) {
+        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        res.status(400).json({ message: error.message });
+    }
+};
+
+const approveAll = async (req, res) => {
+    const month = clean(req.body.MaKy, 7) || clean(req.query.MaKy, 7);
+    if (!validMonth(month)) return res.status(400).json({ message: 'Cần kỳ lương (MaKy, dạng YYYY-MM) để duyệt tất cả phiếu chờ.' });
+    const pool = await poolPromise;
+    await ensurePayrollSchema(pool);
+    const transaction = new sql.Transaction(pool);
+    try {
+        await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        const pending = await new sql.Request(transaction).input('MaKy', sql.VarChar, month).query(`
+            SELECT MaPhieu FROM PhieuChiLuong WITH(UPDLOCK,HOLDLOCK)
+            WHERE MaKy=@MaKy AND TrangThai=N'Chờ duyệt' ORDER BY MaPhieu`);
+        if (!pending.recordset.length) throw new Error(`Kỳ ${month} không còn phiếu chi lương chờ duyệt.`);
+        const approved = [];
+        for (const row of pending.recordset) {
+            const voucher = await approveOne(transaction, req.user, row.MaPhieu);
+            approved.push({ MaPhieu: voucher.MaPhieu, TenNV: voucher.TenNV, SoTien: Number(voucher.SoTien), PhuongThuc: voucher.PhuongThuc });
+        }
+        await logAudit(transaction, {
+            user: req.user, action: 'Duyệt hàng loạt Phiếu chi lương', table: 'KyLuong', recordId: month,
+            uc: 'UC09', severity: 'Quan trọng',
+            content: `Đã duyệt ${approved.length} phiếu kỳ ${month}. Chưa giao quỹ — bước tiếp theo là giao quỹ chung một lần.`
         });
         await transaction.commit();
         res.json({
-            message: approved
-                ? `Đã duyệt và giao quỹ trên Phiếu chi lương ${maPhieu}. Kế toán mới được chi. Bảng lương chỉ chuyển Đã thanh toán khi chi thành công.`
-                : `Đã từ chối Phiếu chi lương ${maPhieu}.`,
-            MaPhieu: maPhieu, TrangThai: approved ? 'Đã duyệt' : 'Từ chối',
-            HinhThucCapQuy: approved ? fundMethod : null
+            message: `Đã duyệt ${approved.length} phiếu kỳ ${month}. Tiếp theo hãy giao quỹ chung một lần cho Kế toán.`,
+            MaKy: month,
+            items: approved
+        });
+    } catch (error) {
+        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        res.status(400).json({ message: error.message });
+    }
+};
+
+const handOverFund = async (req, res) => {
+    const month = clean(req.params.month, 7);
+    if (!validMonth(month)) return res.status(400).json({ message: 'Kỳ lương không hợp lệ.' });
+    const note = clean(req.body.GhiChu, 500);
+    const pool = await poolPromise;
+    await ensurePayrollSchema(pool);
+    const transaction = new sql.Transaction(pool);
+    try {
+        await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        const pending = await new sql.Request(transaction).input('MaKy', sql.VarChar, month)
+            .query(`SELECT COUNT(*) SoLuong FROM PhieuChiLuong WITH(UPDLOCK,HOLDLOCK) WHERE MaKy=@MaKy AND TrangThai=N'Chờ duyệt'`);
+        if (Number(pending.recordset[0].SoLuong) > 0) {
+            throw new Error(`Còn ${pending.recordset[0].SoLuong} phiếu chưa duyệt. Hãy duyệt hết (hoặc Duyệt tất cả) rồi mới giao quỹ chung.`);
+        }
+        const needRow = await new sql.Request(transaction).input('MaKy', sql.VarChar, month).query(`
+            SELECT PhuongThuc, COUNT(*) SoPhieu, COALESCE(SUM(SoTien),0) Tong
+            FROM PhieuChiLuong WITH(UPDLOCK,HOLDLOCK)
+            WHERE MaKy=@MaKy AND TrangThai IN (N'Đã duyệt', N'Thanh toán thất bại')
+            GROUP BY PhuongThuc`);
+        const of = method => needRow.recordset.find(row => row.PhuongThuc === method);
+        const tmNeed = Number(of('Tiền mặt')?.Tong || 0);
+        const ckNeed = Number(of('Chuyển khoản')?.Tong || 0);
+        if (tmNeed <= 0 && ckNeed <= 0) {
+            throw new Error('Không có phiếu đã duyệt chưa chi để giao quỹ chung.');
+        }
+        const current = await new sql.Request(transaction).input('MaKy', sql.VarChar, month)
+            .query('SELECT * FROM QuyLuongKy WITH(UPDLOCK,HOLDLOCK) WHERE MaKy=@MaKy');
+        const fund = current.recordset[0];
+        const tmCon = Number(fund?.SoTienMatCon || 0);
+        const ckCon = Number(fund?.SoTienCKCon || 0);
+        const tmTopUp = Math.max(0, tmNeed - tmCon);
+        const ckTopUp = Math.max(0, ckNeed - ckCon);
+        if (tmTopUp <= 0 && ckTopUp <= 0) {
+            throw new Error('Quỹ chung kỳ này đã đủ cho các phiếu đã duyệt chưa chi.');
+        }
+        await new sql.Request(transaction)
+            .input('MaKy', sql.VarChar, month)
+            .input('TmTop', sql.Decimal(18, 2), tmTopUp)
+            .input('CkTop', sql.Decimal(18, 2), ckTopUp)
+            .input('MaNV', sql.VarChar, req.user.MaNV)
+            .input('GhiChu', sql.NVarChar, note)
+            .query(`
+                MERGE QuyLuongKy target USING (SELECT @MaKy MaKy) source ON target.MaKy=source.MaKy
+                WHEN MATCHED THEN UPDATE SET
+                    SoTienMatGiao=SoTienMatGiao+@TmTop,
+                    SoTienMatCon=SoTienMatCon+@TmTop,
+                    SoTienCKGiao=SoTienCKGiao+@CkTop,
+                    SoTienCKCon=SoTienCKCon+@CkTop,
+                    MaNV_QL=@MaNV, NgayGiao=GETDATE(), GhiChu=@GhiChu, NgayCapNhat=GETDATE()
+                WHEN NOT MATCHED THEN INSERT(MaKy,SoTienMatGiao,SoTienMatCon,SoTienCKGiao,SoTienCKCon,MaNV_QL,NgayGiao,GhiChu)
+                    VALUES(@MaKy,@TmTop,@TmTop,@CkTop,@CkTop,@MaNV,GETDATE(),@GhiChu);`);
+        const after = await loadFund(transaction, month);
+        await logAudit(transaction, {
+            user: req.user, action: 'Giao quỹ lương chung', table: 'QuyLuongKy', recordId: month,
+            uc: 'UC09', severity: 'Quan trọng',
+            content: `Kỳ ${month}: giao TM +${tmTopUp} (còn ${Number(after.SoTienMatCon)}), ủy quyền CK +${ckTopUp} (còn ${Number(after.SoTienCKCon)}). Kế toán chích từng nhân viên từ quỹ này.`
+        });
+        await transaction.commit();
+        res.json({
+            message: `Đã giao quỹ chung kỳ ${month}. Tiền mặt ${tmTopUp ? `+${tmTopUp}` : 'không thêm'}; chuyển khoản ${ckTopUp ? `+${ckTopUp}` : 'không thêm'}. Kế toán chi từng người từ quỹ còn lại.`,
+            MaKy: month,
+            tmTopUp,
+            ckTopUp,
+            fund: after
         });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
@@ -318,6 +483,75 @@ const listPending = async (req, res) => {
     }
 };
 
+const listBoard = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        await ensurePayrollSchema(pool);
+        const result = await pool.request().query(`
+            SELECT pcl.MaPhieu,pcl.MaKy,pcl.MaNV,nv.TenNV,nv.ChucVu,pcl.SoTien,pcl.PhuongThuc,pcl.TrangThai,
+                   pcl.NgayLap,pcl.NgayDuyet,lap.TenNV AS NguoiLap,CONVERT(varchar(10),k.NgayTraDuKien,23) NgayTraDuKien
+            FROM PhieuChiLuong pcl
+            JOIN NhanVien nv ON nv.MaNV=pcl.MaNV
+            JOIN NhanVien lap ON lap.MaNV=pcl.MaNV_Lap
+            JOIN KyLuong k ON k.MaKy=pcl.MaKy
+            WHERE pcl.TrangThai IN (N'Chờ duyệt', N'Đã duyệt', N'Thanh toán thất bại')
+            ORDER BY pcl.MaKy DESC, pcl.NgayLap DESC`);
+        const byKy = new Map();
+        for (const row of result.recordset) {
+            if (!byKy.has(row.MaKy)) byKy.set(row.MaKy, []);
+            byKy.get(row.MaKy).push(row);
+        }
+        const periods = [];
+        for (const [MaKy, items] of byKy) {
+            const fund = await snapshotFund(pool, MaKy);
+            periods.push({
+                MaKy,
+                pending: items.filter(item => item.TrangThai === 'Chờ duyệt'),
+                approved: items.filter(item => ['Đã duyệt', 'Thanh toán thất bại'].includes(item.TrangThai)),
+                fund
+            });
+        }
+        res.json({ periods });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Không thể tải bảng duyệt lương.' });
+    }
+};
+
+const getAccountantActivity = async (req, res) => {
+    if (String(req.user?.TenVaiTro || '').trim() !== 'Kế toán') {
+        return res.status(403).json({ message: 'Chỉ Kế toán xem lịch sử hoạt động kế toán của mình.' });
+    }
+    try {
+        const data = await listAuditLogs({
+            ...req.query,
+            role: 'Kế toán',
+            actor: req.user.MaNV,
+            kind: req.query.kind == null ? 'nghiep-vu' : req.query.kind
+        });
+        res.json(data);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: error.message || 'Không thể tải lịch sử kế toán.' });
+    }
+};
+
+const getPayoutHistory = async (req, res) => {
+    if (String(req.user?.TenVaiTro || '').trim() !== 'Kế toán') {
+        return res.status(403).json({ message: 'Chỉ Kế toán xem lịch sử chi lương từ quỹ chung.' });
+    }
+    try {
+        const pool = await poolPromise;
+        await ensurePayrollSchema(pool);
+        const month = clean(req.query.month, 7) || '';
+        const items = await listPayouts(pool, { maKy: month, actor: req.user.MaNV, take: 200 });
+        res.json({ items });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Không thể tải lịch sử chi lương từ quỹ chung.' });
+    }
+};
+
 module.exports = {
     createVouchers,
     resubmitVoucher,
@@ -325,5 +559,10 @@ module.exports = {
     getApprovalDetail,
     approveVoucher: decideVoucher(true),
     rejectVoucher: decideVoucher(false),
-    listPending
+    approveAll,
+    handOverFund,
+    listPending,
+    listBoard,
+    getAccountantActivity,
+    getPayoutHistory
 };

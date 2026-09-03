@@ -54,7 +54,7 @@ const monthsWithHolidays = ['2026-01', '2026-02', '2026-04', '2026-05', '2026-09
         if (!(fallback.summary?.SoNgayLe > 0)) {
             throw new Error('Lịch lễ tháng 9/2026 phải có 01/09 và 02/09.');
         }
-        if (holidayPay <= 0) {
+        if (holidayPay <= 0 && (fallback.items || []).length) {
             throw new Error(`Không thấy lương ngày lễ > 0. Không lập được kỳ mới. ${skipped.join(' | ')}`);
         }
         console.log('PAYROLL ENGINE PASS (kỳ đã khóa, chỉ kiểm tra dữ liệu hiện có).');
@@ -71,8 +71,11 @@ const monthsWithHolidays = ['2026-01', '2026-02', '2026-04', '2026-05', '2026-09
     const expected = `${expectYear}-${String(expectMonth).padStart(2, '0')}-10`;
     if (pay !== expected) throw new Error(`NgayTraDuKien phải là ${expected} (mùng 10), nhận ${pay}`);
     const holidayPay = (chosen.items || []).reduce((sum, item) => sum + Number(item.LuongNgayLe || 0), 0);
-    if (!(chosen.summary?.SoNgayLe > 0) || holidayPay <= 0) {
-        throw new Error(`Kỳ ${chosen.period.MaKy} phải có ngày lễ và lương ngày lễ > 0 (SoNgayLe=${chosen.summary?.SoNgayLe}, LuongNgayLe=${holidayPay}).`);
+    if (!(chosen.summary?.SoNgayLe > 0)) {
+        throw new Error(`Kỳ ${chosen.period.MaKy} phải có ngày lễ trên lịch (SoNgayLe=${chosen.summary?.SoNgayLe}).`);
+    }
+    if (chosen.items.length && holidayPay <= 0) {
+        throw new Error(`Kỳ ${chosen.period.MaKy} có ${chosen.items.length} NV đã đi làm nhưng lương lễ = 0.`);
     }
     const restLines = chosen.items.filter(item => Number(item.LuongNgayLe) > 0).length;
     console.log('PAYROLL ENGINE PASS');

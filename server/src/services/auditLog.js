@@ -14,6 +14,8 @@ const TABLE_LABELS = {
     ThanhToan: 'Thanh toán hóa đơn',
     PhieuChi: 'Phiếu chi Nhà cung cấp',
     PhieuChiLuong: 'Phiếu chi lương',
+    QuyLuongKy: 'Quỹ lương chung',
+    LichSuChiLuong: 'Lịch sử chi lương từ quỹ chung',
     PhieuThu: 'Phiếu thu cuối ca',
     CaLamViec: 'Ca bán hàng',
     CongNoNCC: 'Công nợ Nhà cung cấp',
@@ -29,7 +31,9 @@ const TABLE_LABELS = {
     KyLuong: 'Kỳ lương',
     BangLuong: 'Bảng lương',
     NgayLeNam: 'Lịch ngày lễ năm',
-    HeSoLuongNgay: 'Hệ số lương ngày'
+    HeSoLuongNgay: 'Hệ số lương ngày',
+    KeHoachDieuChinhLaiLo: 'Kế hoạch điều chỉnh lãi lỗ',
+    ThongBaoCuaHang: 'Thông báo cửa hàng'
 };
 
 const TARGET_BY_TABLE = {
@@ -40,6 +44,8 @@ const TARGET_BY_TABLE = {
     PhieuDoiTra: 'manager-purchase-approvals',
     PhieuChi: 'manager-purchase-approvals',
     PhieuChiLuong: 'manager-purchase-approvals',
+    QuyLuongKy: 'accounting-payroll',
+    LichSuChiLuong: 'accounting-payroll',
     HoaDonMuaHang: 'manager-payables',
     CongNoNCC: 'manager-payables',
     PhieuThu: 'manager-payables',
@@ -50,6 +56,8 @@ const TARGET_BY_TABLE = {
     BangLuong: 'manager-workforce',
     NgayLeNam: 'manager-holidays',
     HeSoLuongNgay: 'manager-holidays',
+    KeHoachDieuChinhLaiLo: 'manager-reports',
+    ThongBaoCuaHang: 'manager-reports',
     SanPham: '../admin/products.html',
     DanhMuc: '../admin/products.html',
     KhuyenMai: '../admin/promotions.html',
@@ -59,6 +67,11 @@ const TARGET_BY_TABLE = {
 };
 
 const ACTION_META = {
+    'Gửi kế hoạch điều chỉnh lãi lỗ': {
+        viecLam: 'Gửi kế hoạch điều chỉnh khi cửa hàng lỗ',
+        giaiThich: 'Quản lý ghi nguyên nhân, việc sẽ làm và hạn xem lại, rồi gửi thông báo tới mọi nhân viên đang làm việc. Không chi tiền, không sửa lãi gộp.',
+        mucDo: 'Cảnh báo', nhom: 'tien-ton', target: 'manager-reports'
+    },
     'Đăng nhập': {
         viecLam: 'Đăng nhập hệ thống',
         giaiThich: 'Ghi nhận nhân viên đã mở phần mềm. Không làm thay đổi tiền, tồn kho hay chứng từ.',
@@ -364,15 +377,35 @@ const ACTION_META = {
         giaiThich: 'Kế toán đổi phương thức trên cùng phiếu bị từ chối. Không tạo phiếu thứ hai.',
         mucDo: 'Cảnh báo', nhom: 'luong'
     },
+    'Duyệt Phiếu chi lương': {
+        viecLam: 'Duyệt phiếu chi lương',
+        giaiThich: 'Quản lý đồng ý chi cho nhân viên này. Chưa đưa tiền. Quỹ chung giao sau, một lần cho cả kỳ.',
+        mucDo: 'Quan trọng', nhom: 'duyet'
+    },
+    'Duyệt hàng loạt Phiếu chi lương': {
+        viecLam: 'Duyệt tất cả phiếu chi lương kỳ',
+        giaiThich: 'Duyệt nhanh các phiếu đang chờ trên bảng lương kỳ đó. Vẫn chưa giao quỹ.',
+        mucDo: 'Quan trọng', nhom: 'duyet'
+    },
+    'Giao quỹ lương chung': {
+        viecLam: 'Giao quỹ lương chung',
+        giaiThich: 'Quản lý đưa một cục tiền mặt và/hoặc ủy quyền chuyển khoản cho Kế toán. Kế toán mới được chích từng người từ quỹ này.',
+        mucDo: 'Quan trọng', nhom: 'luong', target: 'accounting-payroll'
+    },
     'Duyệt Phiếu chi lương và giao quỹ': {
-        viecLam: 'Duyệt phiếu chi lương và giao quỹ',
-        giaiThich: 'Quản lý giao tiền mặt hoặc ủy quyền chuyển khoản cho Kế toán. Bảng lương chưa Đã thanh toán.',
+        viecLam: 'Duyệt phiếu chi lương và giao quỹ (cách cũ)',
+        giaiThich: 'Cách cũ: giao quỹ theo từng người. Hiện tại duyệt riêng, giao quỹ chung một lần.',
         mucDo: 'Quan trọng', nhom: 'duyet'
     },
     'Từ chối Phiếu chi lương': {
         viecLam: 'Từ chối phiếu chi lương',
         giaiThich: 'Kế toán sửa trên cùng phiếu. Bảng lương vẫn khóa.',
         mucDo: 'Cảnh báo', nhom: 'duyet'
+    },
+    'Chi lương từ quỹ chung': {
+        viecLam: 'Chi lương từ quỹ chung',
+        giaiThich: 'Kế toán chích một khoản từ quỹ chung để trả một nhân viên. Quỹ còn lại giảm. Chuyển khoản bắt buộc mã giao dịch.',
+        mucDo: 'Quan trọng', nhom: 'luong', target: 'accounting-payroll'
     },
     'Chi lương thành công': {
         viecLam: 'Chi lương thành công',
@@ -704,7 +737,9 @@ const listAuditLogs = async (query = {}) => {
                     : kind === 'cong-no'
                         ? `AND (nk.BangLienQuan IN (N'PhieuChi',N'HoaDonMuaHang',N'CongNoNCC') OR nk.HanhDong LIKE N'%Phiếu chi%' OR nk.HanhDong LIKE N'%công nợ%')`
                         : kind === 'luong'
-                            ? `AND (nk.BangLienQuan IN (N'KyLuong',N'BangLuong',N'ChamCong',N'LichLamViec',N'CaLamViec') OR nk.HanhDong LIKE N'%lương%' OR nk.HanhDong LIKE N'%chấm công%' OR nk.HanhDong LIKE N'%ca %')`
+                            ? `AND (nk.BangLienQuan IN (N'KyLuong',N'BangLuong',N'ChamCong',N'LichLamViec',N'CaLamViec',N'PhieuChiLuong',N'QuyLuongKy',N'LichSuChiLuong') OR nk.HanhDong LIKE N'%lương%' OR nk.HanhDong LIKE N'%chấm công%' OR nk.HanhDong LIKE N'%ca %' OR nk.HanhDong LIKE N'%quỹ%')`
+                            : kind === 'quy-luong'
+                                ? `AND (nk.BangLienQuan IN (N'QuyLuongKy',N'LichSuChiLuong',N'PhieuChiLuong') OR nk.HanhDong LIKE N'%quỹ lương%' OR nk.HanhDong LIKE N'%Chi lương%' OR nk.HanhDong LIKE N'%Phiếu chi lương%')`
                             : kind === 'he-thong'
                                 ? `AND nk.BangLienQuan IN (N'TaiKhoan',N'NhanVien',N'VaiTro_ChucNang')`
                                 : '';

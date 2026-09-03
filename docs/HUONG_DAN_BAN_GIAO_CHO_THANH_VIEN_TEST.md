@@ -148,13 +148,13 @@ Nếu một tài khoản đã được đổi mật khẩu hoặc bị khóa tro
 Thực hiện chi tiết từng ca bình thường và ngoại lệ theo file:
 
 ```text
-HUONG_DAN_KIEM_THU_TOAN_BO_HE_THONG_SUPERMARKET_FLY.txt
+docs/HUONG_DAN_KIEM_THU_TOAN_BO_HE_THONG_SUPERMARKET_FLY.txt
 ```
 
 Riêng UC10/UC27/UC29 dùng thêm:
 
 ```text
-HUONG_DAN_KIEM_THU_UC10_UC27_UC29.md
+docs/HUONG_DAN_KIEM_THU_UC10_UC27_UC29.md
 ```
 
 ## 9. Quy ước dữ liệu test

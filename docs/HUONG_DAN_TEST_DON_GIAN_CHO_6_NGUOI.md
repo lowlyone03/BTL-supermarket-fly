@@ -33,7 +33,7 @@ chứa database.
 ```text
 Mọi người chỉ tải hai mục mình gửi: ZIP dự án và file database .bak.
 
-Mỗi người làm theo file HUONG_DAN_TEST_DON_GIAN_CHO_6_NGUOI.md trong dự án.
+Mỗi người làm theo file `docs/HUONG_DAN_TEST_DON_GIAN_CHO_6_NGUOI.md` trong dự án.
 Mật khẩu tài khoản test đều là 123.
 
 Mỗi người chỉ test phần được phân công. Khi gặp lỗi, gửi vào nhóm:

@@ -208,6 +208,11 @@ const holidayRestLine = (day, luongGio) => ({
     ThanhTien: money(HOLIDAY_MINUTES / 60 * luongGio)
 });
 
+const workMinutesOf = (details = []) => details.reduce((sum, line) => {
+    if (line.LoaiGio === 'NgayLeNghi') return sum;
+    return sum + Number(line.PhutNgay || 0) + Number(line.PhutDem || 0);
+}, 0);
+
 const summarize = (details) => {
     let phutNgay = 0;
     let phutDem = 0;
@@ -263,5 +268,5 @@ module.exports = {
     validMonth, money, dateKey, paymentDateFor, periodBounds,
     employedOn, loadRates, rateOf, loadHolidays, holidaySet,
     validateLunarCalendar, pendingAttendance, computeShiftLines,
-    holidayRestLine, summarize, lateWarning, voucherMaPhieu, mondayKey
+    holidayRestLine, workMinutesOf, summarize, lateWarning, voucherMaPhieu, mondayKey
 };

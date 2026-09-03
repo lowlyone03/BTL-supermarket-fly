@@ -285,11 +285,22 @@
         const intro = officeToday
           ? 'Chấm công ca hành chính 7h30–17h30. Giờ nghỉ trưa 11h30–13h30 không tính lương.'
           : 'Chấm công theo lịch đã được Quản lý công bố trước khi nhận nhiệm vụ hoặc mở quầy.';
-        const goPos = (today?.NhiemVu === 'Ca chính full-time' || today?.NhiemVu === 'Thu ngân') && today?.ThoiGianVao && !today?.ThoiGianRa;
+        const duty = data.duty || {};
+        const goPos = Boolean(duty.canOpenShift);
+        const checkInBtn = !today
+          ? ''
+          : duty.canCheckIn === false && !today.ThoiGianVao
+            ? `<span class="status-pill draft">${esc(duty.message || 'Chưa tới giờ ca / đã hết ca')}</span>`
+            : !today.ThoiGianVao
+              ? '<button class="warehouse-primary" id="checkIn"><svg><use href="#i-clock"/></svg>Chấm công vào</button>'
+              : !today.ThoiGianRa
+                ? '<button class="warehouse-secondary" id="checkOut"><svg><use href="#i-clock"/></svg>Chấm công ra</button>'
+                : '<span class="status-pill ok">Đã hoàn thành chấm công</span>';
+        const dutyLine = duty.message && today ? `<p class="workforce-duty-note">${esc(duty.message)}</p>` : '';
         const restNote = data.publishedCount
           ? `<article class="workforce-no-shift"><svg><use href="#i-calendar"/></svg><h2>Hôm nay bạn được xếp nghỉ</h2><p>Lịch tuần đã được công bố, nhưng hôm nay không có ca của bạn nên chưa hiện nút chấm công.${data.nextShift ? ` Ca gần nhất: <strong>${esc(data.nextShift.TenCa)} · ${shortDate(data.nextShift.NgayLam)}</strong>.` : ''} Muốn mở quầy hôm nay, hãy đăng nhập đúng thu ngân được phân <strong>ca chính 8 giờ</strong> trong ngày.</p></article>`
           : `<article class="workforce-no-shift"><svg><use href="#i-calendar"/></svg><h2>Hôm nay chưa có lịch được công bố</h2><p>Bạn chưa thể chấm công. Hãy liên hệ Quản lý cửa hàng nếu lịch cần được điều chỉnh.</p></article>`;
-        root.innerHTML = `<header class="warehouse-heading"><div><p class="warehouse-kicker">NHÂN VIÊN / LỊCH CÁ NHÂN</p><h1>Lịch làm việc của tôi</h1><p>${intro}</p></div><span class="warehouse-chip">Supermarket Fly · Hà Nội</span></header>${today ? `<article class="workforce-today"><div><span class="cashier-live"><i></i> LỊCH HÔM NAY</span><h2>${esc(today.TenCa)} · ${esc(today.GioBatDau)}–${esc(today.GioKetThuc)}${lunch}</h2><p>${esc(today.NhiemVu)}${today.TenQuay ? ` tại ${esc(today.TenQuay)}` : ''}${officeToday ? ' · không mở quầy bán hàng' : ''}</p><div class="workforce-today-times"><span>Vào ca <strong>${fmtDateTime(today.ThoiGianVao)}</strong></span><span>Ra ca <strong>${fmtDateTime(today.ThoiGianRa)}</strong></span></div></div><div class="workforce-today-actions">${!today.ThoiGianVao ? '<button class="warehouse-primary" id="checkIn"><svg><use href="#i-clock"/></svg>Chấm công vào</button>' : !today.ThoiGianRa ? '<button class="warehouse-secondary" id="checkOut"><svg><use href="#i-clock"/></svg>Chấm công ra</button>' : '<span class="status-pill ok">Đã hoàn thành chấm công</span>'}${goPos ? '<button class="warehouse-primary" id="goShift">Đi tới mở ca bán hàng</button>' : ''}</div></article>` : restNote}<article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>LỊCH ĐÃ CÔNG BỐ</p><h2>Các lượt làm việc gần đây</h2></div><button class="warehouse-secondary" id="refreshPersonal"><svg><use href="#i-refresh"/></svg>Làm mới</button></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NGÀY</th><th>CA LÀM VIỆC</th><th>NHIỆM VỤ</th><th>QUẦY</th><th>CHẤM CÔNG VÀO</th><th>CHẤM CÔNG RA</th><th>TRẠNG THÁI</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><strong>${shortDate(item.NgayLam)}</strong></td><td>${esc(item.TenCa)}<small>${esc(item.GioBatDau)}–${esc(item.GioKetThuc)}${item.GioNghiBatDau ? ` · nghỉ ${esc(item.GioNghiBatDau)}–${esc(item.GioNghiKetThuc)}` : ''}</small></td><td>${esc(item.NhiemVu)}</td><td>${esc(item.TenQuay || '—')}</td><td>${fmtDateTime(item.ThoiGianVao)}</td><td>${fmtDateTime(item.ThoiGianRa)}</td><td><span class="status-pill ${item.ThoiGianRa ? 'ok' : item.ThoiGianVao ? 'sent' : 'draft'}">${esc(item.TrangThaiChamCong || 'Chưa chấm công')}</span></td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có lịch nào được công bố.</td></tr>'}</tbody></table></div></article>`;
+        root.innerHTML = `<header class="warehouse-heading"><div><p class="warehouse-kicker">NHÂN VIÊN / LỊCH CÁ NHÂN</p><h1>Lịch làm việc của tôi</h1><p>${intro}</p></div><span class="warehouse-chip">Supermarket Fly · Hà Nội</span></header>${today ? `<article class="workforce-today"><div><span class="cashier-live"><i></i> LỊCH HÔM NAY</span><h2>${esc(today.TenCa)} · ${esc(today.GioBatDau)}–${esc(today.GioKetThuc)}${lunch}</h2><p>${esc(today.NhiemVu)}${today.TenQuay ? ` tại ${esc(today.TenQuay)}` : ''}${officeToday ? ' · không mở quầy bán hàng' : ''}</p>${dutyLine}<div class="workforce-today-times"><span>Vào ca <strong>${fmtDateTime(today.ThoiGianVao)}</strong></span><span>Ra ca <strong>${fmtDateTime(today.ThoiGianRa)}</strong></span></div></div><div class="workforce-today-actions">${checkInBtn}${goPos ? '<button class="warehouse-primary" id="goShift">Đi tới mở ca bán hàng</button>' : ''}</div></article>` : restNote}<article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>LỊCH ĐÃ CÔNG BỐ</p><h2>Các lượt làm việc gần đây</h2></div><button class="warehouse-secondary" id="refreshPersonal"><svg><use href="#i-refresh"/></svg>Làm mới</button></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NGÀY</th><th>CA LÀM VIỆC</th><th>NHIỆM VỤ</th><th>QUẦY</th><th>CHẤM CÔNG VÀO</th><th>CHẤM CÔNG RA</th><th>TRẠNG THÁI</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><strong>${shortDate(item.NgayLam)}</strong></td><td>${esc(item.TenCa)}<small>${esc(item.GioBatDau)}–${esc(item.GioKetThuc)}${item.GioNghiBatDau ? ` · nghỉ ${esc(item.GioNghiBatDau)}–${esc(item.GioNghiKetThuc)}` : ''}</small></td><td>${esc(item.NhiemVu)}</td><td>${esc(item.TenQuay || '—')}</td><td>${fmtDateTime(item.ThoiGianVao)}</td><td>${fmtDateTime(item.ThoiGianRa)}</td><td><span class="status-pill ${item.ThoiGianRa ? 'ok' : item.ThoiGianVao ? 'sent' : 'draft'}">${esc(item.TrangThaiChamCong || 'Chưa chấm công')}</span></td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có lịch nào được công bố.</td></tr>'}</tbody></table></div></article>`;
         root.querySelector('#checkIn')?.addEventListener('click', async () => { try { const result = await api(context, '/cashier/attendance/check-in', { method: 'POST' }); context.showToast(result.message, 'success'); await load(); } catch (error) { context.showToast(error.message, 'error'); } });
         root.querySelector('#checkOut')?.addEventListener('click', async () => { try { const result = await api(context, '/cashier/attendance/check-out', { method: 'POST' }); context.showToast(result.message, 'success'); await load(); } catch (error) { context.showToast(error.message, 'error'); } });
         root.querySelector('#goShift')?.addEventListener('click', () => context.navigate('cashier-shifts'));
@@ -301,30 +312,94 @@
   const initHolidays = async (root, context) => {
     let year = new Date().getFullYear();
     const heading = (kicker, title, subtitle) => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(kicker)}</p><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div></header>`;
+    const nhomClass = nhom => ({
+      TetDuongLich: 'fixed', ChienThang: 'fixed', LaoDong: 'fixed', QuocKhanh: 'fixed',
+      TetAmLich: 'lunar', GioTo: 'lunar', QuocKhanhLienKe: 'adjacent'
+    }[nhom] || 'other');
+    const nhomLabel = nhom => ({
+      TetDuongLich: 'Cố định', ChienThang: 'Cố định', LaoDong: 'Cố định', QuocKhanh: 'Cố định · 02/09',
+      TetAmLich: 'Âm lịch · bạn nhập', GioTo: 'Âm lịch · bạn nhập', QuocKhanhLienKe: 'Liền kề 02/09'
+    }[nhom] || nhom);
+    const shortHoliday = item => {
+      if (item.NhomLe === 'TetAmLich') return 'Tết';
+      if (item.NhomLe === 'GioTo') return 'Giỗ Tổ';
+      if (item.NhomLe === 'QuocKhanhLienKe') return 'Liền 02/09';
+      if (item.NhomLe === 'QuocKhanh') return '02/09';
+      if (item.NhomLe === 'TetDuongLich') return '01/01';
+      if (item.NhomLe === 'ChienThang') return '30/04';
+      if (item.NhomLe === 'LaoDong') return '01/05';
+      return item.TenLe;
+    };
+    const pct = value => `${Math.round(Number(value || 0) * 100)}%`;
+    const monthCalendar = (y, items) => {
+      const byDay = new Map((items || []).map(item => [(item.NgayDuongLich || '').slice(0, 10), item]));
+      const weekdays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+      return Array.from({ length: 12 }, (_, monthIndex) => {
+        const first = new Date(y, monthIndex, 1);
+        const pad = (first.getDay() + 6) % 7;
+        const days = new Date(y, monthIndex + 1, 0).getDate();
+        const cells = [];
+        for (let i = 0; i < pad; i += 1) cells.push('<span class="holiday-cell pad"></span>');
+        for (let day = 1; day <= days; day += 1) {
+          const key = `${y}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const hol = byDay.get(key);
+          cells.push(hol
+            ? `<span class="holiday-cell ${nhomClass(hol.NhomLe)}" title="${esc(hol.TenLe)}"><em>${day}</em><small>${esc(shortHoliday(hol))}</small></span>`
+            : `<span class="holiday-cell"><em>${day}</em></span>`);
+        }
+        return `<article class="holiday-month"><h3>Tháng ${monthIndex + 1}</h3><div class="holiday-weekdays">${weekdays.map(day => `<span>${day}</span>`).join('')}</div><div class="holiday-grid">${cells.join('')}</div></article>`;
+      }).join('');
+    };
     const load = async () => {
       try {
         const data = await api(context, `/admin/workforce/holidays/${year}`);
         const tet = data.items.filter(item => item.NhomLe === 'TetAmLich');
         const gioTo = data.items.find(item => item.NhomLe === 'GioTo');
         const adjacent = data.items.find(item => item.NhomLe === 'QuocKhanhLienKe');
-        const tetInputs = Array.from({ length: 5 }, (_, index) => tet[index]?.NgayDuongLich?.slice(0, 10) || '').map((value, index) =>
-          `<label class="warehouse-field"><span>Tết âm ngày ${index + 1}/5</span><input type="date" class="tet-am-day" data-index="${index}" value="${esc(value)}"></label>`).join('');
-        root.innerHTML = `${heading('ĐIỀU HÀNH / UC30', `Ngày lễ năm ${year}`, data.note || 'Khai báo ngày dương lịch cho Tết âm và Giỗ Tổ. Ngày cố định (01/01, 30/04, 01/05, 02/09) không xóa. Khóa khi kỳ lương chứa ngày đó đã khóa.')}
-          ${data.lunarError ? `<div class="approval-center-note"><strong>Thiếu lịch âm.</strong><span>${esc(data.lunarError)}</span></div>` : ''}
-          <article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="payroll-period-field"><span>Năm</span><input type="number" id="holidayYear" min="2020" max="2100" value="${year}"></label><div class="warehouse-toolbar-actions"><button class="warehouse-secondary" id="reloadHolidays">Tải lại</button><button class="warehouse-primary" id="saveHolidays">Lưu lịch lễ</button></div></div>
-          <div class="warehouse-form-grid" style="padding:16px">${tetInputs}
-            <label class="warehouse-field"><span>Giỗ Tổ Hùng Vương (dương lịch)</span><input type="date" id="gioToDay" value="${esc((gioTo?.NgayDuongLich || '').slice(0, 10))}"></label>
-            <label class="warehouse-field"><span>Ngày liền kề Quốc khánh 02/09</span><select id="adjacentDay"><option value="${year}-09-01" ${!adjacent || (adjacent.NgayDuongLich || '').slice(0, 10) === `${year}-09-01` ? 'selected' : ''}>01/09/${year}</option><option value="${year}-09-03" ${(adjacent?.NgayDuongLich || '').slice(0, 10) === `${year}-09-03` ? 'selected' : ''}>03/09/${year}</option></select></label>
-          </div>
-          <div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NGÀY</th><th>TÊN LỄ</th><th>NHÓM</th><th>NGUỒN</th><th>KHÓA</th></tr></thead><tbody>${data.items.map(item => `<tr><td>${esc((item.NgayDuongLich || '').slice(0, 10))}</td><td>${esc(item.TenLe)}</td><td>${esc(item.NhomLe)}</td><td>${esc(item.Nguon)}</td><td>${item.NgayKhoa ? '<span class="status-pill sent">Đã khóa</span>' : '—'}</td></tr>`).join('')}</tbody></table></div></article>
-          <article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>HỆ SỐ</p><h2>BLLĐ 2019 Điều 98 / NĐ 145 Điều 55–57</h2></div><button class="warehouse-secondary" id="saveRates">Lưu hệ số</button></div>
-          <div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>LOẠI NGÀY</th><th>LOẠI GIỜ</th><th>HỆ SỐ</th><th>TỐI THIỂU</th><th>MÔ TẢ</th></tr></thead><tbody>${(data.rates || []).map(item => `<tr><td>${esc(item.LoaiNgay)}</td><td>${esc(item.LoaiGio)}</td><td class="num"><input type="number" class="rate-heso" data-ma="${esc(item.MaHeSo)}" min="${Number(item.MinHeSo)}" step="0.01" value="${Number(item.HeSo).toFixed(2)}"></td><td class="num">${Number(item.MinHeSo).toFixed(2)}</td><td>${esc(item.MoTa)}</td></tr>`).join('')}</tbody></table></div></article>`;
-        root.querySelector('#holidayYear').addEventListener('change', () => { year = Number(root.querySelector('#holidayYear').value) || year; load(); });
+        const adjacentDay = (adjacent?.NgayDuongLich || '').slice(0, 10);
+        const tetInputs = Array.from({ length: 5 }, (_, index) => {
+          const value = tet[index]?.NgayDuongLich?.slice(0, 10) || '';
+          const labels = ['Ngày 1/5 — thường 29 hoặc 30 tháng Chạp', 'Ngày 2/5 — mùng 1 Tết', 'Ngày 3/5 — mùng 2', 'Ngày 4/5 — mùng 3', 'Ngày 5/5 — mùng 4'];
+          return `<label class="warehouse-field"><span>${labels[index]}</span><input type="date" class="tet-am-day" data-keep-native data-index="${index}" value="${esc(value)}"></label>`;
+        }).join('');
+        const rateGroups = [
+          { key: 'Thuong', title: 'Ngày thường', hint: 'Trong ca 100% · đêm 130% · tăng ca 150% / 200%' },
+          { key: 'NghiTuan', title: 'Ngày nghỉ hằng tuần', hint: 'Làm ngày nghỉ tuần: từ 200%' },
+          { key: 'LeTet', title: 'Ngày lễ / Tết', hint: 'Đi làm lễ: 300% / 330%. Tăng ca lễ: 360% / 390%' }
+        ];
+        const ratesHtml = rateGroups.map(group => {
+          const rows = (data.rates || []).filter(item => item.LoaiNgay === group.key);
+          return `<article class="holiday-rate-card"><h3>${esc(group.title)}</h3><p>${esc(group.hint)}</p><ul>${rows.map(item => `<li><span>${esc(item.MoTa)}</span><strong><input type="number" class="rate-heso" data-ma="${esc(item.MaHeSo)}" min="${Number(item.MinHeSo)}" step="0.01" value="${Number(item.HeSo).toFixed(2)}"> ${pct(item.HeSo)}</strong><small>tối thiểu ${pct(item.MinHeSo)}</small></li>`).join('')}</ul></article>`;
+        }).join('');
+        const timeline = [...data.items].sort((a, b) => String(a.NgayDuongLich).localeCompare(String(b.NgayDuongLich)))
+          .map(item => `<li class="${nhomClass(item.NhomLe)}"><strong>${esc((item.NgayDuongLich || '').slice(0, 10).split('-').reverse().join('/'))}</strong><span>${esc(item.TenLe)}</span><em>${esc(nhomLabel(item.NhomLe))}${item.NgayKhoa ? ' · đã khóa kỳ lương' : ''}</em></li>`).join('');
+        root.innerHTML = `${heading('ĐIỀU HÀNH / NGÀY LỄ', `Ngày lễ năm ${year}`, 'Lịch dưới đây cho thấy cả năm. Ô xanh là ngày cố định (không xóa). Ô vàng là Tết âm / Giỗ Tổ — bạn phải nhập đủ. Ô cam là ngày nghỉ liền kề Quốc khánh 02/09.')}
+          ${data.lunarError ? `<div class="approval-center-note"><strong>Thiếu ngày âm lịch.</strong><span>${esc(data.lunarError)}</span></div>` : ''}
+          <article class="holiday-yearbar"><button class="warehouse-icon-button" id="prevHolidayYear" type="button"><svg><use href="#i-chevron"/></svg></button><div><span>NĂM ĐANG XEM</span><strong>${year}</strong><small>${year === 2026 ? 'Tết 2026 đã có sẵn 16–20/02 (TB 9441/BNV). Giỗ Tổ 26/04. Bạn vẫn sửa được nếu lệch.' : 'Ngày cố định đã có. Hãy nhập 5 ngày Tết, Giỗ Tổ và chọn 01/09 hoặc 03/09.'}</small></div><button class="warehouse-icon-button next" id="nextHolidayYear" type="button"><svg><use href="#i-chevron"/></svg></button><div class="holiday-yearbar-actions"><button class="warehouse-secondary" id="reloadHolidays" type="button">Tải lại</button><button class="warehouse-primary" id="saveHolidays" type="button">Lưu ngày lễ</button></div></article>
+          <div class="holiday-legend"><i class="fixed"></i>Cố định (01/01, 30/04, 01/05, 02/09) <i class="lunar"></i>Âm lịch — Quản lý nhập <i class="adjacent"></i>Liền kề 02/09</div>
+          <div class="holiday-year-grid">${monthCalendar(year, data.items)}</div>
+          <article class="warehouse-table-card holiday-timeline-card"><div class="warehouse-panel-title"><div><p>DỌC THEO NĂM</p><h2>Các ngày nghỉ lễ ${year}</h2></div></div><ol class="holiday-timeline">${timeline || '<li>Chưa có ngày lễ.</li>'}</ol></article>
+          <article class="warehouse-table-card holiday-edit-card"><div class="warehouse-panel-title"><div><p>PHẦN BẠN CẦN NHẬP</p><h2>Tết 5 ngày · Giỗ Tổ · ngày liền 02/09</h2></div></div>
+            <div class="holiday-edit-grid" data-keep-native>
+              ${tetInputs}
+              <label class="warehouse-field"><span>Giỗ Tổ Hùng Vương (đổi ra dương lịch)</span><input type="date" id="gioToDay" data-keep-native value="${esc((gioTo?.NgayDuongLich || '').slice(0, 10))}"><small>${year === 2026 ? 'Năm 2026: 26/04 (10/03 âm).' : 'Xem lịch âm từng năm rồi nhập ngày dương.'}</small></label>
+              <div class="holiday-adjacent"><span>Ngày nghỉ liền kề Quốc khánh 02/09</span><label class="${adjacentDay !== `${year}-09-03` ? 'selected' : ''}"><input type="radio" name="adjacentDay" value="${year}-09-01" ${adjacentDay !== `${year}-09-03` ? 'checked' : ''}> Nghỉ 01/09 — ngày trước 02/09</label><label class="${adjacentDay === `${year}-09-03` ? 'selected' : ''}"><input type="radio" name="adjacentDay" value="${year}-09-03" ${adjacentDay === `${year}-09-03` ? 'checked' : ''}> Nghỉ 03/09 — ngày sau 02/09</label><small>02/09 luôn nghỉ. Bạn chỉ chọn thêm 01/09 hoặc 03/09.</small></div>
+            </div>
+          </article>
+          <article class="warehouse-table-card holiday-rates-card"><div class="warehouse-panel-title"><div><p>HỆ SỐ TRẢ LƯƠNG</p><h2>Xem nhanh theo loại ngày</h2></div><button class="warehouse-secondary" id="saveRates" type="button">Lưu hệ số</button></div>
+            <p class="holiday-rate-help">Số lớn hơn 1 nghĩa là nhân lương giờ. Ví dụ 3.00 = 300% khi đi làm ngày lễ. Không để thấp hơn mức tối thiểu.</p>
+            <div class="holiday-rate-grid">${ratesHtml}</div>
+          </article>`;
+        root.querySelector('#prevHolidayYear').addEventListener('click', () => { year -= 1; load(); });
+        root.querySelector('#nextHolidayYear').addEventListener('click', () => { year += 1; load(); });
         root.querySelector('#reloadHolidays').addEventListener('click', load);
+        root.querySelectorAll('input[name="adjacentDay"]').forEach(input => input.addEventListener('change', () => {
+          root.querySelectorAll('.holiday-adjacent label').forEach(label => label.classList.toggle('selected', label.contains(input) && input.checked));
+        }));
         root.querySelector('#saveHolidays').addEventListener('click', async () => {
           const tetAm = Array.from(root.querySelectorAll('.tet-am-day')).map(input => input.value).filter(Boolean);
           const gioToValue = root.querySelector('#gioToDay').value;
-          const quocKhanhLienKe = root.querySelector('#adjacentDay').value;
+          const quocKhanhLienKe = root.querySelector('input[name="adjacentDay"]:checked')?.value;
           try {
             const result = await api(context, `/admin/workforce/holidays/${year}`, {
               method: 'PUT', body: JSON.stringify({ tetAm, gioTo: gioToValue, quocKhanhLienKe })

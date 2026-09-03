@@ -7,6 +7,12 @@
   const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
   const money = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
   const fmtDate = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
+  const fmtDateTime = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
+  const accountantLabel = fundSnap => {
+    const person = fundSnap?.accountant;
+    if (!person?.TenNV) return 'Kế toán';
+    return `${person.TenNV} · ${person.VaiTro || 'Kế toán'}`;
+  };
   const statusClass = status => ({ 'Nháp': 'draft', 'Chờ duyệt': 'sent', 'Đã duyệt': 'ok', 'Yêu cầu chỉnh sửa': 'returned', 'Từ chối': 'cancelled', 'Đã gửi Nhà cung cấp': 'processing', 'Nhà cung cấp xác nhận': 'ok', 'Đang giao': 'processing', 'Giao một phần': 'returned', 'Hoàn thành': 'ok' }[status] || 'draft');
   const api = async (context, path, options = {}) => {
     const response = await fetch(`${context.apiBase}${path}`, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.token}`, ...(options.headers || {}) } });
@@ -312,19 +318,15 @@
       const voucher = data.voucher;
       const overlay = document.createElement('div');
       overlay.className = 'warehouse-modal-backdrop';
-      const fundDefault = voucher.PhuongThuc === 'Tiền mặt' ? 'Tiền mặt' : 'Ủy quyền chuyển khoản';
-      const tmBatch = (data.batch || []).find(item => item.PhuongThuc === 'Tiền mặt');
-      overlay.innerHTML = `<div class="warehouse-modal payment-voucher-approval-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">UC09 · DUYỆT CHI LƯƠNG VÀ GIAO QUỸ</p><h2>${esc(voucher.MaPhieu)}</h2><span>${esc(voucher.TenNV || '')} · kỳ ${esc(voucher.MaKy)} · ${money(voucher.SoTien)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="manager-readonly-note"><svg><use href="#i-cash"></use></svg><div><strong>Duyệt phiếu chi lương là bước giao quỹ</strong><span>Tiền mặt: giao đủ tổng các phiếu TM chờ duyệt của kỳ. Chuyển khoản: ủy quyền TK cửa hàng. Bảng lương chỉ Đã thanh toán khi Kế toán chi thành công. Không dùng Phiếu chi NCC.</span></div></div><div class="payment-voucher-source"><div><span>NHÂN VIÊN</span><strong>${esc(voucher.TenNV || voucher.MaNV)}</strong></div><div><span>KỲ LƯƠNG</span><strong>${esc(voucher.MaKy)}</strong></div><div><span>TẤT TOÁN DỰ KIẾN</span><strong>${fmtDate(data.period?.NgayTraDuKien)}</strong></div><div><span>KÊNH CHI</span><strong>${esc(voucher.PhuongThuc)}</strong></div><div><span>SỐ TIỀN KHÓA</span><strong>${money(voucher.SoTien)}</strong></div><div><span>TỔNG TM CHỜ DUYỆT KỲ</span><strong>${money(tmBatch?.TongTien || (voucher.PhuongThuc === 'Tiền mặt' ? voucher.SoTien : 0))}</strong></div></div><div class="warehouse-form-grid payment-voucher-fields"><div class="warehouse-field"><label>Cách giao quỹ cho Kế toán *</label><select id="payrollFundMethod"><option value="Tiền mặt" ${fundDefault === 'Tiền mặt' ? 'selected' : ''}>Tiền mặt — giao đủ cho Kế toán</option><option value="Ủy quyền chuyển khoản" ${fundDefault === 'Ủy quyền chuyển khoản' ? 'selected' : ''}>Ủy quyền chuyển khoản — Kế toán dùng TK cửa hàng</option></select></div><div class="warehouse-field full"><label>Ghi chú giao quỹ</label><textarea id="payrollFundNote" maxlength="500" rows="2"></textarea></div><div class="warehouse-field full reject-reason-field" hidden><label>Lý do từ chối *</label><textarea id="payrollRejectReason" maxlength="500" rows="2"></textarea></div></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Đóng</button><button class="warehouse-danger reject-payroll-voucher" type="button">Từ chối</button><button class="warehouse-primary approve-payroll-voucher" type="button">Duyệt và giao quỹ</button></div></div>`;
+      overlay.innerHTML = `<div class="warehouse-modal payment-voucher-approval-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">DUYỆT PHIẾU CHI LƯƠNG</p><h2>${esc(voucher.MaPhieu)}</h2><span>${esc(voucher.TenNV || '')} · kỳ ${esc(voucher.MaKy)} · ${money(voucher.SoTien)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="manager-readonly-note"><svg><use href="#i-cash"></use></svg><div><strong>Duyệt là đồng ý chi cho người này — chưa đưa tiền</strong><span>Sau khi duyệt xong kỳ, bạn giao quỹ cho kế toán một lần. Kế toán mới chi từng nhân viên. Phiếu chi Nhà cung cấp vẫn duyệt + giao theo từng phiếu như cũ.</span></div></div><div class="payment-voucher-source"><div><span>NHÂN VIÊN</span><strong>${esc(voucher.TenNV || voucher.MaNV)}</strong></div><div><span>KỲ LƯƠNG</span><strong>${esc(voucher.MaKy)}</strong></div><div><span>TẤT TOÁN DỰ KIẾN</span><strong>${fmtDate(data.period?.NgayTraDuKien)}</strong></div><div><span>KÊNH CHI</span><strong>${esc(voucher.PhuongThuc)}</strong></div><div><span>SỐ TIỀN KHÓA</span><strong>${money(voucher.SoTien)}</strong></div></div><div class="warehouse-form-grid payment-voucher-fields"><div class="warehouse-field full reject-reason-field" hidden><label>Lý do từ chối *</label><textarea id="payrollRejectReason" maxlength="500" rows="2"></textarea></div></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Đóng</button><button class="warehouse-danger reject-payroll-voucher" type="button">Từ chối</button><button class="warehouse-primary approve-payroll-voucher" type="button">Duyệt</button></div></div>`;
       document.body.appendChild(overlay);
       const close = () => overlay.remove();
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
       overlay.querySelector('.approve-payroll-voucher').addEventListener('click', async event => {
-        const HinhThucCapQuy = overlay.querySelector('#payrollFundMethod').value;
-        const GhiChuCapQuy = overlay.querySelector('#payrollFundNote').value.trim();
-        if (!window.confirm(`Xác nhận giao quỹ ${HinhThucCapQuy} cho phiếu ${voucher.MaPhieu}? Bảng lương chưa Đã thanh toán.`)) return;
+        if (!window.confirm(`Duyệt phiếu ${voucher.MaPhieu} cho ${voucher.TenNV}? Chưa giao quỹ.`)) return;
         event.currentTarget.disabled = true;
         try {
-          const result = await api(context, `/admin/approvals/payroll-vouchers/${id}/approve`, { method: 'POST', body: JSON.stringify({ HinhThucCapQuy, GhiChuCapQuy }) });
+          const result = await api(context, `/admin/approvals/payroll-vouchers/${id}/approve`, { method: 'POST', body: JSON.stringify({}) });
           context.showToast(result.message, 'success'); close(); await onDone();
         } catch (error) { context.showToast(error.message, 'error'); event.currentTarget.disabled = false; }
       });
@@ -339,6 +341,38 @@
         } catch (error) { context.showToast(error.message, 'error'); event.currentTarget.disabled = false; }
       });
     } catch (error) { context.showToast(error.message, 'error'); }
+  };
+
+  const payrollHandoverModal = async (context, maKy, fund, onDone) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'warehouse-modal-backdrop';
+    const tm = Number(fund?.tmTopUp || 0);
+    const ck = Number(fund?.ckTopUp || 0);
+    const receiver = accountantLabel(fund);
+    overlay.innerHTML = `<div class="warehouse-modal payment-voucher-approval-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">GIAO QUỸ CHO KẾ TOÁN</p><h2>Kỳ ${esc(maKy)}</h2><span>Người nhận: ${esc(receiver)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="manager-readonly-note"><svg><use href="#i-cash"></use></svg><div><strong>Bạn đưa một cục tiền / quyền cho kế toán — không đưa từng nhân viên</strong><span>Tiền mặt: giao đủ tổng các phiếu TM đã duyệt chưa chi. Chuyển khoản: ủy quyền tài khoản cửa hàng đúng tổng CK. ${esc(fund?.accountant?.TenNV || 'Kế toán')} sẽ chi từng người từ quỹ này.</span></div></div><div class="payment-voucher-amount"><span>CẦN GIAO CHO KẾ TOÁN BÂY GIỜ</span><strong>Tiền mặt ${money(tm)} · Ủy quyền CK ${money(ck)}</strong><small>Nếu đã giao trước đó, chỉ bổ sung phần phiếu mới duyệt. Không giao lần hai cùng kênh khi đã đủ.</small></div><div class="warehouse-field full"><label>Ghi chú</label><textarea id="payrollHandoverNote" maxlength="500" rows="2" placeholder="Ví dụ: đã giao đủ tiền mặt tại văn phòng / ủy quyền TK Vietcombank cửa hàng"></textarea></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Hủy</button><button class="warehouse-primary confirm-handover" type="button">Xác nhận giao quỹ cho kế toán</button></div></div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+    overlay.querySelector('.confirm-handover').addEventListener('click', async event => {
+      if (!window.confirm(`Giao quỹ cho kế toán ${receiver}, kỳ ${maKy}: TM ${money(tm)}, CK ${money(ck)}?`)) return;
+      event.currentTarget.disabled = true;
+      try {
+        const result = await api(context, `/admin/approvals/payroll-fund/${maKy}/handover`, {
+          method: 'POST', body: JSON.stringify({ GhiChu: overlay.querySelector('#payrollHandoverNote').value.trim() })
+        });
+        context.showToast(result.message, 'success'); close(); await onDone();
+      } catch (error) { context.showToast(error.message, 'error'); event.currentTarget.disabled = false; }
+    });
+  };
+
+  const payrollHandoverHistoryModal = (period) => {
+    const snap = period.fund || {};
+    const fund = snap.fund;
+    const overlay = document.createElement('div');
+    overlay.className = 'warehouse-modal-backdrop';
+    overlay.innerHTML = `<div class="warehouse-modal payment-voucher-approval-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">LỊCH SỬ GIAO QUỸ</p><h2>Kỳ ${esc(period.MaKy)}</h2><span>Đã giao cho ${esc(accountantLabel(snap))}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="payment-voucher-source"><div><span>NGƯỜI GIAO</span><strong>${esc(fund?.TenQL || 'Quản lý')}</strong></div><div><span>NGÀY GIAO</span><strong>${fmtDateTime(fund?.NgayGiao)}</strong></div><div><span>NGƯỜI NHẬN</span><strong>${esc(accountantLabel(snap))}</strong></div><div><span>TIỀN MẶT ĐÃ GIAO / CÒN</span><strong>${money(fund?.SoTienMatGiao)} / ${money(fund?.SoTienMatCon)}</strong></div><div><span>CK ĐÃ ỦY QUYỀN / CÒN</span><strong>${money(fund?.SoTienCKGiao)} / ${money(fund?.SoTienCKCon)}</strong></div></div>${fund?.GhiChu ? `<p>${esc(fund.GhiChu)}</p>` : ''}<p class="warehouse-modal-note">Không giao lần hai cùng kênh khi quỹ đã đủ cho các phiếu đã duyệt. Chỉ bổ sung nếu còn phiếu mới duyệt.</p></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Đóng</button></div></div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', () => overlay.remove()));
   };
 
   const initApprovalCenter = async (root, context) => {
@@ -356,15 +390,41 @@
           <article class="warehouse-stat"><span>ĐƠN MUA HÀNG</span><strong>${orders.items.length}</strong><small>Kiểm tra nguồn đề nghị và điều khoản mua</small></article>
           <article class="warehouse-stat warn"><span>CHỨNG TỪ KHO</span><strong>${queues.warehouse.length}</strong><small>Phiếu xuất và điều chỉnh sau kiểm kê</small></article>
           <article class="warehouse-stat"><span>TÀI CHÍNH &amp; ĐỔI TRẢ</span><strong>${queues.finance.length}</strong><small>Phiếu chi NCC và hồ sơ đổi trả đã kiểm tra</small></article>
-          <article class="warehouse-stat"><span>CHI LƯƠNG</span><strong>${(queues.payroll || []).length}</strong><small>Phiếu chi lương chờ duyệt và giao quỹ</small></article>`;
+          <article class="warehouse-stat"><span>CHI LƯƠNG</span><strong>${(queues.payroll || []).length}</strong><small>Phiếu chờ duyệt — rồi giao quỹ cho kế toán</small></article>`;
         root.querySelector('#purchaseApprovalBody').innerHTML = orders.items.length ? orders.items.map(item => `<tr><td><strong>${esc(item.MaPO)}</strong><small>Nguồn ${esc(item.MaDN)}</small></td><td><strong>${esc(item.TenNCC)}</strong><small>Người lập: ${esc(item.NguoiLap)}</small></td><td>${item.SoMatHang} mặt hàng</td><td>${fmtDate(item.NgayGiaoDuKien)}</td><td>${item.SoNgayThanhToan} ngày</td><td class="num"><strong>${money(item.TongTien)}</strong></td><td><button class="warehouse-primary" data-review-order="${esc(item.MaPO)}">Xem và quyết định</button></td></tr>`).join('') : empty(7, 'Không có Đơn mua hàng chờ phê duyệt.');
         root.querySelector('#warehouseApprovalBody').innerHTML = queues.warehouse.length ? queues.warehouse.map(item => `<tr><td><strong>${esc(item.MaHoSo)}</strong><small>${esc(item.LoaiHoSo)}</small></td><td>${esc(item.NguoiLap)}</td><td>${fmtDate(item.NgayLap)}</td><td>${esc(item.NoiDung || '—')}</td><td><span class="status-pill sent">${esc(item.TrangThai)}</span></td><td>${item.LoaiHoSo === 'Điều chỉnh kiểm kê' ? `<button class="warehouse-primary" data-review-inventory-count="${esc(item.MaHoSo)}">Xem và quyết định</button>` : item.LoaiHoSo === 'Phiếu xuất kho' ? `<button class="warehouse-primary" data-review-stock-issue="${esc(item.MaHoSo)}">Xem và quyết định</button>` : '—'}</td></tr>`).join('') : empty(6, 'Chưa có chứng từ kho do Thủ kho gửi duyệt.');
         root.querySelector('#financeApprovalBody').innerHTML = queues.finance.length ? queues.finance.map(item => `<tr><td><strong>${esc(item.MaHoSo)}</strong><small>${esc(item.LoaiHoSo)}</small></td><td>${esc(item.NguoiLap)}</td><td>${fmtDate(item.NgayLap)}</td><td>${esc(item.NoiDung || '—')}</td><td class="num">${money(item.SoTien)}</td><td><span class="status-pill sent">${esc(item.TrangThai)}</span></td><td>${item.LoaiHoSo === 'Phiếu chi Nhà cung cấp' ? `<button class="warehouse-primary" data-review-payment-voucher="${esc(item.MaHoSo)}">Duyệt và giao tiền</button>` : item.LoaiHoSo === 'Đổi trả khách hàng' ? `<button class="warehouse-primary" data-approve-return="${esc(item.MaHoSo)}">Duyệt</button><button class="warehouse-danger" data-reject-return="${esc(item.MaHoSo)}">Từ chối</button>` : '—'}</td></tr>`).join('') : empty(7, 'Chưa có Phiếu chi hoặc hồ sơ đổi trả được gửi duyệt. Hóa đơn chờ đối chiếu và công nợ không nằm trong hàng phê duyệt này.');
         const payrollItems = queues.payroll || [];
-        root.querySelector('#payrollApprovalBody').innerHTML = payrollItems.length ? payrollItems.map(item => `<tr><td><strong>${esc(item.MaPhieu)}</strong><small>Kỳ ${esc(item.MaKy)}</small></td><td><strong>${esc(item.TenNV)}</strong><small>${esc(item.NguoiLap)}</small></td><td>${esc(item.PhuongThuc)}</td><td>${fmtDate(item.NgayLap)}</td><td class="num"><strong>${money(item.SoTien)}</strong></td><td><button class="warehouse-primary" data-review-payroll-voucher="${esc(item.MaPhieu)}">Duyệt và giao quỹ</button></td></tr>`).join('') : empty(6, 'Chưa có Phiếu chi lương chờ duyệt.');
+        let board = { periods: [] };
+        try { board = await api(context, '/admin/approvals/payroll-board'); } catch { board = { periods: [] }; }
+        const periods = board.periods || [];
+        const payrollBoard = root.querySelector('#payrollApprovalBoard');
+        if (!payrollBoard) return;
+        if (!periods.length && !payrollItems.length) {
+          payrollBoard.innerHTML = '<p class="warehouse-empty">Chưa có Phiếu chi lương chờ duyệt hoặc chờ giao quỹ cho kế toán.</p>';
+        } else {
+          payrollBoard.innerHTML = periods.map(period => {
+            const pendingRows = (period.pending || []).map(item => `<tr><td><strong>${esc(item.MaPhieu)}</strong></td><td><strong>${esc(item.TenNV)}</strong><small>${esc(item.NguoiLap)}</small></td><td>${esc(item.PhuongThuc)}</td><td>${fmtDate(item.NgayLap)}</td><td class="num"><strong>${money(item.SoTien)}</strong></td><td><button class="warehouse-primary" data-approve-payroll="${esc(item.MaPhieu)}" type="button">Duyệt</button> <button class="warehouse-secondary" data-review-payroll-voucher="${esc(item.MaPhieu)}" type="button">Chi tiết</button></td></tr>`).join('');
+            const approvedRows = (period.approved || []).map(item => `<tr><td><strong>${esc(item.MaPhieu)}</strong></td><td>${esc(item.TenNV)}</td><td>${esc(item.PhuongThuc)}</td><td class="num">${money(item.SoTien)}</td><td><span class="status-pill sent">${esc(item.TrangThai)}</span></td></tr>`).join('');
+            const canHandover = !(period.pending || []).length && ((period.fund?.tmTopUp || 0) > 0 || (period.fund?.ckTopUp || 0) > 0);
+            const snap = period.fund || {};
+            const fund = snap.fund;
+            const handed = Boolean(snap.handed);
+            const receiver = accountantLabel(snap);
+            const handoverBtn = canHandover
+              ? `<button class="warehouse-primary" data-handover-payroll="${esc(period.MaKy)}" type="button">Giao quỹ cho kế toán</button>`
+              : handed
+                ? `<button class="warehouse-secondary" data-handover-history="${esc(period.MaKy)}" type="button">Đã giao quỹ cho kế toán ${esc(snap.accountant?.TenNV || 'Kế toán')}${fund?.NgayGiao ? ` · ${fmtDateTime(fund.NgayGiao)}` : ''}</button>`
+                : `<button class="warehouse-secondary" data-handover-payroll="${esc(period.MaKy)}" type="button" disabled>Giao quỹ cho kế toán</button>`;
+            const fundLine = handed
+              ? `<p class="payroll-ky-fund">Đã giao cho <strong>${esc(receiver)}</strong>: TM ${money(fund.SoTienMatGiao)} (còn ${money(fund.SoTienMatCon)}) · CK ${money(fund.SoTienCKGiao)} (còn ${money(fund.SoTienCKCon)})</p>`
+              : `<p class="payroll-ky-fund">Chưa giao quỹ cho kế toán ${esc(snap.accountant?.TenNV || '')}. Sau khi duyệt xong kỳ, bấm Giao quỹ cho kế toán.</p>`;
+            return `<section class="payroll-ky-card" data-ky="${esc(period.MaKy)}"><header><div><p>KỲ LƯƠNG</p><h3>${esc(period.MaKy)}</h3><small>${(period.pending || []).length} chờ duyệt · ${(period.approved || []).length} đã duyệt chưa chi</small></div><div class="payroll-ky-actions">${(period.pending || []).length ? `<button class="warehouse-primary" data-approve-all-payroll="${esc(period.MaKy)}" type="button">Duyệt tất cả</button>` : ''}${handoverBtn}</div></header><p class="payroll-ky-recipient">Người nhận quỹ: <strong>${esc(receiver)}</strong></p>${fundLine}${canHandover ? `<p class="payroll-ky-need">Cần giao thêm cho kế toán: TM ${money(snap.tmTopUp || 0)} · CK ${money(snap.ckTopUp || 0)}</p>` : handed ? `<p class="payroll-ky-need">Quỹ đã đủ cho các phiếu đã duyệt. Kế toán chi từng nhân viên từ quỹ này.</p>` : `<p class="payroll-ky-need">Cần giao cho kế toán: TM ${money(snap.tmTopUp || 0)} · CK ${money(snap.ckTopUp || 0)}</p>`}${(period.pending || []).length ? `<div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU</th><th>NHÂN VIÊN</th><th>KÊNH</th><th>NGÀY LẬP</th><th>SỐ TIỀN</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody>${pendingRows}</tbody></table></div>` : ''}${(period.approved || []).length ? `<div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU ĐÃ DUYỆT</th><th>NHÂN VIÊN</th><th>KÊNH</th><th>SỐ TIỀN</th><th>TRẠNG THÁI</th></tr></thead><tbody>${approvedRows}</tbody></table></div>` : ''}</section>`;
+          }).join('');
+        }
       } catch (error) { context.showToast(error.message, 'error'); }
     };
-    root.innerHTML = `${heading('ĐIỀU HÀNH / PHÊ DUYỆT', 'Trung tâm phê duyệt', 'Hồ sơ chỉ xuất hiện sau khi bộ phận phụ trách gửi đúng bước. Riêng duyệt kiểm kê có chênh lệch sẽ cập nhật tồn và ghi Giao dịch kho Điều chỉnh.', '<button class="warehouse-secondary" id="refreshApprovalCenter"><svg><use href="#i-refresh"/></svg>Làm mới</button>')}<div class="warehouse-stats approval-center-summary" id="approvalSummary"></div><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC05 · MUA HÀNG</p><h2>Đơn mua hàng chờ quyết định</h2></div><span class="warehouse-chip">Nhân viên mua hàng gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>ĐƠN MUA</th><th>NHÀ CUNG CẤP</th><th>QUY MÔ</th><th>NGÀY GIAO</th><th>THANH TOÁN</th><th>TỔNG TIỀN</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="purchaseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC06–UC07 · KHO</p><h2>Chứng từ kho chờ phê duyệt</h2></div><span class="warehouse-chip">Thủ kho gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>TRẠNG THÁI</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="warehouseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC08–UC09 · TÀI CHÍNH</p><h2>Đề nghị thanh toán NCC và đổi trả</h2></div><span class="warehouse-chip">Kế toán/Thu ngân gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>SỐ TIỀN</th><th>TRẠNG THÁI</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="financeApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC09 · LƯƠNG</p><h2>Phiếu chi lương chờ duyệt và giao quỹ</h2></div><span class="warehouse-chip">Tách khỏi phiếu chi Nhà cung cấp</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU</th><th>NHÂN VIÊN</th><th>KÊNH</th><th>NGÀY LẬP</th><th>SỐ TIỀN</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="payrollApprovalBody"></tbody></table></div></article>`;
+    root.innerHTML = `${heading('ĐIỀU HÀNH / PHÊ DUYỆT', 'Trung tâm phê duyệt', 'Hồ sơ chỉ xuất hiện sau khi bộ phận phụ trách gửi đúng bước. Riêng duyệt kiểm kê có chênh lệch sẽ cập nhật tồn và ghi Giao dịch kho Điều chỉnh.', '<button class="warehouse-secondary" id="refreshApprovalCenter"><svg><use href="#i-refresh"/></svg>Làm mới</button>')}<div class="warehouse-stats approval-center-summary" id="approvalSummary"></div><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC05 · MUA HÀNG</p><h2>Đơn mua hàng chờ quyết định</h2></div><span class="warehouse-chip">Nhân viên mua hàng gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>ĐƠN MUA</th><th>NHÀ CUNG CẤP</th><th>QUY MÔ</th><th>NGÀY GIAO</th><th>THANH TOÁN</th><th>TỔNG TIỀN</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="purchaseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC06–UC07 · KHO</p><h2>Chứng từ kho chờ phê duyệt</h2></div><span class="warehouse-chip">Thủ kho gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>TRẠNG THÁI</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="warehouseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC08–UC09 · TÀI CHÍNH</p><h2>Đề nghị thanh toán NCC và đổi trả</h2></div><span class="warehouse-chip">Kế toán/Thu ngân gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>SỐ TIỀN</th><th>TRẠNG THÁI</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="financeApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue payroll-fund-queue"><div class="warehouse-panel-title"><div><p>LƯƠNG</p><h2>Duyệt phiếu, rồi giao quỹ cho kế toán</h2></div></div><p class="payroll-fund-note">Không giao từng nhân viên — một lần giao cả quỹ cho kế toán.</p><p class="approval-center-note" style="margin:0 16px 12px"><strong>Ba bước.</strong><span> 1. Duyệt từng người hoặc Duyệt tất cả. 2. Giao quỹ cho kế toán. 3. Kế toán chi từng nhân viên từ quỹ đó. Phiếu chi Nhà cung cấp vẫn duyệt và giao theo từng phiếu.</span></p><div id="payrollApprovalBoard"></div></article>`;
     root.innerHTML = root.innerHTML
       .replace('actor nghiệp vụ', 'bộ phận phụ trách')
       .replace('UC05 · ', '')
@@ -383,6 +443,43 @@
       if (reviewPaymentVoucher) return paymentVoucherApprovalModal(context, reviewPaymentVoucher.dataset.reviewPaymentVoucher, load);
       const reviewPayrollVoucher = event.target.closest('[data-review-payroll-voucher]');
       if (reviewPayrollVoucher) return payrollVoucherApprovalModal(context, reviewPayrollVoucher.dataset.reviewPayrollVoucher, load);
+      const approvePayroll = event.target.closest('[data-approve-payroll]');
+      if (approvePayroll) {
+        if (!window.confirm(`Duyệt phiếu ${approvePayroll.dataset.approvePayroll}? Chưa giao quỹ.`)) return;
+        try {
+          const result = await api(context, `/admin/approvals/payroll-vouchers/${approvePayroll.dataset.approvePayroll}/approve`, { method: 'POST', body: JSON.stringify({}) });
+          context.showToast(result.message, 'success'); await load();
+        } catch (error) { context.showToast(error.message, 'error'); }
+        return;
+      }
+      const approveAllPayroll = event.target.closest('[data-approve-all-payroll]');
+      if (approveAllPayroll) {
+        if (!window.confirm(`Duyệt tất cả phiếu chờ kỳ ${approveAllPayroll.dataset.approveAllPayroll}? Chưa giao quỹ.`)) return;
+        try {
+          const result = await api(context, '/admin/approvals/payroll-vouchers/approve-all', { method: 'POST', body: JSON.stringify({ MaKy: approveAllPayroll.dataset.approveAllPayroll }) });
+          context.showToast(result.message, 'success'); await load();
+        } catch (error) { context.showToast(error.message, 'error'); }
+        return;
+      }
+      const handoverHistory = event.target.closest('[data-handover-history]');
+      if (handoverHistory) {
+        try {
+          const board = await api(context, '/admin/approvals/payroll-board');
+          const period = (board.periods || []).find(item => item.MaKy === handoverHistory.dataset.handoverHistory);
+          if (period) payrollHandoverHistoryModal(period);
+        } catch (error) { context.showToast(error.message, 'error'); }
+        return;
+      }
+      const handoverPayroll = event.target.closest('[data-handover-payroll]');
+      if (handoverPayroll) {
+        const ky = handoverPayroll.dataset.handoverPayroll;
+        let fund = {};
+        try {
+          const board = await api(context, '/admin/approvals/payroll-board');
+          fund = (board.periods || []).find(item => item.MaKy === ky)?.fund || {};
+        } catch { /* dùng số 0 */ }
+        return payrollHandoverModal(context, ky, fund, load);
+      }
       const approveReturn = event.target.closest('[data-approve-return]');
       if (approveReturn) {
         try {

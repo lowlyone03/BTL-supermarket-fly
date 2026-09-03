@@ -29,6 +29,8 @@ router.get('/shift-settlements/:id', requirePermission('UC29'), settlement.getSh
 router.post('/shift-settlements/:id/receipt', requirePermission('UC29'), settlement.createReceipt);
 router.post('/shift-receipts/:id/confirm', requirePermission('UC29'), settlement.confirmReceipt);
 router.get('/reports/financial-summary', requirePermission('UC29'), reportController.getFinancialReport);
+router.get('/activity-log', requireRole('Kế toán'), payrollVoucher.getAccountantActivity);
+router.get('/payroll-payouts', accountantPayroll, payrollVoucher.getPayoutHistory);
 router.get('/payroll/:month', accountantPayroll, payroll.get);
 router.post('/payroll/:month/build', accountantPayroll, payroll.build);
 router.post('/payroll/:month/lock', accountantPayroll, payroll.lock);

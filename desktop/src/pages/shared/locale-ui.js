@@ -141,7 +141,7 @@
   const hydrateNative = (root = document) => {
     root.querySelectorAll('input[type="date"], input[type="month"], input[type="datetime-local"]').forEach(input => {
       if (input.closest('.fly-vi-date')) return;
-      if (input.hasAttribute('data-keep-native') || input.closest('[data-keep-native]') || input.closest('.audit-daterange') || input.closest('.warehouse-history-page') || input.closest('.warehouse-history-daterange') || input.closest('.payroll-period-picker') || input.closest('.accounting-payroll') || input.closest('.workforce-payroll-filter')) return;
+      if (input.hasAttribute('data-keep-native') || input.closest('[data-keep-native]') || input.closest('.audit-daterange') || input.closest('.warehouse-history-page') || input.closest('.warehouse-history-daterange') || input.closest('.payroll-period-picker') || input.closest('.accounting-payroll') || input.closest('.workforce-payroll-filter') || input.closest('.manager-holidays') || input.closest('.accounting-history') || input.closest('.financial-report-filter') || input.closest('.store-pnl-filter')) return;
       const type = input.getAttribute('type');
       const id = input.id || `fly-date-${Math.random().toString(36).slice(2, 8)}`;
       if (!input.id) input.id = id;

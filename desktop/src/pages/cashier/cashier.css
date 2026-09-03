@@ -652,3 +652,19 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.cashier-duty-note {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #d7e3db;
+  border-radius: 14px;
+  background: #f4faf6;
+}
+.cashier-duty-note svg { width: 22px; height: 22px; flex: 0 0 auto; color: #2f6b4f; }
+.cashier-duty-note strong, .cashier-duty-note p { display: block; margin: 0; }
+.cashier-duty-note strong { color: #1f4d39; font-size: 13px; }
+.cashier-duty-note p { margin-top: 4px; color: #4d6358; font-size: 13px; line-height: 1.45; }
+

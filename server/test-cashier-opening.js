@@ -32,6 +32,18 @@ const cleanup = async () => {
     });
     const before = await request('/cashier/shifts', login.token);
     if (before.current) throw new Error(`Tài khoản Thu ngân đang có ca thật ${before.current.MaCa}; không chạy kiểm thử ghi dữ liệu.`);
+    if (before.duty && before.duty.canOpenShift === false) {
+        const blocked = await request('/cashier/shifts/open', login.token, {
+            method: 'POST', body: JSON.stringify({ TienDauCa: 1250000 })
+        }, 403);
+        console.log(JSON.stringify({
+            result: 'PASS',
+            outsideHours: true,
+            message: blocked.message,
+            duty: before.duty.status
+        }, null, 2));
+        return;
+    }
     const opened = await request('/cashier/shifts/open', login.token, {
         method: 'POST', body: JSON.stringify({ TienDauCa: 1250000 })
     });

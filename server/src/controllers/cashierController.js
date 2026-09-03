@@ -2,6 +2,36 @@ const { sql, poolPromise } = require('../config/db');
 const { closeOpenAttendance } = require('../services/attendanceSync');
 const { calculateGrossProfit, RESTOCK_ACCEPTED_SQL } = require('../services/financialRules');
 const { logAudit } = require('../services/auditLog');
+const { snapshotDuty, assertCashierDuty, CashierDutyError } = require('../services/cashierDuty');
+
+const publicDuty = (duty) => {
+    if (!duty) return null;
+    const schedule = duty.schedule ? {
+        MaLich: duty.schedule.MaLich,
+        TenCa: duty.schedule.TenCa,
+        NgayLam: duty.schedule.NgayLam,
+        GioBatDau: duty.schedule.GioBatDau,
+        GioKetThuc: duty.schedule.GioKetThuc,
+        NhiemVu: duty.schedule.NhiemVu,
+        ViTri: duty.schedule.ViTri
+    } : null;
+    return {
+        graceMinutes: duty.graceMinutes,
+        status: duty.status,
+        message: duty.message,
+        schedule,
+        canCheckIn: duty.canCheckIn,
+        canCheckOut: duty.canCheckOut,
+        canOpenShift: duty.canOpenShift,
+        canSell: duty.canSell,
+        openShift: duty.openShift ? { MaCa: duty.openShift.MaCa, MaLich: duty.openShift.MaLich } : null
+    };
+};
+
+const failDuty = (res, error) => res.status(error.status || 400).json({
+    message: error.message,
+    duty: error.duty ? publicDuty(error.duty) : undefined
+});
 
 const generateShiftId = async transaction => {
     const now = new Date();
@@ -40,7 +70,7 @@ const getShifts = async (req, res) => {
                          ca.TrangThaiDoiSoat,ca.TongTienMat,ca.TongTienQR,ca.TongTienThe,ca.TongTienChuyenKhoan,ca.TongTienHoanMat,ca.TienMatHeThong,ca.TienThucNop
                 ORDER BY ca.ThoiGianBatDau DESC`)
         ]);
-        res.json({ current: current.recordset[0] || null, items: history.recordset });
+        res.json({ current: current.recordset[0] || null, items: history.recordset, duty: publicDuty(await snapshotDuty(pool, req.user.MaNV)) });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải thông tin ca bán hàng.' });
@@ -72,7 +102,8 @@ const getMySchedule = async (req, res) => {
             || null;
         const nextShift = result.recordset.find(item => String(item.NgayLam) > todayKey) || null;
         const publishedCount = result.recordset.length;
-        res.json({ today, todayKey, nextShift, publishedCount, items: result.recordset });
+        const duty = publicDuty(await snapshotDuty(pool, req.user.MaNV));
+        res.json({ today, todayKey, nextShift, publishedCount, items: result.recordset, duty });
     } catch (error) { console.error(error); res.status(500).json({ message: 'Không thể tải lịch làm việc cá nhân.' }); }
 };
 
@@ -80,17 +111,8 @@ const checkIn = async (req, res) => {
     const transaction = new sql.Transaction(await poolPromise);
     try {
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
-        const schedule = await new sql.Request(transaction).input('MaNV', sql.VarChar, req.user.MaNV).query(`${scheduleSelect}
-            WHERE l.MaNV=@MaNV AND l.TrangThai=N'Đã công bố'
-              AND (
-                    l.NgayLam = CONVERT(date, GETDATE())
-                 OR (lc.LaCaDem = 1 AND CONVERT(date, GETDATE()) = DATEADD(day, 1, l.NgayLam)
-                     AND GETDATE() <= DATEADD(hour, 2, l.KetThucDuKien))
-              )
-            ORDER BY l.BatDauDuKien`);
-        if (!schedule.recordset.length) throw new Error('Hôm nay bạn được xếp nghỉ hoặc chưa có lịch đã công bố. Hãy đăng nhập đúng thu ngân được phân ca hôm nay.');
-        const item = schedule.recordset[0];
-        if (item.ThoiGianVao) throw new Error('Bạn đã chấm công vào ca này.');
+        const { schedule: item } = await assertCashierDuty(transaction, req.user.MaNV, 'check-in');
+        if (item.ThoiGianVao) throw new CashierDutyError('Bạn đã chấm công vào ca này.', 400);
         await new sql.Request(transaction).input('MaLich', sql.BigInt, item.MaLich)
             .input('BatDau', sql.DateTime, item.BatDauDuKien).query(`
             MERGE ChamCong AS target USING (SELECT @MaLich MaLich) source ON target.MaLich=source.MaLich
@@ -100,10 +122,10 @@ const checkIn = async (req, res) => {
                 VALUES (@MaLich,GETDATE(),N'Đang làm việc',
                     CASE WHEN GETDATE()>@BatDau THEN DATEDIFF(minute,@BatDau,GETDATE()) ELSE 0 END);`);
         await transaction.commit();
-        res.json({ message: `Đã chấm công vào ${item.TenCa}.`, MaLich: item.MaLich });
+        res.json({ message: `Đã chấm công vào ${item.TenCa} (${String(item.GioBatDau || '').slice(0, 5)}–${String(item.GioKetThuc || '').slice(0, 5)}).`, MaLich: item.MaLich });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
-        res.status(400).json({ message: error.message });
+        failDuty(res, error);
     }
 };
 
@@ -141,39 +163,15 @@ const openShift = async (req, res) => {
         if (employee.recordset[0].ChucVu !== 'Thu ngân') {
             throw new Error('Chỉ Nhân viên bán hàng kiêm thu ngân mới được mở ca bán hàng cá nhân.');
         }
-        const todayShift = await new sql.Request(transaction)
-            .input('MaNV', sql.VarChar, req.user.MaNV)
-            .query(`SELECT TOP 1 l.MaLich,l.MaQuay,l.NhiemVu,l.NgayLam,lc.TenCa,
-                           cc.ThoiGianVao,cc.ThoiGianRa
-                    FROM LichLamViec l
-                    JOIN LoaiCa lc ON lc.MaLoaiCa=l.MaLoaiCa
-                    LEFT JOIN ChamCong cc ON cc.MaLich=l.MaLich
-                    WHERE l.MaNV=@MaNV AND l.TrangThai=N'Đã công bố'
-                      AND (
-                            l.NgayLam = CONVERT(date, GETDATE())
-                         OR (lc.LaCaDem = 1 AND CONVERT(date, GETDATE()) = DATEADD(day, 1, l.NgayLam)
-                             AND GETDATE() <= DATEADD(hour, 2, l.KetThucDuKien))
-                      )
-                    ORDER BY l.BatDauDuKien DESC`);
-        if (!todayShift.recordset.length) {
-            const next = await new sql.Request(transaction).input('MaNV', sql.VarChar, req.user.MaNV).query(`
-                SELECT TOP 1 CONVERT(varchar(10),l.NgayLam,23) NgayLam, lc.TenCa
-                FROM LichLamViec l JOIN LoaiCa lc ON lc.MaLoaiCa=l.MaLoaiCa
-                WHERE l.MaNV=@MaNV AND l.TrangThai=N'Đã công bố' AND l.NgayLam > CONVERT(date, GETDATE())
-                ORDER BY l.NgayLam, lc.ThuTu`);
-            const hint = next.recordset[0]
-                ? ` Ca gần nhất của bạn là ${next.recordset[0].TenCa} ngày ${next.recordset[0].NgayLam}.`
-                : '';
-            throw new Error(`Hôm nay bạn được xếp nghỉ, không mở được ca bán hàng.${hint} Hãy đăng nhập tài khoản thu ngân được phân ca hôm nay.`);
-        }
-        const assignment = { recordset: todayShift.recordset };
-        if (!assignment.recordset[0].ThoiGianVao || assignment.recordset[0].ThoiGianRa) {
-            throw new Error('Hãy vào Lịch làm việc và nhấn Chấm công vào trước khi mở ca bán hàng.');
+        const { schedule } = await assertCashierDuty(transaction, req.user.MaNV, 'open-shift');
+        if (!schedule.ThoiGianVao || schedule.ThoiGianRa) {
+            throw new CashierDutyError('Hãy vào Lịch làm việc và nhấn Chấm công vào trước khi mở ca bán hàng.', 400);
         }
         const mainShiftDuties = new Set(['Ca chính full-time', 'Thu ngân']);
-        if (!mainShiftDuties.has(assignment.recordset[0].NhiemVu)) {
-            throw new Error('Hôm nay bạn được phân công tăng cường part-time, không phụ trách mở quầy thu ngân.');
+        if (!mainShiftDuties.has(schedule.NhiemVu)) {
+            throw new CashierDutyError('Hôm nay bạn được phân công tăng cường part-time, không phụ trách mở quầy thu ngân.', 400);
         }
+        const assignment = { recordset: [schedule] };
         const active = await new sql.Request(transaction)
             .input('MaNV', sql.VarChar, req.user.MaNV)
             .query(`SELECT MaCa FROM CaLamViec WITH (UPDLOCK,HOLDLOCK)
@@ -198,10 +196,12 @@ const openShift = async (req, res) => {
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);
-        const message = error.message.includes('UX_CaLamViec_Quay_DangMo')
-            ? 'Quầy được phân công đang có Thu ngân khác mở ca.'
-            : error.message;
-        res.status(400).json({ message });
+        const message = error instanceof CashierDutyError
+            ? error.message
+            : error.message.includes('UX_CaLamViec_Quay_DangMo')
+                ? 'Quầy được phân công đang có Thu ngân khác mở ca.'
+                : error.message;
+        res.status(error.status || 400).json({ message, duty: error.duty ? publicDuty(error.duty) : undefined });
     }
 };
 

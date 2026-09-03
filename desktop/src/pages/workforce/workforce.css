@@ -79,3 +79,55 @@
 .attendance-approval-note textarea { width:100%; min-height:78px; resize:vertical; box-sizing:border-box; border:1px solid #d5dfd9; border-radius:12px; padding:11px 12px; color:#29463a; background:#fff; font:inherit; }
 .attendance-approval-note textarea:focus { outline:0; border-color:#3d9271; box-shadow:0 0 0 3px rgba(61,146,113,.1); }
 @media (max-width:760px) { .attendance-approval-summary { grid-template-columns:1fr; } }
+
+.holiday-yearbar { display:grid; grid-template-columns:48px 1fr 48px auto; align-items:center; gap:14px; margin-bottom:14px; padding:16px 18px; border:1px solid #d3e1da; border-radius:18px; background:linear-gradient(110deg,rgba(255,255,255,.96),rgba(237,247,241,.93)); }
+.holiday-yearbar > div span,.holiday-yearbar > div strong,.holiday-yearbar > div small { display:block; }
+.holiday-yearbar > div span { color:#75857c; font-size:10px; font-weight:850; letter-spacing:.12em; }
+.holiday-yearbar > div strong { margin:4px 0; color:#20372b; font-size:22px; }
+.holiday-yearbar > div small { color:#7d8c84; line-height:1.45; }
+.holiday-yearbar .next svg { transform:rotate(180deg); }
+.holiday-yearbar-actions { display:flex; gap:8px; }
+.holiday-legend { display:flex; flex-wrap:wrap; gap:10px 16px; margin:0 4px 16px; color:#6f7f76; font-size:12px; }
+.holiday-legend i { display:inline-block; width:11px; height:11px; margin-right:6px; border-radius:3px; vertical-align:-1px; }
+.holiday-legend .fixed { background:#6fbf9a; }
+.holiday-legend .lunar { background:#e4c36a; }
+.holiday-legend .adjacent { background:#e08a5a; }
+.holiday-year-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:18px; }
+.holiday-month { padding:12px 12px 14px; border:1px solid #d8e2dc; border-radius:16px; background:#fff; }
+.holiday-month h3 { margin:0 0 8px; color:#2a4337; font-size:13px; }
+.holiday-weekdays,.holiday-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:3px; }
+.holiday-weekdays span { color:#8a958e; font-size:9px; font-weight:750; text-align:center; }
+.holiday-cell { min-height:42px; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:8px; color:#4d5e55; font-size:11px; }
+.holiday-cell.pad { background:transparent; }
+.holiday-cell em { font-style:normal; }
+.holiday-cell small { max-width:100%; overflow:hidden; color:#3d6a54; font-size:8px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+.holiday-cell.fixed { background:#e7f6ee; color:#1f6b4d; }
+.holiday-cell.lunar { background:#fff6de; color:#8a6414; }
+.holiday-cell.adjacent { background:#ffeee4; color:#a24d28; }
+.holiday-timeline { display:flex; flex-wrap:wrap; gap:8px; margin:0; padding:4px 16px 16px; list-style:none; }
+.holiday-timeline li { display:flex; flex-direction:column; gap:2px; min-width:140px; padding:10px 12px; border:1px solid #dbe5df; border-radius:12px; background:#fbfcfb; }
+.holiday-timeline li.fixed { border-color:#c7e4d6; background:#f3faf6; }
+.holiday-timeline li.lunar { border-color:#ead9a4; background:#fffaf0; }
+.holiday-timeline li.adjacent { border-color:#f0cbb8; background:#fff7f2; }
+.holiday-timeline strong { color:#24382e; font-size:12px; }
+.holiday-timeline span { color:#3e5448; font-size:12px; }
+.holiday-timeline em { color:#7b8a82; font-size:10px; font-style:normal; }
+.holiday-edit-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; padding:8px 16px 18px; }
+.holiday-adjacent { display:flex; flex-direction:column; gap:8px; padding:12px; border:1px solid #ead9a4; border-radius:14px; background:#fffaf0; grid-column:span 2; }
+.holiday-adjacent > span { color:#8a6414; font-size:11px; font-weight:750; }
+.holiday-adjacent label { display:flex; align-items:center; gap:8px; padding:10px 12px; border:1px solid #e4d7b2; border-radius:12px; background:#fff; cursor:pointer; }
+.holiday-adjacent label.selected { border-color:#c9a227; background:#fff7dc; }
+.holiday-adjacent small { color:#8a7a4a; }
+.holiday-rate-help { margin:0 16px 12px; color:#6f7f76; font-size:13px; }
+.holiday-rate-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; padding:0 16px 18px; }
+.holiday-rate-card { padding:14px 16px; border:1px solid #d8e2dc; border-radius:16px; background:#fbfcfb; }
+.holiday-rate-card h3 { margin:0; font-size:14px; }
+.holiday-rate-card p { margin:6px 0 10px; color:#75857c; font-size:12px; line-height:1.4; }
+.holiday-rate-card ul { margin:0; padding:0; list-style:none; }
+.holiday-rate-card li { display:grid; grid-template-columns:1fr auto; gap:4px 10px; padding:8px 0; border-top:1px solid #e7eee9; font-size:12px; }
+.holiday-rate-card li span { grid-column:1 / -1; color:#40574a; }
+.holiday-rate-card input { width:72px; min-height:34px; border:1px solid #d5dfd9; border-radius:8px; padding:0 8px; }
+.holiday-rate-card small { color:#88948e; }
+.workforce-duty-note { margin:8px 0 0; color:#4d6358; font-size:13px; line-height:1.45; }
+@media (max-width:1100px) { .holiday-year-grid,.holiday-rate-grid,.holiday-edit-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .holiday-adjacent { grid-column:span 2; } }
+@media (max-width:720px) { .holiday-yearbar { grid-template-columns:48px 1fr 48px; } .holiday-yearbar-actions { grid-column:1 / -1; } .holiday-year-grid,.holiday-rate-grid,.holiday-edit-grid { grid-template-columns:1fr; } .holiday-adjacent { grid-column:span 1; } }

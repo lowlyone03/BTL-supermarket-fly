@@ -2,6 +2,7 @@ const { sql, poolPromise } = require('../config/db');
 const { calculateGrossProfit, roundMoney, RESTOCK_ACCEPTED_SQL, RESTOCK_REJECTED_SQL, STOCK_FATE_SQL } = require('../services/financialRules');
 const { resolveReportingPeriod, activityFromStamp, currentPeriodDefaults } = require('../services/reportingPeriod');
 const { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS } = require('../services/invoiceReturnSql');
+const storeProfitLoss = require('../services/storeProfitLoss');
 
 const bindPeriod = (pool, period) => pool.request()
     .input('From', sql.NVarChar(10), period.from)
@@ -728,4 +729,49 @@ const getPurchasingReport = async (req, res) => {
     }
 };
 
-module.exports = { getFinancialReport, getStoreOperationsReport, getWarehouseReport, getSalesReport, getPurchasingReport };
+const noStore = res => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    return res;
+};
+
+const getStoreProfitLossReport = async (req, res) => {
+    try {
+        noStore(res);
+        const pool = await poolPromise;
+        const resolved = await resolveReportPeriod(pool, req.query);
+        res.json(await storeProfitLoss.buildReport(pool, resolved));
+    } catch (error) {
+        console.error(error);
+        noStore(res).status(400).json({ message: error.message || 'Không thể lập báo cáo lãi lỗ cửa hàng.' });
+    }
+};
+
+const postStoreProfitLossPlan = async (req, res) => {
+    try {
+        noStore(res);
+        const pool = await poolPromise;
+        const resolved = await resolveReportPeriod(pool, {
+            periodType: req.body?.periodType,
+            period: req.body?.period,
+            lockPeriod: '1'
+        });
+        const result = await storeProfitLoss.savePlan(pool, req.user, req, resolved, req.body || {});
+        res.json(result);
+    } catch (error) {
+        console.error(error);
+        noStore(res).status(error.status || 400).json({
+            message: error.message || 'Không thể lưu kế hoạch điều chỉnh.'
+        });
+    }
+};
+
+module.exports = {
+    getFinancialReport,
+    getStoreOperationsReport,
+    getWarehouseReport,
+    getSalesReport,
+    getPurchasingReport,
+    getStoreProfitLossReport,
+    postStoreProfitLossPlan
+};

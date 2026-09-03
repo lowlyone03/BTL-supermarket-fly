@@ -2,6 +2,7 @@ const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
 const { isRestockAccepted, looksUnsellable, isEqualValueExchange, roundMoney } = require('../services/financialRules');
 const { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS } = require('../services/invoiceReturnSql');
+const { assertCashierDuty } = require('../services/cashierDuty');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 
@@ -437,6 +438,7 @@ const completeReturn = async (req, res) => {
         const ticket = header.recordset[0];
         if (ticket.MaNV_Lap !== req.user.MaNV) throw new Error('Chỉ thu ngân lập phiếu mới hoàn tất đổi trả.');
         if (ticket.TrangThai !== 'Đã duyệt') throw new Error('Chỉ phiếu đã được Quản lý duyệt mới hoàn tất được.');
+        await assertCashierDuty(transaction, req.user.MaNV, 'sell');
         const shift = await new sql.Request(transaction).input('MaNV', sql.VarChar, req.user.MaNV).query(`
             SELECT TOP 1 MaCa FROM CaLamViec WITH(UPDLOCK,HOLDLOCK)
             WHERE MaNV=@MaNV AND TrangThai=N'Đang mở' AND ThoiGianKetThuc IS NULL`);
@@ -562,7 +564,7 @@ const completeReturn = async (req, res) => {
         res.json({ message: `Đã hoàn thành phiếu đổi trả ${maDT}.`, MaDT: maDT, MaCaHoan: maCaHoan });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
-        res.status(400).json({ message: error.message });
+        res.status(error.status || 400).json({ message: error.message });
     }
 };
 
