@@ -309,15 +309,53 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const warehousePending = Number(pending.PhieuXuat || 0) + Number(pending.KiemKe || 0);
       const financePending = Number(pending.DoiTra || 0) + Number(pending.PhieuChi || 0);
+      const totalStaff = data.roleDistribution.reduce((s, r) => s + Number(r.SoNhanVien || 0), 0) || 1;
       const maxRole = Math.max(1, ...data.roleDistribution.map(role => Number(role.SoNhanVien || 0)));
-      const roleBars = data.roleDistribution.map(role => `
-        <div class="role-bar-row">
+      const roleGradients = ['#2d6a4f,#40916c', '#1b7fa3,#34b3d5', '#7c5cbf,#a78bfa', '#c97a0a,#eab308', '#c4553d,#f87171'];
+      const roleBars = data.roleDistribution.map((role, i) => {
+        const pct = (Number(role.SoNhanVien || 0) / totalStaff * 100).toFixed(1);
+        const grad = roleGradients[i % roleGradients.length];
+        return `
+        <div class="role-bar-row" style="cursor:pointer" data-open-target="../admin/employees.html" title="Xem nhân viên ${escapeHtml(role.TenVaiTro)}">
           <span>${escapeHtml(role.TenVaiTro)}</span>
-          <div class="role-bar-track"><div class="role-bar-fill" style="width:${Math.max(2, Number(role.SoNhanVien || 0) / maxRole * 100)}%"></div></div>
-          <b>${role.SoNhanVien}</b>
-        </div>`).join('');
-      const logRows = data.recentLogs.length ? data.recentLogs.map(log => `
-        <li><span class="activity-dot"></span><div><strong>${escapeHtml(log.HanhDong)}</strong><p>${escapeHtml(log.NoiDung || log.NguoiThaoTac || 'Hoạt động hệ thống')}</p></div><time>${new Date(log.ThoiGian).toLocaleTimeString('vi-VN', {hour:'2-digit',minute:'2-digit',timeZone:HANOI_TIME_ZONE})}</time></li>`).join('') : '<li class="empty-row">Chưa có hoạt động gần đây.</li>';
+          <div class="role-bar-track"><div class="role-bar-fill" style="width:${Math.max(4, Number(role.SoNhanVien || 0) / maxRole * 100)}%;background:linear-gradient(90deg,${grad})"></div></div>
+          <b>${role.SoNhanVien}<small class="role-pct">${pct}%</small></b>
+        </div>`;
+      }).join('');
+
+      const logIconMap = { 'Đăng nhập': '🔐', 'Đăng xuất': '🔐', 'Phê duyệt': '📋', 'Từ chối': '📋', 'Thanh toán': '💰', 'Nhập kho': '📦', 'Xuất kho': '📦', 'Đổi trả': '🔄', 'Cập nhật': '⚙️', 'Tạo mới': '✨', 'Xóa': '🗑️' };
+      const getLogIcon = action => {
+        for (const [key, icon] of Object.entries(logIconMap)) {
+          if (String(action).includes(key)) return icon;
+        }
+        return '📝';
+      };
+      const timeAgo = dateStr => {
+        const diff = Date.now() - new Date(dateStr).getTime();
+        const mins = Math.floor(diff / 60000);
+        if (mins < 1) return 'Vừa xong';
+        if (mins < 60) return `${mins} phút trước`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs} giờ trước`;
+        return `${Math.floor(hrs / 24)} ngày trước`;
+      };
+      const logRows = data.recentLogs.length ? data.recentLogs.slice(0, 8).map(log => {
+        const icon = getLogIcon(log.HanhDong);
+        const absTime = new Date(log.ThoiGian).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: HANOI_TIME_ZONE });
+        const isLogin = String(log.HanhDong).includes('Đăng nhập') || String(log.HanhDong).includes('Đăng xuất');
+        return `
+        <li class="activity-item" title="${escapeHtml(absTime + ' · ' + (log.NoiDung || ''))}">
+          <span class="activity-icon">${icon}</span>
+          <div class="activity-body">
+            <strong>${escapeHtml(log.HanhDong)}</strong>
+            <p>${escapeHtml(log.NoiDung || log.NguoiThaoTac || 'Hoạt động hệ thống')}</p>
+          </div>
+          <div class="activity-meta">
+            <time>${timeAgo(log.ThoiGian)}</time>
+            <span class="activity-status-badge ${isLogin ? 'login' : 'success'}">Thành công</span>
+          </div>
+        </li>`;
+      }).join('') : '<li class="empty-row">Chưa có hoạt động gần đây.</li>';
       const priorityTitle = pending.TongChoDuyet > 0 ? `${String(pending.TongChoDuyet).padStart(2, '0')} nghiệp vụ đang chờ quyết định` : 'Hệ thống chưa có nghiệp vụ tồn đọng';
       const priorityText = pending.TongChoDuyet > 0
         ? 'Đơn mua hàng, chứng từ kho, đề nghị đổi trả và thanh toán đang chờ Quản lý xem xét.'
