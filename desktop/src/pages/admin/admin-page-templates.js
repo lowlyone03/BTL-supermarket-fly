@@ -33,20 +33,32 @@
           <div><p class="module-kicker">UC04 / KHUYẾN MÃI</p><h1>Chương trình khuyến mãi</h1><p>Tạo, cập nhật hoặc ngừng chương trình. Thu ngân chỉ áp dụng KM đang hiệu lực trong hạn.</p></div>
           <div class="heading-actions"><span class="record-count" id="promoCount">0 chương trình</span><button class="btn btn-primary" onclick="openPromoModal()"><svg aria-hidden="true"><use href="#i-plus"/></svg> Thêm khuyến mãi</button></div>
         </header>
+        <div class="module-stat-grid compact-stats">
+          <article class="mini-stat"><span>Đang hiệu lực</span><strong id="promoActiveCount">0</strong><small>Chương trình đang áp dụng</small></article>
+          <article class="mini-stat warning"><span>Tạm ngừng</span><strong id="promoPausedCount">0</strong><small>Đã tạm dừng áp dụng</small></article>
+          <article class="mini-stat danger"><span>Đã hết hạn</span><strong id="promoExpiredCount">0</strong><small>Quá ngày kết thúc</small></article>
+        </div>
         <article class="surface-card data-surface">
-          <div class="table-toolbar"><label class="filter-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="promoSearch" placeholder="Tìm mã hoặc tên chương trình..."></label><button class="icon-button" onclick="loadPromotions()" aria-label="Tải lại"><svg><use href="#i-refresh"/></svg></button></div>
-          <div class="table-container"><table><thead><tr><th>Chương trình</th><th>Loại / giá trị</th><th>Thời hạn</th><th>Trạng thái</th><th class="align-right">Thao tác</th></tr></thead><tbody id="promoTableBody"></tbody></table></div>
+          <div class="table-toolbar"><label class="filter-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="promoSearch" placeholder="Tìm mã hoặc tên chương trình..."></label><div class="filter-actions"><select id="promoStatusFilter" aria-label="Lọc trạng thái"><option value="">Tất cả trạng thái</option><option value="active">Đang hiệu lực</option><option value="paused">Tạm ngừng</option><option value="expired">Đã hết hạn</option></select><button class="icon-button" onclick="loadPromotions()" aria-label="Tải lại"><svg><use href="#i-refresh"/></svg></button></div></div>
+          <div class="table-container"><table class="promo-table"><thead><tr><th>Chương trình</th><th>Loại / giá trị</th><th>Thời hạn</th><th>Trạng thái</th><th class="align-right">Thao tác</th></tr></thead><tbody id="promoTableBody"></tbody></table></div>
         </article>
       </section>
-      <div class="modal-backdrop" id="promoModal" style="display:none"><div class="modal"><div class="modal-header"><div><p class="module-kicker">CHƯƠNG TRÌNH</p><h3 id="promoModalTitle">Thêm khuyến mãi</h3></div><button class="close-btn" onclick="closePromoModal()">×</button></div><div class="modal-body"><form id="promoForm"><div class="form-grid">
-        <div class="form-group"><label>Mã KM *</label><input id="promoCode" maxlength="20" required></div>
-        <div class="form-group"><label>Loại *</label><select id="promoType"><option>Phần trăm</option><option>Số tiền</option></select></div>
-        <div class="form-group form-span-2"><label>Tên chương trình *</label><input id="promoName" maxlength="150" required></div>
-        <div class="form-group"><label>Giá trị *</label><input id="promoValue" type="number" min="0" step="1" required></div>
-        <div class="form-group"><label>Trạng thái</label><select id="promoStatus"><option>Hiệu lực</option><option>Ngừng</option></select></div>
-        <div class="form-group"><label>Ngày bắt đầu *</label><input id="promoStart" type="date" required></div>
-        <div class="form-group"><label>Ngày kết thúc *</label><input id="promoEnd" type="date" required></div>
-      </div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closePromoModal()">Hủy</button><button type="button" class="btn btn-secondary" onclick="previewPromotion()">Xem trước</button><button class="btn btn-primary" type="submit">Lưu</button></div></form></div></div></div>
+      <div class="modal-backdrop" id="promoModal" style="display:none"><div class="modal modal-wide promo-editor-modal"><div class="modal-header"><div><p class="module-kicker">CHƯƠNG TRÌNH KHUYẾN MÃI</p><h3 id="promoModalTitle">Thêm khuyến mãi</h3><p class="modal-description">Khai báo thông tin, thời hạn và điều kiện áp dụng chương trình khuyến mãi.</p></div><button class="close-btn" onclick="closePromoModal()">×</button></div><div class="modal-body"><form id="promoForm" novalidate>
+
+        <div class="promo-section"><div class="promo-section-heading"><small>THÔNG TIN CƠ BẢN</small><h4>Nội dung khuyến mãi</h4></div><div class="form-grid">
+          <div class="form-group"><label>Mã KM *</label><div class="input-with-action"><input id="promoCode" maxlength="20" required placeholder="Ví dụ: KM001"><button type="button" class="field-action" onclick="suggestPromoCode()">Gợi ý mã</button></div><small class="field-help" id="promoCodeHelp">Mã duy nhất, không thể đổi sau khi tạo.</small><small class="field-error" id="promoCodeError"></small></div>
+          <div class="form-group"><label>Loại khuyến mãi *</label><select id="promoType"><option>Phần trăm</option><option>Số tiền</option></select></div>
+          <div class="form-group form-span-2"><label>Tên chương trình *</label><input id="promoName" maxlength="150" required placeholder="Ví dụ: Giảm giá mùa hè 2025"><small class="field-error" id="promoNameError"></small></div>
+          <div class="form-group"><label>Giá trị khuyến mãi *</label><div class="input-with-suffix"><input id="promoValue" type="number" min="0" step="1" required placeholder="0"><span class="input-suffix" id="promoValueSuffix">%</span></div><small class="field-help" id="promoValueHelp">Phần trăm: 0–100, Số tiền: > 0</small><small class="field-error" id="promoValueError"></small></div>
+          <div class="form-group"><label>Trạng thái</label><div class="toggle-row"><label class="toggle-switch"><input type="checkbox" id="promoStatusToggle" checked><span class="toggle-slider"></span></label><span class="toggle-label" id="promoStatusLabel">Hiệu lực</span></div></div>
+        </div></div>
+
+        <div class="promo-section"><div class="promo-section-heading"><small>THỜI HẠN ÁP DỤNG</small><h4>Khoảng thời gian hiệu lực</h4></div><div class="form-grid">
+          <div class="form-group"><label>Ngày bắt đầu *</label><input id="promoStart" type="date" required><small class="field-error" id="promoStartError"></small></div>
+          <div class="form-group"><label>Ngày kết thúc *</label><input id="promoEnd" type="date" required><small class="field-error" id="promoEndError"></small></div>
+        </div></div>
+
+      <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closePromoModal()">Hủy</button><button type="button" class="btn btn-secondary" onclick="previewPromotion()">Xem trước</button><button class="btn btn-primary" id="promoSubmitBtn" type="submit">Lưu khuyến mãi</button></div></form></div></div></div>
       <script src="../admin/promotions.js"></script>`,
 
     'employees.html': `

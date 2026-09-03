@@ -47,8 +47,11 @@ const getDashboard = async (req, res) => {
             pool.request().query(`
                 SELECT COALESCE(SUM(CASE WHEN CONVERT(date,hd.NgayLap)=CONVERT(date,GETDATE()) THEN hd.TongThanhToan ELSE 0 END),0) AS DoanhThuHomNay,
                        COALESCE(SUM(CASE WHEN CONVERT(date,hd.NgayLap)>=DATEADD(day,-7,CONVERT(date,GETDATE())) THEN hd.TongThanhToan ELSE 0 END),0) AS DoanhThu7Ngay,
-                       COALESCE(SUM(CASE WHEN CONVERT(date,hd.NgayLap)=CONVERT(date,GETDATE()) THEN hd.TongThanhToan-hd.TongGiaNhap ELSE 0 END),0) AS LaiGopHomNay
-                FROM HoaDon hd WHERE hd.TrangThai=N'Hoàn thành'
+                       COALESCE(SUM(CASE WHEN CONVERT(date,hd.NgayLap)=CONVERT(date,GETDATE()) THEN hd.TongThanhToan ELSE 0 END)
+                               -SUM(CASE WHEN CONVERT(date,hd.NgayLap)=CONVERT(date,GETDATE()) THEN ct.GiaVonTong ELSE 0 END),0) AS LaiGopHomNay
+                FROM HoaDon hd
+                CROSS APPLY (SELECT COALESCE(SUM(c.DonGiaVon*c.SoLuong),0) AS GiaVonTong FROM ChiTietHoaDon c WHERE c.MaHD=hd.MaHD) ct
+                WHERE hd.TrangThai=N'Hoàn thành'
             `).catch(() => ({ recordset: [{ DoanhThuHomNay: 0, DoanhThu7Ngay: 0, LaiGopHomNay: 0 }] })),
             pool.request().query(`
                 SELECT TOP 10 sp.MaSP, sp.TenSP, sp.DonViTinh, sp.TonKhoToiThieu, ISNULL(SUM(tk.SLTon),0) AS SLTon
