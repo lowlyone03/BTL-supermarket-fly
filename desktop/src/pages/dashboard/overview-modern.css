@@ -308,3 +308,58 @@
   .overview-product-grid { grid-template-columns: 1fr; }
   .overview-product-visual { height: 185px; }
 }
+
+/* ── Enhanced Staff Panel ── */
+.overview-panel-staff .role-chart-summary { flex-wrap: wrap; gap: 20px 42px; }
+.staff-warn { color: #c97a0a; }
+.role-pct { display: inline-block; margin-left: 6px; color: #8a968f; font-size: 9px; font-weight: 600; }
+.role-bar-fill { transition: width .5s ease; }
+.role-bar-row:hover .role-bar-fill { filter: brightness(1.1); }
+.role-bar-row:hover { background: #f8faf8; border-radius: 6px; }
+
+/* ── Enhanced Activity Log ── */
+.activity-list-v2 {
+  margin: 0; padding: 8px 16px; list-style: none;
+  max-height: 480px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: #bdd0c5 transparent;
+}
+.activity-item {
+  min-height: 52px; padding: 10px 4px;
+  display: grid; grid-template-columns: 32px 1fr auto;
+  align-items: center; gap: 10px;
+  border-bottom: 1px solid #eceeea;
+  transition: background .15s ease;
+}
+.activity-item:hover { background: #f5f8f6; border-radius: 8px; }
+.activity-item:last-child { border-bottom: 0; }
+.activity-icon {
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  border-radius: 9px; background: #f2f5f3;
+  font-size: 14px;
+}
+.activity-body { min-width: 0; }
+.activity-body strong { display: block; font-size: 11px; color: #24342c; font-weight: 650; }
+.activity-body p { margin: 3px 0 0; color: #718078; font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-meta { text-align: right; min-width: 80px; }
+.activity-meta time { display: block; color: #9aa39e; font-size: 9px; white-space: nowrap; }
+.activity-status-badge {
+  display: inline-block; margin-top: 4px;
+  padding: 2px 7px; border-radius: 999px;
+  font-size: 8px; font-weight: 800;
+}
+.activity-status-badge.success { color: #26704f; background: #e7f2eb; }
+.activity-status-badge.login { color: #45658d; background: #e9eff8; }
+.activity-status-badge.fail { color: #aa4c39; background: #fbe9e5; }
+.activity-footer {
+  padding: 12px 20px; border-top: 1px solid #eceeea;
+  text-align: center;
+}
+.activity-view-all {
+  color: #2d6a4f; font-size: 11px; font-weight: 700;
+  text-decoration: none; cursor: pointer;
+}
+.activity-view-all:hover { text-decoration: underline; }
+.overview-panel-log { display: flex; flex-direction: column; }
+.overview-panel-log .activity-list-v2 { flex: 1 1 auto; min-height: 0; }
+.overview-panel-log .activity-footer { flex: 0 0 auto; }
