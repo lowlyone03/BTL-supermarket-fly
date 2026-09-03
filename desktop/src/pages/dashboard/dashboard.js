@@ -413,13 +413,21 @@ document.addEventListener('DOMContentLoaded', () => {
           </section>
 
           <div class="overview-columns">
-            <article class="overview-panel">
+            <article class="overview-panel overview-panel-staff">
               <div class="panel-title"><div><p class="module-kicker">TÌNH HÌNH NHÂN SỰ</p><h3>Cơ cấu nhân sự theo chức vụ</h3><p>Tổng hợp từ hồ sơ nhân viên đang làm việc tại cửa hàng.</p></div><button class="quick-link" data-open-target="../admin/employees.html" aria-label="Mở danh sách nhân viên"><svg><use href="#i-chevron"/></svg></button></div>
-              <div class="role-chart"><div class="role-chart-summary"><div><span>Đang làm việc</span><strong>${summary.NhanVienDangLam}</strong></div><div><span>Nhóm chức vụ</span><strong>${data.roleDistribution.length} nhóm</strong></div></div><div class="role-bars">${roleBars}</div></div>
+              <div class="role-chart">
+                <div class="role-chart-summary">
+                  <div><span>Đang làm việc</span><strong>${summary.NhanVienDangLam}</strong></div>
+                  <div><span>Nhóm chức vụ</span><strong>${data.roleDistribution.length} nhóm</strong></div>
+                  <div><span>Chưa có TK</span><strong class="${summary.ChuaCoTaiKhoan ? 'staff-warn' : ''}">${summary.ChuaCoTaiKhoan}</strong></div>
+                </div>
+                <div class="role-bars">${roleBars}</div>
+              </div>
             </article>
-            <article class="overview-panel">
+            <article class="overview-panel overview-panel-log">
               <div class="panel-title"><div><p class="module-kicker">NHẬT KÝ HOẠT ĐỘNG</p><h3>Hoạt động gần đây</h3></div><button class="quick-link" data-open-target="../admin/audit-log.html" aria-label="Mở nhật ký hệ thống"><svg><use href="#i-chevron"/></svg></button></div>
-              <ul class="activity-list">${logRows}</ul>
+              <ul class="activity-list-v2">${logRows}</ul>
+              <div class="activity-footer"><a href="#" class="activity-view-all" data-open-target="../admin/audit-log.html">Xem tất cả nhật ký →</a></div>
             </article>
           </div>
         </section>`;
