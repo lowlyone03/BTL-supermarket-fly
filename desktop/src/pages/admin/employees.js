@@ -8,6 +8,8 @@
     const roleFilter = document.getElementById('empRoleFilter');
     const statusFilter = document.getElementById('empStatusFilter');
     let searchTimer = null;
+    let employeesRequestController = null;
+    let employeesRequestSeq = 0;
 
     const escapeHtml = value => String(value ?? '')
         .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
@@ -20,6 +22,38 @@
         try { return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(dateStr)); }
         catch { return '—'; }
     };
+
+    const getTableColspan = () => {
+        const thCount = document.querySelectorAll('.employee-table thead th').length;
+        return thCount > 0 ? thCount : 6;
+    };
+
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
+
+    const extractEmployeeList = payload => {
+        if (Array.isArray(payload)) return payload;
+        if (Array.isArray(payload?.data)) return payload.data;
+        if (Array.isArray(payload?.items)) return payload.items;
+        if (Array.isArray(payload?.employees)) return payload.employees;
+        return null;
+    };
+
+    const normalizeEmployee = raw => ({
+        MaNV: raw?.MaNV ?? raw?.maNV ?? raw?.employeeId ?? '',
+        TenNV: raw?.TenNV ?? raw?.tenNV ?? raw?.name ?? '',
+        ChucVu: raw?.ChucVu ?? raw?.chucVu ?? raw?.roleName ?? '',
+        SDT: raw?.SDT ?? raw?.sdt ?? raw?.phone ?? '',
+        Email: raw?.Email ?? raw?.email ?? '',
+        DiaChi: raw?.DiaChi ?? raw?.diaChi ?? raw?.address ?? '',
+        TrangThai: raw?.TrangThai ?? raw?.trangThai ?? raw?.status ?? '',
+        NgayVaoLam: raw?.NgayVaoLam ?? raw?.ngayVaoLam ?? raw?.createdAt ?? null,
+        HasAccount: raw?.HasAccount ?? raw?.hasAccount ?? raw?.coTaiKhoan ?? 0,
+        TenDangNhap: raw?.TenDangNhap ?? raw?.tenDangNhap ?? raw?.username ?? '',
+        CaLamGanNhat: raw?.CaLamGanNhat ?? raw?.caLamGanNhat ?? ''
+    });
 
     const validateField = (id, condition, msg) => {
         const el = document.getElementById(id + '_err');
@@ -64,12 +98,12 @@
             && (!selectedRole || emp.ChucVu === selectedRole)
             && (!selectedStatus || emp.TrangThai === selectedStatus)
         );
-        document.getElementById('empCount').textContent = `${filtered.length} nhân viên`;
-        document.getElementById('empActiveCount').textContent = employees.filter(emp => emp.TrangThai === 'Đang làm việc').length;
-        document.getElementById('empAccountCount').textContent = employees.filter(emp => Number(emp.HasAccount) === 1).length;
-        document.getElementById('empNoAccountCount').textContent = employees.filter(emp => Number(emp.HasAccount) !== 1 && emp.TrangThai === 'Đang làm việc').length;
+        setText('empCount', `${filtered.length} nhân viên`);
+        setText('empActiveCount', employees.filter(emp => emp.TrangThai === 'Đang làm việc').length);
+        setText('empAccountCount', employees.filter(emp => Number(emp.HasAccount) === 1).length);
+        setText('empNoAccountCount', employees.filter(emp => Number(emp.HasAccount) !== 1 && emp.TrangThai === 'Đang làm việc').length);
         const onLeave = employees.filter(emp => emp.TrangThai === 'Nghỉ việc').length;
-        document.getElementById('empOnLeave').textContent = onLeave;
+        setText('empOnLeave', onLeave);
 
         const roleColors = { 'Quản lý': '#2d6a4f', 'Nhân viên mua hàng': '#1b7fa3', 'Thủ kho': '#7c5cbf', 'Thu ngân': '#c97a0a', 'Kế toán': '#c4553d' };
         const getRoleColor = role => roleColors[role] || '#40916c';
@@ -80,39 +114,53 @@
             const isActive = emp.TrangThai === 'Đang làm việc';
             const hasAccount = Number(emp.HasAccount) === 1;
             return `
-            <tr class="emp-row" onclick="openEmpDetail('${escapeHtml(emp.MaNV)}')" title="Click để xem chi tiết">
+            <tr class="emp-row" data-emp-action="detail" data-ma-nv="${escapeHtml(emp.MaNV)}">
                 <td><div class="person-cell"><span class="person-avatar emp-avatar-lg" style="background:${roleColor}15;color:${roleColor}">${escapeHtml(initials)}</span><span><strong>${escapeHtml(emp.TenNV)}</strong><small>${escapeHtml(emp.MaNV)}</small></span></div></td>
                 <td><span class="emp-role-chip" style="background:${roleColor}12;color:${roleColor};border-color:${roleColor}30">${escapeHtml(emp.ChucVu)}</span></td>
                 <td class="contact-cell"><span>${escapeHtml(emp.SDT || 'Chưa có SĐT')}</span><small>${escapeHtml(emp.Email || '')}</small></td>
-                <td><span class="emp-date">${formatDate(emp.NgayVaoLam)}</span></td>
-                <td><span class="badge ${isActive ? 'badge-success' : 'badge-secondary'}">${escapeHtml(emp.TrangThai)}</span></td>
+                <td><span class="badge ${isActive ? 'badge-success' : 'badge-secondary'}">${escapeHtml(emp.TrangThai || 'Đang làm việc')}</span></td>
                 <td>${hasAccount ? `<span class="badge badge-info">${escapeHtml(emp.TenDangNhap)}</span>` : '<span class="badge badge-warning">Chưa cấp</span>'}</td>
-                <td class="align-right"><div class="action-btns">
-                    <button class="btn btn-outline" onclick="event.stopPropagation();editEmpById('${escapeHtml(emp.MaNV)}')">Chỉnh sửa</button>
-                    ${isActive ? `<button class="btn btn-outline emp-btn-lock" onclick="event.stopPropagation();toggleEmpStatus('${escapeHtml(emp.MaNV)}','Nghỉ việc')" title="Cho nghỉ việc">🔒</button>` : `<button class="btn btn-outline emp-btn-unlock" onclick="event.stopPropagation();toggleEmpStatus('${escapeHtml(emp.MaNV)}','Đang làm việc')" title="Mở lại">🔓</button>`}
+                <td class="emp-actions-cell"><div class="emp-actions">
+                    <button type="button" class="btn btn-outline emp-btn" data-emp-action="edit" data-ma-nv="${escapeHtml(emp.MaNV)}">Sửa</button>
+                    ${isActive
+                        ? `<button type="button" class="btn btn-danger emp-btn" data-emp-action="leave" data-ma-nv="${escapeHtml(emp.MaNV)}">Nghỉ việc</button>`
+                        : `<button type="button" class="btn btn-secondary emp-btn" data-emp-action="restore" data-ma-nv="${escapeHtml(emp.MaNV)}">Mở lại</button>`}
                 </div></td>
             </tr>`;
-        }).join('') : '<tr><td colspan="7" class="empty-state">Không tìm thấy nhân viên phù hợp.</td></tr>';
+        }).join('') : `<tr><td colspan="${getTableColspan()}" class="empty-state">Không tìm thấy nhân viên phù hợp.</td></tr>`;
     };
 
     window.loadEmployees = async () => {
         const tbody = document.getElementById('empTableBody');
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Đang tải dữ liệu...</td></tr>';
+        const requestSeq = ++employeesRequestSeq;
+        if (employeesRequestController) employeesRequestController.abort();
+        employeesRequestController = new AbortController();
+
+        tbody.innerHTML = `<tr><td colspan="${getTableColspan()}" class="empty-state">Đang tải dữ liệu...</td></tr>`;
         try {
             const res = await fetch('http://localhost:3000/api/employees', {
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: { 'Authorization': `Bearer ${token}` },
+                signal: employeesRequestController.signal
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.message || 'Không thể tải danh sách nhân viên.');
-            employees = data;
+            const payload = await res.json();
+            if (!res.ok) throw new Error(payload.message || 'Không thể tải danh sách nhân viên.');
+            const list = extractEmployeeList(payload);
+            if (!list) {
+                throw new Error('Dữ liệu nhân viên trả về không đúng định dạng danh sách.');
+            }
+            if (requestSeq !== employeesRequestSeq) return;
+            employees = list.map(normalizeEmployee);
             renderEmployees();
         } catch (err) {
-            tbody.innerHTML = '<tr><td colspan="7" class="empty-state error-text">Không thể tải dữ liệu.</td></tr>';
+            if (err.name === 'AbortError') return;
+            console.error('loadEmployees failed:', err);
+            tbody.innerHTML = `<tr><td colspan="${getTableColspan()}" class="empty-state error-text">Không thể tải dữ liệu.</td></tr>`;
             window.showToast(err.message || 'Lỗi tải danh sách nhân viên', 'error');
         }
     };
 
     window.openEmpModal = () => {
+        if (!empModal) return;
         isEditMode = false;
         document.getElementById('empModalTitle').textContent = 'Thêm nhân viên';
         document.getElementById('maNV').readOnly = false;
@@ -203,13 +251,14 @@
                 </div>
             </div>
             <div class="emp-detail-actions">
-                <button class="btn btn-primary" onclick="closeEmpDetail();editEmpById('${escapeHtml(emp.MaNV)}')">Chỉnh sửa hồ sơ</button>
+                <button type="button" class="btn btn-primary" data-emp-action="edit" data-ma-nv="${escapeHtml(emp.MaNV)}">Chỉnh sửa hồ sơ</button>
                 ${isActive
-                    ? `<button class="btn btn-secondary" onclick="closeEmpDetail();toggleEmpStatus('${escapeHtml(emp.MaNV)}','Nghỉ việc')">Cho nghỉ việc</button>`
-                    : `<button class="btn btn-secondary" onclick="closeEmpDetail();toggleEmpStatus('${escapeHtml(emp.MaNV)}','Đang làm việc')">Mở lại làm việc</button>`
+                    ? `<button type="button" class="btn btn-danger" data-emp-action="leave" data-ma-nv="${escapeHtml(emp.MaNV)}">Cho nghỉ việc</button>`
+                    : `<button type="button" class="btn btn-secondary" data-emp-action="restore" data-ma-nv="${escapeHtml(emp.MaNV)}">Mở lại làm việc</button>`
                 }
             </div>`;
-        document.getElementById('empDetailBackdrop').style.display = 'flex';
+        const backdrop = document.getElementById('empDetailBackdrop');
+        if (backdrop) backdrop.style.display = 'flex';
     };
 
     window.closeEmpDetail = () => {
@@ -219,19 +268,49 @@
     window.toggleEmpStatus = async (maNV, newStatus) => {
         const emp = employees.find(item => item.MaNV === maNV);
         if (!emp) return;
+        const confirmText = newStatus === 'Nghỉ việc'
+            ? `Cho ${emp.TenNV} nghỉ việc? Tài khoản đăng nhập (nếu có) sẽ bị khóa.`
+            : `Mở lại làm việc cho ${emp.TenNV}?`;
+        if (!window.confirm(confirmText)) return;
         try {
             const res = await fetch(`http://localhost:3000/api/employees/${encodeURIComponent(maNV)}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ ...emp, TrangThai: newStatus })
+                body: JSON.stringify({
+                    MaNV: emp.MaNV,
+                    TenNV: emp.TenNV,
+                    ChucVu: emp.ChucVu,
+                    SDT: emp.SDT,
+                    Email: emp.Email,
+                    DiaChi: emp.DiaChi,
+                    TrangThai: newStatus
+                })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Không thể cập nhật trạng thái.');
             window.showToast(`Đã chuyển ${emp.TenNV} sang "${newStatus}"`, 'success');
+            closeEmpDetail();
             loadEmployees();
         } catch (err) {
             window.showToast(err.message || 'Lỗi cập nhật trạng thái', 'error');
         }
+    };
+
+    const handleEmpAction = event => {
+        const trigger = event.target.closest('[data-emp-action]');
+        if (!trigger) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const maNV = trigger.dataset.maNv;
+        const action = trigger.dataset.empAction;
+        if (action === 'edit') {
+            closeEmpDetail();
+            editEmpById(maNV);
+            return;
+        }
+        if (action === 'leave') return toggleEmpStatus(maNV, 'Nghỉ việc');
+        if (action === 'restore') return toggleEmpStatus(maNV, 'Đang làm việc');
+        if (action === 'detail') return openEmpDetail(maNV);
     };
 
     empForm.onsubmit = async event => {
@@ -264,13 +343,16 @@
         }
     };
 
-    // Debounced search
-    searchInput.addEventListener('input', () => {
+    document.getElementById('empAddBtn')?.addEventListener('click', openEmpModal);
+    document.getElementById('empRefreshBtn')?.addEventListener('click', () => loadEmployees());
+    document.getElementById('empTableBody')?.addEventListener('click', handleEmpAction);
+    document.getElementById('empDetailContent')?.addEventListener('click', handleEmpAction);
+    searchInput?.addEventListener('input', () => {
         clearTimeout(searchTimer);
         searchTimer = setTimeout(renderEmployees, 250);
     });
-    roleFilter.addEventListener('change', renderEmployees);
-    statusFilter.addEventListener('change', renderEmployees);
+    roleFilter?.addEventListener('change', renderEmployees);
+    statusFilter?.addEventListener('change', renderEmployees);
 
     // Real-time validation & avatar preview
     document.getElementById('tenNV')?.addEventListener('input', updateAvatarPreview);

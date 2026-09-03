@@ -469,7 +469,7 @@
 .manager-debt-amounts span,.manager-debt-amounts strong { display:block; }
 .manager-debt-amounts span { color:#75857d; font-size:9px; font-weight:850; letter-spacing:.08em; }
 .manager-debt-amounts strong { margin-top:7px; color:#21372c; font-size:16px; }
-.approval-center-summary { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.approval-center-summary { grid-template-columns:repeat(4,minmax(0,1fr)); }
 .approval-center-note { display:flex; align-items:flex-start; gap:12px; margin-bottom:16px; padding:14px 16px; border:1px solid #d3e5dc; border-radius:15px; color:#285e4b; background:#eef7f2; }
 .approval-center-note strong { white-space:nowrap; }
 .approval-center-note span { color:#65796e; line-height:1.5; }
@@ -564,6 +564,7 @@
   .stock-issue-note { grid-column:1/-1; }
   .stock-issue-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .payment-voucher-source { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .approval-center-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 .return-workflow-hint,
 .return-inspect-warn {
@@ -945,6 +946,51 @@
 .payroll-ky-recipient { margin:0 0 8px; color:#2a4337; font-size:13px; }
 .payroll-fund-note { margin:0 16px 8px; color:#4d6358; font-size:13px; }
 .payroll-build-hint { margin:8px 0 0; color:#4d6358; font-size:13px; line-height:1.45; }
+.payroll-supplier-debt { margin-top:18px; }
+.payroll-supplier-debt .report-card-count {
+  min-width:36px; height:36px; display:inline-grid; place-items:center;
+  padding:0 12px; border:1px solid #cfe1d8; border-radius:999px;
+  background:#edf7f2; color:#237458; font-size:14px; font-weight:800;
+}
+.payroll-supplier-debt-buckets {
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:10px;
+  padding:14px 18px 8px;
+}
+.payroll-supplier-debt-row {
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:8px;
+  min-height:78px;
+  padding:12px 14px;
+  border:1px solid #dbe6e0;
+  border-radius:14px;
+  background:#f7faf8;
+}
+.payroll-supplier-debt-row span {
+  min-width:0; color:#4d6358; font-size:12px; font-weight:650; line-height:1.35;
+}
+.payroll-supplier-debt-row strong {
+  color:#1f523f;
+  font-size:16px; font-weight:800; white-space:nowrap; font-variant-numeric:tabular-nums;
+}
+.payroll-supplier-debt-row.is-overdue { border-color:#efc8ba; background:#fff7f4; }
+.payroll-supplier-debt-row.is-overdue strong { color:#9e4330; }
+.payroll-supplier-debt .warehouse-table-wrap {
+  margin:10px 16px 0; border:1px solid #e4ebe6; border-radius:12px;
+}
+.payroll-supplier-debt .warehouse-note {
+  margin:0; padding:12px 22px 16px; color:#66786e; font-size:12px; line-height:1.5;
+}
+@media (max-width: 1180px) {
+  .payroll-supplier-debt-buckets { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
+@media (max-width: 760px) {
+  .payroll-supplier-debt-buckets { grid-template-columns:1fr; }
+}
 .accounting-history-filters { align-items:flex-end; gap:10px; flex-wrap:wrap; }
 
 /* ══════════════════════════════════════════════════════

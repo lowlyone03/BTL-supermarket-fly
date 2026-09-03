@@ -1,5 +1,6 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
+const { MANAGER_FIXED_PERMISSION_CODES } = require('../constants/permissions');
 
 // Lấy danh sách vai trò
 const getRoles = async (req, res) => {
@@ -66,13 +67,13 @@ const updatePermissions = async (req, res) => {
         await transaction.begin();
 
         try {
-            // Vai trò Quản lý được cố định theo UC01-UC10 để tránh tự khóa hệ thống.
+            // Vai trò Quản lý được cố định theo bộ quyền vận hành chuẩn để tránh tự khóa hệ thống.
             await new sql.Request(transaction).query('DELETE FROM VaiTro_ChucNang');
 
-            for (let index = 1; index <= 10; index += 1) {
+            for (const code of MANAGER_FIXED_PERMISSION_CODES) {
                 await new sql.Request(transaction)
                     .input('MaVaiTro', sql.Int, Number(manager.MaVaiTro))
-                    .input('MaChucNang', sql.VarChar, `UC${String(index).padStart(2, '0')}`)
+                    .input('MaChucNang', sql.VarChar, code)
                     .query(`INSERT INTO VaiTro_ChucNang (MaVaiTro, MaChucNang, DuocPhep)
                             VALUES (@MaVaiTro, @MaChucNang, 1)`);
             }

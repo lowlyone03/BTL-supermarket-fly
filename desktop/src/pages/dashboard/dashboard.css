@@ -256,11 +256,11 @@ button { color: inherit; }
 .role-chart-summary span { color: #829087; font-size: 10px; }
 .role-chart-summary strong { margin-top: 5px; font-size: 18px; }
 .role-bars { display: flex; flex-direction: column; gap: 14px; }
-.role-bar-row { display: grid; grid-template-columns: 150px 1fr 28px; align-items: center; gap: 14px; font-size: 11px; }
+.role-bar-row { display: grid; grid-template-columns: 120px 1fr auto; align-items: center; gap: 14px; font-size: 11px; padding: 4px 6px; }
 .role-bar-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .role-bar-track { height: 8px; overflow: hidden; border-radius: 5px; background: #edf0ec; }
 .role-bar-fill { height: 100%; min-width: 3px; border-radius: inherit; background: var(--green-700); }
-.role-bar-row b { color: #55655c; text-align: right; }
+.role-bar-row b { min-width: 62px; color: #55655c; text-align: right; white-space: nowrap; }
 .activity-list { margin: 0; padding: 12px 20px; list-style: none; }
 .activity-list li { min-height: 58px; display: grid; grid-template-columns: 8px 1fr auto; align-items: center; gap: 12px; border-bottom: 1px solid #eceeea; }
 .activity-list li:last-child { border-bottom: 0; }

@@ -62,7 +62,7 @@
       <script src="../admin/promotions.js"></script>`,
 
     'employees.html': `
-      <section class="admin-module">
+      <section class="admin-module emp-module">
         <header class="module-heading">
           <div>
             <p class="module-kicker">NHÂN SỰ / HỒ SƠ</p>
@@ -71,65 +71,61 @@
           </div>
           <div class="heading-actions">
             <span class="record-count" id="empCount">0 nhân viên</span>
-            <button class="btn btn-primary" onclick="openEmpModal()"><svg aria-hidden="true"><use href="#i-plus"/></svg> Thêm nhân viên</button>
+            <button type="button" class="btn btn-primary" id="empAddBtn"><svg aria-hidden="true"><use href="#i-plus"/></svg> Thêm nhân viên</button>
           </div>
         </header>
-
-        <div class="module-stat-grid compact-stats">
-          <article class="mini-stat"><span>Đang làm việc</span><strong id="empActiveCount">0</strong><small>Nhân sự đang hoạt động</small></article>
-          <article class="mini-stat"><span>Đã có tài khoản</span><strong id="empAccountCount">0</strong><small>Có quyền truy cập hệ thống</small></article>
-          <article class="mini-stat warning"><span>Chưa có tài khoản</span><strong id="empNoAccountCount">0</strong><small>Cần được cấp tài khoản</small></article>
+        <div class="module-stat-grid emp-stat-grid">
+          <article class="emp-stat-card"><div class="emp-stat-icon green"><svg viewBox="0 0 24 24"><use href="#i-users"/></svg></div><div class="emp-stat-body"><span>ĐANG LÀM VIỆC</span><strong id="empActiveCount">0</strong><small>Nhân sự đang hoạt động</small></div></article>
+          <article class="emp-stat-card"><div class="emp-stat-icon blue"><svg viewBox="0 0 24 24"><use href="#i-key"/></svg></div><div class="emp-stat-body"><span>ĐÃ CÓ TÀI KHOẢN</span><strong id="empAccountCount">0</strong><small>Có quyền truy cập hệ thống</small></div></article>
+          <article class="emp-stat-card warning"><div class="emp-stat-icon amber"><svg viewBox="0 0 24 24"><use href="#i-user-plus"/></svg></div><div class="emp-stat-body"><span>CHƯA CÓ TÀI KHOẢN</span><strong id="empNoAccountCount">0</strong><small>Cần được cấp tài khoản</small></div></article>
         </div>
-
         <article class="surface-card data-surface">
           <div class="table-toolbar">
             <label class="filter-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input type="text" id="empSearch" placeholder="Tìm theo mã, tên, số điện thoại..."></label>
             <div class="filter-actions">
-              <select id="empRoleFilter" aria-label="Lọc chức vụ">
-                <option value="">Tất cả chức vụ</option>
-                <option value="Quản lý">Quản lý</option>
-                <option value="Nhân viên mua hàng">Nhân viên mua hàng</option>
-                <option value="Thủ kho">Thủ kho</option>
-                <option value="Thu ngân">Thu ngân</option>
-                <option value="Kế toán">Kế toán</option>
-              </select>
-              <select id="empStatusFilter" aria-label="Lọc trạng thái">
-                <option value="">Tất cả trạng thái</option>
-                <option value="Đang làm việc">Đang làm việc</option>
-                <option value="Nghỉ việc">Nghỉ việc</option>
-              </select>
-              <button class="icon-button" onclick="loadEmployees()" title="Tải lại" aria-label="Tải lại danh sách nhân viên"><svg aria-hidden="true"><use href="#i-refresh"/></svg></button>
+              <select id="empRoleFilter"><option value="">Tất cả chức vụ</option><option value="Quản lý">Quản lý</option><option value="Nhân viên mua hàng">Nhân viên mua hàng</option><option value="Thủ kho">Thủ kho</option><option value="Thu ngân">Thu ngân</option><option value="Kế toán">Kế toán</option></select>
+              <select id="empStatusFilter"><option value="">Tất cả trạng thái</option><option value="Đang làm việc">Đang làm việc</option><option value="Nghỉ việc">Nghỉ việc</option></select>
+              <button type="button" class="icon-button" id="empRefreshBtn" title="Làm mới"><svg><use href="#i-refresh"/></svg></button>
             </div>
           </div>
           <div class="table-container">
-            <table class="employee-table">
+            <table class="employee-table emp-table-enhanced">
               <thead><tr><th>Nhân viên</th><th>Chức vụ</th><th>Liên hệ</th><th>Trạng thái</th><th>Tài khoản</th><th class="align-right">Thao tác</th></tr></thead>
               <tbody id="empTableBody"></tbody>
             </table>
           </div>
         </article>
       </section>
-
+      <div class="emp-detail-backdrop" id="empDetailBackdrop" style="display:none">
+        <div class="emp-detail-panel" id="empDetailPanel">
+          <button type="button" class="emp-detail-close" onclick="closeEmpDetail()">×</button>
+          <div id="empDetailContent"></div>
+        </div>
+      </div>
       <div class="modal-backdrop" id="empModal" style="display:none">
-        <div class="modal modal-wide">
+        <div class="modal emp-modal-wide">
           <div class="modal-header"><div><p class="module-kicker">HỒ SƠ NHÂN SỰ</p><h3 id="empModalTitle">Thêm nhân viên</h3></div><button type="button" class="close-btn" onclick="closeEmpModal()">×</button></div>
           <div class="modal-body">
-            <form id="empForm">
-              <div class="form-grid">
-                <div class="form-group"><label>Mã nhân viên *</label><input type="text" id="maNV" required placeholder="VD: NV_TN02"></div>
-                <div class="form-group"><label>Họ và tên *</label><input type="text" id="tenNV" required placeholder="Nhập họ tên nhân viên"></div>
-                <div class="form-group"><label>Chức vụ *</label><select id="chucVu" required><option value="Quản lý">Quản lý</option><option value="Nhân viên mua hàng">Nhân viên mua hàng</option><option value="Thủ kho">Thủ kho</option><option value="Thu ngân">Thu ngân</option><option value="Kế toán">Kế toán</option></select></div>
-                <div class="form-group"><label>Trạng thái</label><select id="trangThai"><option value="Đang làm việc">Đang làm việc</option><option value="Nghỉ việc">Nghỉ việc</option></select></div>
-                <div class="form-group"><label>Số điện thoại</label><input type="text" id="sdt" placeholder="09xxxxxxxx"></div>
-                <div class="form-group"><label>Email</label><input type="email" id="email" placeholder="ten@supermarket.fly"></div>
+            <form id="empForm" novalidate>
+              <div class="emp-avatar-section"><div class="emp-avatar-large" id="empAvatarPreview"><span id="empAvatarInitials">?</span></div><div class="emp-avatar-info"><strong id="empAvatarName">Nhân viên mới</strong><small>Ảnh đại diện sẽ hiển thị bằng chữ cái đầu</small></div></div>
+              <div class="emp-form-section"><div class="emp-section-heading"><small>THÔNG TIN CÁ NHÂN</small><h4>Hồ sơ nhân viên</h4></div><div class="form-grid">
+                <div class="form-group"><label>Mã nhân viên *</label><input type="text" id="maNV" required placeholder="VD: NV_TN02"><small class="emp-field-error" id="maNV_err"></small></div>
+                <div class="form-group"><label>Họ và tên *</label><input type="text" id="tenNV" required placeholder="Nhập họ tên nhân viên"><small class="emp-field-error" id="tenNV_err"></small></div>
+                <div class="form-group"><label>Số điện thoại</label><input type="text" id="sdt" placeholder="09xxxxxxxx" maxlength="11"><small class="emp-field-error" id="sdt_err"></small></div>
+                <div class="form-group"><label>Email</label><input type="email" id="email" placeholder="ten@supermarket.fly"><small class="emp-field-error" id="email_err"></small></div>
                 <div class="form-group form-span-2"><label>Địa chỉ</label><input type="text" id="diaChi" placeholder="Nhập địa chỉ liên hệ"></div>
-              </div>
-              <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeEmpModal()">Hủy</button><button type="submit" class="btn btn-primary">Lưu hồ sơ</button></div>
+              </div></div>
+              <div class="emp-form-section"><div class="emp-section-heading"><small>THÔNG TIN CÔNG VIỆC</small><h4>Vị trí &amp; trạng thái</h4></div><div class="form-grid">
+                <div class="form-group"><label>Chức vụ *</label><select id="chucVu" required><option value="Quản lý">Quản lý</option><option value="Nhân viên mua hàng">Nhân viên mua hàng</option><option value="Thủ kho">Thủ kho</option><option value="Thu ngân" selected>Thu ngân</option><option value="Kế toán">Kế toán</option></select></div>
+                <div class="form-group"><label>Trạng thái</label><select id="trangThai"><option value="Đang làm việc">Đang làm việc</option><option value="Nghỉ việc">Nghỉ việc</option></select></div>
+              </div></div>
+              <div class="emp-form-section" id="empAccountSection" style="display:none"><div class="emp-section-heading"><small>TÀI KHOẢN HỆ THỐNG</small><h4>Truy cập &amp; phân quyền</h4></div><div class="emp-account-info" id="empAccountInfo"></div></div>
+              <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeEmpModal()">Hủy</button><button type="submit" class="btn btn-primary" id="empSubmitBtn">Lưu hồ sơ</button></div>
             </form>
           </div>
         </div>
       </div>
-      <script src="../admin/employees.js"></script>`,
+      <script src="../admin/employees.js?v=emp-actions-3"></script>`,
 
     'accounts.html': `
       <section class="admin-module">

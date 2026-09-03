@@ -7,7 +7,7 @@
         </div>
         <div class="heading-actions">
             <span class="record-count" id="empCount">0 nhân viên</span>
-            <button class="btn btn-primary" onclick="openEmpModal()"><svg aria-hidden="true" style="width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;margin-right:5px;vertical-align:middle"><use href="#i-plus"/></svg> Thêm nhân viên</button>
+            <button type="button" class="btn btn-primary" id="empAddBtn"><svg aria-hidden="true"><use href="#i-plus"/></svg> Thêm nhân viên</button>
         </div>
     </header>
 
@@ -36,22 +36,6 @@
                 <small>Cần được cấp tài khoản</small>
             </div>
         </article>
-        <article class="emp-stat-card">
-            <div class="emp-stat-icon teal"><svg viewBox="0 0 24 24"><use href="#i-clock"/></svg></div>
-            <div class="emp-stat-body">
-                <span>TỔNG GIỜ LÀM THÁNG</span>
-                <strong id="empTotalHours">—</strong>
-                <small>Giờ công ghi nhận tháng này</small>
-            </div>
-        </article>
-        <article class="emp-stat-card">
-            <div class="emp-stat-icon purple"><svg viewBox="0 0 24 24"><use href="#i-calendar"/></svg></div>
-            <div class="emp-stat-body">
-                <span>NGHỈ PHÉP</span>
-                <strong id="empOnLeave">0</strong>
-                <small>Nhân viên đang nghỉ</small>
-            </div>
-        </article>
     </div>
 
     <article class="surface-card data-surface">
@@ -60,12 +44,12 @@
             <div class="filter-actions">
                 <select id="empRoleFilter"><option value="">Tất cả chức vụ</option><option value="Quản lý">Quản lý</option><option value="Nhân viên mua hàng">Nhân viên mua hàng</option><option value="Thủ kho">Thủ kho</option><option value="Thu ngân">Thu ngân</option><option value="Kế toán">Kế toán</option></select>
                 <select id="empStatusFilter"><option value="">Tất cả trạng thái</option><option value="Đang làm việc">Đang làm việc</option><option value="Nghỉ việc">Nghỉ việc</option></select>
-                <button class="icon-button" onclick="loadEmployees()" title="Làm mới"><svg><use href="#i-refresh"/></svg></button>
+                <button type="button" class="icon-button" id="empRefreshBtn" title="Làm mới"><svg><use href="#i-refresh"/></svg></button>
             </div>
         </div>
         <div class="table-container">
             <table class="employee-table emp-table-enhanced">
-                <thead><tr><th>Nhân viên</th><th>Chức vụ</th><th>Liên hệ</th><th>Ngày vào làm</th><th>Trạng thái</th><th>Tài khoản</th><th class="align-right">Thao tác</th></tr></thead>
+                <thead><tr><th>Nhân viên</th><th>Chức vụ</th><th>Liên hệ</th><th>Trạng thái</th><th>Tài khoản</th><th class="align-right">Thao tác</th></tr></thead>
                 <tbody id="empTableBody"></tbody>
             </table>
         </div>
@@ -129,4 +113,4 @@
 </div>
 
 <script src="../shared/escape-key.js"></script>
-<script src="../admin/employees.js"></script>
+<script src="../admin/employees.js?v=emp-actions-3"></script>

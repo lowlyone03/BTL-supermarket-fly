@@ -422,7 +422,7 @@ td small { display: block; margin-top: 4px; color: #7f8b84; font-size: 9px; line
 }
 
 /* ── Enhanced Employee Module ── */
-.emp-stat-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.emp-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .emp-stat-card {
   min-height: 100px;
   padding: 16px 17px;
@@ -453,25 +453,56 @@ td small { display: block; margin-top: 4px; color: #7f8b84; font-size: 9px; line
 .emp-stat-body strong { display: block; margin: 6px 0 3px; font-size: 22px; font-weight: 650; color: #17231d; }
 .emp-stat-body small { display: block; color: #839087; font-size: 9px; }
 
-.emp-table-enhanced th:nth-child(1), .emp-table-enhanced td:nth-child(1) { width: 18%; }
-.emp-table-enhanced th:nth-child(2), .emp-table-enhanced td:nth-child(2) { width: 13%; }
-.emp-table-enhanced th:nth-child(3), .emp-table-enhanced td:nth-child(3) { width: 16%; }
-.emp-table-enhanced th:nth-child(4), .emp-table-enhanced td:nth-child(4) { width: 11%; }
-.emp-table-enhanced th:nth-child(5), .emp-table-enhanced td:nth-child(5) { width: 12%; }
-.emp-table-enhanced th:nth-child(6), .emp-table-enhanced td:nth-child(6) { width: 12%; }
-.emp-table-enhanced th:nth-child(7), .emp-table-enhanced td:nth-child(7) { width: 18%; }
+.emp-module .data-surface { overflow: visible; }
+.emp-module .table-container {
+  max-height: none;
+  overflow: visible;
+  padding: 0 4px 8px 0;
+}
+.emp-table-enhanced {
+  min-width: 0;
+  table-layout: fixed;
+}
+.emp-table-enhanced th,
+.emp-table-enhanced td { overflow: hidden; }
+.emp-table-enhanced th:nth-child(1), .emp-table-enhanced td:nth-child(1) { width: 22%; }
+.emp-table-enhanced th:nth-child(2), .emp-table-enhanced td:nth-child(2) { width: 16%; }
+.emp-table-enhanced th:nth-child(3), .emp-table-enhanced td:nth-child(3) { width: 20%; }
+.emp-table-enhanced th:nth-child(4), .emp-table-enhanced td:nth-child(4) { width: 14%; }
+.emp-table-enhanced th:nth-child(5), .emp-table-enhanced td:nth-child(5) { width: 14%; }
+.emp-table-enhanced th:nth-child(6),
+.emp-table-enhanced td.emp-actions-cell {
+  width: 210px;
+  min-width: 210px;
+  padding-right: 16px;
+  overflow: visible;
+  white-space: nowrap;
+}
 
 .emp-row { cursor: pointer; }
 .emp-row:hover { background: #f0f7f3 !important; }
 .emp-avatar-lg { width: 38px; height: 38px; flex: 0 0 38px; font-size: 11px; font-weight: 800; }
 .emp-role-chip {
   display: inline-flex; align-items: center;
+  max-width: 100%;
   padding: 5px 10px;
+  overflow: hidden;
   border: 1px solid; border-radius: 999px;
-  font-size: 9px; font-weight: 750; white-space: nowrap;
+  font-size: 9px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap;
 }
-.emp-date { color: #55655c; font-size: 11px; }
-.emp-btn-lock, .emp-btn-unlock { min-width: 34px !important; padding: 0 8px !important; font-size: 13px !important; }
+.emp-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  white-space: nowrap;
+}
+.emp-actions .emp-btn {
+  min-height: 34px;
+  min-width: 78px;
+  padding: 0 12px;
+  font-size: 11px;
+}
 
 /* Detail Panel */
 .emp-detail-backdrop {

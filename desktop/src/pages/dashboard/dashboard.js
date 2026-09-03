@@ -313,13 +313,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const maxRole = Math.max(1, ...data.roleDistribution.map(role => Number(role.SoNhanVien || 0)));
       const roleGradients = ['#2d6a4f,#40916c', '#1b7fa3,#34b3d5', '#7c5cbf,#a78bfa', '#c97a0a,#eab308', '#c4553d,#f87171'];
       const roleBars = data.roleDistribution.map((role, i) => {
-        const pct = (Number(role.SoNhanVien || 0) / totalStaff * 100).toFixed(1);
+        const count = Number(role.SoNhanVien || 0);
+        const pct = Math.min((count / totalStaff) * 100, 100).toFixed(1);
+        const barWidth = Math.min(Math.max(4, (count / maxRole) * 100), 100);
         const grad = roleGradients[i % roleGradients.length];
         return `
         <div class="role-bar-row" style="cursor:pointer" data-open-target="../admin/employees.html" title="Xem nhân viên ${escapeHtml(role.TenVaiTro)}">
           <span>${escapeHtml(role.TenVaiTro)}</span>
-          <div class="role-bar-track"><div class="role-bar-fill" style="width:${Math.max(4, Number(role.SoNhanVien || 0) / maxRole * 100)}%;background:linear-gradient(90deg,${grad})"></div></div>
-          <b>${role.SoNhanVien}<small class="role-pct">${pct}%</small></b>
+          <div class="role-bar-track"><div class="role-bar-fill" style="width:${barWidth}%;background:linear-gradient(90deg,${grad})"></div></div>
+          <b>${count}<small class="role-pct">${pct}%</small></b>
         </div>`;
       }).join('');
 
