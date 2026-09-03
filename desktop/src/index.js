@@ -19,7 +19,7 @@ ipcMain.handle('load-admin-page', async (_event, pageName) => {
   return adminPageTemplates[pageName];
 });
 
-ipcMain.handle('save-backup-file', async (event, payload = {}) => {
+const saveBackupFile = async (event, payload = {}) => {
   const defaultName = path.basename(String(payload.defaultName || 'backup.bak'));
   const data = payload.data;
   if (!data) {
@@ -37,9 +37,17 @@ ipcMain.handle('save-backup-file', async (event, payload = {}) => {
   if (result.canceled || !result.filePath) {
     return { canceled: true };
   }
-  await fs.writeFile(result.filePath, Buffer.from(data));
+  const bytes = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  await fs.writeFile(result.filePath, bytes);
   return { canceled: false, filePath: result.filePath };
-});
+};
+
+const registerSaveBackupFileHandler = () => {
+  ipcMain.removeHandler('save-backup-file');
+  ipcMain.handle('save-backup-file', saveBackupFile);
+};
+
+registerSaveBackupFileHandler();
 
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
@@ -69,6 +77,7 @@ const createWindow = () => {
 };
 
 app.whenReady().then(() => {
+  registerSaveBackupFileHandler();
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
