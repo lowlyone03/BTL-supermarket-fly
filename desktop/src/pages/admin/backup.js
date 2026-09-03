@@ -43,7 +43,7 @@
           <td><strong>${esc(b.fileName)}</strong></td>
           <td>${fmtSize(b.size)}</td>
           <td>${fmtTime(b.createdAt)}</td>
-          <td class="align-right"><a href="${API}/backups/${encodeURIComponent(b.fileName)}" class="btn btn-outline" style="text-decoration:none;font-size:9px;padding:4px 10px;border:1px solid #cbd8d0;border-radius:8px;color:#2f5e4a" target="_blank">Tải xuống</a></td>
+          <td class="align-right"><button type="button" class="btn btn-outline" style="font-size:9px;padding:4px 10px;border:1px solid #cbd8d0;border-radius:8px;color:#2f5e4a" data-download-backup="${esc(b.fileName)}">Tải xuống</button></td>
         </tr>`).join('')
       : '<tr><td colspan="4" class="empty-state">Chưa có file backup.</td></tr>';
   };
@@ -84,6 +84,35 @@
   });
 
   document.getElementById('backupSearch')?.addEventListener('input', renderBackups);
+
+  document.getElementById('backupTableBody')?.addEventListener('click', async event => {
+    const btn = event.target.closest('[data-download-backup]');
+    if (!btn) return;
+    const fileName = btn.dataset.downloadBackup;
+    if (!fileName) return;
+    btn.disabled = true;
+    try {
+      const response = await fetch(`${API}/backups/${encodeURIComponent(fileName)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const statusHint = response.status === 401 ? 'Phiên đăng nhập hết hạn. Hãy đăng nhập lại.' : response.status === 404 ? 'File backup không tồn tại.' : (data.message || 'Không thể tải file backup.');
+        throw new Error(statusHint);
+      }
+      const buffer = await response.arrayBuffer();
+      if (!window.flyDesktop?.saveBackupFile) {
+        throw new Error('Ứng dụng desktop chưa sẵn sàng lưu file. Hãy khởi động lại Electron.');
+      }
+      const saved = await window.flyDesktop.saveBackupFile({ defaultName: fileName, data: buffer });
+      if (saved?.canceled) return;
+      window.showToast(`Đã lưu ${fileName}.`, 'success');
+    } catch (error) {
+      window.showToast(error.message || 'Không thể tải file backup.', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   Promise.all([loadBackups(), loadSecurityLogs()]).catch(() => {});
 })();

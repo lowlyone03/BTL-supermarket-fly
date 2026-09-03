@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const fs = require('node:fs/promises');
 const path = require('node:path');
 const adminPageTemplates = require('./pages/admin/admin-page-templates');
 
@@ -16,6 +17,28 @@ ipcMain.handle('load-admin-page', async (_event, pageName) => {
     throw new Error('Trang quản trị không hợp lệ.');
   }
   return adminPageTemplates[pageName];
+});
+
+ipcMain.handle('save-backup-file', async (event, payload = {}) => {
+  const defaultName = path.basename(String(payload.defaultName || 'backup.bak'));
+  const data = payload.data;
+  if (!data) {
+    throw new Error('Không có dữ liệu file để lưu.');
+  }
+  const parent = BrowserWindow.fromWebContents(event.sender);
+  const result = await dialog.showSaveDialog(parent || undefined, {
+    title: 'Lưu file backup',
+    defaultPath: defaultName,
+    filters: [
+      { name: 'Backup', extensions: ['bak', 'json'] },
+      { name: 'Tất cả các file', extensions: ['*'] },
+    ],
+  });
+  if (result.canceled || !result.filePath) {
+    return { canceled: true };
+  }
+  await fs.writeFile(result.filePath, Buffer.from(data));
+  return { canceled: false, filePath: result.filePath };
 });
 
 const createWindow = () => {
