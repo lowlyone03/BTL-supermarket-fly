@@ -11,15 +11,15 @@ const payrollVoucherController = require('../controllers/payrollVoucherControlle
 const holidayController = require('../controllers/holidayController');
 const reportController = require('../controllers/reportController');
 const backupController = require('../controllers/backupController');
-const { verifyToken, requireRole, requirePermission } = require('../middlewares/authMiddleware');
+const { verifyToken, requireRole, requirePermission, requireAnyPermission } = require('../middlewares/authMiddleware');
 const { uploadProductImage } = require('../middlewares/productImageUpload');
 
 const router = express.Router();
 
 router.use(verifyToken);
 router.use(requireRole('Quản lý'));
-router.get('/dashboard', adminController.getDashboard);
-router.get('/approvals/queues', requirePermission('UC05'), adminController.getApprovalQueues);
+router.get('/dashboard', requireAnyPermission(['UC10', 'UC04']), adminController.getDashboard);
+router.get('/approvals/queues', requireAnyPermission(['UC05', 'UC06', 'UC07', 'UC08', 'UC09', 'UC32']), adminController.getApprovalQueues);
 router.get('/finance/payables', requirePermission('UC10'), adminController.getPayablesOverview);
 router.get('/finance/payables/:id', requirePermission('UC10'), adminController.getPayableDetail);
 router.get('/finance/sales-shifts', requirePermission('UC10'), adminController.getSalesShifts);
@@ -56,13 +56,13 @@ router.post('/approvals/stock-issues/:id/reject', requirePermission('UC06'), sto
 router.get('/approvals/payment-vouchers/:id', requirePermission('UC09'), paymentVoucherController.getApprovalDetail);
 router.post('/approvals/payment-vouchers/:id/approve', requirePermission('UC09'), paymentVoucherController.approveVoucher);
 router.post('/approvals/payment-vouchers/:id/reject', requirePermission('UC09'), paymentVoucherController.rejectVoucher);
-router.get('/approvals/payroll-board', requirePermission('UC09'), payrollVoucherController.listBoard);
-router.get('/approvals/payroll-vouchers', requirePermission('UC09'), payrollVoucherController.listPending);
-router.post('/approvals/payroll-vouchers/approve-all', requirePermission('UC09'), payrollVoucherController.approveAll);
-router.post('/approvals/payroll-fund/:month/handover', requirePermission('UC09'), payrollVoucherController.handOverFund);
-router.get('/approvals/payroll-vouchers/:id', requirePermission('UC09'), payrollVoucherController.getApprovalDetail);
-router.post('/approvals/payroll-vouchers/:id/approve', requirePermission('UC09'), payrollVoucherController.approveVoucher);
-router.post('/approvals/payroll-vouchers/:id/reject', requirePermission('UC09'), payrollVoucherController.rejectVoucher);
+router.get('/approvals/payroll-board', requirePermission('UC32'), payrollVoucherController.listBoard);
+router.get('/approvals/payroll-vouchers', requirePermission('UC32'), payrollVoucherController.listPending);
+router.post('/approvals/payroll-vouchers/approve-all', requirePermission('UC32'), payrollVoucherController.approveAll);
+router.post('/approvals/payroll-fund/:month/handover', requirePermission('UC32'), payrollVoucherController.handOverFund);
+router.get('/approvals/payroll-vouchers/:id', requirePermission('UC32'), payrollVoucherController.getApprovalDetail);
+router.post('/approvals/payroll-vouchers/:id/approve', requirePermission('UC32'), payrollVoucherController.approveVoucher);
+router.post('/approvals/payroll-vouchers/:id/reject', requirePermission('UC32'), payrollVoucherController.rejectVoucher);
 router.get('/workforce/holidays/:year', requirePermission('UC30'), holidayController.getHolidays);
 router.put('/workforce/holidays/:year', requirePermission('UC30'), holidayController.saveHolidays);
 router.put('/workforce/pay-rates', requirePermission('UC30'), holidayController.saveRates);
@@ -76,9 +76,9 @@ router.get('/workforce/attendance', requirePermission('UC32'), workforceControll
 router.post('/workforce/attendance/:id/approve', requirePermission('UC32'), workforceController.approveAttendance);
 router.get('/workforce/payroll-preview', requirePermission('UC32'), workforceController.getPayrollPreview);
 
-router.post('/backup', backupController.createBackup);
-router.get('/backups', backupController.listBackups);
-router.get('/backups/:fileName', backupController.downloadBackup);
-router.get('/security-logs', backupController.getSecurityLogs);
+router.post('/backup', requirePermission('UC03'), backupController.createBackup);
+router.get('/backups', requirePermission('UC03'), backupController.listBackups);
+router.get('/backups/:fileName', requirePermission('UC03'), backupController.downloadBackup);
+router.get('/security-logs', requirePermission('UC03'), backupController.getSecurityLogs);
 
 module.exports = router;

@@ -5,7 +5,7 @@ const payroll = require('../controllers/payrollController');
 const payrollVoucher = require('../controllers/payrollVoucherController');
 const paymentVoucher = require('../controllers/paymentVoucherController');
 const reportController = require('../controllers/reportController');
-const { verifyToken, requireRole, requirePermission } = require('../middlewares/authMiddleware');
+const { verifyToken, requireRole, requirePermission, requireAnyPermission } = require('../middlewares/authMiddleware');
 const accountantPayroll = [requireRole('Kế toán'), requirePermission('UC33')];
 
 const router = express.Router();
@@ -29,7 +29,7 @@ router.get('/shift-settlements/:id', requirePermission('UC29'), settlement.getSh
 router.post('/shift-settlements/:id/receipt', requirePermission('UC29'), settlement.createReceipt);
 router.post('/shift-receipts/:id/confirm', requirePermission('UC29'), settlement.confirmReceipt);
 router.get('/reports/financial-summary', requirePermission('UC29'), reportController.getFinancialReport);
-router.get('/activity-log', requireRole('Kế toán'), payrollVoucher.getAccountantActivity);
+router.get('/activity-log', requireRole('Kế toán'), requireAnyPermission(['UC27', 'UC28', 'UC29', 'UC33']), payrollVoucher.getAccountantActivity);
 router.get('/payroll-payouts', accountantPayroll, payrollVoucher.getPayoutHistory);
 router.get('/payroll/:month', accountantPayroll, payroll.get);
 router.post('/payroll/:month/build', accountantPayroll, payroll.build);

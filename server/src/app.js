@@ -16,6 +16,7 @@ app.use('/uploads', express.static(path.resolve(__dirname, '..', 'uploads'), {
 }));
 
 // Import Routes
+const { verifyToken } = require('./middlewares/authMiddleware');
 const authRoutes = require('./routes/authRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 const accountRoutes = require('./routes/accountRoutes');
@@ -47,7 +48,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // API Kiểm tra kết nối Database
-app.get('/api/test-db', async (req, res) => {
+app.get('/api/test-db', verifyToken, async (req, res) => {
     try {
         const pool = await poolPromise;
         const result = await pool.request().query('SELECT GETDATE() AS CurrentTime');

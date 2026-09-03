@@ -33,21 +33,31 @@ const requireRole = (roleName) => {
 
 // Quyền được lấy trực tiếp từ CSDL để thay đổi phân quyền có hiệu lực ở API,
 // không chỉ ẩn/hiện nút trên giao diện.
-const requirePermission = (permissionCode) => {
+const requireAnyPermission = (permissionCodes) => {
+    const codes = (Array.isArray(permissionCodes) ? permissionCodes : [permissionCodes])
+        .map(code => String(code || '').trim())
+        .filter(Boolean);
+
     return async (req, res, next) => {
         try {
             if (!req.user?.MaVaiTro) {
                 return res.status(403).json({ message: 'Không xác định được quyền của tài khoản.' });
             }
+            if (!codes.length) {
+                return res.status(403).json({ message: 'Tài khoản chưa được cấp quyền sử dụng chức năng này.' });
+            }
             const pool = await poolPromise;
-            const result = await pool.request()
-                .input('MaVaiTro', sql.Int, req.user.MaVaiTro)
-                .input('MaChucNang', sql.VarChar, permissionCode)
-                .query(`SELECT 1 AS DuocPhep
-                        FROM VaiTro_ChucNang
-                        WHERE MaVaiTro = @MaVaiTro
-                          AND MaChucNang = @MaChucNang
-                          AND DuocPhep = 1`);
+            const request = pool.request().input('MaVaiTro', sql.Int, req.user.MaVaiTro);
+            const placeholders = codes.map((code, index) => {
+                const name = `MaChucNang${index}`;
+                request.input(name, sql.VarChar, code);
+                return `@${name}`;
+            });
+            const result = await request.query(`SELECT 1 AS DuocPhep
+                    FROM VaiTro_ChucNang
+                    WHERE MaVaiTro = @MaVaiTro
+                      AND MaChucNang IN (${placeholders.join(', ')})
+                      AND DuocPhep = 1`);
             if (!result.recordset.length) {
                 return res.status(403).json({ message: 'Tài khoản chưa được cấp quyền sử dụng chức năng này.' });
             }
@@ -59,8 +69,11 @@ const requirePermission = (permissionCode) => {
     };
 };
 
+const requirePermission = (permissionCode) => requireAnyPermission([permissionCode]);
+
 module.exports = {
     verifyToken,
     requireRole,
-    requirePermission
+    requirePermission,
+    requireAnyPermission
 };
