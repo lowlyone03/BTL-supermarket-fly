@@ -10,6 +10,7 @@ const paymentVoucherController = require('../controllers/paymentVoucherControlle
 const payrollVoucherController = require('../controllers/payrollVoucherController');
 const holidayController = require('../controllers/holidayController');
 const reportController = require('../controllers/reportController');
+const backupController = require('../controllers/backupController');
 const { verifyToken, requireRole, requirePermission } = require('../middlewares/authMiddleware');
 const { uploadProductImage } = require('../middlewares/productImageUpload');
 
@@ -74,5 +75,10 @@ router.post('/workforce/schedules/publish', requirePermission('UC30'), workforce
 router.get('/workforce/attendance', requirePermission('UC32'), workforceController.getAttendance);
 router.post('/workforce/attendance/:id/approve', requirePermission('UC32'), workforceController.approveAttendance);
 router.get('/workforce/payroll-preview', requirePermission('UC32'), workforceController.getPayrollPreview);
+
+router.post('/backup', backupController.createBackup);
+router.get('/backups', backupController.listBackups);
+router.get('/backups/:fileName', backupController.downloadBackup);
+router.get('/security-logs', backupController.getSecurityLogs);
 
 module.exports = router;

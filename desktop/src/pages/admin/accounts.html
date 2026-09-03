@@ -1,65 +1,50 @@
-<div class="admin-page">
-    <div class="page-intro">
-        <div><h3>Tài khoản nội bộ</h3><p>Mỗi nhân viên có tối đa một tài khoản; vai trò luôn khớp với chức vụ.</p></div>
-        <span class="record-count" id="accCount">0 tài khoản</span>
-    </div>
-    <div class="toolbar">
-        <div class="search-group">
-            <input type="text" id="accSearch" placeholder="Tìm kiếm tài khoản...">
-            <button class="btn btn-secondary" onclick="loadAccounts()">Lọc</button>
+<div class="admin-module">
+    <header class="module-heading">
+        <div>
+            <p class="module-kicker">NHÂN SỰ / TÀI KHOẢN</p>
+            <h1>Tài khoản nội bộ</h1>
+            <p>Cấp quyền truy cập, theo dõi trạng thái và lần đăng nhập gần nhất.</p>
         </div>
-        <button class="btn btn-primary" onclick="openAccModal()">+ Tạo Tài Khoản</button>
+        <div class="heading-actions">
+            <span class="record-count" id="accCount">0 tài khoản</span>
+            <button class="btn btn-primary" onclick="openAccModal()"><svg aria-hidden="true" style="width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;margin-right:5px;vertical-align:middle"><use href="#i-plus"/></svg> Tạo tài khoản</button>
+        </div>
+    </header>
+
+    <div class="module-stat-grid compact-stats">
+        <article class="mini-stat"><span>ĐANG HOẠT ĐỘNG</span><strong id="accActiveCount">0</strong><small>Tài khoản có thể đăng nhập</small></article>
+        <article class="mini-stat danger"><span>ĐANG BỊ KHÓA</span><strong id="accLockedCount">0</strong><small>Tạm ngừng truy cập</small></article>
+        <article class="mini-stat"><span>ĐÃ ĐĂNG NHẬP</span><strong id="accUsedCount">0</strong><small>Đã phát sinh phiên làm việc</small></article>
     </div>
 
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>Tên đăng nhập</th>
-                    <th>Nhân viên</th>
-                    <th>Vai trò</th>
-                    <th>Trạng thái</th>
-                    <th>Đăng nhập cuối</th>
-                    <th>Thao tác</th>
-                </tr>
-            </thead>
-            <tbody id="accTableBody">
-            </tbody>
-        </table>
-    </div>
+    <article class="surface-card data-surface">
+        <div class="table-toolbar">
+            <label class="filter-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input type="text" id="accSearch" placeholder="Tìm tên đăng nhập hoặc nhân viên..."></label>
+            <div class="filter-actions">
+                <select id="accRoleFilter"><option value="">Tất cả vai trò</option></select>
+                <select id="accStatusFilter"><option value="">Tất cả trạng thái</option><option value="1">Hoạt động</option><option value="0">Bị khóa</option></select>
+                <button class="icon-button" onclick="loadAccounts()" title="Làm mới"><svg><use href="#i-refresh"/></svg></button>
+            </div>
+        </div>
+        <div class="table-container">
+            <table class="account-table">
+                <thead><tr><th>Tài khoản</th><th>Nhân viên</th><th>Vai trò</th><th>Trạng thái</th><th>Đăng nhập cuối</th><th class="align-right">Thao tác</th></tr></thead>
+                <tbody id="accTableBody"></tbody>
+            </table>
+        </div>
+    </article>
 </div>
 
-<!-- Modal Tạo TK -->
-<div class="modal-backdrop" id="accModal" style="display: none;">
+<div class="modal-backdrop" id="accModal" style="display:none">
     <div class="modal">
-        <div class="modal-header">
-            <h3>Tạo tài khoản</h3>
-            <button type="button" class="close-btn" onclick="closeAccModal()">&times;</button>
-        </div>
+        <div class="modal-header"><div><p class="module-kicker">CẤP QUYỀN TRUY CẬP</p><h3>Tạo tài khoản</h3></div><button type="button" class="close-btn" onclick="closeAccModal()">×</button></div>
         <div class="modal-body">
             <form id="accForm">
-                <div class="form-group">
-                    <label>Nhân viên chưa có tài khoản *</label>
-                    <select id="maNV_Acc" required></select>
-                </div>
-                <div class="form-group">
-                    <label>Tên đăng nhập *</label>
-                    <input type="text" id="tenDangNhap" required>
-                </div>
-                <div class="form-group">
-                    <label>Vai trò *</label>
-                    <select id="maVaiTro" required></select>
-                    <small class="field-hint">Vai trò được chọn tự động theo chức vụ nhân viên.</small>
-                </div>
-                <div class="form-group">
-                    <p style="font-size: 13px; color: #64748b; margin-top: 10px;">
-                        <em>Mật khẩu mặc định sẽ là <strong>123</strong></em>
-                    </p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" onclick="closeAccModal()">Hủy</button>
-                    <button type="submit" class="btn btn-primary">Tạo</button>
-                </div>
+                <div class="form-group"><label>Nhân viên chưa có tài khoản *</label><select id="maNV_Acc" required></select></div>
+                <div class="form-group"><label>Tên đăng nhập *</label><input type="text" id="tenDangNhap" required placeholder="Chữ thường không dấu"></div>
+                <div class="form-group"><label>Vai trò *</label><select id="maVaiTro" required></select><small class="field-help">Vai trò tự động khớp với chức vụ nhân viên.</small></div>
+                <div class="form-group"><p style="font-size:13px;color:#64748b;margin-top:10px"><em>Mật khẩu mặc định: <strong>123</strong></em></p></div>
+                <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeAccModal()">Hủy</button><button type="submit" class="btn btn-primary">Tạo tài khoản</button></div>
             </form>
         </div>
     </div>

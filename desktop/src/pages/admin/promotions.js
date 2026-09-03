@@ -63,6 +63,40 @@
       await window.loadPromotions();
     } catch (error) { window.showToast(error.message, 'error'); }
   });
+  window.previewPromotion = () => {
+    const code = document.getElementById('promoCode').value || '—';
+    const name = document.getElementById('promoName').value || 'Chưa nhập tên';
+    const type = document.getElementById('promoType').value;
+    const value = document.getElementById('promoValue').value || 0;
+    const start = document.getElementById('promoStart').value || '—';
+    const end = document.getElementById('promoEnd').value || '—';
+    const status = document.getElementById('promoStatus').value;
+    const display = type === 'Phần trăm' ? `${value}%` : money(value);
+    const previewHtml = `
+      <div style="padding:12px 0">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><strong style="font-size:17px">${esc(name)}</strong><code style="padding:3px 8px;background:#eef3f0;border-radius:7px;font-size:10px;font-weight:800;color:#517064">${esc(code)}</code></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px">
+          <div><small style="color:#839087;font-size:9px;font-weight:800;text-transform:uppercase">Loại</small><p style="margin:4px 0 0;font-size:13px">${esc(type)}</p></div>
+          <div><small style="color:#839087;font-size:9px;font-weight:800;text-transform:uppercase">Giá trị</small><p style="margin:4px 0 0;font-size:16px;font-weight:700;color:#26704f">${display}</p></div>
+          <div><small style="color:#839087;font-size:9px;font-weight:800;text-transform:uppercase">Bắt đầu</small><p style="margin:4px 0 0;font-size:13px">${esc(start)}</p></div>
+          <div><small style="color:#839087;font-size:9px;font-weight:800;text-transform:uppercase">Kết thúc</small><p style="margin:4px 0 0;font-size:13px">${esc(end)}</p></div>
+          <div><small style="color:#839087;font-size:9px;font-weight:800;text-transform:uppercase">Trạng thái</small><p style="margin:4px 0 0"><span class="status-badge ${status === 'Hiệu lực' ? 'active' : 'locked'}" style="font-size:10px"><i></i>${esc(status)}</span></p></div>
+        </div>
+      </div>`;
+    const modal = document.getElementById('promoPreviewModal');
+    if (!modal) {
+      const backdrop = document.createElement('div');
+      backdrop.className = 'modal-backdrop';
+      backdrop.id = 'promoPreviewModal';
+      backdrop.style.display = 'flex';
+      backdrop.innerHTML = `<div class="modal" style="max-width:500px"><div class="modal-header"><div><p class="module-kicker">XEM TRƯỚC KHUYẾN MÃI</p><h3>Kiểm tra trước khi lưu</h3></div><button type="button" class="close-btn" onclick="document.getElementById('promoPreviewModal').style.display='none'">×</button></div><div class="modal-body" id="promoPreviewContent">${previewHtml}</div><div class="modal-footer"><button class="btn btn-secondary" onclick="document.getElementById('promoPreviewModal').style.display='none'">Đóng</button></div></div>`;
+      document.body.appendChild(backdrop);
+    } else {
+      document.getElementById('promoPreviewContent').innerHTML = previewHtml;
+      modal.style.display = 'flex';
+    }
+  };
+
   document.getElementById('promoForm')?.addEventListener('submit', async event => {
     event.preventDefault();
     const payload = {

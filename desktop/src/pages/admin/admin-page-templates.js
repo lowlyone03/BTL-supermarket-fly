@@ -23,8 +23,8 @@
         <div class="form-group"><label>Đơn vị tính *</label><input id="productUnit" list="productUnitSuggestions" maxlength="30" required placeholder="Chọn hoặc nhập đơn vị"><datalist id="productUnitSuggestions"><option value="Gói"><option value="Hộp"><option value="Chai"><option value="Lon"><option value="Thùng"><option value="Cái"><option value="Kg"></datalist></div><div class="form-group"><label>Mã vạch</label><div class="input-with-action"><input id="productBarcode" inputmode="numeric" maxlength="30" placeholder="Quét/nhập mã trên bao bì"><button type="button" class="field-action" onclick="suggestProductBarcode()">Gợi ý</button></div><small class="field-help">Không bắt buộc; mã vạch phải duy nhất nếu có.</small></div>
         <div class="form-group"><label>Giá nhập *</label><input id="productCost" type="number" min="0" step="100" required placeholder="0"></div><div class="form-group"><label>Giá bán *</label><input id="productPrice" type="number" min="0" step="100" required placeholder="0"></div>
         <div class="form-group"><label>Tồn tối thiểu *</label><input id="productMinimum" type="number" min="0" step="1" required placeholder="0"><small class="field-help">Dùng để cảnh báo và lập đề nghị mua hàng.</small></div><div class="form-group"><label>Trạng thái</label><select id="productStatusInput"><option>Đang bán</option><option>Ngừng bán</option></select></div>
-      </div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeProductModal()">Hủy</button><button class="btn btn-primary" id="productSubmitButton" type="submit">Lưu sản phẩm</button></div></form></div></div></div>
-      <div class="modal-backdrop" id="categoryModal" style="display:none"><div class="modal category-manager-modal"><div class="modal-header"><div><p class="module-kicker">DANH MỤC HÀNG HÓA</p><h3>Quản lý danh mục sản phẩm</h3><p class="modal-description">Thêm mới, tra cứu, chỉnh sửa hoặc ngừng sử dụng danh mục.</p></div><button class="close-btn" onclick="closeCategoryModal()" aria-label="Đóng">×</button></div><div class="modal-body category-manager-layout"><section class="category-editor-panel"><div class="category-section-heading"><div><small>THÔNG TIN DANH MỤC</small><h4 id="categoryFormTitle">Thêm danh mục mới</h4></div><button type="button" class="text-action" id="categoryResetButton" onclick="resetCategoryForm()">Làm mới</button></div><form id="categoryForm"><div class="form-group"><label>Mã danh mục *</label><div class="input-with-action"><input id="categoryCode" maxlength="20" required placeholder="Ví dụ: DM007"><button type="button" class="field-action" id="categoryCodeSuggestionButton" onclick="suggestCategoryCode()">Gợi ý</button></div><small class="field-help">Mã duy nhất, không thể đổi sau khi tạo.</small></div><div class="form-group"><label>Tên danh mục *</label><input id="categoryName" maxlength="100" required placeholder="Ví dụ: Đồ uống"></div><div class="form-group"><label>Mô tả</label><textarea id="categoryDescription" maxlength="255" rows="4" placeholder="Mô tả ngắn nhóm sản phẩm"></textarea></div><div class="category-form-actions"><button type="button" class="btn btn-secondary" id="categoryCancelEdit" onclick="resetCategoryForm()" hidden>Hủy chỉnh sửa</button><button class="btn btn-primary" id="categorySubmitButton" type="submit">Thêm danh mục</button></div></form><div class="category-rule-note"><strong>Quy tắc ngừng sử dụng</strong><span>Danh mục chỉ được ngừng sau khi toàn bộ sản phẩm thuộc danh mục đã ngừng bán.</span></div></section><section class="category-browser-panel"><div class="category-browser-heading"><div><small>DANH SÁCH DANH MỤC</small><h4><span id="categoryTotalCount">0</span> danh mục</h4></div><span class="category-active-count"><span id="categoryActiveCount">0</span> đang sử dụng</span></div><label class="category-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="categorySearch" placeholder="Tìm mã hoặc tên danh mục..."></label><div class="category-list" id="categoryList"></div></section></div></div></div>
+      </div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeProductModal()">Hủy</button><button type="button" class="btn btn-secondary" onclick="previewProduct()">Xem trước</button><button class="btn btn-primary" id="productSubmitButton" type="submit">Lưu sản phẩm</button></div></form></div></div></div>
+      <div class="modal-backdrop" id="categoryModal" style="display:none"><div class="modal category-manager-modal"><div class="modal-header"><div><p class="module-kicker">DANH MỤC HÀNG HÓA</p><h3>Quản lý danh mục sản phẩm</h3><p class="modal-description">Thêm mới, tra cứu, chỉnh sửa hoặc ngừng sử dụng danh mục.</p></div><button class="close-btn" onclick="closeCategoryModal()" aria-label="Đóng">×</button></div><div class="modal-body category-manager-layout"><section class="category-editor-panel"><div class="category-section-heading"><div><small>THÔNG TIN DANH MỤC</small><h4 id="categoryFormTitle">Thêm danh mục mới</h4></div><button type="button" class="text-action" id="categoryResetButton" onclick="resetCategoryForm()">Làm mới</button></div><form id="categoryForm"><div class="form-group"><label>Mã danh mục *</label><div class="input-with-action"><input id="categoryCode" maxlength="20" required placeholder="Ví dụ: DM007"><button type="button" class="field-action" id="categoryCodeSuggestionButton" onclick="suggestCategoryCode()">Gợi ý</button></div><small class="field-help">Mã duy nhất, không thể đổi sau khi tạo.</small></div><div class="form-group"><label>Tên danh mục *</label><input id="categoryName" maxlength="100" required placeholder="Ví dụ: Đồ uống"></div><div class="form-group"><label>Mô tả</label><textarea id="categoryDescription" maxlength="255" rows="4" placeholder="Mô tả ngắn nhóm sản phẩm"></textarea></div><div class="category-form-actions"><button type="button" class="btn btn-secondary" id="categoryCancelEdit" onclick="resetCategoryForm()" hidden>Hủy chỉnh sửa</button><button type="button" class="btn btn-secondary" onclick="previewCategory()">Xem trước</button><button class="btn btn-primary" id="categorySubmitButton" type="submit">Thêm danh mục</button></div></form><div class="category-rule-note"><strong>Quy tắc ngừng sử dụng</strong><span>Danh mục chỉ được ngừng sau khi toàn bộ sản phẩm thuộc danh mục đã ngừng bán.</span></div></section><section class="category-browser-panel"><div class="category-browser-heading"><div><small>DANH SÁCH DANH MỤC</small><h4><span id="categoryTotalCount">0</span> danh mục</h4></div><span class="category-active-count"><span id="categoryActiveCount">0</span> đang sử dụng</span></div><label class="category-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="categorySearch" placeholder="Tìm mã hoặc tên danh mục..."></label><div class="category-list" id="categoryList"></div></section></div></div></div>
       <script src="../admin/products.js?v=product-images-1"></script>`,
 
     'promotions.html': `
@@ -46,7 +46,7 @@
         <div class="form-group"><label>Trạng thái</label><select id="promoStatus"><option>Hiệu lực</option><option>Ngừng</option></select></div>
         <div class="form-group"><label>Ngày bắt đầu *</label><input id="promoStart" type="date" required></div>
         <div class="form-group"><label>Ngày kết thúc *</label><input id="promoEnd" type="date" required></div>
-      </div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closePromoModal()">Hủy</button><button class="btn btn-primary" type="submit">Lưu</button></div></form></div></div></div>
+      </div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closePromoModal()">Hủy</button><button type="button" class="btn btn-secondary" onclick="previewPromotion()">Xem trước</button><button class="btn btn-primary" type="submit">Lưu</button></div></form></div></div></div>
       <script src="../admin/promotions.js"></script>`,
 
     'employees.html': `
@@ -227,6 +227,54 @@
         </article>
       </section>
       <script src="../admin/audit-log.js?v=audit-ql-ui-3"></script>`,
+
+    'backup.html': `
+      <section class="admin-module">
+        <header class="module-heading">
+          <div>
+            <p class="module-kicker">KIỂM SOÁT / BẢO MẬT</p>
+            <h1>Sao lưu &amp; bảo mật</h1>
+            <p>Tạo bản sao lưu cơ sở dữ liệu, theo dõi lịch sử backup và giám sát các sự kiện bảo mật hệ thống.</p>
+          </div>
+          <div class="heading-actions">
+            <button class="btn btn-primary" id="btnCreateBackup"><svg aria-hidden="true"><use href="#i-shield"/></svg> Tạo backup ngay</button>
+          </div>
+        </header>
+
+        <div class="module-stat-grid compact-stats">
+          <article class="mini-stat"><span>TỔNG BẢN SAO LƯU</span><strong id="backupTotalCount">0</strong><small>File backup đã tạo</small></article>
+          <article class="mini-stat"><span>LẦN BACKUP GẦN NHẤT</span><strong id="backupLastTime">—</strong><small id="backupLastFile">Chưa có backup</small></article>
+          <article class="mini-stat warning"><span>SỰ KIỆN BẢO MẬT HÔM NAY</span><strong id="securityEventCount">0</strong><small>Đăng nhập, đổi MK, khóa TK</small></article>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+          <article class="surface-card data-surface">
+            <div class="table-toolbar"><label class="filter-search" style="flex:1"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="backupSearch" placeholder="Tìm file backup..."></label></div>
+            <div class="table-container" style="max-height:420px">
+              <table><thead><tr><th>Tên file</th><th>Kích thước</th><th>Thời gian tạo</th><th class="align-right">Thao tác</th></tr></thead>
+              <tbody id="backupTableBody"><tr><td colspan="4" class="empty-state">Đang tải...</td></tr></tbody></table>
+            </div>
+          </article>
+
+          <article class="surface-card data-surface">
+            <div class="table-toolbar"><strong style="font-size:12px;color:#46564e">Nhật ký bảo mật gần đây</strong></div>
+            <div class="table-container" style="max-height:420px">
+              <table><thead><tr><th>Thời gian</th><th>Người</th><th>Sự kiện</th></tr></thead>
+              <tbody id="securityLogBody"><tr><td colspan="3" class="empty-state">Đang tải...</td></tr></tbody></table>
+            </div>
+          </article>
+        </div>
+
+        <div class="category-rule-note" style="margin-top:18px">
+          <strong>Hướng dẫn cấu hình backup đầy đủ</strong>
+          <span>Backup SQL Server yêu cầu quyền BACKUP DATABASE. Nếu ứng dụng không có quyền, hệ thống sẽ lưu metadata thay thế. Để backup đầy đủ:<br>
+          1. Mở SQL Server Management Studio → Security → Logins → chọn login của ứng dụng<br>
+          2. Cấp quyền: <code>ALTER ROLE db_backupoperator ADD MEMBER [tên_login]</code><br>
+          3. Đảm bảo thư mục <code>server/backups/</code> có quyền ghi<br>
+          4. Hoặc lập lịch backup tự động bằng SQL Server Agent Job</span>
+        </div>
+      </section>
+      <script src="../admin/backup.js"></script>`,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = templates;

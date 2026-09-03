@@ -47,11 +47,13 @@
     const returnedQty = Number(item.SLDaTra || 0);
     const paid = Number(item.TongThanhToan || 0);
     const remaining = Math.max(0, paid - refunded);
-    const fullRefund = soldQty > 0 && returnedQty >= soldQty && refunded > 0 && remaining <= 0;
+    // "Đã hoàn tiền" nên dựa vào đủ số lượng hàng đã trả và phiếu hoàn chỉ là Hoàn tiền,
+    // tránh phụ thuộc chênh lệch số tiền do cách tính thuế/chiết khấu theo hóa đơn gốc.
+    const fullRefund = soldQty > 0 && returnedQty >= soldQty && refunded > 0 && exchanged === 0;
     let label = 'Có đổi trả';
     let tone = 'returned';
     if (pending) { label = 'Đang đổi trả'; tone = 'sent'; }
-    else if (fullRefund) { label = 'Đã hoàn hết'; tone = 'cancelled'; }
+    else if (fullRefund) { label = 'Đã hoàn tiền'; tone = 'cancelled'; }
     else if (exchanged && refunded > 0) { label = 'Đổi và hoàn'; tone = 'returned'; }
     else if (exchanged) { label = 'Đã đổi hàng'; tone = 'returned'; }
     else if (refunded > 0) { label = 'Hoàn một phần'; tone = 'returned'; }
@@ -67,7 +69,7 @@
     const view = invoiceReturnView(item);
     if (!view) return `<td class="num">${money(item.TongThanhToan)}</td>`;
     const extra = view.fullRefund
-      ? `Đã hoàn hết ${money(view.refunded)}`
+      ? `Đã hoàn tiền ${money(view.refunded)}`
       : view.refunded > 0
         ? `Đã hoàn ${money(view.refunded)} · Còn ${money(view.remaining)}`
         : view.exchanged

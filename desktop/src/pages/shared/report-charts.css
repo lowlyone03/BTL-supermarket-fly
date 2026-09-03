@@ -2113,6 +2113,38 @@
   color: #294237;
   padding: 8px 0;
 }
+.store-pnl-kpis {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.store-pnl-kpi-card {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid #dce6e1;
+  background: #fff;
+}
+.store-pnl-kpi-card p {
+  margin: 0;
+  color: #61756c;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+.store-pnl-kpi-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 22px;
+  line-height: 1.1;
+}
+.store-pnl-kpi-card small {
+  display: block;
+  margin-top: 4px;
+  color: #7a8c84;
+}
+.store-pnl-block table.warehouse-table {
+  width: 100%;
+}
 .store-pnl-remain { margin-top: 8px; font-size: 16px; }
 .store-pnl-cash-sentence { font-size: 18px; font-weight: 750; color: #1e392d; }
 .store-pnl-cash-sentence.loss { color: #a33b28; }
@@ -2149,5 +2181,6 @@
   .store-pnl-hero h2 { font-size: 32px; }
   .store-pnl-hero strong { font-size: 26px; }
   .store-report-tabs { flex-direction: column; }
+  .store-pnl-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 

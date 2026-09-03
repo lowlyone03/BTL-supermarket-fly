@@ -53,6 +53,17 @@
   const row = (label, value, note = '') => `<div class="store-pnl-row"><span>${esc(label)}</span><strong>${value}</strong>${note ? `<small>${esc(note)}</small>` : ''}</div>`;
 
   const render = (root, data, options = {}) => {
+    const banner = window.FLY_REPORT_PERIOD?.activeFallbackBanner(root.closest('.financial-reports') || root, data) || '';
+    if (!data?.hoatDong) {
+      root.innerHTML = `${banner}
+        <section class="store-pnl">
+          <div class="welcome-card">
+            <h2>Chưa có dữ liệu</h2>
+            <p>Không lập được báo cáo cho kỳ đã chọn.</p>
+          </div>
+        </section>`;
+      return;
+    }
     const op = data.hoatDong || {};
     const sale = op.banHang || {};
     const cost = op.giaVon || {};
@@ -103,7 +114,59 @@
       ? plans.map(item => `<tr><td>${fmtDateTime(item.NgayGui)}</td><td><strong>${esc(item.TenNV_Gui)}</strong><small>${esc(item.TrangThaiLaiLo)} · ${money(item.SoTienLaiLo)}</small></td><td>${esc(item.KeHoach)}</td><td>${fmtDate(item.HanXemLai)}<small>${item.SoNguoiNhan || 0} người nhận</small></td></tr>`).join('')
       : '<tr><td colspan="4" class="warehouse-empty">Chưa gửi kế hoạch nào cho kỳ này. Các lần gửi được giữ lại, không xóa.</td></tr>';
 
-    root.innerHTML = `${window.FLY_REPORT_PERIOD?.activeFallbackBanner(root.closest('.financial-reports') || root, data) || ''}
+    const kpiLockedSalary = Number(staff.tongLuongKhoa || 0) || 0;
+    const kpiCards = `
+      <section class="store-pnl-kpis" aria-label="KPI nhanh">
+        <article class="store-pnl-kpi-card">
+          <p>Doanh thu thuần</p>
+          <strong>${money(sale.doanhThuThuan)}</strong>
+          <small>${String(sale.soHoaDon || 0)} hóa đơn · ${money(sale.tienHoan || 0)} đổi trả/hoàn</small>
+        </article>
+        <article class="store-pnl-kpi-card">
+          <p>Giá vốn thuần</p>
+          <strong>${money(cost.giaVonThuan)}</strong>
+          <small>Giá vốn sau khi trừ nhập lại/đổi trả</small>
+        </article>
+        <article class="store-pnl-kpi-card">
+          <p>Lãi gộp</p>
+          <strong>${money(op.laiGop?.soTien)}</strong>
+          <small>${esc(op.laiGop?.dinhNghia || 'Giữ định nghĩa cũ')}</small>
+        </article>
+        <article class="store-pnl-kpi-card">
+          <p>Lương đã khóa</p>
+          <strong>${money(kpiLockedSalary)}</strong>
+          <small>${esc(staff.ghiChu || 'Đã khóa theo kỳ lương')}</small>
+        </article>
+        <article class="store-pnl-kpi-card">
+          <p>Lãi/Lỗ quản trị</p>
+          <strong>${money(op.laiLoSauChiPhi)}</strong>
+          <small>Hậu quả sau: chi NCC + vận chuyển + lương</small>
+        </article>
+      </section>`;
+
+    const kpiBreakdown = `
+      <section class="store-pnl-block">
+        <h3>Tóm tắt cấu phần lãi/lỗ</h3>
+        <p>Nhìn nhanh các số chính dùng để tính lãi hoặc lỗ quản trị.</p>
+        <div class="warehouse-table-wrap">
+          <table class="warehouse-table">
+            <thead>
+              <tr><th>THÀNH PHẦN</th><th class="num">SỐ TIỀN</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Doanh thu thuần</td><td class="num"><strong>${money(sale.doanhThuThuan)}</strong></td></tr>
+              <tr><td>Giá vốn thuần</td><td class="num">${money(cost.giaVonThuan)}</td></tr>
+              <tr><td>Lãi gộp (giữ định nghĩa cũ)</td><td class="num">${money(op.laiGop?.soTien)}</td></tr>
+              <tr><td>Chi NCC đã trả thành công</td><td class="num">${money(third.tongChiNcc)}</td></tr>
+              <tr><td>Cước vận chuyển</td><td class="num">${third.cuocVanChuyen ? money(third.cuocVanChuyen) : '0 đ'}</td></tr>
+              <tr><td>Lương đã khóa</td><td class="num">${money(staff.tongLuongKhoa)}</td></tr>
+              <tr><td><strong>Kết quả quản trị</strong></td><td class="num"><strong>${money(op.laiLoSauChiPhi)}</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>`;
+
+    root.innerHTML = `${banner}
       <section class="store-pnl">
         <article class="store-pnl-hero ${tone}">
           <p>CỬA HÀNG ĐANG</p>
@@ -113,6 +176,9 @@
         </article>
         ${alerts.length ? `<div class="store-pnl-alerts">${alerts.map(item => `<p>${esc(item)}</p>`).join('')}</div>` : ''}
         <p class="store-pnl-formula">Công thức: doanh thu thuần (hóa đơn hoàn thành trừ đổi trả) − giá vốn thuần − chi nhà cung cấp đã trả thành công − cước vận chuyển nếu có chứng từ − lương đã khóa. <em>Chưa trừ thuê nhà và điện nước vì chưa có chứng từ.</em> Lãi gộp kế toán vẫn giữ định nghĩa cũ, không trừ lương.</p>
+
+        ${kpiCards}
+        ${kpiBreakdown}
 
         <section class="store-pnl-block">
           <h3>A. Lãi/lỗ hoạt động cửa hàng</h3>

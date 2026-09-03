@@ -379,9 +379,10 @@
     const empty = (cols, text) => `<tr><td colspan="${cols}" class="warehouse-empty">${esc(text)}</td></tr>`;
     const load = async () => {
       try {
-        const [orders, queues] = await Promise.all([
+        const [orders, queues, payables] = await Promise.all([
           api(context, '/admin/approvals/purchase-orders?status=Chờ duyệt'),
-          api(context, '/admin/approvals/queues')
+          api(context, '/admin/approvals/queues'),
+          api(context, '/admin/finance/payables').catch(() => ({ items: [], summary: {} }))
         ]);
         const total = orders.items.length + queues.warehouse.length + queues.finance.length + (queues.payroll || []).length;
         const badge = document.getElementById('approvalNavBadge');
@@ -422,9 +423,75 @@
             return `<section class="payroll-ky-card" data-ky="${esc(period.MaKy)}"><header><div><p>KỲ LƯƠNG</p><h3>${esc(period.MaKy)}</h3><small>${(period.pending || []).length} chờ duyệt · ${(period.approved || []).length} đã duyệt chưa chi</small></div><div class="payroll-ky-actions">${(period.pending || []).length ? `<button class="warehouse-primary" data-approve-all-payroll="${esc(period.MaKy)}" type="button">Duyệt tất cả</button>` : ''}${handoverBtn}</div></header><p class="payroll-ky-recipient">Người nhận quỹ: <strong>${esc(receiver)}</strong></p>${fundLine}${canHandover ? `<p class="payroll-ky-need">Cần giao thêm cho kế toán: TM ${money(snap.tmTopUp || 0)} · CK ${money(snap.ckTopUp || 0)}</p>` : handed ? `<p class="payroll-ky-need">Quỹ đã đủ cho các phiếu đã duyệt. Kế toán chi từng nhân viên từ quỹ này.</p>` : `<p class="payroll-ky-need">Cần giao cho kế toán: TM ${money(snap.tmTopUp || 0)} · CK ${money(snap.ckTopUp || 0)}</p>`}${(period.pending || []).length ? `<div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU</th><th>NHÂN VIÊN</th><th>KÊNH</th><th>NGÀY LẬP</th><th>SỐ TIỀN</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody>${pendingRows}</tbody></table></div>` : ''}${(period.approved || []).length ? `<div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU ĐÃ DUYỆT</th><th>NHÂN VIÊN</th><th>KÊNH</th><th>SỐ TIỀN</th><th>TRẠNG THÁI</th></tr></thead><tbody>${approvedRows}</tbody></table></div>` : ''}</section>`;
           }).join('');
         }
+
+        // Panel công nợ NCC (treo) để Quản lý/Người duyệt nhìn tổng quan trước khi giao quỹ.
+        const panel = root.querySelector('#payrollSupplierDebtPanel');
+        if (panel) {
+          const list = (payables?.items || []).filter(i => Number(i.SoTienConLai || 0) > 0);
+          const bucket = {
+            'Còn 0–15 ngày': 0,
+            'Còn 16–30 ngày': 0,
+            'Còn trên 30 ngày': 0,
+            'Quá hạn 1–30 ngày': 0,
+            'Quá hạn trên 30 ngày': 0
+          };
+          for (const item of list) {
+            const days = Number(item.SoNgayConLai || 0); // >=0: còn hạn, <0: quá hạn
+            const amount = Number(item.SoTienConLai || 0);
+            if (days > 30) bucket['Còn trên 30 ngày'] += amount;
+            else if (days > 15) bucket['Còn 16–30 ngày'] += amount;
+            else if (days >= 0) bucket['Còn 0–15 ngày'] += amount;
+            else if (Math.abs(days) <= 30) bucket['Quá hạn 1–30 ngày'] += amount;
+            else bucket['Quá hạn trên 30 ngày'] += amount;
+          }
+
+          const sortByDue = (a, b) => new Date(a.HanThanhToan || 0).valueOf() - new Date(b.HanThanhToan || 0).valueOf();
+          const top = list.slice().sort(sortByDue).slice(0, 8);
+
+          const toneFromStep = step => {
+            const s = String(step || '').toLowerCase();
+            if (!s) return 'draft';
+            if (s.includes('tất toán') || s.includes('thành công')) return 'ok';
+            if (s.includes('thất bại') || s.includes('từ chối')) return 'cancelled';
+            if (s.includes('chờ') || s.includes('đã giao tiền')) return 'sent';
+            return 'draft';
+          };
+
+          panel.innerHTML = `
+            <article class="warehouse-table-card payroll-supplier-debt">
+              <div class="warehouse-panel-title">
+                <div><p>CÔNG NỢ NCC</p><h2>Công nợ đang treo</h2></div>
+                <span class="report-card-count">${list.length}</span>
+              </div>
+              <div class="payroll-supplier-debt-buckets">
+                ${Object.entries(bucket).map(([k, v]) => `<div><span>${esc(k)}</span><strong>${money(v)}</strong></div>`).join('')}
+              </div>
+              <div class="warehouse-table-wrap">
+                <table class="warehouse-table">
+                  <thead>
+                    <tr><th>NHÀ CUNG CẤP</th><th>HẠN</th><th>CÒN LẠI</th><th>TRẠNG THÁI</th></tr>
+                  </thead>
+                  <tbody>
+                    ${top.length
+                      ? top.map(row => {
+                        const step = row.BuocTatToan || row.TrangThaiHienTai || '';
+                        return `<tr>
+                          <td><strong>${esc(row.TenNCC)}</strong><small>${esc(row.MaCNPTra)} · HĐ ${esc(row.SoHoaDon)} · PO ${esc(row.MaPO)}</small></td>
+                          <td>${fmtDate(row.HanThanhToan)}</td>
+                          <td class="num"><strong>${money(row.SoTienConLai)}</strong></td>
+                          <td><span class="status-pill ${toneFromStep(step)}">${esc(step)}</span></td>
+                        </tr>`;
+                      }).join('')
+                      : '<tr><td colspan="4" class="warehouse-empty">Chưa có công nợ NCC đang treo.</td></tr>'}
+                  </tbody>
+                </table>
+              </div>
+              <p class="warehouse-note">Công nợ chỉ giảm khi “Thanh toán phiếu chi” thành công (không giảm khi mới duyệt).</p>
+            </article>`;
+        }
       } catch (error) { context.showToast(error.message, 'error'); }
     };
-    root.innerHTML = `${heading('ĐIỀU HÀNH / PHÊ DUYỆT', 'Trung tâm phê duyệt', 'Hồ sơ chỉ xuất hiện sau khi bộ phận phụ trách gửi đúng bước. Riêng duyệt kiểm kê có chênh lệch sẽ cập nhật tồn và ghi Giao dịch kho Điều chỉnh.', '<button class="warehouse-secondary" id="refreshApprovalCenter"><svg><use href="#i-refresh"/></svg>Làm mới</button>')}<div class="warehouse-stats approval-center-summary" id="approvalSummary"></div><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC05 · MUA HÀNG</p><h2>Đơn mua hàng chờ quyết định</h2></div><span class="warehouse-chip">Nhân viên mua hàng gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>ĐƠN MUA</th><th>NHÀ CUNG CẤP</th><th>QUY MÔ</th><th>NGÀY GIAO</th><th>THANH TOÁN</th><th>TỔNG TIỀN</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="purchaseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC06–UC07 · KHO</p><h2>Chứng từ kho chờ phê duyệt</h2></div><span class="warehouse-chip">Thủ kho gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>TRẠNG THÁI</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="warehouseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC08–UC09 · TÀI CHÍNH</p><h2>Đề nghị thanh toán NCC và đổi trả</h2></div><span class="warehouse-chip">Kế toán/Thu ngân gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>SỐ TIỀN</th><th>TRẠNG THÁI</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="financeApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue payroll-fund-queue"><div class="warehouse-panel-title"><div><p>LƯƠNG</p><h2>Duyệt phiếu, rồi giao quỹ cho kế toán</h2></div></div><p class="payroll-fund-note">Không giao từng nhân viên — một lần giao cả quỹ cho kế toán.</p><p class="approval-center-note" style="margin:0 16px 12px"><strong>Ba bước.</strong><span> 1. Duyệt từng người hoặc Duyệt tất cả. 2. Giao quỹ cho kế toán. 3. Kế toán chi từng nhân viên từ quỹ đó. Phiếu chi Nhà cung cấp vẫn duyệt và giao theo từng phiếu.</span></p><div id="payrollApprovalBoard"></div></article>`;
+    root.innerHTML = `${heading('ĐIỀU HÀNH / PHÊ DUYỆT', 'Trung tâm phê duyệt', 'Hồ sơ chỉ xuất hiện sau khi bộ phận phụ trách gửi đúng bước. Riêng duyệt kiểm kê có chênh lệch sẽ cập nhật tồn và ghi Giao dịch kho Điều chỉnh.', '<button class="warehouse-secondary" id="refreshApprovalCenter"><svg><use href="#i-refresh"/></svg>Làm mới</button>')}<div class="warehouse-stats approval-center-summary" id="approvalSummary"></div><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC05 · MUA HÀNG</p><h2>Đơn mua hàng chờ quyết định</h2></div><span class="warehouse-chip">Nhân viên mua hàng gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>ĐƠN MUA</th><th>NHÀ CUNG CẤP</th><th>QUY MÔ</th><th>NGÀY GIAO</th><th>THANH TOÁN</th><th>TỔNG TIỀN</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="purchaseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC06–UC07 · KHO</p><h2>Chứng từ kho chờ phê duyệt</h2></div><span class="warehouse-chip">Thủ kho gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>TRẠNG THÁI</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="warehouseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>UC08–UC09 · TÀI CHÍNH</p><h2>Đề nghị thanh toán NCC và đổi trả</h2></div><span class="warehouse-chip">Kế toán/Thu ngân gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>SỐ TIỀN</th><th>TRẠNG THÁI</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="financeApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue payroll-fund-queue"><div class="warehouse-panel-title"><div><p>LƯƠNG</p><h2>Duyệt phiếu, rồi giao quỹ cho kế toán</h2></div></div><p class="payroll-fund-note">Không giao từng nhân viên — một lần giao cả quỹ cho kế toán.</p><p class="approval-center-note" style="margin:0 16px 12px"><strong>Ba bước.</strong><span> 1. Duyệt từng người hoặc Duyệt tất cả. 2. Giao quỹ cho kế toán. 3. Kế toán chi từng nhân viên từ quỹ đó. Phiếu chi Nhà cung cấp vẫn duyệt và giao theo từng phiếu.</span></p><div id="payrollApprovalBoard"></div><div id="payrollSupplierDebtPanel"></div></article>`;
     root.innerHTML = root.innerHTML
       .replace('actor nghiệp vụ', 'bộ phận phụ trách')
       .replace('UC05 · ', '')

@@ -117,8 +117,19 @@
     const tickets = data?.tickets || [];
     const products = data?.products || [];
     if (!Number(summary.SoPhieu || 0) && !tickets.length && !products.length) return '';
+    const fateHtml = text => {
+      if (!text || text === '—') return '<span class="fate-badge pending">Chưa xử lý</span>';
+      const parts = [];
+      if (/nhập lại/i.test(text)) parts.push(`<span class="fate-badge restock">${esc(text.match(/nhập lại[^·]*/i)?.[0]?.trim() || 'Nhập lại kho')}</span>`);
+      if (/loại bỏ|vứt/i.test(text)) parts.push(`<span class="fate-badge scrap">${esc(text.match(/loại bỏ[^·]*/i)?.[0]?.trim() || 'Loại bỏ / vứt')}</span>`);
+      if (/chưa xử lý/i.test(text)) parts.push(`<span class="fate-badge pending">${esc(text.match(/chưa xử lý[^·]*/i)?.[0]?.trim() || 'Chưa xử lý')}</span>`);
+      return parts.length ? parts.join(' ') : esc(text);
+    };
     const ticketRows = tickets.length
-      ? tickets.map(row => `<tr class="${row.TrangThai === 'Đã duyệt' ? 'cashier-return-ready' : ''}"><td><strong>${esc(row.MaDT)}</strong><small>${esc(row.MaHD)} · ${esc(row.TenKH || 'Khách vãng lai')}</small></td><td>${esc(row.HinhThucXuLy)}<small>${esc(row.TrangThai)}</small></td><td class="report-return-reason">${esc(row.LyDo || '—')}</td><td class="num">${money(row.SoTienHoan)}</td><td class="report-return-duty"><span class="status-pill ${stepClass(row.BuocCanXuLy)}">${esc(row.BuocCanXuLy)}</span><small class="report-return-fate">Hàng: ${esc(hangDiDauText(row))}</small><div class="report-return-people"><span>Lập <b>${esc(row.NguoiLap || '—')}</b></span><span>Kho <b>${esc(row.NguoiKiemTra || '—')}</b></span><span>Duyệt <b>${esc(row.NguoiDuyet || '—')}</b></span></div></td></tr>`).join('')
+      ? tickets.map(row => {
+        const typeBadge = /hoàn tiền/i.test(row.HinhThucXuLy) ? '<span class="return-type-badge refund">Hoàn tiền</span>' : '<span class="return-type-badge exchange">Đổi hàng</span>';
+        return `<tr class="${row.TrangThai === 'Đã duyệt' ? 'cashier-return-ready' : ''}"><td><strong>${esc(row.MaDT)}</strong><small>${esc(row.MaHD)} · ${esc(row.TenKH || 'Khách vãng lai')}</small></td><td>${typeBadge}<small>${esc(row.TrangThai)}</small></td><td class="report-return-reason">${esc(row.LyDo || '—')}</td><td class="num">${money(row.SoTienHoan)}</td><td class="report-return-duty"><span class="status-pill ${stepClass(row.BuocCanXuLy)}">${esc(row.BuocCanXuLy)}</span><small class="report-return-fate">${fateHtml(hangDiDauText(row))}</small><div class="report-return-people"><span>Lập <b>${esc(row.NguoiLap || '—')}</b></span><span>Kho <b>${esc(row.NguoiKiemTra || '—')}</b></span><span>Duyệt <b>${esc(row.NguoiDuyet || '—')}</b></span></div></td></tr>`;
+      }).join('')
       : '<tr><td colspan="5" class="warehouse-empty">Kỳ này chưa có phiếu đổi trả.</td></tr>';
     const productCard = options.showProducts === false ? '' : `<article class="warehouse-table-card report-return-products"><div class="warehouse-panel-title"><div><p>HÀNG KHÁCH TRẢ</p><h2>${esc(options.productTitle || 'Sản phẩm bị đổi trả nhiều')}</h2></div><span class="report-card-count">${products.length}</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>SẢN PHẨM</th><th>SL TRẢ</th><th>NHẬP LẠI</th><th>LOẠI BỎ / VỨT</th><th>HÀNG ĐI ĐÂU</th></tr></thead><tbody>${products.length ? products.map(row => `<tr><td><strong>${esc(row.TenSP)}</strong><small>${esc(row.MaSP)}${row.LyDoMau ? ` · ${esc(row.LyDoMau)}` : ''}</small></td><td class="num">${row.SLTra}</td><td class="num">${row.SLNhapLai || 0}</td><td class="num">${row.SLLoaiBo || row.SLKhongNhapLai || 0}</td><td class="report-return-fate">${esc(hangDiDauText(row))}</td></tr>`).join('') : '<tr><td colspan="5" class="warehouse-empty">Kỳ này chưa có hàng khách trả.</td></tr>'}</tbody></table></div></article>`;
     return `<section class="report-return-block">
@@ -480,7 +491,11 @@
         else if (['Đã duyệt', 'Thanh toán thất bại'].includes(item.TrangThaiPhieuChi)) action = `<button class="warehouse-primary" data-pay-voucher="${esc(item.MaCNPTra)}">${item.TrangThaiPhieuChi === 'Thanh toán thất bại' ? 'Thực hiện lại' : 'Thanh toán'}</button>`;
         else if (item.TrangThaiPhieuChi === 'Chờ duyệt') action = '<span class="payment-voucher-wait">Chờ Quản lý giao tiền</span>';
         else if (item.TrangThaiPhieuChi === 'Thanh toán thành công') action = '<span class="status-pill ok">Đã tất toán</span>';
-        return `<tr><td><strong>${esc(item.MaCNPTra)}</strong><small>Phát sinh ${fmtDate(item.NgayPhatSinh)}</small></td><td><strong>${esc(item.TenNCC)}</strong><small>${esc(item.MaNCC)}</small></td><td><button class="warehouse-link" data-invoice="${esc(item.MaHDMH)}">HĐ ${esc(item.SoHoaDon)}</button><small>${esc(item.MaPO)} · ${esc(item.MaPN)}</small></td><td><strong>${fmtDate(item.HanThanhToan)}</strong><small>${Number(item.SoNgayConLai) < 0 ? `Quá ${Math.abs(item.SoNgayConLai)} ngày` : Number(item.SoNgayConLai) === 0 ? 'Đến hạn hôm nay' : `Còn ${item.SoNgayConLai} ngày`}</small></td><td class="num"><strong>${money(item.SoTienConLai)}</strong><small>Gốc ${money(item.SoTienNo)}</small></td><td>${item.MaPhieu ? `<strong>${esc(item.MaPhieu)}</strong><small>${esc(item.PhuongThuc)}</small><span class="status-pill ${voucherClass(item.TrangThaiPhieuChi)}">${esc(item.TrangThaiPhieuChi)}</span>` : '<span class="status-pill draft">Chưa lập Phiếu chi</span>'}</td><td>${action}</td></tr>`;
+        const daysLeft = Number(item.SoNgayConLai);
+        const rowClass = item.TrangThaiPhieuChi === 'Thanh toán thành công' ? '' : daysLeft < 0 ? 'overdue-row' : daysLeft <= 3 ? 'due-soon-row' : '';
+        const daysBadgeClass = daysLeft < 0 ? 'overdue' : daysLeft === 0 ? 'due-today' : daysLeft <= 5 ? 'due-soon' : 'safe';
+        const daysText = daysLeft < 0 ? `Quá ${Math.abs(daysLeft)} ngày` : daysLeft === 0 ? 'Đến hạn hôm nay' : `Còn ${daysLeft} ngày`;
+        return `<tr class="${rowClass}"><td><strong>${esc(item.MaCNPTra)}</strong><small>Phát sinh ${fmtDate(item.NgayPhatSinh)}</small></td><td><strong>${esc(item.TenNCC)}</strong><small>${esc(item.MaNCC)}</small></td><td><button class="warehouse-link" data-invoice="${esc(item.MaHDMH)}">HĐ ${esc(item.SoHoaDon)}</button><small>${esc(item.MaPO)} · ${esc(item.MaPN)}</small></td><td><strong>${fmtDate(item.HanThanhToan)}</strong><small><span class="days-badge ${daysBadgeClass}">${daysText}</span></small></td><td class="num"><strong>${money(item.SoTienConLai)}</strong><small>Gốc ${money(item.SoTienNo)}</small></td><td>${item.MaPhieu ? `<strong>${esc(item.MaPhieu)}</strong><small>${esc(item.PhuongThuc)}</small><span class="status-pill ${voucherClass(item.TrangThaiPhieuChi)}">${esc(item.TrangThaiPhieuChi)}</span>` : '<span class="status-pill draft">Chưa lập Phiếu chi</span>'}</td><td>${action}</td></tr>`;
       }).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có công nợ phù hợp.</td></tr>';
     };
     const load = async () => {
@@ -518,19 +533,24 @@
     let items = [];
     let summary = {};
     const render = () => {
-      root.querySelector('#managerDebtBody').innerHTML = items.length ? items.map(item => `
-        <tr>
+      root.querySelector('#managerDebtBody').innerHTML = items.length ? items.map(item => {
+        const dLeft = Number(item.SoNgayConLai);
+        const rCls = item.TrangThaiHienTai === 'Đã thanh toán' ? '' : dLeft < 0 ? 'overdue-row' : dLeft <= 3 ? 'due-soon-row' : '';
+        const dBadge = item.TrangThaiHienTai === 'Đã thanh toán' ? 'Đã hoàn tất' : dLeft < 0 ? `Quá ${Math.abs(dLeft)} ngày` : `Còn ${dLeft} ngày`;
+        const dCls = item.TrangThaiHienTai === 'Đã thanh toán' ? 'safe' : dLeft < 0 ? 'overdue' : dLeft === 0 ? 'due-today' : dLeft <= 5 ? 'due-soon' : 'safe';
+        return `
+        <tr class="${rCls}">
           <td><strong>${esc(item.MaCNPTra)}</strong><small>Phát sinh ${fmtDate(item.NgayPhatSinh)}</small></td>
           <td><strong>${esc(item.TenNCC)}</strong><small>${esc(item.MaNCC)}</small></td>
           <td><strong>HĐ ${esc(item.SoHoaDon)}</strong><small>${esc(item.MaPO)} · ${esc(item.MaPN || 'Chưa có Phiếu nhập')}</small></td>
-          <td><strong>${fmtDate(item.HanThanhToan)}</strong><small>${item.TrangThaiHienTai === 'Đã thanh toán' ? 'Đã hoàn tất' : item.SoNgayConLai < 0 ? `Quá ${Math.abs(item.SoNgayConLai)} ngày` : `Còn ${item.SoNgayConLai} ngày`}</small></td>
+          <td><strong>${fmtDate(item.HanThanhToan)}</strong><small><span class="days-badge ${dCls}">${dBadge}</span></small></td>
           <td class="num"><strong>${money(item.SoTienNo)}</strong><small>Đã trả ${money(item.SoTienDaTra)}</small></td>
           <td class="num"><strong>${money(item.SoTienConLai)}</strong></td>
           <td><span class="status-pill ${debtClass(item.TrangThaiHienTai)}">${esc(item.TrangThaiHienTai)}</span><small>${esc(item.BuocTatToan || (item.MaPhieu ? item.TrangThaiPhieuChi : 'Chưa lập Phiếu chi'))}</small></td>
           <td>${item.TrangThaiPhieuChi === 'Chờ duyệt'
             ? `<button class="warehouse-primary manager-debt-detail" data-fund-voucher="${esc(item.MaPhieu)}">Giao tiền</button>`
             : `<button class="warehouse-secondary manager-debt-detail" data-manager-debt="${esc(item.MaCNPTra)}">Xem</button>`}</td>
-        </tr>`).join('') : '<tr><td colspan="8" class="warehouse-empty">Chưa phát sinh công nợ phải trả phù hợp với bộ lọc.</td></tr>';
+        </tr>`; }).join('') : '<tr><td colspan="8" class="warehouse-empty">Chưa phát sinh công nợ phải trả phù hợp với bộ lọc.</td></tr>';
       root.querySelector('#managerDebtCount').textContent = `${items.length} khoản hiển thị`;
     };
     const load = async () => {
@@ -892,7 +912,7 @@
         <details class="report-detail-disclosure accounting-detail"><summary>Xem công thức lãi gộp và dữ liệu đối soát chi tiết</summary>
           <div class="gross-profit-steps"><div class="step"><div><span>DOANH THU HÓA ĐƠN</span><strong>${money(s.DoanhThuHoaDon)}</strong></div><b>−</b><div><span>TIỀN HOÀN</span><strong>${money(s.TienHoan)}</strong></div><b>=</b><div class="mid"><span>DOANH THU THUẦN</span><strong>${money(s.DoanhThuThuan)}</strong></div></div><div class="step"><div><span>GIÁ VỐN HÓA ĐƠN</span><strong>${money(s.GiaVonHoaDon)}</strong></div><b>−</b><div><span>GV HÀNG TRẢ NHẬP LẠI</span><strong>${money(s.GiaVonHangTraNhapLai)}</strong></div><b>+</b><div><span>GV HÀNG GIAO ĐỔI</span><strong>${money(s.GiaVonHangGiaoDoi)}</strong></div><b>=</b><div class="mid"><span>GIÁ VỐN THUẦN</span><strong>${money(s.GiaVonHangBanThuan)}</strong></div></div><div class="step"><div class="mid"><span>DOANH THU THUẦN</span><strong>${money(s.DoanhThuThuan)}</strong></div><b>−</b><div class="mid"><span>GIÁ VỐN THUẦN</span><strong>${money(s.GiaVonHangBanThuan)}</strong></div><b>=</b><div class="result"><span>LỢI NHUẬN GỘP</span><strong>${money(s.LoiNhuanGop)}</strong></div></div></div>
           <div class="financial-report-sections"><article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>MUA HÀNG &amp; THUẾ</p><h2>Chứng từ đầu vào</h2></div></div><div class="report-metric-list"><div><span>Đơn mua / Phiếu nhập</span><strong>${p.SoDonMua || 0} / ${p.SoPhieuNhap || 0}</strong></div><div><span>Tiền hàng / Thuế đầu vào</span><strong>${money(p.TienHangMua)} / ${money(p.ThueDauVao)}</strong></div></div></article><article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>NHẬP – XUẤT – TỒN</p><h2>Biến động hàng hóa</h2></div></div><div class="report-metric-list"><div><span>Tồn đầu / cuối kỳ</span><strong>${Number(inv.SoLuongDauKy || 0).toLocaleString('vi-VN')} / ${Number(inv.SoLuongCuoiKy || 0).toLocaleString('vi-VN')}</strong></div><div><span>Nhập / xuất</span><strong>${Number(inv.SoLuongNhap || 0).toLocaleString('vi-VN')} / ${Number(inv.SoLuongXuat || 0).toLocaleString('vi-VN')}</strong></div></div></article><article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>THU – CHI</p><h2>Tổng hợp chứng từ</h2></div></div><div class="report-metric-list"><div><span>Phiếu thu hệ thống / thực nộp</span><strong>${money(f.PhieuThuTheoHeThong)} / ${money(f.PhieuThuThucNop)}</strong></div><div><span>Phiếu chi / đã thanh toán</span><strong>${money(f.TongPhieuChi)} / ${money(f.DaThanhToanNCC)}</strong></div></div></article></div>
-          <article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>CHI TIẾT BÁN HÀNG</p><h2>Doanh thu, giá vốn và lãi gộp theo ngày</h2></div></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NGÀY</th><th>HÓA ĐƠN</th><th>DOANH THU HĐ</th><th>TIỀN HOÀN</th><th>DOANH THU THUẦN</th><th>GIÁ VỐN THUẦN</th><th>LÃI GỘP</th></tr></thead><tbody>${daily.length ? daily.map(row => `<tr><td>${fmtDate(row.Ngay)}</td><td class="num">${row.SoHoaDon}</td><td class="num">${money(row.DoanhThuHoaDon)}</td><td class="num">${money(row.TienHoan)}</td><td class="num"><strong>${money(row.DoanhThuThuan)}</strong></td><td class="num">${money(row.GiaVonHangBanThuan)}</td><td class="num"><strong>${money(row.LoiNhuanGop)}</strong></td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Kỳ này chưa có hóa đơn hoàn thành hoặc đổi trả hoàn thành.</td></tr>'}</tbody></table></div></article>
+          <article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>CHI TIẾT BÁN HÀNG</p><h2>Doanh thu, giá vốn và lãi gộp theo ngày</h2></div></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NGÀY</th><th>HÓA ĐƠN</th><th>DOANH THU HĐ</th><th>TIỀN HOÀN</th><th>DOANH THU THUẦN</th><th>GIÁ VỐN THUẦN</th><th>LÃI GỘP</th></tr></thead><tbody>${daily.length ? (() => { const avgMargin = daily.reduce((sum, r) => sum + Number(r.LoiNhuanGop || 0), 0) / daily.length; return daily.map(row => { const margin = Number(row.LoiNhuanGop || 0); const cls = margin > avgMargin * 1.3 ? 'high-margin' : margin < avgMargin * 0.5 && margin >= 0 ? 'low-margin' : ''; return `<tr class="${cls}"><td>${fmtDate(row.Ngay)}</td><td class="num">${row.SoHoaDon}</td><td class="num">${money(row.DoanhThuHoaDon)}</td><td class="num">${money(row.TienHoan)}</td><td class="num"><strong>${money(row.DoanhThuThuan)}</strong></td><td class="num">${money(row.GiaVonHangBanThuan)}</td><td class="num"><strong>${money(row.LoiNhuanGop)}</strong></td></tr>`; }).join(''); })() : '<tr><td colspan="7" class="warehouse-empty">Kỳ này chưa có hóa đơn hoàn thành hoặc đổi trả hoàn thành.</td></tr>'}</tbody>${daily.length ? `<tfoot><tr><td><strong>TỔNG</strong></td><td class="num">${daily.reduce((s, r) => s + Number(r.SoHoaDon || 0), 0)}</td><td class="num">${money(daily.reduce((s, r) => s + Number(r.DoanhThuHoaDon || 0), 0))}</td><td class="num">${money(daily.reduce((s, r) => s + Number(r.TienHoan || 0), 0))}</td><td class="num"><strong>${money(s.DoanhThuThuan)}</strong></td><td class="num">${money(s.GiaVonHangBanThuan)}</td><td class="num"><strong>${money(s.LoiNhuanGop)}</strong></td></tr></tfoot>` : ''}</table></div></article>
         </details>`;
       window.FLY_REPORT_LAYOUT?.enhance(root.querySelector('#financialReportBody'), { actor: 'Kế toán', analysisTitle: 'Xu hướng tài chính và chất lượng doanh thu', detailTitle: 'Công thức, chứng từ và số liệu theo ngày' });
       root.querySelector('#printFinancialReport').disabled = false;
@@ -1255,11 +1275,63 @@
     LichSuChiLuong: 'accounting-payroll'
   };
 
+  /* ── Activity icon & color helpers ── */
+  const ACTIVITY_ICONS = {
+    'Lập phiếu chi': 'i-expense', 'Phiếu chi NCC': 'i-expense', 'Duyệt': 'i-approve',
+    'Thanh toán': 'i-pay', 'Đối chiếu': 'i-reconcile', 'Giao quỹ': 'i-fund',
+    'Lập phiếu thu': 'i-income', 'Phiếu thu': 'i-income', 'Lập phiếu chi lương': 'i-payroll',
+    'Khóa lương': 'i-lock', 'Lập bảng lương': 'i-payroll', 'Chi từ quỹ': 'i-fund',
+    'Nhập kho': 'i-warehouse', 'Xuất kho': 'i-warehouse'
+  };
+  const activityIcon = label => {
+    for (const [key, icon] of Object.entries(ACTIVITY_ICONS)) { if ((label || '').includes(key)) return icon; }
+    return 'i-log';
+  };
+  const ACTIVITY_EMOJI = {
+    'Lập phiếu chi': '📋', 'Phiếu chi NCC': '📋', 'Lập phiếu thu': '📋', 'Phiếu thu': '📋',
+    'Lập phiếu chi lương': '📋', 'Lập bảng lương': '📋',
+    'Duyệt': '✅', 'Đã duyệt': '✅',
+    'Thanh toán': '💰', 'Chi từ quỹ': '💰',
+    'Giao quỹ': '🔄', 'Khóa lương': '🔒',
+    'Đối chiếu': '📊', 'Nhập kho': '📦', 'Xuất kho': '📦'
+  };
+  const activityEmoji = label => {
+    for (const [key, emoji] of Object.entries(ACTIVITY_EMOJI)) { if ((label || '').includes(key)) return emoji; }
+    return '📝';
+  };
+  const ACTIVITY_COLOR = {
+    'Lập phiếu chi': 'blue', 'Phiếu chi NCC': 'blue', 'Lập phiếu thu': 'blue', 'Phiếu thu': 'blue',
+    'Lập phiếu chi lương': 'purple', 'Lập bảng lương': 'purple',
+    'Duyệt': 'green', 'Đã duyệt': 'green',
+    'Thanh toán': 'emerald', 'Chi từ quỹ': 'emerald',
+    'Giao quỹ': 'amber', 'Khóa lương': 'slate',
+    'Đối chiếu': 'teal', 'Nhập kho': 'brown', 'Xuất kho': 'brown'
+  };
+  const activityColor = label => {
+    for (const [key, color] of Object.entries(ACTIVITY_COLOR)) { if ((label || '').includes(key)) return color; }
+    return 'default';
+  };
+  const statusClass = item => {
+    const s = (item.ketQuaHienThi || item.TrangThai || '').toLowerCase();
+    if (s.includes('thành công') || s.includes('đã duyệt') || s.includes('đã thanh toán') || s.includes('hoàn tất')) return 'ok';
+    if (s.includes('chờ') || s.includes('đang')) return 'warning';
+    if (s.includes('thất bại') || s.includes('từ chối') || s.includes('hủy')) return 'cancelled';
+    return '';
+  };
+  const statusLabel = item => {
+    const s = item.ketQuaHienThi || item.TrangThai || '';
+    return s || '—';
+  };
+
   const initAccountingHistory = async (root, context) => {
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
     const fromDefault = new Date();
     fromDefault.setDate(fromDefault.getDate() - 30);
     const fromKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(fromDefault);
+    let currentPage = 1;
+    const PAGE_SIZE = 40;
+    let lastLogData = null;
+
     root.innerHTML = `${heading('KẾ TOÁN / NHẬT KÝ', 'Lịch sử hoạt động', 'Mọi việc bạn đã làm: đối chiếu hóa đơn, phiếu chi NCC, phiếu thu, lập/khóa lương, lập phiếu lương, chi từ quỹ chung. Không xóa được nhật ký.')}
       <article class="warehouse-table-card"><div class="warehouse-toolbar accounting-history-filters" data-keep-native>
         <label class="warehouse-field"><span>Từ ngày</span><input type="date" id="accHistFrom" data-keep-native value="${esc(fromKey)}"></label>
@@ -1275,53 +1347,235 @@
         <label class="warehouse-field"><span>Tìm</span><input id="accHistSearch" placeholder="Chứng từ, nội dung..."></label>
         <div class="warehouse-toolbar-actions"><button class="warehouse-primary" id="accHistLoad" type="button">Xem lịch sử</button></div>
       </div>
-      <div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>THỜI GIAN</th><th>VIỆC LÀM</th><th>CHỨNG TỪ</th><th>GIẢI THÍCH</th><th></th></tr></thead><tbody id="accHistBody"><tr><td colspan="5" class="warehouse-empty">Đang tải...</td></tr></tbody></table></div></article>
-      <article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>QUỸ CHUNG</p><h2>Lịch sử chi lương từ quỹ chung</h2></div><span class="warehouse-chip">Không xóa</span></div>
-      <div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>LÚC CHI</th><th>NHÂN VIÊN</th><th>PHIẾU</th><th>KÊNH</th><th>SỐ TIỀN</th><th>MÃ GD</th><th>QUỸ CÒN SAU CHI</th><th>KẾT QUẢ</th></tr></thead><tbody id="accPayoutBody"><tr><td colspan="8" class="warehouse-empty">Đang tải...</td></tr></tbody></table></div></article>`;
 
+      <!-- Timeline -->
+      <div class="acc-timeline" id="accTimeline"></div>
+      <div class="acc-timeline-pager" id="accTimelinePager"></div>
+
+      <!-- Activity log table -->
+      <div class="warehouse-table-wrap"><table class="warehouse-table acc-history-table" id="accHistTable"><thead><tr>
+        <th class="sortable" data-sort="ThoiGian">THỜI GIAN <span class="sort-arrow"></span></th>
+        <th class="sortable" data-sort="viecLam">VIỆC LÀM <span class="sort-arrow"></span></th>
+        <th>ĐỐI TƯỢNG</th>
+        <th class="sortable num" data-sort="SoTien">SỐ TIỀN <span class="sort-arrow"></span></th>
+        <th>TRẠNG THÁI</th>
+        <th>GIẢI THÍCH</th>
+        <th></th>
+      </tr></thead><tbody id="accHistBody"><tr><td colspan="7" class="warehouse-empty">Đang tải...</td></tr></tbody></table></div></article>
+
+      <article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>QUỸ CHUNG</p><h2>Lịch sử chi lương từ quỹ chung</h2></div><span class="warehouse-chip">Không xóa</span></div>
+      <div class="warehouse-table-wrap"><table class="warehouse-table acc-payout-table"><thead><tr>
+        <th>LÚC CHI</th><th>NHÂN VIÊN</th><th>PHIẾU</th><th>KÊNH</th>
+        <th class="num">SỐ TIỀN</th><th>MÃ GD</th><th class="num">QUỸ CÒN SAU CHI</th><th>KẾT QUẢ</th>
+      </tr></thead><tbody id="accPayoutBody"><tr><td colspan="8" class="warehouse-empty">Đang tải...</td></tr></tbody>
+      <tfoot id="accPayoutFoot"></tfoot></table></div></article>`;
+
+    /* ── Modal chi tiết (upgraded) ── */
     const openDetail = item => {
       const overlay = document.createElement('div');
       overlay.className = 'warehouse-modal-backdrop';
       const target = ACCOUNTING_DRILL[item.BangLienQuan] || '';
-      overlay.innerHTML = `<div class="warehouse-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">CHI TIẾT VIỆC LÀM</p><h2>${esc(item.viecLam || item.HanhDong)}</h2><span>${fmtDateTime(item.ThoiGian)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="manager-readonly-note"><svg><use href="#i-log"></use></svg><div><strong>${esc(item.doiTuong || '')} ${esc(item.doiTuongMa || '')}</strong><span>${esc(item.giaiThich || '')}</span></div></div><p>${esc(item.NoiDung || item.tieuDe || '')}</p></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Đóng</button>${target ? `<button class="warehouse-primary open-doc" type="button">Mở chứng từ</button>` : ''}</div></div>`;
+      const sc = statusClass(item);
+      const relatedLinks = [];
+      if (item.BangLienQuan === 'PhieuChi' || item.BangLienQuan === 'CongNo') {
+        if (target) relatedLinks.push({ label: 'Công nợ NCC', page: 'accounting-payables' });
+      }
+      if (item.BangLienQuan === 'PhieuChiLuong') {
+        relatedLinks.push({ label: 'Bảng lương', page: 'accounting-payroll' });
+      }
+      const breadcrumbHtml = relatedLinks.length
+        ? `<nav class="acc-detail-breadcrumb">${relatedLinks.map(l => `<a href="#" class="acc-breadcrumb-link" data-nav="${esc(l.page)}">${esc(l.label)}</a>`).join('<span class="acc-breadcrumb-sep">›</span>')}</nav>`
+        : '';
+      overlay.innerHTML = `<div class="warehouse-modal acc-detail-modal">
+        <div class="warehouse-modal-heading"><div>
+          <p class="warehouse-kicker">CHI TIẾT VIỆC LÀM</p>
+          <h2><svg class="acc-detail-icon"><use href="#${activityIcon(item.viecLam || item.HanhDong)}"></use></svg> ${esc(item.viecLam || item.HanhDong)}</h2>
+          <span>${fmtDateTime(item.ThoiGian)}</span>
+        </div><button class="warehouse-icon-button close" type="button">×</button></div>
+        <div class="warehouse-modal-body">
+          <div class="acc-detail-grid">
+            <div class="acc-detail-field"><span class="acc-detail-label">Người thực hiện</span><strong>${esc(item.NguoiThucHien || item.TenNguoiDung || '—')}</strong></div>
+            <div class="acc-detail-field"><span class="acc-detail-label">Loại chứng từ</span><strong>${esc(item.doiTuong || item.BangLienQuan || '—')}</strong></div>
+            <div class="acc-detail-field"><span class="acc-detail-label">Mã chứng từ</span><strong>${esc(item.doiTuongMa || '—')}</strong></div>
+            <div class="acc-detail-field"><span class="acc-detail-label">Số tiền</span><strong>${item.SoTien ? money(item.SoTien) : '—'}</strong></div>
+            <div class="acc-detail-field"><span class="acc-detail-label">Trạng thái</span><span class="status-pill ${sc}">${esc(statusLabel(item))}</span></div>
+            <div class="acc-detail-field"><span class="acc-detail-label">Ghi chú</span><span>${esc(item.GhiChu || item.giaiThich || '—')}</span></div>
+          </div>
+          <div class="manager-readonly-note"><svg><use href="#${activityIcon(item.viecLam || item.HanhDong)}"></use></svg><div><strong>${esc(item.doiTuong || '')} ${esc(item.doiTuongMa || '')}</strong><span>${esc(item.giaiThich || '')}</span></div></div>
+          <p>${esc(item.NoiDung || item.tieuDe || '')}</p>
+          ${breadcrumbHtml}
+        </div>
+        <div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Đóng</button>${target ? `<button class="warehouse-primary open-doc" type="button">Mở chứng từ</button>` : ''}</div>
+      </div>`;
       document.body.appendChild(overlay);
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', () => overlay.remove()));
-      overlay.querySelector('.open-doc')?.addEventListener('click', () => {
-        overlay.remove();
-        context.navigate(target);
-      });
+      overlay.querySelector('.open-doc')?.addEventListener('click', () => { overlay.remove(); context.navigate(target); });
+      overlay.querySelectorAll('.acc-breadcrumb-link').forEach(a => a.addEventListener('click', e => { e.preventDefault(); overlay.remove(); context.navigate(a.dataset.nav); }));
     };
 
+    /* ── Timeline renderer (card-based, grouped by date) ── */
+    const renderTimeline = items => {
+      const timeline = root.querySelector('#accTimeline');
+      if (!items.length) { timeline.innerHTML = '<div class="acc-timeline-empty"><svg><use href="#i-log"></use></svg><p>Chưa có hoạt động nào trong khoảng ngày này.</p></div>'; return; }
+
+      /* Group by date */
+      const groups = {};
+      items.forEach(item => {
+        const d = item.ThoiGian ? new Date(item.ThoiGian) : null;
+        const dateKey = d ? new Intl.DateTimeFormat('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' }).format(d) : 'Không rõ ngày';
+        if (!groups[dateKey]) groups[dateKey] = [];
+        groups[dateKey].push(item);
+      });
+
+      const fmtTime = t => { const d = t ? new Date(t) : null; return d ? new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' }).format(d) : ''; };
+
+      let html = '';
+      for (const [dateLabel, dateItems] of Object.entries(groups)) {
+        html += `<div class="acc-tl-date-group"><div class="acc-tl-date-header"><span>${esc(dateLabel)}</span><span class="acc-tl-date-count">${dateItems.length} hoạt động</span></div>`;
+        html += dateItems.map(item => {
+          const sc = statusClass(item);
+          const emoji = activityEmoji(item.viecLam || item.HanhDong);
+          const color = activityColor(item.viecLam || item.HanhDong);
+          return `<div class="acc-tl-card ${sc}" data-color="${color}" data-nk="${esc(item.MaNK)}">
+            <div class="acc-tl-card-icon" data-color="${color}"><span>${emoji}</span></div>
+            <div class="acc-tl-card-body">
+              <div class="acc-tl-card-top">
+                <strong class="acc-tl-card-title">${esc(item.viecLam || item.HanhDong)}</strong>
+                <span class="acc-tl-card-status ${sc}">${esc(statusLabel(item))}</span>
+              </div>
+              <div class="acc-tl-card-meta">
+                <span class="acc-tl-card-time">${fmtTime(item.ThoiGian)}</span>
+                ${item.doiTuong ? `<span class="acc-tl-card-subject">${esc(item.doiTuong)} ${esc(item.doiTuongMa || '')}</span>` : ''}
+              </div>
+              <p class="acc-tl-card-desc">${esc(item.giaiThich || item.NoiDung || '')}</p>
+            </div>
+            ${item.SoTien ? `<div class="acc-tl-card-amount">${money(item.SoTien)}</div>` : ''}
+          </div>`;
+        }).join('');
+        html += '</div>';
+      }
+
+      timeline.innerHTML = html;
+      timeline.querySelectorAll('.acc-tl-card').forEach(card => card.addEventListener('click', () => {
+        const item = items.find(row => String(row.MaNK) === card.dataset.nk);
+        if (item) openDetail(item);
+      }));
+    };
+
+    /* ── Sort state ── */
+    let sortCol = 'ThoiGian', sortAsc = false;
+    const sortItems = items => {
+      const arr = [...items];
+      arr.sort((a, b) => {
+        let va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
+        if (sortCol === 'ThoiGian') { va = new Date(va); vb = new Date(vb); }
+        if (sortCol === 'SoTien') { va = Number(va || 0); vb = Number(vb || 0); }
+        if (typeof va === 'string') { va = va.toLowerCase(); vb = vb.toLowerCase(); }
+        if (va < vb) return sortAsc ? -1 : 1;
+        if (va > vb) return sortAsc ? 1 : -1;
+        return 0;
+      });
+      return arr;
+    };
+
+    /* ── Main load ── */
     const load = async () => {
       const from = root.querySelector('#accHistFrom').value;
       const to = root.querySelector('#accHistTo').value;
       const kind = root.querySelector('#accHistKind').value;
       const search = root.querySelector('#accHistSearch').value.trim();
-      const params = new URLSearchParams({ from, to, kind, search, page: '1', pageSize: '80' });
+      const params = new URLSearchParams({ from, to, kind, search, page: String(currentPage), pageSize: String(PAGE_SIZE) });
       try {
         const [log, payouts] = await Promise.all([
           api(context, `/accounting/activity-log?${params}`),
           api(context, '/accounting/payroll-payouts')
         ]);
+        lastLogData = log;
+
+        /* Timeline (top 10 most recent) */
+        renderTimeline((log.items || []).slice(0, 10));
+
+        /* Pager */
+        const totalPages = Math.ceil((log.total || (log.items || []).length) / PAGE_SIZE) || 1;
+        const pager = root.querySelector('#accTimelinePager');
+        if (totalPages > 1) {
+          pager.innerHTML = `<div class="acc-pager"><button class="warehouse-secondary" id="accPrev" ${currentPage <= 1 ? 'disabled' : ''}>← Trước</button><span>Trang ${currentPage} / ${totalPages}</span><button class="warehouse-secondary" id="accNext" ${currentPage >= totalPages ? 'disabled' : ''}>Sau →</button></div>`;
+          pager.querySelector('#accPrev')?.addEventListener('click', () => { currentPage--; load(); });
+          pager.querySelector('#accNext')?.addEventListener('click', () => { currentPage++; load(); });
+        } else { pager.innerHTML = ''; }
+
+        /* Table */
+        const sorted = sortItems(log.items || []);
         const body = root.querySelector('#accHistBody');
-        body.innerHTML = (log.items || []).length
-          ? log.items.map(item => `<tr data-nk="${esc(item.MaNK)}"><td>${fmtDateTime(item.ThoiGian)}</td><td><strong>${esc(item.viecLam || item.HanhDong)}</strong><small>${esc(item.ketQuaHienThi || '')}</small></td><td>${esc(item.doiTuong || '')}<small>${esc(item.doiTuongMa || '')}</small></td><td>${esc(item.giaiThich || item.NoiDung || '')}</td><td><button class="warehouse-secondary" data-hist-detail="${esc(item.MaNK)}" type="button">Chi tiết</button></td></tr>`).join('')
-          : '<tr><td colspan="5" class="warehouse-empty">Chưa có việc nào trong khoảng ngày này.</td></tr>';
+        body.innerHTML = sorted.length
+          ? sorted.map(item => {
+            const sc = statusClass(item);
+            return `<tr data-nk="${esc(item.MaNK)}">
+              <td>${fmtDateTime(item.ThoiGian)}</td>
+              <td><div class="acc-cell-flex"><svg class="acc-row-icon"><use href="#${activityIcon(item.viecLam || item.HanhDong)}"></use></svg><div><strong>${esc(item.viecLam || item.HanhDong)}</strong></div></div></td>
+              <td>${esc(item.doiTuong || '')}<small>${esc(item.doiTuongMa || '')}</small></td>
+              <td class="num">${item.SoTien ? money(item.SoTien) : '—'}</td>
+              <td><span class="status-pill ${sc}">${esc(statusLabel(item))}</span></td>
+              <td>${esc(item.giaiThich || item.NoiDung || '')}</td>
+              <td><button class="warehouse-secondary" data-hist-detail="${esc(item.MaNK)}" type="button">Chi tiết</button></td>
+            </tr>`;
+          }).join('')
+          : '<tr><td colspan="7" class="warehouse-empty"><svg class="acc-empty-icon"><use href="#i-log"></use></svg> Chưa có việc nào trong khoảng ngày này.</td></tr>';
         body.querySelectorAll('[data-hist-detail]').forEach(button => {
           button.addEventListener('click', () => {
             const item = (log.items || []).find(row => String(row.MaNK) === button.dataset.histDetail);
             if (item) openDetail(item);
           });
         });
+
+        /* Payout table */
         const payBody = root.querySelector('#accPayoutBody');
-        payBody.innerHTML = (payouts.items || []).length
-          ? payouts.items.map(item => `<tr><td>${fmtDateTime(item.NgayChi)}</td><td><strong>${esc(item.TenNV)}</strong><small>${esc(item.MaNV)}</small></td><td>${esc(item.MaPhieu)}<small>Kỳ ${esc(item.MaKy)}</small></td><td>${esc(item.PhuongThuc)}</td><td class="num"><strong>${money(item.SoTien)}</strong></td><td>${esc(item.MaGiaoDichNganHang || '—')}</td><td class="num">TM ${money(item.SoTienMatCon)}<small>CK ${money(item.SoTienCKCon)}</small></td><td><span class="status-pill ${item.ThanhCong ? 'ok' : 'cancelled'}">${item.ThanhCong ? 'Thành công' : 'Thất bại'}</span>${item.GhiChu ? `<small>${esc(item.GhiChu)}</small>` : ''}</td></tr>`).join('')
-          : '<tr><td colspan="8" class="warehouse-empty">Chưa chi khoản nào từ quỹ chung.</td></tr>';
+        const payItems = payouts.items || [];
+        payBody.innerHTML = payItems.length
+          ? payItems.map(item => `<tr><td>${fmtDateTime(item.NgayChi)}</td><td><strong>${esc(item.TenNV)}</strong><small>${esc(item.MaNV)}</small></td><td>${esc(item.MaPhieu)}<small>Kỳ ${esc(item.MaKy)}</small></td><td>${esc(item.PhuongThuc)}</td><td class="num"><strong>${money(item.SoTien)}</strong></td><td>${esc(item.MaGiaoDichNganHang || '—')}</td><td class="num">TM ${money(item.SoTienMatCon)}<small>CK ${money(item.SoTienCKCon)}</small></td><td><span class="status-pill ${item.ThanhCong ? 'ok' : 'cancelled'}">${item.ThanhCong ? 'Thành công' : 'Thất bại'}</span>${item.GhiChu ? `<small>${esc(item.GhiChu)}</small>` : ''}</td></tr>`).join('')
+          : '<tr><td colspan="8" class="warehouse-empty"><svg class="acc-empty-icon"><use href="#i-log"></use></svg> Chưa chi khoản nào từ quỹ chung.</td></tr>';
+        /* Payout totals footer */
+        const payFoot = root.querySelector('#accPayoutFoot');
+        if (payItems.length) {
+          const totalPaid = payItems.reduce((s, i) => s + Number(i.SoTien || 0), 0);
+          payFoot.innerHTML = `<tr class="acc-table-footer"><td colspan="4" style="text-align:right"><strong>TỔNG CỘNG</strong></td><td class="num"><strong>${money(totalPaid)}</strong></td><td colspan="3"></td></tr>`;
+        } else { payFoot.innerHTML = ''; }
       } catch (error) {
         context.showToast(error.message, 'error');
       }
     };
-    root.querySelector('#accHistLoad').addEventListener('click', load);
+
+    /* Sort headers */
+    root.querySelectorAll('.sortable').forEach(th => th.addEventListener('click', () => {
+      const col = th.dataset.sort;
+      if (sortCol === col) { sortAsc = !sortAsc; } else { sortCol = col; sortAsc = true; }
+      root.querySelectorAll('.sortable').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+      th.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
+      if (lastLogData) {
+        const sorted = sortItems(lastLogData.items || []);
+        const body = root.querySelector('#accHistBody');
+        body.innerHTML = sorted.map(item => {
+          const sc = statusClass(item);
+          return `<tr data-nk="${esc(item.MaNK)}">
+            <td>${fmtDateTime(item.ThoiGian)}</td>
+            <td><div class="acc-cell-flex"><svg class="acc-row-icon"><use href="#${activityIcon(item.viecLam || item.HanhDong)}"></use></svg><div><strong>${esc(item.viecLam || item.HanhDong)}</strong></div></div></td>
+            <td>${esc(item.doiTuong || '')}<small>${esc(item.doiTuongMa || '')}</small></td>
+            <td class="num">${item.SoTien ? money(item.SoTien) : '—'}</td>
+            <td><span class="status-pill ${sc}">${esc(statusLabel(item))}</span></td>
+            <td>${esc(item.giaiThich || item.NoiDung || '')}</td>
+            <td><button class="warehouse-secondary" data-hist-detail="${esc(item.MaNK)}" type="button">Chi tiết</button></td>
+          </tr>`;
+        }).join('');
+        body.querySelectorAll('[data-hist-detail]').forEach(button => {
+          button.addEventListener('click', () => {
+            const item = (lastLogData.items || []).find(row => String(row.MaNK) === button.dataset.histDetail);
+            if (item) openDetail(item);
+          });
+        });
+      }
+    }));
+
+    root.querySelector('#accHistLoad').addEventListener('click', () => { currentPage = 1; load(); });
     await load();
   };
 

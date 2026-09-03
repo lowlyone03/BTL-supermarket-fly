@@ -377,3 +377,481 @@ select:disabled,
     animation-iteration-count: 1 !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ACCOUNTING UI ENHANCEMENTS
+   Layered refinements for UC28 Payables, Đổi trả, Financial Reports.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 1. UC28 – Settlement flow stepper ── */
+.settlement-flow {
+  gap: 6px 0;
+  padding: 18px 24px;
+  border: 1px solid #d2e5da;
+  border-radius: var(--ui-radius-lg);
+  background: linear-gradient(135deg, #f7fbf9 0%, #eef6f2 100%);
+  box-shadow: 0 2px 8px rgba(35, 63, 48, .04);
+}
+.settlement-flow span {
+  position: relative;
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: #6d8076;
+  background: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  transition: all .2s ease;
+  box-shadow: 0 1px 4px rgba(35, 63, 48, .04);
+}
+.settlement-flow span.active {
+  border-color: #2d6a4f;
+  color: #1a4a36;
+  background: linear-gradient(135deg, #d7f0e4 0%, #c3e8d6 100%);
+  box-shadow: 0 2px 10px rgba(45, 106, 79, .15), inset 0 1px 0 rgba(255, 255, 255, .5);
+}
+.settlement-flow span.active::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border: 2px solid rgba(45, 106, 79, .18);
+  border-radius: 14px;
+  pointer-events: none;
+}
+.settlement-flow span.done {
+  color: #247457;
+  background: #e7f6ee;
+}
+.settlement-flow span.done::after {
+  content: ' ✓';
+  font-size: 10px;
+  opacity: .7;
+}
+.settlement-flow i {
+  display: flex;
+  align-items: center;
+  width: 28px;
+  justify-content: center;
+  color: #a8c0b4;
+  font-size: 16px;
+  font-style: normal;
+}
+
+/* ── 2. UC28 – KPI cards with icons & danger/safe tones ── */
+.payment-voucher-stats {
+  gap: 18px;
+  margin-bottom: 28px;
+}
+.payment-voucher-stats > article {
+  position: relative;
+  overflow: hidden;
+  padding: 22px 24px 20px;
+  border-left-width: 4px;
+  transition: box-shadow .2s ease, transform .15s ease;
+}
+.payment-voucher-stats > article:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ui-shadow-hover);
+}
+.payment-voucher-stats > article::before {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  font-size: 16px;
+}
+.payment-voucher-stats > article:nth-child(1)::before {
+  content: '💰';
+  background: rgba(45, 106, 79, .1);
+}
+.payment-voucher-stats > article:nth-child(2)::before {
+  content: '⏳';
+  background: rgba(228, 173, 53, .12);
+}
+.payment-voucher-stats > article:nth-child(3)::before {
+  content: '📤';
+  background: rgba(83, 118, 198, .1);
+}
+/* Danger tone for overdue amounts */
+.payment-voucher-stats > article:nth-child(1)[data-overdue="true"],
+.payment-voucher-stats > article.attention {
+  border-left-color: #cf705c;
+  background: linear-gradient(135deg, rgba(207, 112, 92, .04) 0%, rgba(255, 255, 255, .97) 100%);
+}
+
+/* ── 3. UC28 – Payable table row urgency ── */
+.payment-voucher-table tbody tr {
+  transition: background .15s ease;
+}
+.payment-voucher-table tbody tr:hover {
+  background: rgba(45, 106, 79, .03);
+}
+.payment-voucher-table tbody tr.overdue-row {
+  background: rgba(207, 112, 92, .05);
+  border-left: 3px solid #cf705c;
+}
+.payment-voucher-table tbody tr.overdue-row td:first-child {
+  padding-left: 13px;
+}
+.payment-voucher-table tbody tr.due-soon-row {
+  background: rgba(228, 173, 53, .06);
+  border-left: 3px solid #e4ad35;
+}
+.payment-voucher-table tbody tr.due-soon-row td:first-child {
+  padding-left: 13px;
+}
+.payment-voucher-table .days-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.days-badge.overdue { color: #8b2e1a; background: #fde4de; }
+.days-badge.due-today { color: #7a4b0e; background: #fef3d4; }
+.days-badge.due-soon { color: #6b5a12; background: #fef7e0; }
+.days-badge.safe { color: #1f523f; background: #e2f3eb; }
+
+/* ── 4. Đổi trả – KPI cards with icons ── */
+.report-return-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 18px 0 22px;
+}
+.report-return-kpis > article {
+  position: relative;
+  overflow: hidden;
+  padding: 20px 22px 18px;
+  border: 1px solid #d9e1dc;
+  border-left: 4px solid #cfe8dc;
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
+  transition: transform .15s ease, box-shadow .2s ease;
+}
+.report-return-kpis > article:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--ui-shadow-hover);
+}
+.report-return-kpis > article::before {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.report-return-kpis > article:nth-child(1)::before {
+  content: '📋';
+  background: rgba(83, 118, 198, .1);
+}
+.report-return-kpis > article:nth-child(2)::before {
+  content: '💸';
+  border-left-color: #e4ad35;
+  background: rgba(228, 173, 53, .1);
+}
+.report-return-kpis > article:nth-child(2) {
+  border-left-color: #e4ad35;
+}
+.report-return-kpis > article:nth-child(3)::before {
+  content: '⚠️';
+  background: rgba(207, 112, 92, .1);
+}
+.report-return-kpis > article:nth-child(3) {
+  border-left-color: #cf705c;
+}
+.report-return-kpis > article:nth-child(4)::before {
+  content: '📦';
+  background: rgba(45, 106, 79, .1);
+}
+.report-return-kpis > article span {
+  display: block;
+  color: #7e8b84;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .08em;
+}
+.report-return-kpis > article strong {
+  display: block;
+  margin: 8px 0 4px;
+  font-size: 24px;
+  color: #1e3a2c;
+}
+.report-return-kpis > article small {
+  display: block;
+  color: #839088;
+  font-size: 11.5px;
+}
+
+/* Đổi trả – fate badges for hàng đi đâu */
+.report-return-fate {
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.fate-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.fate-badge.restock {
+  color: #1a5b3f;
+  background: #ddf3e8;
+}
+.fate-badge.restock::before {
+  content: '↩';
+  font-size: 12px;
+}
+.fate-badge.scrap {
+  color: #8b2e1a;
+  background: #fde8e2;
+}
+.fate-badge.scrap::before {
+  content: '✕';
+  font-size: 10px;
+}
+.fate-badge.pending {
+  color: #6b5a12;
+  background: #fef7e0;
+}
+.fate-badge.pending::before {
+  content: '…';
+}
+
+/* Đổi trả – ticket status badges */
+.return-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 650;
+}
+.return-type-badge.refund {
+  color: #7a4b0e;
+  background: #fef3d4;
+}
+.return-type-badge.refund::before {
+  content: '💵';
+  font-size: 10px;
+}
+.return-type-badge.exchange {
+  color: #2c5282;
+  background: #e1ecfa;
+}
+.return-type-badge.exchange::before {
+  content: '🔄';
+  font-size: 10px;
+}
+
+/* ── 5. Financial Report – gross profit flow cards ── */
+.gross-profit-steps {
+  gap: 10px;
+  padding: 18px 16px;
+  border: 1px solid #d2e5da;
+  border-radius: var(--ui-radius-lg);
+  background: linear-gradient(135deg, #f7fbf9 0%, #eef6f2 100%);
+}
+.gross-profit-steps .step > div {
+  padding: 14px 16px;
+  border-radius: var(--ui-radius-md);
+  border: 1px solid rgba(215, 228, 220, .6);
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(35, 63, 48, .03);
+  transition: transform .15s ease;
+}
+.gross-profit-steps .step > div:hover {
+  transform: translateY(-1px);
+}
+.gross-profit-steps span {
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.gross-profit-steps strong {
+  margin-top: 6px;
+  font-size: 15px;
+  font-weight: 720;
+}
+.gross-profit-steps .step > b {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(45, 106, 79, .08);
+  color: #40916c;
+  font-size: 14px;
+  align-self: center;
+}
+.gross-profit-steps .mid {
+  border-color: rgba(45, 106, 79, .15);
+  background: linear-gradient(135deg, #eef6f2 0%, #e5f1ea 100%);
+}
+.gross-profit-steps .result {
+  border-color: transparent;
+  background: linear-gradient(135deg, #2d6a4f 0%, #1b4332 100%);
+  box-shadow: 0 4px 14px rgba(45, 106, 79, .25);
+}
+
+/* ── 6. Financial Report – summary metric cards ── */
+.financial-report-sections {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.financial-report-sections > article {
+  border: 1px solid #d7e4dd;
+  border-radius: var(--ui-radius-lg);
+  padding: 0;
+  overflow: hidden;
+  transition: box-shadow .2s ease;
+}
+.financial-report-sections > article:hover {
+  box-shadow: var(--ui-shadow-hover);
+}
+.financial-report-sections .warehouse-panel-title {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid #e8efe9;
+}
+.financial-report-sections .warehouse-panel-title p {
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .1em;
+  color: #7e8b84;
+}
+.financial-report-sections .warehouse-panel-title h2 {
+  font-size: 15px;
+  margin: 4px 0 0;
+}
+.financial-report-sections .report-metric-list {
+  padding: 14px 20px 18px;
+}
+.financial-report-sections .report-metric-list > div {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f4f1;
+}
+.financial-report-sections .report-metric-list > div:last-child {
+  border-bottom: 0;
+}
+.financial-report-sections .report-metric-list span {
+  color: #68786f;
+  font-size: 12.5px;
+}
+.financial-report-sections .report-metric-list strong {
+  color: #1e3a2c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Icon badges for summary sections */
+.financial-report-sections > article:nth-child(1) .warehouse-panel-title::before {
+  content: '🧾';
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 14px;
+}
+.financial-report-sections > article:nth-child(2) .warehouse-panel-title::before {
+  content: '📊';
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 14px;
+}
+.financial-report-sections > article:nth-child(3) .warehouse-panel-title::before {
+  content: '💳';
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 14px;
+}
+
+/* ── 7. Daily table – highlight profit rows ── */
+.accounting-detail .warehouse-table tbody tr {
+  transition: background .15s ease;
+}
+.accounting-detail .warehouse-table tbody tr:hover {
+  background: rgba(45, 106, 79, .04);
+}
+.accounting-detail .warehouse-table tbody tr.high-margin {
+  background: rgba(45, 106, 79, .05);
+}
+.accounting-detail .warehouse-table tbody tr.low-margin {
+  background: rgba(207, 112, 92, .04);
+}
+.accounting-detail .warehouse-table tfoot {
+  font-weight: 700;
+  border-top: 2px solid #2d6a4f;
+}
+.accounting-detail .warehouse-table tfoot td {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  color: #1a3a2d;
+  font-size: 13px;
+}
+
+/* ── 8. Responsive adjustments ── */
+@media (max-width: 1180px) {
+  .report-return-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .financial-report-sections { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .report-return-kpis { grid-template-columns: 1fr; }
+  .payment-voucher-stats { grid-template-columns: 1fr; }
+  .settlement-flow { flex-direction: column; }
+  .settlement-flow i { transform: rotate(90deg); }
+}
+
+/* ── 9. Empty & loading states ── */
+.warehouse-empty {
+  padding: 32px 20px;
+  color: #8a9990;
+  font-size: 13px;
+  text-align: center;
+}
+.warehouse-empty::before {
+  content: '';
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  background: #f0f5f2;
+}
+.overview-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 200px;
+  color: #7e8b84;
+  font-size: 13.5px;
+}
+.overview-loading::before {
+  content: '';
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid #d7e4dc;
+  border-top-color: #2d6a4f;
+  border-radius: 50%;
+  animation: ui-spin .8s linear infinite;
+}
+@keyframes ui-spin {
+  to { transform: rotate(360deg); }
+}

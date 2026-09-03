@@ -358,11 +358,16 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
 
           <div class="stat-grid">
+            <article class="stat-card"><div><span>DOANH THU HÔM NAY</span><i><svg><use href="#i-trend"/></svg></i></div><strong>${formatMoney(data.revenue?.DoanhThuHomNay || 0)}</strong><small>Lãi gộp: ${formatMoney(data.revenue?.LaiGopHomNay || 0)}</small></article>
+            <article class="stat-card"><div><span>DOANH THU 7 NGÀY</span><i><svg><use href="#i-report"/></svg></i></div><strong>${formatMoney(data.revenue?.DoanhThu7Ngay || 0)}</strong><small>Tổng doanh thu tuần gần nhất</small></article>
             <article class="stat-card"><div><span>CA POS ĐANG MỞ</span><i><svg><use href="#i-clock"/></svg></i></div><strong>${summary.CaDangMo || 0}</strong><small>Thu ngân chưa đóng ca bán hàng</small></article>
-            <article class="stat-card"><div><span>HỒ SƠ NHÂN SỰ</span><i><svg><use href="#i-users"/></svg></i></div><strong>${summary.NhanVienDangLam}</strong><small>Đang làm việc = còn hợp đồng, không phải đang trong ca</small></article>
+            <article class="stat-card"><div><span>HỒ SƠ NHÂN SỰ</span><i><svg><use href="#i-users"/></svg></i></div><strong>${summary.NhanVienDangLam}</strong><small>Đang làm việc tại cửa hàng</small></article>
             <article class="stat-card ${summary.ChuaCoTaiKhoan ? 'attention' : ''}"><div><span>CHƯA CÓ TÀI KHOẢN</span><i><svg><use href="#i-user-plus"/></svg></i></div><strong>${summary.ChuaCoTaiKhoan}</strong><small><b>${summary.ChuaCoTaiKhoan}</b> nhân viên chưa được cấp tài khoản</small></article>
             <article class="stat-card ${summary.TaiKhoanBiKhoa ? 'attention' : ''}"><div><span>TÀI KHOẢN BỊ KHÓA</span><i><svg><use href="#i-lock"/></svg></i></div><strong>${summary.TaiKhoanBiKhoa}</strong><small><b>${summary.ThaoTacHomNay}</b> thao tác hôm nay</small></article>
           </div>
+
+          ${(data.lowStock || []).length > 0 ? `<div class="section-heading"><div><p>CẢNH BÁO TỒN KHO</p><h2>Sản phẩm cần bổ sung</h2></div><button type="button" data-open-target="../admin/products.html">Xem tất cả <svg><use href="#i-chevron"/></svg></button></div>
+          <div class="decision-grid">${data.lowStock.slice(0, 6).map(item => `<article class="decision-card red" style="cursor:default"><div class="card-top"><span class="decision-icon"><svg><use href="#i-warning"/></svg></span><strong>${item.SLTon}</strong></div><h3>${escapeHtml(item.TenSP)}</h3><p>${escapeHtml(item.MaSP)} · Tối thiểu: ${item.TonKhoToiThieu} ${escapeHtml(item.DonViTinh)}</p></article>`).join('')}</div>` : ''}
 
           <section class="overview-product-showcase">
             <div class="section-heading"><div><p>HÀNG HÓA TRỰC QUAN</p><h2>Sản phẩm cần theo dõi</h2><span>Ưu tiên những mặt hàng gần hoặc dưới mức tồn tối thiểu.</span></div><button type="button" data-open-target="../admin/products.html">Quản lý sản phẩm <svg><use href="#i-chevron"/></svg></button></div>

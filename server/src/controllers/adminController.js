@@ -9,7 +9,7 @@ const getDashboard = async (req, res) => {
     try {
         const pool = await poolPromise;
         await closeOpenAttendance(pool).catch(() => {});
-        const [summaryResult, rolesResult, pendingResult, logsResult] = await Promise.all([
+        const [summaryResult, rolesResult, pendingResult, logsResult, revenueResult, lowStockResult] = await Promise.all([
             pool.request().query(`
                 SELECT
                     (SELECT COUNT(*) FROM NhanVien) AS TongNhanVien,
@@ -43,7 +43,21 @@ const getDashboard = async (req, res) => {
                 LEFT JOIN TaiKhoan t ON t.MaTK = nk.MaTK
                 LEFT JOIN NhanVien n ON n.MaNV = t.MaNV
                 ORDER BY nk.ThoiGian DESC
-            `)
+            `),
+            pool.request().query(`
+                SELECT COALESCE(SUM(CASE WHEN CONVERT(date,hd.NgayLap)=CONVERT(date,GETDATE()) THEN hd.TongThanhToan ELSE 0 END),0) AS DoanhThuHomNay,
+                       COALESCE(SUM(CASE WHEN CONVERT(date,hd.NgayLap)>=DATEADD(day,-7,CONVERT(date,GETDATE())) THEN hd.TongThanhToan ELSE 0 END),0) AS DoanhThu7Ngay,
+                       COALESCE(SUM(CASE WHEN CONVERT(date,hd.NgayLap)=CONVERT(date,GETDATE()) THEN hd.TongThanhToan-hd.TongGiaNhap ELSE 0 END),0) AS LaiGopHomNay
+                FROM HoaDon hd WHERE hd.TrangThai=N'Hoàn thành'
+            `).catch(() => ({ recordset: [{ DoanhThuHomNay: 0, DoanhThu7Ngay: 0, LaiGopHomNay: 0 }] })),
+            pool.request().query(`
+                SELECT TOP 10 sp.MaSP, sp.TenSP, sp.DonViTinh, sp.TonKhoToiThieu, ISNULL(SUM(tk.SLTon),0) AS SLTon
+                FROM SanPham sp LEFT JOIN TonKho tk ON tk.MaSP=sp.MaSP
+                WHERE sp.TrangThai=N'Đang bán'
+                GROUP BY sp.MaSP,sp.TenSP,sp.DonViTinh,sp.TonKhoToiThieu
+                HAVING ISNULL(SUM(tk.SLTon),0) <= sp.TonKhoToiThieu
+                ORDER BY ISNULL(SUM(tk.SLTon),0) ASC
+            `).catch(() => ({ recordset: [] }))
         ]);
 
         const pending = pendingResult.recordset[0];
@@ -54,7 +68,9 @@ const getDashboard = async (req, res) => {
                 ...pending,
                 TongChoDuyet: Object.values(pending).reduce((total, value) => total + Number(value || 0), 0)
             },
-            recentLogs: logsResult.recordset
+            recentLogs: logsResult.recordset,
+            revenue: revenueResult.recordset[0] || { DoanhThuHomNay: 0, DoanhThu7Ngay: 0, LaiGopHomNay: 0 },
+            lowStock: lowStockResult.recordset
         });
     } catch (error) {
         console.error(error);

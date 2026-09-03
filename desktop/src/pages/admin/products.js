@@ -245,6 +245,70 @@
     window.resetCategoryForm();
   };
 
+  window.previewProduct = () => {
+    const name = document.getElementById('productName').value || 'Chưa nhập tên';
+    const code = document.getElementById('productCode').value || '—';
+    const category = document.getElementById('productCategoryInput');
+    const categoryName = category?.options[category.selectedIndex]?.textContent || '—';
+    const unit = document.getElementById('productUnit').value || '—';
+    const barcode = document.getElementById('productBarcode').value || 'Không có';
+    const cost = money(document.getElementById('productCost').value);
+    const price = money(document.getElementById('productPrice').value);
+    const minimum = document.getElementById('productMinimum').value || 0;
+    const status = document.getElementById('productStatusInput').value;
+    const imgSrc = imagePreviewUrl || (editingCode ? window.FLY_PRODUCT_IMAGES?.resolve(allProducts.find(p => p.MaSP === editingCode) || {}) : '') || '';
+    const imgTag = imgSrc ? `<img src="${esc(imgSrc)}" style="max-width:120px;max-height:120px;border-radius:12px;object-fit:contain;border:1px solid #dce7e0">` : '<span style="display:inline-block;width:100px;height:80px;background:#eef3f0;border-radius:12px;text-align:center;line-height:80px;color:#7a8a82;font-size:11px">Chưa có ảnh</span>';
+    const previewHtml = `
+      <div style="display:flex;gap:20px;align-items:flex-start;margin-bottom:18px">
+        ${imgTag}
+        <div><h2 style="margin:0;font-size:18px;color:#17231d">${esc(name)}</h2><p style="margin:6px 0 0;color:#68766e;font-size:12px">${esc(code)} · ${esc(unit)} · ${esc(barcode)}</p></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px">
+        <div><small style="color:#839087;font-size:9px;font-weight:800;text-transform:uppercase">Danh mục</small><p style="margin:4px 0 0;font-size:13px">${esc(categoryName)}</p></div>
+        <div><small style="color:#839087;font-size:9px;font-weight:800;text-transform:uppercase">Trạng thái</small><p style="margin:4px 0 0"><span class="status-badge ${status === 'Đang bán' ? 'active' : 'locked'}" style="font-size:10px"><i></i>${esc(status)}</span></p></div>
+        <div><small style="color:#839087;font-size:9px;font-weight:800;text-transform:uppercase">Giá nhập</small><p style="margin:4px 0 0;font-size:14px;font-weight:600">${cost}</p></div>
+        <div><small style="color:#839087;font-size:9px;font-weight:800;text-transform:uppercase">Giá bán</small><p style="margin:4px 0 0;font-size:14px;font-weight:600;color:#26704f">${price}</p></div>
+        <div><small style="color:#839087;font-size:9px;font-weight:800;text-transform:uppercase">Tồn tối thiểu</small><p style="margin:4px 0 0;font-size:13px">${minimum}</p></div>
+      </div>`;
+    const modal = document.getElementById('productPreviewModal');
+    if (!modal) {
+      const backdrop = document.createElement('div');
+      backdrop.className = 'modal-backdrop';
+      backdrop.id = 'productPreviewModal';
+      backdrop.style.display = 'flex';
+      backdrop.innerHTML = `<div class="modal" style="max-width:560px"><div class="modal-header"><div><p class="module-kicker">XEM TRƯỚC SẢN PHẨM</p><h3>Kiểm tra thông tin trước khi lưu</h3></div><button type="button" class="close-btn" onclick="document.getElementById('productPreviewModal').style.display='none'">×</button></div><div class="modal-body" id="productPreviewContent">${previewHtml}</div><div class="modal-footer"><button class="btn btn-secondary" onclick="document.getElementById('productPreviewModal').style.display='none'">Đóng</button></div></div>`;
+      document.body.appendChild(backdrop);
+    } else {
+      document.getElementById('productPreviewContent').innerHTML = previewHtml;
+      modal.style.display = 'flex';
+    }
+  };
+
+  window.previewCategory = () => {
+    const code = document.getElementById('categoryCode').value || '—';
+    const name = document.getElementById('categoryName').value || 'Chưa nhập tên';
+    const desc = document.getElementById('categoryDescription').value || 'Chưa có mô tả';
+    const isEditing = Boolean(editingCategoryCode);
+    const previewHtml = `
+      <div style="padding:16px 0">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><strong style="font-size:17px">${esc(name)}</strong><code style="padding:3px 8px;background:#eef3f0;border-radius:7px;font-size:10px;font-weight:800;color:#517064">${esc(code)}</code></div>
+        <p style="color:#65746c;font-size:13px;line-height:1.6">${esc(desc)}</p>
+        <p style="margin-top:12px;color:#839087;font-size:11px">${isEditing ? 'Chỉnh sửa danh mục hiện có' : 'Danh mục mới sẽ được tạo'}</p>
+      </div>`;
+    const modal = document.getElementById('categoryPreviewModal');
+    if (!modal) {
+      const backdrop = document.createElement('div');
+      backdrop.className = 'modal-backdrop';
+      backdrop.id = 'categoryPreviewModal';
+      backdrop.style.display = 'flex';
+      backdrop.innerHTML = `<div class="modal" style="max-width:480px"><div class="modal-header"><div><p class="module-kicker">XEM TRƯỚC DANH MỤC</p><h3>Kiểm tra trước khi lưu</h3></div><button type="button" class="close-btn" onclick="document.getElementById('categoryPreviewModal').style.display='none'">×</button></div><div class="modal-body" id="categoryPreviewContent">${previewHtml}</div><div class="modal-footer"><button class="btn btn-secondary" onclick="document.getElementById('categoryPreviewModal').style.display='none'">Đóng</button></div></div>`;
+      document.body.appendChild(backdrop);
+    } else {
+      document.getElementById('categoryPreviewContent').innerHTML = previewHtml;
+      modal.style.display = 'flex';
+    }
+  };
+
   document.getElementById('productForm')?.addEventListener('submit', async event => {
     event.preventDefault();
     const imageInput = document.getElementById('productImage');
