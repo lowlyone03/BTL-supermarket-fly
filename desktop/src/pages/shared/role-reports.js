@@ -1,15 +1,102 @@
 (() => {
   const previous = window.FLY_ROLE_PAGES;
   const templates = {
-    'warehouse-reports': '<section class="warehouse-page financial-reports report-warehouse"><div class="overview-loading">Đang lập báo cáo kho...</div></section>',
-    'cashier-reports': '<section class="warehouse-page cashier-page financial-reports report-cashier"><div class="overview-loading">Đang lập báo cáo bán hàng...</div></section>',
-    'purchasing-reports': '<section class="warehouse-page financial-reports report-purchasing"><div class="overview-loading">Đang lập báo cáo mua hàng...</div></section>'
+    'warehouse-reports': '<section class="warehouse-page financial-reports report-warehouse"><div class="overview-loading">Đang mở bộ lọc báo cáo...</div></section>',
+    'cashier-reports': '<section class="warehouse-page cashier-page financial-reports report-cashier"><div class="overview-loading">Đang mở bộ lọc báo cáo...</div></section>',
+    'purchasing-reports': '<section class="warehouse-page financial-reports report-purchasing"><div class="overview-loading">Đang mở bộ lọc báo cáo...</div></section>'
   };
   const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
   const money = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
   const qty = value => Number(value || 0).toLocaleString('vi-VN');
   const fmtDate = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
   const fmtDateTime = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
+  const pad2 = value => String(value).padStart(2, '0');
+  const vnYmd = value => {
+    if (!value) return '';
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(value));
+    const get = type => parts.find(part => part.type === type)?.value;
+    return `${get('year')}-${get('month')}-${get('day')}`;
+  };
+  const addDaysIso = (iso, days) => {
+    const [year, month, day] = iso.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day + days));
+    return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
+  };
+  const eachDay = (from, to) => {
+    const days = [];
+    let cursor = from;
+    while (cursor <= to) {
+      days.push(cursor);
+      cursor = addDaysIso(cursor, 1);
+    }
+    return days;
+  };
+  const eachMonth = (from, to) => {
+    const months = [];
+    let year = Number(from.slice(0, 4));
+    let month = Number(from.slice(5, 7));
+    const endYear = Number(to.slice(0, 4));
+    const endMonth = Number(to.slice(5, 7));
+    while (year < endYear || (year === endYear && month <= endMonth)) {
+      months.push(`${year}-${pad2(month)}`);
+      month += 1;
+      if (month > 12) { month = 1; year += 1; }
+    }
+    return months;
+  };
+  const emptySalesBucket = key => ({ key, SoHoaDon: 0, DoanhThuHoaDon: 0, SoPhieu: 0, TienHoan: 0, DoanhThuThuan: 0 });
+  const addSalesBucket = (bucket, row) => {
+    bucket.SoHoaDon += Number(row.SoHoaDon || 0);
+    bucket.DoanhThuHoaDon += Number(row.DoanhThuHoaDon || 0);
+    bucket.SoPhieu += Number(row.SoPhieu || 0);
+    bucket.TienHoan += Number(row.TienHoan || 0);
+    bucket.DoanhThuThuan += Number(row.DoanhThuThuan || 0);
+    return bucket;
+  };
+  const salesTrendTitle = (type, kind = 'chart') => {
+    const grain = { day: 'ngày', month: 'tháng', quarter: 'quý', year: 'năm' }[type] || 'ngày';
+    return kind === 'print' ? `Doanh thu hóa đơn và doanh thu thuần theo ${grain}` : `Doanh thu bán hàng theo ${grain}`;
+  };
+  const salesTrend = (daily, period = {}) => {
+    const type = period.periodType || 'month';
+    const from = period.from;
+    const to = period.to;
+    const grain = (type === 'quarter' || type === 'year') ? 'month' : 'day';
+    const rows = daily || [];
+    if (!rows.length) {
+      return { type, grain, title: salesTrendTitle(type), printTitle: salesTrendTitle(type, 'print'), labels: [], rows: [] };
+    }
+    let buckets;
+    if (grain === 'month' && from && to) {
+      const map = new Map(eachMonth(from, to).map(key => [key, emptySalesBucket(key)]));
+      rows.forEach(row => {
+        const key = vnYmd(row.Ngay).slice(0, 7);
+        if (map.has(key)) addSalesBucket(map.get(key), row);
+      });
+      buckets = [...map.values()];
+    } else if (type === 'month' && from && to) {
+      const map = new Map(eachDay(from, to).map(key => [key, emptySalesBucket(key)]));
+      rows.forEach(row => {
+        const key = vnYmd(row.Ngay);
+        if (map.has(key)) addSalesBucket(map.get(key), row);
+      });
+      buckets = [...map.values()];
+    } else {
+      buckets = rows.map(row => addSalesBucket(emptySalesBucket(vnYmd(row.Ngay)), row));
+    }
+    const labels = buckets.map(row => grain === 'month'
+      ? `T${Number(row.key.slice(5, 7))}/${row.key.slice(0, 4)}`
+      : fmtDate(row.Ngay || `${row.key}T00:00:00+07:00`));
+    return {
+      type,
+      grain,
+      title: salesTrendTitle(type),
+      printTitle: salesTrendTitle(type, 'print'),
+      labels,
+      rows: buckets.map((row, index) => ({ ...row, label: labels[index] }))
+    };
+  };
   const heading = (kicker, title, subtitle) => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(kicker)}</p><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div></header>`;
   const reportDefaults = () => window.FLY_REPORT_PERIOD?.defaults?.() || (() => {
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
@@ -81,7 +168,7 @@
     if (!window.FLY_VI_DATE?.periodToolbar) {
       return `<div id="roleReportBody">${failBox('Giao diện kỳ báo cáo chưa tải. Hãy đóng ứng dụng và chạy lại npm start.')}</div>`;
     }
-    return `${window.FLY_VI_DATE.periodToolbar(reportDefaults(), extraButtons, 'loadRoleReport')}<div id="roleReportBody"><div class="overview-loading">Đang tải báo cáo...</div></div>`;
+    return `${window.FLY_VI_DATE.periodToolbar(reportDefaults(), extraButtons, 'loadRoleReport')}<div id="roleReportBody"><div class="welcome-card report-idle"><h2>Chưa lập báo cáo</h2><p>Chọn kỳ rồi bấm <strong>Lập báo cáo</strong> để tổng hợp số liệu. Trang này không tự chạy truy vấn nặng khi vừa mở.</p></div></div>`;
   };
   const bindPeriod = (root, load) => {
     const selected = () => {
@@ -100,6 +187,45 @@
   };
   const failBox = message => `<div class="welcome-card"><h2>Không lập được báo cáo</h2><p>${esc(message)}</p></div>`;
   const titleBlock = (root, period, badge) => `${window.FLY_REPORT_PERIOD?.activeFallbackBanner(root, { period }) || ''}<div class="financial-report-title"><div><p>KỲ BÁO CÁO</p><h2>${esc(period.label)}</h2><span>${esc(period.from)} đến ${esc(period.to)}</span></div><span class="status-pill ok">${esc(badge)}</span></div>`;
+  const slipKindLabel = doc => {
+    const raw = `${doc.LoaiChungTu || ''} ${doc.LoaiGD || ''}`;
+    if (/đổi trả/i.test(raw)) return 'Đổi trả';
+    if (/kiểm kê/i.test(raw)) return 'Kiểm kê';
+    if (/phiếu nhập/i.test(raw)) return 'Phiếu nhập';
+    if (/phiếu xuất/i.test(raw)) return 'Phiếu xuất';
+    if (/hoadon|hóa đơn/i.test(raw)) return 'Hóa đơn bán';
+    return doc.LoaiChungTu || doc.LoaiGD || 'Chứng từ';
+  };
+  const slipDestination = doc => {
+    const kind = `${doc.LoaiChungTu || ''} ${doc.LoaiGD || ''}`;
+    const id = doc.MaChungTu;
+    if (!id) return { nav: 'warehouse-history' };
+    if (/đổi trả/i.test(kind)) return { nav: 'warehouse-returns', id, open: 'return' };
+    if (/kiểm kê/i.test(kind)) return { nav: 'warehouse-inventory-counts', id, open: 'count' };
+    if (/phiếu nhập/i.test(kind)) return { nav: 'warehouse-receipts', id };
+    if (/phiếu xuất/i.test(kind)) return { nav: 'warehouse-stock-issues', id };
+    return { nav: 'warehouse-history' };
+  };
+  const bindWarehouseChartActions = (charts, context) => {
+    charts.setActionHandler?.(action => {
+      if (!action?.nav && !action?.open) return;
+      if (action.open === 'count' && action.id && window.FLY_WAREHOUSE?.openCount) {
+        window.FLY_WAREHOUSE.openCount(context, action.id, () => {});
+        return;
+      }
+      if (action.open === 'return' && action.id && window.FLY_WAREHOUSE?.openReturn) {
+        window.FLY_WAREHOUSE.openReturn(context, action.id, () => {}, 'view');
+        return;
+      }
+      if (action.nav === 'warehouse-receipts' && action.id) sessionStorage.setItem('fly_open_receipt', action.id);
+      if (action.nav === 'warehouse-stock-issues' && action.id) sessionStorage.setItem('fly_open_stock_issue', action.id);
+      if (action.nav === 'warehouse-inventory' && action.id) {
+        sessionStorage.setItem('fly_inventory_search', action.id);
+        sessionStorage.setItem('fly_inventory_low_only', '0');
+      }
+      context.navigate(action.nav);
+    });
+  };
   const percent = value => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(Number(value || 0))}%`;
   const statusClass = value => /quá hạn|trễ|từ chối|thất bại/i.test(value || '') ? 'cancelled' : /hoàn thành|đã xác nhận|đã duyệt|khớp/i.test(value || '') ? 'ok' : /chờ|đang/i.test(value || '') ? 'sent' : 'draft';
   const alertList = items => `<div class="report-alert-list">${items.map(item => `<article class="${esc(item.tone || '')}"><span class="report-alert-icon"><svg><use href="#${esc(item.icon)}"/></svg></span><div><strong>${esc(item.title)}</strong><small>${esc(item.detail)}</small></div>${item.value != null ? `<b>${esc(item.value)}</b>` : ''}</article>`).join('')}</div>`;
@@ -130,7 +256,7 @@
 
   const initWarehouseReport = async (root, context) => {
     let currentReport = null;
-    root.innerHTML = `${heading('THỦ KHO / UC15', 'Báo cáo nhập – xuất – tồn', 'Số lượng nhập xuất trong kỳ, tồn hiện tại, mặt hàng sắp hết, phiếu nhập/xuất/kiểm kê và đổi trả chờ kiểm.')}${periodCard()}`;
+    root.innerHTML = `${heading('THỦ KHO / BÁO CÁO', 'Báo cáo nhập – xuất – tồn', 'Số lượng nhập xuất trong kỳ, tồn hiện tại, mặt hàng sắp hết, phiếu nhập/xuất/kiểm kê và đổi trả chờ kiểm.')}${periodCard()}`;
     let loadReport = async () => {};
     const selected = bindPeriod(root, () => { loadReport(); });
     loadReport = async () => {
@@ -149,7 +275,73 @@
         const recentDocuments = data.recentDocuments || [];
         const visuals = ui();
         const charts = chartUi();
+        charts.setActionHandler?.(null);
         const netMovement = Number(m.SoLuongNhap || 0) - Number(m.SoLuongXuat || 0) + Number(m.DieuChinhRong || 0);
+        const categoryTotal = categories.reduce((sum, row) => sum + Number(row.GiaTriTon || 0), 0);
+        const productsByCat = new Map();
+        (data.topProductsByCategory || []).forEach(row => {
+          const list = productsByCat.get(row.MaDM) || [];
+          list.push(row);
+          productsByCat.set(row.MaDM, list);
+        });
+        const docsByDay = new Map();
+        (data.dailyDocuments || []).forEach(doc => {
+          const key = vnYmd(doc.Ngay);
+          if (!docsByDay.has(key)) docsByDay.set(key, []);
+          docsByDay.get(key).push(doc);
+        });
+        const categoryShare = value => categoryTotal ? percent(Number(value || 0) / categoryTotal * 100) : '0%';
+        const categoryExtras = (_label, index) => {
+          const row = categories[index];
+          if (!row) return null;
+          const products = productsByCat.get(row.MaDM) || [];
+          return {
+            title: row.TenDM,
+            rows: [
+              { name: 'Tỷ trọng', value: categoryShare(row.GiaTriTon), color: '#5376c6' },
+              { name: 'Số lượng tồn', value: qty(row.SoLuongTon), color: '#d8a33e' }
+            ],
+            notes: products.length
+              ? products.map(item => `Top: ${item.TenSP} · ${money(item.GiaTriTon)} · ${qty(item.SLTon)}`)
+              : ['Nhóm này chưa có mặt hàng còn tồn.'],
+            actions: [{ label: 'Mở tồn kho theo nhóm này', nav: 'warehouse-inventory', id: row.TenDM }]
+          };
+        };
+        const dayExtras = (_label, index) => {
+          const row = daily[index];
+          if (!row) return null;
+          const docsOfDay = docsByDay.get(vnYmd(row.Ngay)) || [];
+          const notes = [];
+          if (Number(row.DieuChinhRong)) notes.push(`Điều chỉnh ròng ${qty(row.DieuChinhRong)}`);
+          const nhapCount = Number(row.SoChungTuNhap || 0);
+          const xuatCount = Number(row.SoChungTuXuat || 0);
+          if (nhapCount || xuatCount) notes.push(`${nhapCount} chứng từ nhập · ${xuatCount} chứng từ xuất`);
+          if (docsOfDay.length) {
+            notes.push(...docsOfDay.slice(0, 6).map(doc => `${slipKindLabel(doc)}: ${doc.MaChungTu}`));
+            if (docsOfDay.length > 6) notes.push(`… và ${docsOfDay.length - 6} chứng từ khác trong ngày`);
+          } else if (!nhapCount && !xuatCount) {
+            notes.push('Ngày này chưa có phiếu trong sổ giao dịch kho.');
+          }
+          const actions = [{ label: 'Mở lịch sử kho', nav: 'warehouse-history' }];
+          docsOfDay.slice(0, 3).forEach(doc => {
+            const dest = slipDestination(doc);
+            if (dest.id && dest.nav !== 'warehouse-history') {
+              actions.push({ label: `Mở ${doc.MaChungTu}`, nav: dest.nav, id: dest.id, open: dest.open });
+            }
+          });
+          return { notes, actions };
+        };
+        const donutItems = categories.map((row, index) => {
+          const extra = categoryExtras(row.TenDM, index) || {};
+          return {
+            label: row.TenDM,
+            value: row.GiaTriTon,
+            color: charts.palette?.[index % charts.palette.length],
+            extraRows: [{ name: 'Số lượng tồn', value: qty(row.SoLuongTon), color: '#d8a33e' }],
+            notes: extra.notes || [],
+            actions: extra.actions || []
+          };
+        });
         root.querySelector('#roleReportBody').innerHTML = `${titleBlock(root, data.period, 'Báo cáo kho')}
           ${visuals.kpiGrid([
             { icon: 'i-cash', label: 'GIÁ TRỊ TỒN KHO', value: money(stock.GiaTriTon), hint: `${qty(stock.TongTon)} đơn vị đang tồn` },
@@ -159,10 +351,12 @@
             { icon: 'i-approve', label: 'ĐỢT KIỂM KÊ', value: String(docs.SoKiemKe || 0), hint: `${docs.ChoDuyetKiemKe || 0} đợt chờ duyệt` },
             { icon: 'i-alert', label: 'CHÊNH LỆCH KIỂM KÊ', value: money(docs.GiaTriChenhLechKiemKe), hint: `${qty(m.DieuChinhRong)} điều chỉnh ròng`, tone: Number(docs.GiaTriChenhLechKiemKe) ? 'attention' : '' }
           ], 'primary')}
-          <div class="fly-dashboard-grid report-chart-trio">
-            ${charts.card({ kicker: 'NHẬP – XUẤT – TỒN', title: 'Biến động kho theo ngày', subtitle: 'Tồn cuối ngày được tái lập từ sổ giao dịch kho', badge: `${netMovement >= 0 ? '+' : ''}${qty(netMovement)} ròng`, className: 'executive', chart: charts.line({ labels: daily.map(row => fmtDate(row.Ngay)), series: [{ name: 'Nhập', values: daily.map(row => row.SoLuongNhap), color: '#2c8b66' }, { name: 'Xuất', values: daily.map(row => row.SoLuongXuat), color: '#e1a536' }, { name: 'Tồn cuối ngày', values: daily.map(row => row.TonCuoiNgay), color: '#5376c6' }], formatter: qty, axisFormatter: charts.compact, emptyText: 'Kỳ này chưa phát sinh giao dịch kho.' }) })}
-            ${charts.card({ kicker: 'DANH MỤC', title: 'Giá trị tồn theo danh mục', subtitle: 'Giá trị tồn hiện tại theo nhóm hàng', badge: money(stock.GiaTriTon), className: 'operations', chart: charts.columns({ labels: categories.map(row => row.TenDM), series: [{ name: 'Giá trị tồn', values: categories.map(row => row.GiaTriTon), color: '#2c8b66' }], formatter: money, axisFormatter: charts.compact, emptyText: 'Chưa có dữ liệu tồn kho theo danh mục.' }) })}
-            ${charts.card({ kicker: 'CƠ CẤU TỒN', title: 'Tỷ trọng giá trị tồn kho', subtitle: 'Phân bổ vốn hàng hóa theo danh mục', badge: `${categories.length} danh mục`, className: 'summary', chart: charts.donut({ items: categories.map((row, index) => ({ label: row.TenDM, value: row.GiaTriTon, color: charts.palette?.[index % charts.palette.length] })), centerLabel: 'Giá trị tồn', centerValue: money(stock.GiaTriTon), formatter: money, emptyText: 'Chưa có giá trị tồn kho.' }) })}
+          <div class="fly-dashboard-grid report-chart-pair report-warehouse-visuals">
+            ${charts.card({ kicker: 'NHẬP – XUẤT – TỒN', title: 'Biến động kho theo ngày', subtitle: 'Tồn cuối ngày đọc trục phải, được tái lập từ sổ giao dịch kho', badge: `${netMovement >= 0 ? '+' : ''}${qty(netMovement)} ròng`, className: 'executive', chart: charts.line({ labels: daily.map(row => fmtDate(row.Ngay)), series: [{ name: 'Nhập', values: daily.map(row => row.SoLuongNhap), color: '#2c8b66', dash: false }, { name: 'Xuất', values: daily.map(row => row.SoLuongXuat), color: '#e1a536', dash: true }, { name: 'Tồn cuối ngày', values: daily.map(row => row.TonCuoiNgay), color: '#5376c6', dash: true, axis: 'right' }], formatter: qty, axisFormatter: charts.compact, emptyText: 'Kỳ này chưa phát sinh giao dịch kho.', dualAxis: true, alwaysHit: true, emphasis: true, pointExtras: dayExtras, markerNote: 'Nhập/Xuất đọc trục trái · Tồn cuối đọc trục phải. Bấm ngày để xem số và phiếu; bấm ra ngoài hoặc Esc để đóng.' }) })}
+            ${charts.card({ kicker: 'DANH MỤC', title: 'Giá trị tồn theo danh mục', subtitle: 'Giá trị tồn hiện tại theo nhóm hàng', badge: money(stock.GiaTriTon), className: 'operations', chart: charts.columns({ labels: categories.map(row => row.TenDM), series: [{ name: 'Giá trị tồn', values: categories.map(row => row.GiaTriTon), color: '#2c8b66' }], formatter: money, axisFormatter: charts.compact, emptyText: 'Chưa có dữ liệu tồn kho theo danh mục.', labelWrap: true, emphasizeBars: true, alwaysHit: true, pointExtras: categoryExtras, markerNote: 'Bấm cột để xem tỷ trọng, số lượng và mặt hàng chiếm vốn lớn nhất.' }) })}
+          </div>
+          <div class="fly-dashboard-grid report-chart-composition">
+            ${charts.card({ kicker: 'CƠ CẤU TỒN', title: 'Tỷ trọng giá trị tồn kho', subtitle: 'Phân bổ vốn hàng hóa theo danh mục', badge: `${categories.length} danh mục`, className: 'summary wide', chart: charts.donut({ items: donutItems, centerLabel: 'Giá trị tồn', centerValue: money(categoryTotal || stock.GiaTriTon), formatter: money, emptyText: 'Chưa có giá trị tồn kho.' }) })}
           </div>
           <div class="report-bottom-grid">
             <article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>ƯU TIÊN BỔ SUNG</p><h2>Sản phẩm dưới tồn tối thiểu</h2></div><span class="report-card-count">${stock.TonThap || 0}</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>SẢN PHẨM</th><th>TỒN</th><th>THIẾU</th></tr></thead><tbody>${lowStock.length ? lowStock.slice(0, 6).map(row => `<tr><td>${visuals.person(row.TenSP, `${row.MaSP} · ${row.DonViTinh}`)}</td><td class="num">${qty(row.SLTon)}</td><td class="num"><strong>${qty(Math.max(0, Number(row.TonKhoToiThieu) - Number(row.SLTon)))}</strong></td></tr>`).join('') : '<tr><td colspan="3" class="warehouse-empty">Không có mặt hàng dưới tồn tối thiểu.</td></tr>'}</tbody></table></div></article>
@@ -176,6 +370,7 @@
           </div>
           ${doiTraPanel(data.doiTra, { title: 'Hàng khách trả đã/đang kiểm', subtitle: 'Nhập lại = cộng tồn bán. Loại bỏ/vứt = không cộng tồn vì đã trừ lúc bán — không trừ lần nữa. Chờ kiểm tra là việc của Thủ kho.', productTitle: 'Mặt hàng trả về kho' })}`;
         window.FLY_REPORT_LAYOUT?.enhance(root.querySelector('#roleReportBody'), { actor: 'Thủ kho', analysisTitle: 'Biến động và sức khỏe tồn kho', detailTitle: 'Mặt hàng cần bổ sung' });
+        bindWarehouseChartActions(charts, context);
         enableReportActions(root);
       } catch (error) {
         context.showToast(error.message, 'error');
@@ -204,12 +399,11 @@
       const m = currentReport.movement || {}; const stock = currentReport.stock || {};
       downloadCsv(`bao-cao-kho-${currentReport.period.period}.csv`, [['BÁO CÁO NHẬP – XUẤT – TỒN', currentReport.period.label], ['Nhập trong kỳ', m.SoLuongNhap], ['Xuất trong kỳ', m.SoLuongXuat], ['Tồn hiện tại', stock.TongTon], ['Giá trị tồn', stock.GiaTriTon], [], ['Mã SP', 'Sản phẩm', 'ĐVT', 'Tồn', 'Tối thiểu', 'Thiếu'], ...(currentReport.lowStock || []).map(row => [row.MaSP, row.TenSP, row.DonViTinh, row.SLTon, row.TonKhoToiThieu, Math.max(0, Number(row.TonKhoToiThieu) - Number(row.SLTon))]), ...returnCsvRows(currentReport.doiTra)]);
     });
-    await loadReport();
   };
 
   const initSalesReport = async (root, context) => {
     let currentReport = null;
-    root.innerHTML = `${heading('THU NGÂN / UC22', 'Báo cáo ca và bán hàng của bạn', 'Chỉ hóa đơn, phương thức thanh toán, hoàn tiền và ca do chính bạn lập. Không gồm doanh thu thu ngân khác.')}${periodCard()}`;
+    root.innerHTML = `${heading('THU NGÂN / BÁO CÁO', 'Báo cáo ca và bán hàng của bạn', 'Chỉ hóa đơn, phương thức thanh toán, hoàn tiền và ca do chính bạn lập. Không gồm doanh thu thu ngân khác.')}${periodCard()}`;
     let loadReport = async () => {};
     const selected = bindPeriod(root, () => { loadReport(); });
     loadReport = async () => {
@@ -229,9 +423,16 @@
         const alerts = data.alerts || {};
         const visuals = ui();
         const charts = chartUi();
+        charts.setActionHandler?.(null);
+        const trend = salesTrend(daily, data.period);
         const netRevenue = Number(s.DoanhThuHoaDon || 0) - Number(s.TienHoan || 0);
         const electronic = Number(m.QR || 0) + Number(m.The || 0) + Number(m.ChuyenKhoan || 0);
         const averageOrder = Number(s.SoHoaDon || 0) ? netRevenue / Number(s.SoHoaDon) : 0;
+        const trendSeries = [{ name: 'Doanh thu hóa đơn', values: trend.rows.map(row => row.DoanhThuHoaDon), color: '#25845f' }, { name: 'Doanh thu thuần', values: trend.rows.map(row => row.DoanhThuThuan), color: '#4f73c5' }];
+        const trendChartOpts = { labels: trend.labels, series: trendSeries, formatter: money, axisFormatter: charts.compact, emptyText: 'Kỳ này bạn chưa có hóa đơn hoàn thành.' };
+        const trendChart = (trend.type === 'month' || trend.grain === 'month')
+          ? charts.columns({ ...trendChartOpts, markerNote: 'Cột xanh = doanh thu hóa đơn, cột xanh dương = doanh thu thuần — hai cột đứng cạnh nhau kể cả khi hai số bằng nhau. Ngày không bán không vẽ cột. Bấm vào cột hoặc vùng ngày để xem cả hai số.' })
+          : charts.line({ ...trendChartOpts, markerNote: 'Hai chấm cạnh nhau là hai doanh thu của cùng một ngày. Ngày không bán không gắn chấm. Bấm vào ngày để xem cả hai số.' });
         root.querySelector('#roleReportBody').innerHTML = `${titleBlock(root, data.period, 'Bán hàng cá nhân')}
           ${visuals.kpiGrid([
             { icon: 'i-trend', label: 'DOANH THU THUẦN', value: money(netRevenue), hint: `${s.SoHoaDon || 0} hóa đơn hoàn thành` },
@@ -242,7 +443,7 @@
             { icon: 'i-refresh', label: 'ĐỔI TRẢ HOÀN THÀNH', value: String(s.SoPhieu || 0), hint: `Đã hoàn ${money(s.TienHoan)}`, tone: Number(s.SoPhieu) ? 'attention' : '' }
           ], 'primary')}
           <div class="fly-dashboard-grid report-chart-trio">
-            ${charts.card({ kicker: 'XU HƯỚNG CÁ NHÂN', title: 'Doanh thu bán hàng theo ngày', subtitle: 'Doanh thu hóa đơn và doanh thu sau hoàn tiền', badge: money(netRevenue), className: 'executive', chart: charts.line({ labels: daily.map(row => fmtDate(row.Ngay)), series: [{ name: 'Doanh thu hóa đơn', values: daily.map(row => row.DoanhThuHoaDon), color: '#25845f' }, { name: 'Doanh thu thuần', values: daily.map(row => row.DoanhThuThuan), color: '#4f73c5' }], formatter: money, axisFormatter: charts.compact, emptyText: 'Kỳ này bạn chưa có hóa đơn hoàn thành.' }) })}
+            ${charts.card({ kicker: 'XU HƯỚNG CÁ NHÂN', title: trend.title, subtitle: 'Doanh thu hóa đơn và doanh thu sau hoàn tiền', badge: money(netRevenue), className: 'executive', chart: trendChart })}
             ${charts.card({ kicker: 'THANH TOÁN', title: 'Cơ cấu phương thức thu tiền', subtitle: 'Chỉ giao dịch thành công của hóa đơn hoàn thành', badge: `${s.SoHoaDon || 0} hóa đơn`, className: 'summary', chart: charts.donut({ items: [{ label: 'Tiền mặt', value: m.TienMat, color: '#25845f' }, { label: 'QR', value: m.QR, color: '#4f73c5' }, { label: 'Thẻ', value: m.The, color: '#7b61b8' }, { label: 'Chuyển khoản', value: m.ChuyenKhoan, color: '#d8a33e' }], centerLabel: 'Đã thu', centerValue: money(Number(m.TienMat || 0) + Number(m.QR || 0) + Number(m.The || 0) + Number(m.ChuyenKhoan || 0)), formatter: money, emptyText: 'Kỳ này bạn chưa có thanh toán thành công.' }) })}
             ${charts.card({ kicker: 'SẢN PHẨM', title: 'Top sản phẩm bán chạy', subtitle: 'Xếp theo doanh thu hóa đơn của bạn', badge: `${topProducts.length} sản phẩm`, className: 'ranking', chart: charts.horizontal({ items: topProducts.map(row => ({ label: row.TenSP, value: row.DoanhThu, display: money(row.DoanhThu) })), formatter: money, emptyText: 'Kỳ này bạn chưa bán sản phẩm nào.' }) })}
           </div>
@@ -277,6 +478,7 @@
       if (!currentReport) return;
       const s = currentReport.sales || {}; const methods = currentReport.methods || {}; const shifts = currentReport.shifts || [];
       const netRevenue = Number(s.DoanhThuHoaDon || 0) - Number(s.TienHoan || 0);
+      const trend = salesTrend(currentReport.daily || [], currentReport.period);
       window.FLY_PRINT.show({
         variant: 'report', orientation: 'landscape', title: 'BÁO CÁO CA VÀ BÁN HÀNG CÁ NHÂN', number: currentReport.period.period,
         documentDate: new Date(), status: currentReport.period.label,
@@ -284,7 +486,7 @@
         columns: [{ label: 'Mã ca', key: 'MaCa' }, { label: 'Mở ca', key: 'ThoiGianBatDau', format: 'date' }, { label: 'Số HĐ', key: 'SoHoaDon', align: 'right' }, { label: 'Doanh thu', key: 'DoanhThu', format: 'money', align: 'right' }, { label: 'Số đổi trả', key: 'SoDoiTra', align: 'right' }, { label: 'Tiền hoàn', key: 'TienHoan', format: 'money', align: 'right' }, { label: 'Trạng thái', key: 'TrangThai' }],
         rows: shifts,
         summary: [{ label: 'Doanh thu thuần', value: netRevenue, format: 'money' }, { label: 'Hóa đơn hoàn thành', value: s.SoHoaDon }, { label: 'Tiền hoàn', value: s.TienHoan, format: 'money' }, { label: 'Tiền mặt', value: methods.TienMat, format: 'money' }],
-        chart: { title: 'Doanh thu hóa đơn và doanh thu thuần theo ngày', rows: currentReport.daily || [], labelKey: 'Ngay', labelFormat: 'date', series: [{ name: 'Doanh thu hóa đơn', key: 'DoanhThuHoaDon', color: '#b76045' }, { name: 'Doanh thu thuần', key: 'DoanhThuThuan', color: '#4f72bb' }] },
+        chart: { title: trend.printTitle, rows: trend.rows, labelKey: 'label', series: [{ name: 'Doanh thu hóa đơn', key: 'DoanhThuHoaDon', color: '#b76045' }, { name: 'Doanh thu thuần', key: 'DoanhThuThuan', color: '#4f72bb' }] },
         note: 'Báo cáo chỉ gồm hóa đơn, hoàn tiền và ca của Thu ngân đang đăng nhập; không bao gồm doanh thu của nhân viên khác.',
         signatures: ['Thu ngân lập báo cáo', 'Kế toán đối soát']
       });
@@ -294,12 +496,11 @@
       const s = currentReport.sales || {}; const m = currentReport.methods || {};
       downloadCsv(`bao-cao-thu-ngan-${currentReport.period.period}.csv`, [['BÁO CÁO CA VÀ BÁN HÀNG CÁ NHÂN', currentReport.period.label], ['Hóa đơn', s.SoHoaDon], ['Doanh thu hóa đơn', s.DoanhThuHoaDon], ['Tiền hoàn', s.TienHoan], ['Tiền mặt', m.TienMat], ['QR', m.QR], ['Thẻ', m.The], ['Chuyển khoản', m.ChuyenKhoan], [], ['Mã ca', 'Mở ca', 'Đóng ca', 'Hóa đơn', 'Doanh thu', 'Đổi trả', 'Tiền hoàn', 'Trạng thái'], ...(currentReport.shifts || []).map(row => [row.MaCa, fmtDateTime(row.ThoiGianBatDau), fmtDateTime(row.ThoiGianKetThuc), row.SoHoaDon, row.DoanhThu, row.SoDoiTra, row.TienHoan, row.TrangThai]), ...returnCsvRows(currentReport.doiTra)]);
     });
-    await loadReport();
   };
 
   const initPurchasingReport = async (root, context) => {
     let currentReport = null;
-    root.innerHTML = `${heading('MUA HÀNG / UC14', 'Báo cáo đơn mua và giao hàng', 'Theo dõi đơn đã lập, giá trị theo trạng thái, số lượng còn thiếu và Nhà cung cấp trong kỳ.')}${periodCard()}`;
+    root.innerHTML = `${heading('MUA HÀNG / BÁO CÁO', 'Báo cáo đơn mua và giao hàng', 'Theo dõi đơn đã lập, giá trị theo trạng thái, số lượng còn thiếu và Nhà cung cấp trong kỳ.')}${periodCard()}`;
     let loadReport = async () => {};
     const selected = bindPeriod(root, () => { loadReport(); });
     loadReport = async () => {
@@ -319,6 +520,7 @@
         const actionOrders = data.actionOrders || [];
         const visuals = ui();
         const charts = chartUi();
+        charts.setActionHandler?.(null);
         const onTimeRate = Number(s.SoDonDaHoanTat || 0) ? Number(s.SoDonDungHan || 0) / Number(s.SoDonDaHoanTat) * 100 : null;
         root.querySelector('#roleReportBody').innerHTML = `${titleBlock(root, data.period, 'Mua hàng')}
           ${visuals.kpiGrid([
@@ -375,7 +577,6 @@
       const s = currentReport.summary || {};
       downloadCsv(`bao-cao-mua-hang-${currentReport.period.period}.csv`, [['BÁO CÁO ĐƠN MUA VÀ GIAO HÀNG', currentReport.period.label], ['Đơn mua hợp lệ', s.SoDonMua], ['Giá trị đơn mua', s.GiaTriDonMua], ['Phiếu nhập', s.SoPhieuNhap], ['Giá trị nhập', s.GiaTriNhap], ['Số lượng còn thiếu', s.SLConThieu], [], ['Mã NCC', 'Nhà cung cấp', 'Số đơn', 'Giá trị'], ...(currentReport.suppliers || []).map(row => [row.MaNCC, row.TenNCC, row.SoDon, row.GiaTri]), ...returnCsvRows(currentReport.doiTra)]);
     });
-    await loadReport();
   };
 
   window.FLY_ROLE_PAGES = {

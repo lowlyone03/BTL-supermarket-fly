@@ -43,7 +43,13 @@ const listShifts = async (req, res) => {
 const getShift = async (req, res) => {
     try {
         const pool = await poolPromise;
-        const maCa = clean(req.params.id, 20);
+        let maCa = clean(req.params.id, 20);
+        if (/^PT/i.test(maCa)) {
+            const found = await pool.request().input('Id', sql.VarChar, maCa)
+                .query('SELECT MaCa FROM PhieuThu WHERE MaPT=@Id');
+            if (!found.recordset.length) return res.status(404).json({ message: 'Không tìm thấy Phiếu thu.' });
+            maCa = found.recordset[0].MaCa;
+        }
         const header = await pool.request().input('MaCa', sql.VarChar, maCa).query(`
             SELECT ca.*,nv.TenNV,q.TenQuay,pt.MaPT,pt.LyDoChenhLech,pt.TrangThai TrangThaiPhieuThu
             FROM CaLamViec ca JOIN NhanVien nv ON nv.MaNV=ca.MaNV

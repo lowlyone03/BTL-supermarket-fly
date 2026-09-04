@@ -48,7 +48,7 @@ const inventoryQuery = `
     JOIN DanhMuc dm ON dm.MaDM = sp.MaDM
     LEFT JOIN TonKho tk ON tk.MaSP = sp.MaSP AND tk.MaKho = @MaKho
     WHERE sp.TrangThai = N'Đang bán'
-      AND (@TuKhoa = N'' OR sp.MaSP LIKE @Mau COLLATE Latin1_General_100_CI_AI OR sp.TenSP LIKE @Mau COLLATE Latin1_General_100_CI_AI OR sp.MaVach LIKE @Mau COLLATE Latin1_General_100_CI_AI)
+      AND (@TuKhoa = N'' OR sp.MaSP LIKE @Mau COLLATE Latin1_General_100_CI_AI OR sp.TenSP LIKE @Mau COLLATE Latin1_General_100_CI_AI OR sp.MaVach LIKE @Mau COLLATE Latin1_General_100_CI_AI OR dm.TenDM LIKE @Mau COLLATE Latin1_General_100_CI_AI)
       AND (@CanBoSung = 0 OR ISNULL(tk.SLTon, 0) <= sp.TonKhoToiThieu)
     ORDER BY CASE WHEN ISNULL(tk.SLTon, 0) <= sp.TonKhoToiThieu THEN 0 ELSE 1 END,
              ThieuSoVoiDinhMuc DESC, sp.TenSP`;
@@ -172,7 +172,14 @@ const getRequestDetail = (purchasing = false) => async (req, res) => {
             SELECT ct.*, sp.TenSP, sp.MaVach, sp.DonViTinh, sp.GiaNhap
             FROM ChiTietDeNghi ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
             WHERE ct.MaDN=@MaDN ORDER BY sp.TenSP`);
-        res.json({ request: header.recordset[0], lines: details.recordset });
+        const audit = await pool.request().input('MaBanGhi', sql.VarChar, req.params.id).query(`
+            SELECT nk.ThoiGian, nk.HanhDong, nk.NoiDung, n.TenNV
+            FROM NhatKy nk
+            LEFT JOIN TaiKhoan t ON t.MaTK=nk.MaTK
+            LEFT JOIN NhanVien n ON n.MaNV=t.MaNV
+            WHERE nk.BangLienQuan=N'DeNghiMuaHang' AND nk.MaBanGhi=@MaBanGhi
+            ORDER BY nk.ThoiGian`);
+        res.json({ request: header.recordset[0], lines: details.recordset, audit: audit.recordset });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải chi tiết đề nghị.' });
@@ -522,16 +529,20 @@ const getHistory = async (req, res) => {
                 detail: row.GhiChu || null,
                 amount: row.TongTien
             })),
-            ...issues.recordset.map(row => ({
-                kind: 'phieu-xuat',
-                at: row.NgayXuat,
-                recordId: row.MaPX,
-                title: `Phiếu xuất ${row.MaPX}`,
-                subtitle: `${row.LoaiXuat} · ${row.TrangThai}`,
-                tone: /hủy|hỏng|trả/i.test(row.LoaiXuat || '') ? 'warn' : 'info',
-                status: row.TrangThai,
-                detail: row.GhiChu || null
-            })),
+            ...issues.recordset.map(row => {
+                const related = String(row.GhiChu || '').match(/Nguồn đổi trả\s+(DT[A-Z0-9]+)/i);
+                return {
+                    kind: 'phieu-xuat',
+                    at: row.NgayXuat,
+                    recordId: row.MaPX,
+                    title: `Phiếu xuất ${row.MaPX}`,
+                    subtitle: `${row.LoaiXuat} · ${row.TrangThai}`,
+                    tone: /hủy|hỏng|trả/i.test(row.LoaiXuat || '') ? 'warn' : 'info',
+                    status: row.TrangThai,
+                    detail: row.GhiChu || null,
+                    relatedReturnId: related ? related[1] : null
+                };
+            }),
             ...counts.recordset.map(row => ({
                 kind: 'kiem-ke',
                 at: row.NgayKiemKe,
@@ -559,7 +570,7 @@ const getHistory = async (req, res) => {
             if (kind !== 'all' && item.kind !== kind) return false;
             if (!search) return true;
             const blob = [
-                item.title, item.subtitle, item.status, item.detail, item.hangDiDau, item.recordId,
+                item.title, item.subtitle, item.status, item.detail, item.hangDiDau, item.recordId, item.relatedReturnId,
                 item.ticket?.LyDo, item.ticket?.KetQuaKiemTra, item.ticket?.GhiChu,
                 ...(item.products || []).map(line => `${line.TenSP} ${line.MaSP}`)
             ].join(' ');

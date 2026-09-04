@@ -157,15 +157,57 @@ const getIssueDetail = async (req, res, ownerOnly) => {
                     LEFT JOIN PhieuNhap pn ON pn.MaPN=px.MaPN
                     WHERE px.MaPX=@MaPX AND (@ChiCuaToi=0 OR px.MaNV=@MaNV)`);
         if (!header.recordset.length) return res.status(404).json({ message: 'Không tìm thấy Phiếu xuất kho.' });
-        const lines = await pool.request()
-            .input('MaPX', sql.VarChar, req.params.id)
-            .query(`SELECT ct.*,sp.TenSP,sp.DonViTinh,sp.MaVach,dm.TenDM,ISNULL(tk.SLTon,0) SLTonHienTai
-                    FROM ChiTietPhieuXuat ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
-                    JOIN DanhMuc dm ON dm.MaDM=sp.MaDM
-                    JOIN PhieuXuat px ON px.MaPX=ct.MaPX
-                    LEFT JOIN TonKho tk ON tk.MaKho=px.MaKho AND tk.MaSP=ct.MaSP
-                    WHERE ct.MaPX=@MaPX ORDER BY sp.TenSP`);
-        res.json({ issue: header.recordset[0], lines: lines.recordset });
+        const issue = header.recordset[0];
+        const relatedMatch = String(issue.GhiChu || '').match(/Nguồn đổi trả\s+(DT[A-Z0-9]+)/i)
+            || String(issue.GhiChu || '').match(/\b(DT\d{8,})\b/);
+        const maDT = relatedMatch ? relatedMatch[1] : null;
+        const cashierReason = (String(issue.GhiChu || '').match(/Lý do thu ngân:\s*(.+?)(?:\.|$)/i) || [])[1] || null;
+        const [lines, audit, stockMoves, related] = await Promise.all([
+            pool.request()
+                .input('MaPX', sql.VarChar, req.params.id)
+                .query(`SELECT ct.*,sp.TenSP,sp.DonViTinh,sp.MaVach,dm.TenDM,ISNULL(tk.SLTon,0) SLTonHienTai
+                        FROM ChiTietPhieuXuat ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
+                        JOIN DanhMuc dm ON dm.MaDM=sp.MaDM
+                        JOIN PhieuXuat px ON px.MaPX=ct.MaPX
+                        LEFT JOIN TonKho tk ON tk.MaKho=px.MaKho AND tk.MaSP=ct.MaSP
+                        WHERE ct.MaPX=@MaPX ORDER BY sp.TenSP`),
+            pool.request()
+                .input('MaBanGhi', sql.VarChar, req.params.id)
+                .query(`SELECT nk.ThoiGian, nk.HanhDong, nk.NoiDung, n.TenNV
+                        FROM NhatKy nk
+                        LEFT JOIN TaiKhoan t ON t.MaTK=nk.MaTK
+                        LEFT JOIN NhanVien n ON n.MaNV=t.MaNV
+                        WHERE nk.BangLienQuan=N'PhieuXuat' AND nk.MaBanGhi=@MaBanGhi
+                        ORDER BY nk.ThoiGian`),
+            pool.request()
+                .input('MaPX', sql.VarChar, req.params.id)
+                .query(`SELECT gd.LoaiGD, gd.SoLuong, gd.NgayGD, gd.GhiChu, sp.MaSP, sp.TenSP, nv.TenNV NguoiGhiSo
+                        FROM GiaoDichKho gd
+                        JOIN SanPham sp ON sp.MaSP=gd.MaSP
+                        JOIN NhanVien nv ON nv.MaNV=gd.MaNV
+                        WHERE gd.LoaiChungTu=N'PhieuXuat' AND gd.MaChungTu=@MaPX
+                        ORDER BY gd.NgayGD`),
+            maDT
+                ? pool.request().input('MaDT', sql.VarChar, maDT).query(`
+                    SELECT dt.MaDT, dt.LyDo, dt.TrangThai, dt.KetQuaKiemTra, dt.MaHD
+                    FROM PhieuDoiTra dt WHERE dt.MaDT=@MaDT`)
+                : Promise.resolve({ recordset: [] })
+        ]);
+        const confirmLog = audit.recordset.find(row => /xác nhận xuất/i.test(row.HanhDong || ''));
+        const relatedTicket = related.recordset[0] || null;
+        res.json({
+            issue: {
+                ...issue,
+                MaDT: relatedTicket?.MaDT || maDT,
+                LyDoThuNgan: cashierReason || relatedTicket?.LyDo || null,
+                NguoiXacNhan: confirmLog?.TenNV || (issue.TrangThai === 'Đã xác nhận' ? issue.NguoiLap : null),
+                NgayXacNhan: confirmLog?.ThoiGian || stockMoves.recordset[0]?.NgayGD || null
+            },
+            lines: lines.recordset,
+            audit: audit.recordset,
+            stockMoves: stockMoves.recordset,
+            relatedReturn: relatedTicket
+        });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải chi tiết Phiếu xuất kho.' });

@@ -24,6 +24,7 @@ router.get('/finance/payables', requirePermission('UC10'), adminController.getPa
 router.get('/finance/payables/:id', requirePermission('UC10'), adminController.getPayableDetail);
 router.get('/finance/sales-shifts', requirePermission('UC10'), adminController.getSalesShifts);
 router.get('/reports/financial-summary', requirePermission('UC10'), reportController.getFinancialReport);
+router.get('/reports/financial-documents', requirePermission('UC10'), reportController.getReportDocuments);
 router.get('/reports/store-operations', requirePermission('UC10'), reportController.getStoreOperationsReport);
 router.get('/reports/store-profit-loss', requirePermission('UC10'), reportController.getStoreProfitLossReport);
 router.post('/reports/store-profit-loss/plan', requirePermission('UC10'), reportController.postStoreProfitLossPlan);

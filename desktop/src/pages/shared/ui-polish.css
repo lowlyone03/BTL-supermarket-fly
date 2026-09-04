@@ -708,6 +708,11 @@ select:disabled,
   border-color: transparent;
   background: linear-gradient(135deg, #2d6a4f 0%, #1b4332 100%);
   box-shadow: 0 4px 14px rgba(45, 106, 79, .25);
+  color: #fff;
+}
+.gross-profit-steps .result span,
+.gross-profit-steps .result strong {
+  color: #fff;
 }
 
 /* ── 6. Financial Report – summary metric cards ── */

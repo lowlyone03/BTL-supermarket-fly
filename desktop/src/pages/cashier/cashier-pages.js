@@ -10,6 +10,25 @@
   const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
   const money = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
   const unaccent = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
+  const posSearchHaystack = item => unaccent(`${item.MaSP} ${item.MaVach || ''} ${item.TenSP} ${item.TenDM || ''}`);
+  const posSearchTokens = query => unaccent(query).trim().split(/\s+/).filter(Boolean);
+  const productMatchesPosFilter = (item, query, category) => {
+    if (category && String(item.TenDM || '').trim() !== category) return false;
+    const tokens = posSearchTokens(query);
+    if (!tokens.length) return true;
+    const hay = posSearchHaystack(item);
+    return tokens.every(token => hay.includes(token));
+  };
+  const findExactPosProduct = (products, raw) => {
+    const trimmed = String(raw ?? '').trim();
+    if (!trimmed) return null;
+    const needle = unaccent(trimmed);
+    return products.find(item => {
+      const maVach = String(item.MaVach || '').trim();
+      const maSP = String(item.MaSP || '').trim();
+      return maVach === trimmed || maSP === trimmed || unaccent(maVach) === needle || unaccent(maSP) === needle;
+    }) || null;
+  };
   const fmtTime = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
   const heading = (kicker, title, subtitle, action = '') => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(kicker)}</p><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div>${action}</header>`;
   const avatar = text => window.FLY_UI?.avatar(text) || '';
@@ -343,21 +362,24 @@
       });
     };
     const render = () => {
-      const products = catalog.products;
+      const products = catalog.products || [];
       const payable = payableAmount();
       root.innerHTML = `${heading('BÁN HÀNG TẠI QUẦY', 'Lập hóa đơn và thanh toán', 'Chọn danh mục, quét mã hoặc bấm sản phẩm. Hóa đơn chỉ hoàn thành sau khi thanh toán đủ.', '<button class="warehouse-secondary" id="backShift">Quay lại ca</button>')}
         <section class="cashier-pos-layout">
           <article class="warehouse-table-card cashier-product-panel">
-            <div class="warehouse-panel-title"><div><p>SẢN PHẨM</p><h2>Quét mã hoặc tìm kiếm</h2></div><input id="posSearch" type="search" value="${esc(searchQuery)}" placeholder="Mã vạch, mã hoặc tên sản phẩm"></div>
-            <div class="pos-category-bar"><button type="button" class="pos-chip ${categoryFilter ? '' : 'active'}" data-cat="">Tất cả</button>${[...new Set(products.map(item => item.TenDM).filter(Boolean))].map(name => `<button type="button" class="pos-chip ${categoryFilter === name ? 'active' : ''}" data-cat="${esc(name)}">${esc(name)}</button>`).join('')}</div>
-            <div class="cashier-product-grid">${products.map(item => `<button type="button" class="cashier-product" data-id="${esc(item.MaSP)}" data-cat="${esc(item.TenDM || '')}" data-search="${esc(unaccent(`${item.MaSP} ${item.MaVach || ''} ${item.TenSP} ${item.TenDM || ''}`))}" ${Number(item.SLTon) <= 0 ? 'disabled' : ''}>${productPhoto(item, 'pos-product-photo')}<div class="cashier-product-copy"><strong>${esc(item.TenSP)}</strong><span>${money(item.GiaBan)}</span><small>${esc(item.TenDM || item.MaSP)} · còn ${item.SLTon} ${esc(item.DonViTinh)}</small><div class="pos-stock ${Number(item.SLTon) <= 5 ? 'low' : ''}"><i style="width:${Math.max(8, Math.min(100, Number(item.SLTon) * 5))}%"></i></div></div></button>`).join('')}</div>
-            <p class="cashier-search-empty" id="posEmpty" hidden>Không tìm thấy sản phẩm khớp. Thử mã vạch, mã SP hoặc một phần tên (không cần dấu).</p>
+            <div class="warehouse-panel-title"><div><p>SẢN PHẨM</p><h2>Quét mã hoặc tìm kiếm</h2></div><form class="cashier-pos-search" id="posSearchForm" autocomplete="off"><input id="posSearch" type="search" value="${esc(searchQuery)}" placeholder="Mã vạch, mã hoặc tên sản phẩm" aria-label="Tìm sản phẩm"><button type="submit" class="warehouse-icon-button" id="posSearchBtn" title="Tìm sản phẩm" aria-label="Tìm sản phẩm"><svg><use href="#i-search"></use></svg></button></form></div>
+            <div class="pos-category-bar"><button type="button" class="pos-chip ${categoryFilter ? '' : 'active'}" data-cat="">Tất cả</button>${[...new Set(products.map(item => String(item.TenDM || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')).map(name => `<button type="button" class="pos-chip ${categoryFilter === name ? 'active' : ''}" data-cat="${esc(name)}">${esc(name)}</button>`).join('')}</div>
+            <div class="cashier-product-grid">${products.map(item => {
+        const show = productMatchesPosFilter(item, searchQuery, categoryFilter);
+        return `<button type="button" class="cashier-product${show ? '' : ' pos-filtered-out'}" data-id="${esc(item.MaSP)}" data-cat="${esc(item.TenDM || '')}" ${show ? '' : 'hidden'} ${Number(item.SLTon) <= 0 ? 'disabled' : ''}>${productPhoto(item, 'pos-product-photo')}<div class="cashier-product-copy"><strong>${esc(item.TenSP)}</strong><span>${money(item.GiaBan)}</span><small>${esc(item.TenDM || item.MaSP)} · còn ${item.SLTon} ${esc(item.DonViTinh)}</small><div class="pos-stock ${Number(item.SLTon) <= 5 ? 'low' : ''}"><i style="width:${Math.max(8, Math.min(100, Number(item.SLTon) * 5))}%"></i></div></div></button>`;
+      }).join('')}</div>
+            <p class="cashier-search-empty" id="posEmpty" ${products.some(item => productMatchesPosFilter(item, searchQuery, categoryFilter)) ? 'hidden' : ''}>Không tìm thấy sản phẩm khớp. Thử mã vạch, mã SP, một phần tên (không cần dấu) hoặc chọn danh mục khác.</p>
           </article>
           <article class="warehouse-table-card cashier-cart-panel">
             <div class="warehouse-panel-title"><div><p>${draftId ? `NHÁP ${esc(draftId)}` : 'HÓA ĐƠN NHÁP'}</p><h2>Giỏ hàng</h2></div><span class="status-pill draft">${cart.size} mặt hàng</span></div>
             <div class="cashier-customer-row"><div class="cashier-customer-who">${avatar(customer?.TenKH || 'K')}<div><strong>${customer ? esc(customer.TenKH) : 'Khách vãng lai'}</strong><small>${customer ? `${esc(customer.SDT || '')} · ${esc(customer.HangThanhVien)} · ${customer.DiemTichLuy} điểm` : 'Không tích điểm'}</small></div></div><button class="warehouse-secondary" id="selectCustomer">Chọn khách</button></div>
             <div class="cashier-pos-extras"><label>Khuyến mãi<select id="promoSelect"><option value="">Không áp dụng</option>${(catalog.promotions || []).map(item => `<option value="${esc(item.MaKM)}" ${maKM === item.MaKM ? 'selected' : ''}>${esc(item.TenKM)}</option>`).join('')}</select></label>${customer ? `<label>Dùng điểm<input id="pointInput" type="number" min="0" max="${customer.DiemTichLuy}" value="${diemSuDung}"></label>` : ''}</div>
-            ${(catalog.promotions || []).length ? '' : '<small class="cashier-quote-break">Chưa có KM hiệu lực. Quản lý tạo/ngừng chương trình ở menu Khuyến mãi (UC04).</small>'}
+            ${(catalog.promotions || []).length ? '' : '<small class="cashier-quote-break">Chưa có KM hiệu lực. Quản lý tạo/ngừng chương trình ở menu Khuyến mãi.</small>'}
             <div class="cashier-cart-lines">${cart.size ? [...cart.values()].map(line => `<div class="cashier-cart-line">${productPhoto(line, 'cart-product-photo')}<div><strong>${esc(line.TenSP)}</strong><small>${money(line.GiaBan)} × ${line.SoLuong}</small></div><div class="cashier-cart-qty"><button data-action="minus" data-id="${line.MaSP}">−</button><span>${line.SoLuong}</span><button data-action="plus" data-id="${line.MaSP}">+</button></div><strong>${money(Number(line.GiaBan) * line.SoLuong)}</strong></div>`).join('') : '<div class="warehouse-empty">Quét hoặc chọn sản phẩm để bắt đầu.</div>'}</div>
             <div class="cashier-cart-total"><span>PHẢI THANH TOÁN</span><strong>${money(payable)}</strong></div>
             ${quote ? `<small class="cashier-quote-break">Tiền hàng ${money(quote.TongTienHang)} · Giảm ${money(quote.TienGiamGia)} · Điểm ${money(quote.TienDiemQuyDoi)}</small>` : ''}
@@ -371,35 +393,45 @@
         cart.set(product.MaSP, { ...product, SoLuong: next }); await refreshQuote(); render();
       };
       const applySearch = () => {
-        const query = unaccent(searchQuery);
         let visible = 0;
         root.querySelectorAll('.cashier-product').forEach(button => {
-          const show = (!query || button.dataset.search.includes(query)) && (!categoryFilter || button.dataset.cat === categoryFilter);
+          const product = products.find(item => item.MaSP === button.dataset.id);
+          const show = product
+            ? productMatchesPosFilter(product, searchQuery, categoryFilter)
+            : (!categoryFilter || button.dataset.cat === categoryFilter) && (!searchQuery.trim() || unaccent(button.textContent).includes(unaccent(searchQuery)));
           button.hidden = !show;
+          button.classList.toggle('pos-filtered-out', !show);
           if (show) visible += 1;
         });
         const empty = root.querySelector('#posEmpty');
-        if (empty) empty.hidden = !query || visible > 0;
+        if (empty) empty.hidden = visible > 0;
+        return visible;
+      };
+      const submitPosSearch = async event => {
+        event?.preventDefault();
+        const raw = searchQuery.trim();
+        if (!raw) {
+          applySearch();
+          return;
+        }
+        const exact = findExactPosProduct(products, raw);
+        if (exact) {
+          searchQuery = '';
+          await addProduct(exact);
+          return;
+        }
+        applySearch();
       };
       root.querySelector('#backShift').addEventListener('click', () => context.navigate('cashier-shifts'));
       root.querySelectorAll('.cashier-product').forEach(button => button.addEventListener('click', () => addProduct(products.find(item => item.MaSP === button.dataset.id))));
       root.querySelectorAll('.pos-chip').forEach(chip => chip.addEventListener('click', () => {
-        categoryFilter = chip.dataset.cat || '';
+        categoryFilter = (chip.dataset.cat || '').trim();
         root.querySelectorAll('.pos-chip').forEach(item => item.classList.toggle('active', item === chip));
         applySearch();
       }));
       const searchBox = root.querySelector('#posSearch');
       searchBox.addEventListener('input', event => { searchQuery = event.target.value; applySearch(); });
-      searchBox.addEventListener('keydown', async event => {
-        if (event.key !== 'Enter') return;
-        event.preventDefault();
-        const raw = searchQuery.trim();
-        if (!raw) return;
-        const needle = unaccent(raw);
-        const exact = products.find(item => item.MaVach === raw || item.MaSP === raw || unaccent(item.MaVach || '') === needle || unaccent(item.MaSP) === needle);
-        if (exact) { searchQuery = ''; await addProduct(exact); }
-        else applySearch();
-      });
+      root.querySelector('#posSearchForm')?.addEventListener('submit', submitPosSearch);
       applySearch();
       if (!cart.size) searchBox.focus();
       root.querySelectorAll('.cashier-cart-qty button').forEach(button => button.addEventListener('click', async () => {
@@ -819,7 +851,7 @@
     const load = async () => {
       try {
         const data = await api(context, '/cashier/returns?scope=mine');
-        root.innerHTML = `${heading('THU NGÂN / UC26', 'Yêu cầu đổi hàng hoặc hoàn tiền', 'Lập phiếu → Thủ kho kiểm → Quản lý duyệt → bạn xác nhận hoàn/đổi trên ca đang mở. Cột thao tác hiện Chờ duyệt cho đến khi Quản lý duyệt xong.', '<button class="warehouse-primary" id="newReturn">Lập yêu cầu</button>')}<article class="warehouse-table-card"><div class="warehouse-table-wrap"><table class="warehouse-table cashier-return-table"><thead><tr><th>PHIẾU</th><th>HÓA ĐƠN / KHÁCH</th><th>CA GỐC</th><th>HÌNH THỨC</th><th>SỐ TIỀN HOÀN</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr class="${item.TrangThai === 'Đã duyệt' ? 'cashier-return-ready' : ''}"><td><strong>${esc(item.MaDT)}</strong><small>${fmtTime(item.NgayLap)}</small></td><td>${esc(item.MaHD)}<small>${esc(item.TenKH || 'Khách vãng lai')}</small></td><td>${esc(item.MaCaGoc || '—')}<small>${esc(item.ThuNganGoc || '')}${item.MaCaHoan ? `<br>Hoàn ca ${esc(item.MaCaHoan)}` : ''}</small></td><td>${esc(item.HinhThucXuLy)}</td><td class="num">${money(item.SoTienHoan)}</td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></td><td>${returnActionHtml(item)}</td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có yêu cầu đổi trả.</td></tr>'}</tbody></table></div></article>`;
+        root.innerHTML = `${heading('THU NGÂN / ĐỔI TRẢ', 'Yêu cầu đổi hàng hoặc hoàn tiền', 'Lập phiếu → Thủ kho kiểm → Quản lý duyệt → bạn xác nhận hoàn/đổi trên ca đang mở. Cột thao tác hiện Chờ duyệt cho đến khi Quản lý duyệt xong.', '<button class="warehouse-primary" id="newReturn">Lập yêu cầu</button>')}<article class="warehouse-table-card"><div class="warehouse-table-wrap"><table class="warehouse-table cashier-return-table"><thead><tr><th>PHIẾU</th><th>HÓA ĐƠN / KHÁCH</th><th>CA GỐC</th><th>HÌNH THỨC</th><th>SỐ TIỀN HOÀN</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr class="${item.TrangThai === 'Đã duyệt' ? 'cashier-return-ready' : ''}"><td><strong>${esc(item.MaDT)}</strong><small>${fmtTime(item.NgayLap)}</small></td><td>${esc(item.MaHD)}<small>${esc(item.TenKH || 'Khách vãng lai')}</small></td><td>${esc(item.MaCaGoc || '—')}<small>${esc(item.ThuNganGoc || '')}${item.MaCaHoan ? `<br>Hoàn ca ${esc(item.MaCaHoan)}` : ''}</small></td><td>${esc(item.HinhThucXuLy)}</td><td class="num">${money(item.SoTienHoan)}</td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></td><td>${returnActionHtml(item)}</td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có yêu cầu đổi trả.</td></tr>'}</tbody></table></div></article>`;
         root.querySelector('#newReturn').addEventListener('click', () => openCreate());
         root.querySelectorAll('[data-complete]').forEach(button => button.addEventListener('click', () => completeModal(button.dataset.complete)));
         root.querySelectorAll('[data-print-return]').forEach(button => button.addEventListener('click', async () => {

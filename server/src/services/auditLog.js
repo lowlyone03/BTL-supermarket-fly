@@ -536,6 +536,17 @@ const loadExtraColumns = async pool => {
     return extraColumnSet;
 };
 
+const extractAuditAmount = text => {
+    const raw = String(text || '');
+    if (!raw) return null;
+    const locale = raw.match(/(\d{1,3}(?:\.\d{3})+)(?:\s*đ)?/);
+    if (locale) return Number(locale[1].replace(/\./g, ''));
+    const labeled = raw.match(/(?:toàn bộ|chi|lương|thực nộp|hệ thống|thanh toán|tổng)\s[^0-9]{0,24}(\d{4,})/i);
+    if (labeled) return Number(labeled[1]);
+    const any = raw.match(/\b(\d{5,})\b/);
+    return any ? Number(any[1]) : null;
+};
+
 const inferMeta = row => {
     const action = String(row.HanhDong || '');
     const lower = action.toLocaleLowerCase('vi-VN');
@@ -580,6 +591,7 @@ const presentAudit = row => {
         try { diff = JSON.parse(row.DuLieuJSON); } catch { diff = null; }
     }
     const mucDo = row.MucDo || meta.mucDo;
+    const soTien = Number(diff?.sau?.SoTien ?? diff?.SoTien ?? extractAuditAmount(row.NoiDung) ?? 0) || null;
     return {
         ...row,
         tieuDe,
@@ -594,7 +606,8 @@ const presentAudit = row => {
         quanTrong: ['Quan trọng', 'Cảnh báo'].includes(mucDo),
         target: meta.target || TARGET_BY_TABLE[row.BangLienQuan] || '',
         truoc: diff?.truoc || null,
-        sau: diff?.sau || null
+        sau: diff?.sau || null,
+        SoTien: soTien
     };
 };
 

@@ -19,12 +19,16 @@
     'kiem-ke': { icon: 'i-inventory', label: 'Kiểm kê' },
     'de-nghi': { icon: 'i-request', label: 'Đề nghị mua' }
   }[kind] || { icon: 'i-log', label: 'Thao tác kho' });
+  const auditListHtml = rows => {
+    const logs = (rows || []).map(row => `<li><strong>${esc(row.HanhDong)}</strong> <small>${fmtDate(row.ThoiGian)}${row.TenNV ? ` · ${esc(row.TenNV)}` : ''}</small><span>${esc(row.NoiDung || '')}</span></li>`).join('');
+    return logs ? `<p class="return-dossier-section">NHẬT KÝ PHIẾU</p><ul class="warehouse-history-audit">${logs}</ul>` : '';
+  };
   const renderHistoryCard = (item, inner = '') => {
     const meta = historyKindMeta(item.kind);
     const sub = item.subtitle && item.subtitle !== item.status
       ? `<p class="warehouse-history-sub">${esc(item.subtitle)}</p>`
       : '';
-    return `<article class="warehouse-history-card kind-${esc(item.kind || 'other')} tone-${esc(item.tone || 'info')}">
+    return `<article class="warehouse-history-card is-openable kind-${esc(item.kind || 'other')} tone-${esc(item.tone || 'info')}" tabindex="0" data-history-kind="${esc(item.kind || '')}" data-history-id="${esc(item.recordId || '')}" aria-label="Xem lịch sử chi tiết ${esc(item.title)}">
       <div class="warehouse-history-card-rail" aria-hidden="true"><svg><use href="#${meta.icon}"/></svg></div>
       <div class="warehouse-history-card-main">
         <div class="warehouse-history-card-head">
@@ -36,12 +40,13 @@
           <span class="status-pill ${statusClass(item.status)}">${esc(item.status)}</span>
         </div>
         ${inner}
+        <p class="warehouse-history-open-hint">Xem lịch sử chi tiết</p>
       </div>
     </article>`;
   };
   const statusClass = status => ({
     'Nháp': 'draft', 'Đã gửi': 'sent', 'Đang xử lý': 'processing', 'Yêu cầu bổ sung': 'returned',
-    'Đã hủy': 'cancelled', 'Hoàn thành': 'ok', 'Đã lập đơn': 'ok',
+    'Đã hủy': 'cancelled', 'Hoàn thành': 'ok', 'Đã lập đơn': 'ok', 'Đã xác nhận': 'ok',
     'Chờ kiểm tra': 'sent', 'Chờ duyệt': 'sent', 'Đã duyệt': 'ok', 'Từ chối': 'cancelled',
     'Đang kiểm': 'processing', 'Chờ duyệt điều chỉnh': 'sent', 'Hoàn thành không chênh lệch': 'ok'
   }[status] || 'draft');
@@ -118,6 +123,83 @@
     : /không nhập lại/i.test(ketQua || '')
       ? 'Loại bỏ / vứt — không cộng tồn (đã trừ lúc bán)'
       : 'Chưa kiểm kho';
+  const inspectVerdict = ketQua => {
+    if (/không đạt|không nhập lại/i.test(ketQua || '')) return 'Không đạt — không nhập lại kho';
+    if (/ạt yêu cầu|ược nhập lại/i.test(ketQua || '')) return 'Đạt — nhập lại kho bán';
+    return 'Chưa có kết quả kiểm';
+  };
+  const invoicePayText = payments => {
+    const paid = (payments || []).filter(item => item.TrangThai === 'Thành công');
+    return paid.length ? paid.map(item => `${item.PhuongThuc} ${money(item.SoTien)}`).join(', ') : '';
+  };
+  const refundText = ticket => {
+    if (ticket.HinhThucXuLy !== 'Hoàn tiền') return 'Đổi hàng — không hoàn tiền';
+    const bits = [money(ticket.SoTienHoan || 0)];
+    if (ticket.PhuongThucHoan) bits.push(ticket.PhuongThucHoan);
+    if (ticket.MaGiaoDichHoan) bits.push(`mã ${ticket.MaGiaoDichHoan}`);
+    if (ticket.NgayHoan) bits.push(fmtDate(ticket.NgayHoan));
+    return bits.join(' · ');
+  };
+  const printWarehouseReturn = detail => {
+    if (!window.FLY_PRINT?.show) return;
+    const ticket = detail.ticket || {};
+    const payText = invoicePayText(detail.payments);
+    const fields = [
+      { label: 'Cửa hàng / kho', value: [ticket.TenKho, ticket.DiaChiKho].filter(Boolean).join(' · ') || 'Cửa hàng Hà Nội' },
+      { label: 'Hóa đơn gốc', value: ticket.MaHD },
+      { label: 'Ngày bán gốc', value: ticket.NgayHoaDon ? fmtDate(ticket.NgayHoaDon) : '—' },
+      { label: 'Tổng lúc bán', value: money(ticket.TongThanhToan) },
+      { label: 'Khách hàng', value: ticket.TenKH || 'Khách vãng lai' },
+      { label: 'Điện thoại', value: ticket.SDT || 'Không SĐT' },
+      { label: 'Ca / thu ngân gốc', value: [ticket.MaCaGoc, ticket.ThuNganGoc].filter(Boolean).join(' · ') || '—' },
+      { label: 'Thu ngân lập phiếu', value: ticket.NguoiLap ? `${ticket.NguoiLap} · ${fmtDate(ticket.NgayLap)}` : '—' },
+      { label: 'Hình thức', value: ticket.HinhThucXuLy },
+      { label: 'Số tiền hoàn', value: refundText(ticket) },
+      { label: 'Hàng đi đâu', value: hangDiDauLabel(ticket.KetQuaKiemTra) },
+      { label: 'Thủ kho kiểm', value: ticket.NguoiKiemTra ? `${ticket.NguoiKiemTra} · ${fmtDate(ticket.NgayKiemTra)}` : 'Chưa kiểm' },
+      { label: 'Quản lý duyệt', value: ticket.NguoiDuyet ? `${ticket.NguoiDuyet} · ${fmtDate(ticket.NgayDuyet)}` : 'Chưa duyệt' }
+    ];
+    if (payText) fields.splice(4, 0, { label: 'Thanh toán hóa đơn gốc', value: payText });
+    if (ticket.HangThanhVien) fields.splice(fields.findIndex(item => item.label === 'Điện thoại') + 1, 0, { label: 'Hạng thành viên', value: ticket.HangThanhVien });
+    if (ticket.NgayHoan) fields.push({ label: 'Hoàn / đổi lúc', value: `${fmtDate(ticket.NgayHoan)}${ticket.MaCaHoan ? ` · ca ${ticket.MaCaHoan}` : ''}` });
+    const note = [
+      ticket.LyDo ? `Lý do thu ngân: ${ticket.LyDo}.` : '',
+      ticket.KetQuaKiemTra ? `Kết quả kiểm: ${ticket.KetQuaKiemTra}.` : '',
+      hangDiDauLabel(ticket.KetQuaKiemTra) + '.',
+      ticket.GhiChu ? `Ghi chú phiếu: ${ticket.GhiChu}` : ''
+    ].filter(Boolean).join(' ');
+    window.FLY_PRINT.show({
+      title: 'HỒ SƠ KIỂM ĐỔI TRẢ',
+      number: ticket.MaDT,
+      documentDate: ticket.NgayKiemTra || ticket.NgayLap,
+      status: ticket.TrangThai,
+      fields,
+      columns: [
+        { key: 'LoaiDong', label: 'Loại dòng' },
+        { key: 'MaSP', label: 'Mã SP' },
+        { key: 'MaVach', label: 'Mã vạch' },
+        { key: 'TenSP', label: 'Sản phẩm' },
+        { key: 'DonViTinh', label: 'ĐVT' },
+        { key: 'SLBan', label: 'SL bán', align: 'right' },
+        { key: 'SoLuong', label: 'SL', align: 'right' },
+        { key: 'DonGia', label: 'Đơn giá', format: 'money', align: 'right' },
+        { key: 'ThanhTien', label: 'Thành tiền', format: 'money', align: 'right' }
+      ],
+      rows: (detail.lines || []).map(line => ({
+        ...line,
+        LoaiDong: line.LoaiDong || 'Hàng khách trả',
+        MaVach: line.MaVach || '—',
+        DonViTinh: line.DonViTinh || '—',
+        SLBan: line.LoaiDong === 'Hàng giao đổi' ? '—' : (line.SLBan ?? '—')
+      })),
+      totals: [
+        { label: 'Tiền hàng khách trả', value: (detail.lines || []).filter(line => line.LoaiDong === 'Hàng khách trả').reduce((sum, line) => sum + Number(line.ThanhTien || 0), 0), format: 'money' },
+        { label: 'Số tiền hoàn', value: ticket.SoTienHoan, format: 'money' }
+      ],
+      note,
+      signatures: ['Thu ngân lập phiếu', 'Thủ kho kiểm hàng', 'Quản lý duyệt']
+    });
+  };
   const confirmMistakeModal = ({ maDT, products, reduceStock }) => new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'warehouse-modal-backdrop';
@@ -138,12 +220,65 @@
       const ticket = detail.ticket;
       const restocked = wasRestocked(ticket.KetQuaKiemTra);
       const editable = mode !== 'view' && (ticket.TrangThai === 'Chờ kiểm tra' || (ticket.TrangThai === 'Chờ duyệt' && mode === 'revise'));
-      const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
-      const lines = detail.lines.filter(item => item.LoaiDong === 'Hàng khách trả');
-      overlay.innerHTML = `<div class="warehouse-modal receipt-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">${editable ? (mode === 'revise' ? 'SỬA KẾT QUẢ KIỂM / UC21' : 'KIỂM TRA HÀNG KHÁCH TRẢ / UC21') : 'HỒ SƠ KIỂM ĐỔI TRẢ'}</p><h2>${esc(ticket.MaDT)}</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="return-source-card"><div><span>HÓA ĐƠN GỐC</span><strong>${esc(ticket.MaHD)}</strong><small>${fmtDate(ticket.NgayHoaDon)}</small></div><div><span>CA / THU NGÂN GỐC</span><strong>${esc(ticket.MaCaGoc || '—')}</strong><small>${esc(ticket.ThuNganGoc || '')}</small></div><div><span>HÌNH THỨC</span><strong>${esc(ticket.HinhThucXuLy)}</strong></div><div><span>HÀNG ĐI ĐÂU</span><strong>${esc(hangDiDauLabel(ticket.KetQuaKiemTra))}</strong><small>${esc(ticket.TrangThai)}</small></div></div>${editable ? `<div class="return-inspect-warn"><svg><use href="#i-warning"/></svg><div><strong>Hàng hỏng, hết hạn hoặc lỗi cửa hàng: bỏ tick nhập lại kho</strong><span>Không tick = loại bỏ/vứt, tồn giữ nguyên vì đã trừ lúc bán — không trừ lần nữa. Chỉ tick khi bao bì nguyên, còn hạn và còn bán được (sẽ cộng tồn bán).</span></div></div>` : ''}<p>Lý do thu ngân: <strong>${esc(ticket.LyDo || '—')}</strong></p>${ticket.GhiChu ? `<p class="warehouse-history-note">Ghi chú phiếu: ${esc(ticket.GhiChu)}</p>` : ''}<div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>SẢN PHẨM</th><th>SL</th><th>THÀNH TIỀN</th></tr></thead><tbody>${lines.map(item => `<tr><td><strong>${esc(item.TenSP)}</strong><small>${esc(item.MaSP)}</small></td><td class="num">${item.SoLuong}</td><td class="num">${money(item.ThanhTien)}</td></tr>`).join('')}</tbody></table></div>${editable ? `<label class="warehouse-field return-restock-field"><input type="checkbox" id="restock" ${restocked ? 'checked' : ''}> <span>Nhập lại kho bán (cộng tồn)<small>Không tick = loại bỏ/vứt. Không trừ kho lần nữa vì đã trừ lúc bán.</small></span></label><div class="warehouse-field"><label>Kết quả kiểm tra *</label><textarea id="inspectNote" maxlength="200" placeholder="Tình trạng bao bì, hạn dùng, lỗi sản phẩm...">${esc(inspectNoteText(ticket.KetQuaKiemTra))}</textarea></div>` : `<div class="warehouse-history-result"><span>Kết quả bạn đã ghi</span><strong>${esc(ticket.KetQuaKiemTra || '—')}</strong><small>Kiểm lúc ${fmtDate(ticket.NgayKiemTra)} · ${esc(ticket.NguoiKiemTra || '')}</small></div>`}</div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">${editable ? 'Hủy' : 'Đóng'}</button>${editable ? `<button class="warehouse-primary save-inspect">${mode === 'revise' ? 'Lưu kết quả mới' : 'Ghi nhận và gửi duyệt'}</button>` : ''}${!editable && restocked && ['Đã duyệt', 'Hoàn thành'].includes(ticket.TrangThai) ? `<button class="warehouse-danger flag-mistake" type="button">${ticket.TrangThai === 'Hoàn thành' ? 'Tôi đã tích nhầm — trừ tồn' : 'Tôi đã tích nhầm'}</button>` : ''}</div></div>`;
+      const overlay = document.createElement('div');
+      overlay.className = 'warehouse-modal-backdrop';
+      const lines = (detail.lines || []).filter(item => item.LoaiDong === 'Hàng khách trả');
+      const exchanged = (detail.lines || []).filter(item => item.LoaiDong === 'Hàng giao đổi');
+      const payText = invoicePayText(detail.payments);
+      const kicker = editable ? (mode === 'revise' ? 'SỬA KẾT QUẢ KIỂM' : 'KIỂM TRA HÀNG KHÁCH TRẢ') : 'HỒ SƠ KIỂM ĐỔI TRẢ';
+      const productRows = items => items.map(item => `<tr>
+        <td><strong>${esc(item.TenSP)}</strong><small>${esc(item.MaSP)} · ${esc(item.MaVach || 'Chưa có mã vạch')} · ${esc(item.DonViTinh || '—')}</small>${item.LyDo && item.LyDo !== ticket.LyDo ? `<small>${esc(item.LyDo)}</small>` : ''}</td>
+        <td class="num">${item.SLBan != null ? item.SLBan : '—'}</td>
+        <td class="num">${item.SoLuong}</td>
+        <td class="num">${money(item.DonGia)}</td>
+        <td class="num">${money(item.ThanhTien)}</td>
+      </tr>`).join('');
+      const moves = (detail.stockMoves || []).map(move => `<li><strong>${esc(move.LoaiGD)} ${Number(move.SoLuong) > 0 ? '+' : ''}${move.SoLuong}</strong> ${esc(move.TenSP)} <small>${esc(move.GhiChu || '')} · ${esc(move.NguoiGhiSo)} · ${fmtDate(move.NgayGD)}</small></li>`).join('');
+      const logs = (detail.audit || []).map(row => `<li><strong>${esc(row.HanhDong)}</strong> <small>${fmtDate(row.ThoiGian)}${row.TenNV ? ` · ${esc(row.TenNV)}` : ''}</small><span>${esc(row.NoiDung || '')}</span></li>`).join('');
+      overlay.innerHTML = `<div class="warehouse-modal receipt-modal return-dossier-modal">
+        <div class="warehouse-modal-heading"><div>
+          <p class="warehouse-kicker">${kicker}</p>
+          <h2>${esc(ticket.MaDT)}</h2>
+          <span>${esc(ticket.TenKho || 'Cửa hàng Hà Nội')}${ticket.DiaChiKho ? ` · ${esc(ticket.DiaChiKho)}` : ''} · ${esc(ticket.TrangThai)}</span>
+        </div><button class="warehouse-icon-button close" type="button">×</button></div>
+        <div class="warehouse-modal-body">
+          <div class="return-source-card return-dossier-cards">
+            <div><span>HÓA ĐƠN GỐC</span><strong>${esc(ticket.MaHD)}</strong><small>${fmtDate(ticket.NgayHoaDon)}${ticket.TongThanhToan != null ? ` · ${money(ticket.TongThanhToan)}` : ''}${payText ? ` · ${esc(payText)}` : ''}</small></div>
+            <div><span>KHÁCH HÀNG</span><strong>${esc(ticket.TenKH || 'Khách vãng lai')}</strong><small>${esc(ticket.SDT || 'Không SĐT')}${ticket.HangThanhVien ? ` · ${esc(ticket.HangThanhVien)}` : ''}</small></div>
+            <div><span>CA / THU NGÂN GỐC</span><strong>${esc(ticket.MaCaGoc || '—')}</strong><small>${esc(ticket.ThuNganGoc || '')}</small></div>
+            <div><span>HÌNH THỨC</span><strong>${esc(ticket.HinhThucXuLy)}</strong><small>${esc(refundText(ticket))}</small></div>
+            <div><span>HÀNG ĐI ĐÂU</span><strong>${esc(hangDiDauLabel(ticket.KetQuaKiemTra))}</strong><small>${esc(ticket.TrangThai)}</small></div>
+            <div><span>CỬA HÀNG / KHO</span><strong>${esc(ticket.TenKho || 'Cửa hàng Hà Nội')}</strong><small>${esc(ticket.DiaChiKho || '')}</small></div>
+          </div>
+          <div class="return-dossier-trail">
+            <div><span>LẬP</span><strong>${esc(ticket.NguoiLap || '—')}</strong><small>${fmtDate(ticket.NgayLap)}</small></div>
+            <div><span>KHO KIỂM</span><strong>${esc(ticket.NguoiKiemTra || 'Chưa kiểm')}</strong><small>${ticket.NgayKiemTra ? fmtDate(ticket.NgayKiemTra) : 'Chưa có'}</small></div>
+            <div><span>DUYỆT</span><strong>${esc(ticket.NguoiDuyet || 'Chưa duyệt')}</strong><small>${ticket.NgayDuyet ? fmtDate(ticket.NgayDuyet) : 'Chưa có'}</small></div>
+            ${ticket.NgayHoan ? `<div><span>HOÀN / ĐỔI</span><strong>${esc(ticket.MaCaHoan || 'Đã xác nhận')}</strong><small>${fmtDate(ticket.NgayHoan)}</small></div>` : ''}
+          </div>
+          ${editable ? `<div class="return-inspect-warn"><svg><use href="#i-warning"/></svg><div><strong>Hàng hỏng, hết hạn hoặc lỗi cửa hàng: bỏ tick nhập lại kho</strong><span>Không tick = loại bỏ/vứt, tồn giữ nguyên vì đã trừ lúc bán — không trừ lần nữa. Chỉ tick khi bao bì nguyên, còn hạn và còn bán được (sẽ cộng tồn bán).</span></div></div>` : ''}
+          <p>Lý do thu ngân: <strong>${esc(ticket.LyDo || '—')}</strong></p>
+          ${ticket.GhiChu ? `<p class="warehouse-history-note">Ghi chú phiếu: ${esc(ticket.GhiChu)}</p>` : ''}
+          <p class="return-dossier-section">HÀNG KHÁCH TRẢ</p>
+          <div class="warehouse-table-wrap"><table class="warehouse-table return-dossier-table"><thead><tr><th>SẢN PHẨM</th><th>SL BÁN</th><th>SL TRẢ</th><th>ĐƠN GIÁ</th><th>THÀNH TIỀN</th></tr></thead><tbody>${productRows(lines) || '<tr><td colspan="5" class="warehouse-empty">Không có hàng khách trả.</td></tr>'}</tbody></table></div>
+          ${exchanged.length ? `<p class="return-dossier-section">HÀNG GIAO ĐỔI CHO KHÁCH</p><div class="warehouse-table-wrap"><table class="warehouse-table return-dossier-table"><thead><tr><th>SẢN PHẨM</th><th>SL BÁN GỐC</th><th>SL GIAO</th><th>ĐƠN GIÁ</th><th>THÀNH TIỀN</th></tr></thead><tbody>${productRows(exchanged)}</tbody></table></div>` : ''}
+          ${editable
+            ? `<label class="warehouse-field return-restock-field"><input type="checkbox" id="restock" ${restocked ? 'checked' : ''}> <span>Nhập lại kho bán (cộng tồn)<small>Không tick = loại bỏ/vứt. Không trừ kho lần nữa vì đã trừ lúc bán.</small></span></label><div class="warehouse-field"><label>Kết quả kiểm tra *</label><textarea id="inspectNote" maxlength="200" placeholder="Tình trạng bao bì, hạn dùng, lỗi sản phẩm...">${esc(inspectNoteText(ticket.KetQuaKiemTra))}</textarea></div>`
+            : `<div class="warehouse-history-result return-inspect-result"><span>Kết quả kiểm kho</span><strong>${esc(inspectVerdict(ticket.KetQuaKiemTra))}</strong><p>${esc(ticket.KetQuaKiemTra || 'Chưa ghi kết quả')}</p><small>Kiểm lúc ${fmtDate(ticket.NgayKiemTra)} · ${esc(ticket.NguoiKiemTra || '—')}</small><small>Hàng đi đâu: ${esc(hangDiDauLabel(ticket.KetQuaKiemTra))}</small></div>`}
+          ${moves ? `<div class="warehouse-history-moves"><p>SỔ KHO</p><ul>${moves}</ul></div>` : ''}
+          ${logs ? `<p class="return-dossier-section">NHẬT KÝ PHIẾU</p><ul class="warehouse-history-audit">${logs}</ul>` : ''}
+        </div>
+        <div class="warehouse-modal-actions">
+          <button class="warehouse-secondary close" type="button">${editable ? 'Hủy' : 'Đóng'}</button>
+          <button class="warehouse-secondary print-return" type="button"><svg><use href="#i-report"/></svg>In hồ sơ</button>
+          ${editable ? `<button class="warehouse-primary save-inspect" type="button">${mode === 'revise' ? 'Lưu kết quả mới' : 'Ghi nhận và gửi duyệt'}</button>` : ''}
+          ${!editable && restocked && ['Đã duyệt', 'Hoàn thành'].includes(ticket.TrangThai) ? `<button class="warehouse-danger flag-mistake" type="button">${ticket.TrangThai === 'Hoàn thành' ? 'Tôi đã tích nhầm — trừ tồn' : 'Tôi đã tích nhầm'}</button>` : ''}
+        </div>
+      </div>`;
       document.body.appendChild(overlay);
       const close = () => overlay.remove();
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+      overlay.querySelector('.print-return')?.addEventListener('click', () => printWarehouseReturn(detail));
       overlay.querySelector('.save-inspect')?.addEventListener('click', async () => {
         try {
           const restock = overlay.querySelector('#restock').checked;
@@ -239,7 +374,7 @@
         return `<tr data-product="${esc(line.MaSP)}" data-system="${Number(line.SLHeThong)}" data-name="${esc(line.TenSP)}" data-unit="${esc(line.DonViTinh || '')}" data-min="${Number(line.TonKhoToiThieu || 0)}" data-ordered="${Number(line.SLDatMua || 0)}"><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)} · ${esc(line.TenDM)}</small></td><td class="num"><strong>${Number(line.SLHeThong)}</strong></td><td class="num">${actual}</td><td class="num inventory-count-difference">${difference > 0 ? '+' : ''}${difference}</td><td><span class="status-pill inventory-count-result ${difference === 0 ? 'ok' : 'sent'}">${resultLabel(difference)}</span></td><td>${condition}</td><td>${reason}</td></tr>`;
       }).join('');
       const preRequest = options.followUp || isPreRequestCount(count);
-      overlay.innerHTML = `<div class="warehouse-modal inventory-count-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">${preRequest ? 'KIỂM TRA SỐ LƯỢNG THỰC TẾ' : 'KIỂM KÊ KHO'} / ${esc(count.MaKK)}</p><h2>${esc(count.TenKho)}</h2><span>${fmtDate(count.NgayKiemKe)} · ${esc(count.NguoiKiemKe)} · ${esc(count.TrangThai)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="receipt-rule"><svg><use href="#i-warning"/></svg><span>${preRequest ? 'Cảnh báo tồn tối thiểu chỉ là gợi ý. Ghi số thực tế và tình trạng (bình thường / hỏng / hết hạn). Còn đủ thì không lập đề nghị. Hết hoặc dưới nhu cầu thì lập Phiếu đề nghị mua hàng. Tồn hệ thống chỉ đổi sau khi Quản lý duyệt chênh lệch.' : 'Số lượng hệ thống là ảnh chụp lúc tạo đợt. Khi có chênh lệch phải ghi nguyên nhân; tồn kho chỉ thay đổi sau khi Quản lý duyệt.'}</span></div><div class="warehouse-field inventory-count-note"><label>Ghi chú đợt kiểm kê</label><textarea id="inventoryCountNote" maxlength="500" ${editable ? '' : 'disabled'}>${esc(count.GhiChu || '')}</textarea></div>${count.LyDoTuChoi ? `<div class="manager-readonly-note"><svg><use href="#i-warning"/></svg><div><strong>Lý do từ chối</strong><span>${esc(count.LyDoTuChoi)}</span></div></div>` : ''}<div class="warehouse-table-wrap"><table class="warehouse-table inventory-count-table"><thead><tr><th>SẢN PHẨM</th><th>HỆ THỐNG</th><th>THỰC TẾ</th><th>CHÊNH LỆCH</th><th>KẾT QUẢ</th><th>TÌNH TRẠNG</th><th>NGUYÊN NHÂN</th></tr></thead><tbody>${rows}</tbody></table></div></div><div class="warehouse-modal-actions"><div class="inventory-count-submit-hint" ${editable ? '' : 'hidden'}></div><button class="warehouse-secondary close" type="button">Đóng</button>${editable ? '<button class="warehouse-secondary save-count" type="button">Lưu kết quả đếm</button><button class="warehouse-primary submit-count" type="button"></button>' : ''}</div></div>`;
+      overlay.innerHTML = `<div class="warehouse-modal inventory-count-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">${preRequest ? 'KIỂM TRA SỐ LƯỢNG THỰC TẾ' : 'KIỂM KÊ KHO'} / ${esc(count.MaKK)}</p><h2>${esc(count.TenKho)}</h2><span>${fmtDate(count.NgayKiemKe)} · ${esc(count.NguoiKiemKe)} · ${esc(count.TrangThai)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="receipt-rule"><svg><use href="#i-warning"/></svg><span>${preRequest ? 'Cảnh báo tồn tối thiểu chỉ là gợi ý. Ghi số thực tế và tình trạng (bình thường / hỏng / hết hạn). Còn đủ thì không lập đề nghị. Hết hoặc dưới nhu cầu thì lập Phiếu đề nghị mua hàng. Tồn hệ thống chỉ đổi sau khi Quản lý duyệt chênh lệch.' : 'Số lượng hệ thống là ảnh chụp lúc tạo đợt. Khi có chênh lệch phải ghi nguyên nhân; tồn kho chỉ thay đổi sau khi Quản lý duyệt.'}</span></div><div class="warehouse-field inventory-count-note"><label>Ghi chú đợt kiểm kê</label><textarea id="inventoryCountNote" maxlength="500" ${editable ? '' : 'disabled'}>${esc(count.GhiChu || '')}</textarea></div>${count.LyDoTuChoi ? `<div class="manager-readonly-note"><svg><use href="#i-warning"/></svg><div><strong>Lý do từ chối</strong><span>${esc(count.LyDoTuChoi)}</span></div></div>` : ''}<div class="warehouse-table-wrap"><table class="warehouse-table inventory-count-table"><thead><tr><th>SẢN PHẨM</th><th>HỆ THỐNG</th><th>THỰC TẾ</th><th>CHÊNH LỆCH</th><th>KẾT QUẢ</th><th>TÌNH TRẠNG</th><th>NGUYÊN NHÂN</th></tr></thead><tbody>${rows}</tbody></table></div>${auditListHtml(data.audit)}</div><div class="warehouse-modal-actions"><div class="inventory-count-submit-hint" ${editable ? '' : 'hidden'}></div><button class="warehouse-secondary close" type="button">Đóng</button>${editable ? '<button class="warehouse-secondary save-count" type="button">Lưu kết quả đếm</button><button class="warehouse-primary submit-count" type="button"></button>' : ''}</div></div>`;
       document.body.appendChild(overlay);
       const close = () => overlay.remove();
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
@@ -363,6 +498,28 @@
     } catch (error) { showError(root, error); }
   };
 
+  const printRequest = data => {
+    const request = data.request;
+    window.FLY_PRINT.show({
+      title: 'PHIẾU ĐỀ NGHỊ MUA HÀNG', number: request.MaDN,
+      documentDate: request.NgayLap, status: request.TrangThai,
+      fields: [
+        { label: 'Người đề nghị', value: request.NguoiLap }, { label: 'Bộ phận', value: 'Kho hàng' },
+        { label: 'Lý do đề nghị', value: request.LyDo || 'Bổ sung hàng hóa' },
+        { label: 'Thời điểm gửi', value: request.NgayGui || request.NgayLap, format: 'date' }
+      ],
+      columns: [
+        { label: 'Mã hàng', key: 'MaSP' }, { label: 'Tên mặt hàng', key: 'TenSP' },
+        { label: 'Tồn hiện tại', key: 'SLTonHienTai', align: 'right' },
+        { label: 'Tồn tối thiểu', key: 'SLTonToiThieu', align: 'right' },
+        { label: 'SL đề nghị', key: 'SLDeNghi', align: 'right' }, { label: 'Ghi chú', key: 'GhiChu' }
+      ], rows: data.lines,
+      totals: [{ label: 'Tổng số lượng đề nghị', value: data.lines.reduce((sum, line) => sum + Number(line.SLDeNghi || 0), 0) }],
+      note: request.GhiChu || 'Phiếu được chuyển đến Nhân viên mua hàng để tiếp nhận và lập Đơn mua.',
+      signatures: ['Thủ kho lập phiếu', 'Nhân viên mua hàng tiếp nhận']
+    });
+  };
+
   const requestModal = (context, items, existing = null, extras = {}) => {
     const backdrop = document.createElement('div');
     backdrop.className = 'warehouse-modal-backdrop';
@@ -382,7 +539,7 @@
         <div class="warehouse-modal-note">Chỉ lập đề nghị khi đã kiểm tra số lượng thực tế và hàng còn thiếu. Phiếu đề nghị không đổi tồn kho. Nhân viên mua hàng lập Đơn mua; Quản lý mới phê duyệt đơn.</div>
         <div class="warehouse-form-lines"><div class="warehouse-form-line heading"><span>Mặt hàng</span><span>Tồn hiện tại</span><span>Định mức</span><span>Đã đặt</span><span>SL đề nghị</span><span></span></div>${lineHtml}</div>
       </div>
-      <div class="warehouse-modal-actions"><button class="warehouse-secondary modal-close" type="button">Đóng</button><button class="warehouse-secondary save-draft" type="button">Lưu bản nháp</button><button class="warehouse-primary save-submit" type="button">Lưu và gửi mua hàng</button></div>
+      <div class="warehouse-modal-actions"><button class="warehouse-secondary modal-close" type="button">Đóng</button><button class="warehouse-secondary print-draft" type="button">Lưu và xem bản in</button><button class="warehouse-secondary save-draft" type="button">Lưu bản nháp</button><button class="warehouse-primary save-submit" type="button">Lưu và gửi mua hàng</button></div>
     </div>`;
     document.body.appendChild(backdrop);
     const close = () => backdrop.remove();
@@ -390,7 +547,7 @@
     backdrop.addEventListener('click', event => { if (event.target === backdrop) close(); });
     backdrop.querySelectorAll('.remove-line').forEach(button => button.addEventListener('click', () => button.closest('.warehouse-form-line').remove()));
 
-    const save = async submit => {
+    const save = async (submit, preview = false) => {
       const rows = Array.from(backdrop.querySelectorAll('.warehouse-form-line[data-product]'));
       if (!rows.length) return context.showToast('Đề nghị phải còn ít nhất một mặt hàng.', 'error');
       const lines = rows.map(row => ({
@@ -405,12 +562,14 @@
           : await api(context, '/warehouse/purchase-requests', { method: 'POST', body: JSON.stringify(payload) });
         const id = existing?.MaDN || saved.MaDN;
         if (submit) await api(context, `/warehouse/purchase-requests/${id}/submit`, { method: 'POST' });
-        context.showToast(submit ? 'Đã gửi đề nghị tới Nhân viên mua hàng.' : saved.message, 'success');
+        context.showToast(preview ? 'Đã lưu bản nháp. Mở xem trước để in.' : (submit ? 'Đã gửi đề nghị tới Nhân viên mua hàng.' : saved.message), 'success');
         close();
         context.navigate('warehouse-requests');
+        if (preview) printRequest(await api(context, `/warehouse/purchase-requests/${id}`));
       } catch (error) { context.showToast(error.message, 'error'); }
     };
     backdrop.querySelector('.save-draft').addEventListener('click', () => save(false));
+    backdrop.querySelector('.print-draft').addEventListener('click', () => save(false, true));
     backdrop.querySelector('.save-submit').addEventListener('click', () => save(true));
   };
 
@@ -425,28 +584,12 @@
         <div class="warehouse-detail-grid"><div><span>NGƯỜI LẬP</span><strong>${esc(request.NguoiLap)}</strong></div><div><span>THỜI GIAN</span><strong>${fmtDate(request.NgayGui || request.NgayLap)}</strong></div><div><span>TRẠNG THÁI</span><strong><span class="status-pill ${statusClass(request.TrangThai)}">${esc(request.TrangThai)}</span></strong></div></div>
         <p><strong>Lý do:</strong> ${esc(request.LyDo || 'Không ghi')}</p><p><strong>Ghi chú:</strong> ${esc(request.GhiChu || 'Không có')}</p>
         <div class="warehouse-table-wrap warehouse-form-lines"><table class="warehouse-table"><thead><tr><th>MẶT HÀNG</th><th>TỒN HIỆN TẠI</th><th>ĐỊNH MỨC</th><th>ĐỀ NGHỊ</th><th>GHI CHÚ</th></tr></thead><tbody>${rows}</tbody></table></div>
+        ${auditListHtml(data.audit)}
       </div><div class="warehouse-modal-actions"><button class="warehouse-secondary modal-close">Đóng</button><button class="warehouse-primary print-request"><svg><use href="#i-report"/></svg>Xem bản in</button></div></div>`;
       document.body.appendChild(backdrop);
       backdrop.querySelectorAll('.modal-close').forEach(button => button.addEventListener('click', () => backdrop.remove()));
       backdrop.addEventListener('click', event => { if (event.target === backdrop) backdrop.remove(); });
-      backdrop.querySelector('.print-request').addEventListener('click', () => window.FLY_PRINT.show({
-        title: 'PHIẾU ĐỀ NGHỊ MUA HÀNG', number: request.MaDN,
-        documentDate: request.NgayLap, status: request.TrangThai,
-        fields: [
-          { label: 'Người đề nghị', value: request.NguoiLap }, { label: 'Bộ phận', value: 'Kho hàng' },
-          { label: 'Lý do đề nghị', value: request.LyDo || 'Bổ sung hàng hóa' },
-          { label: 'Thời điểm gửi', value: request.NgayGui || request.NgayLap, format: 'date' }
-        ],
-        columns: [
-          { label: 'Mã hàng', key: 'MaSP' }, { label: 'Tên mặt hàng', key: 'TenSP' },
-          { label: 'Tồn hiện tại', key: 'SLTonHienTai', align: 'right' },
-          { label: 'Tồn tối thiểu', key: 'SLTonToiThieu', align: 'right' },
-          { label: 'SL đề nghị', key: 'SLDeNghi', align: 'right' }, { label: 'Ghi chú', key: 'GhiChu' }
-        ], rows: data.lines,
-        totals: [{ label: 'Tổng số lượng đề nghị', value: data.lines.reduce((sum, line) => sum + Number(line.SLDeNghi || 0), 0) }],
-        note: request.GhiChu || 'Phiếu được chuyển đến Nhân viên mua hàng để tiếp nhận và lập Đơn mua.',
-        signatures: ['Thủ kho lập phiếu', 'Nhân viên mua hàng tiếp nhận']
-      }));
+      backdrop.querySelector('.print-request').addEventListener('click', () => printRequest(data));
     } catch (error) { context.showToast(error.message, 'error'); }
   };
 
@@ -470,6 +613,10 @@
 
   const initInventory = async (root, context) => {
     let currentItems = [];
+    const presetSearch = sessionStorage.getItem('fly_inventory_search');
+    const presetLow = sessionStorage.getItem('fly_inventory_low_only');
+    if (presetSearch != null) sessionStorage.removeItem('fly_inventory_search');
+    if (presetLow != null) sessionStorage.removeItem('fly_inventory_low_only');
     const selectedItems = () => Array.from(root.querySelectorAll('.inventory-select:checked')).map(box => currentItems.find(item => item.MaSP === box.value)).filter(Boolean);
     const load = async () => {
       const search = root.querySelector('#inventorySearch')?.value || '';
@@ -491,7 +638,7 @@
     };
     root.innerHTML = `${heading('KHO HÀNG / TỒN KHO', 'Tồn kho và cảnh báo tồn tối thiểu', 'So sánh tồn với mức tối thiểu. Kiểm tra số lượng thực tế trước khi lập phiếu đề nghị mua hàng.', '<span class="warehouse-chip">Kho cửa hàng Hà Nội</span>')}
       <article class="warehouse-table-card inventory-alert-card"><div class="receipt-rule inventory-check-rule"><svg><use href="#i-warning"/></svg><span>Cảnh báo tồn tối thiểu chỉ là gợi ý. Còn đủ sau khi kiểm đếm thì không lập đề nghị. Hết hoặc dưới nhu cầu thì gửi mua hàng. Hỏng/hết hạn thì lập Phiếu xuất hủy.</span></div>
-      <div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"/></svg><input id="inventorySearch" placeholder="Tìm mã, tên sản phẩm hoặc mã vạch..."></label><div class="warehouse-toolbar-actions"><label class="warehouse-check"><input id="lowOnly" type="checkbox" checked> Chỉ hiện hàng cần nhập</label><button class="warehouse-secondary" id="refreshInventory" type="button"><svg><use href="#i-refresh"/></svg>Làm mới</button><button class="warehouse-secondary" id="createRequest" type="button">Lập phiếu đề nghị mua hàng</button><button class="warehouse-primary" id="checkActual" type="button"><svg><use href="#i-plus"/></svg>Kiểm tra số lượng thực tế</button></div></div>
+      <div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"/></svg><input id="inventorySearch" placeholder="Tìm mã, tên sản phẩm, mã vạch hoặc nhóm hàng..." value="${esc(presetSearch || '')}"></label><div class="warehouse-toolbar-actions"><label class="warehouse-check"><input id="lowOnly" type="checkbox"${presetLow === '0' ? '' : ' checked'}> Chỉ hiện hàng cần nhập</label><button class="warehouse-secondary" id="refreshInventory" type="button"><svg><use href="#i-refresh"/></svg>Làm mới</button><button class="warehouse-secondary" id="createRequest" type="button">Lập phiếu đề nghị mua hàng</button><button class="warehouse-primary" id="checkActual" type="button"><svg><use href="#i-plus"/></svg>Kiểm tra số lượng thực tế</button></div></div>
       <div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>CHỌN</th><th>MẶT HÀNG</th><th>NHÓM HÀNG</th><th>TỒN HIỆN TẠI</th><th>TỒN TỐI THIỂU</th><th>ĐÃ ĐẶT</th><th>MỨC TỒN</th></tr></thead><tbody id="inventoryBody"></tbody></table></div></article>`;
     let timer;
     root.querySelector('#inventorySearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250); });
@@ -591,7 +738,7 @@
       try {
         const data = await api(context, '/warehouse/returns?status=' + encodeURIComponent(root.querySelector('#returnStatus')?.value || 'Chờ kiểm tra'));
         if (!root.querySelector('#warehouseReturnBody')) {
-          root.innerHTML = `${heading('KHO HÀNG / UC21', 'Kiểm tra hàng khách trả', 'Thủ kho ghi kết quả kiểm. Hàng hỏng thì bỏ tick: loại bỏ/vứt. Tick nhầm nhập lại thì vào Lịch sử kho bấm Tôi đã tích nhầm để trừ tồn.', '<button class="warehouse-secondary" data-go-history type="button">Lịch sử kho</button>')}<article class="warehouse-table-card"><div class="warehouse-toolbar"><select id="returnStatus"><option>Chờ kiểm tra</option><option>Chờ duyệt</option><option>Đã duyệt</option><option>Hoàn thành</option><option value="">Tất cả</option></select></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU</th><th>HÓA ĐƠN / KHÁCH</th><th>HÌNH THỨC</th><th>HÀNG ĐI ĐÂU</th><th>TRẠNG THÁI</th><th></th></tr></thead><tbody id="warehouseReturnBody"></tbody></table></div></article>`;
+          root.innerHTML = `${heading('KHO HÀNG / ĐỔI TRẢ', 'Kiểm tra hàng khách trả', 'Thủ kho ghi kết quả kiểm. Hàng hỏng thì bỏ tick: loại bỏ/vứt. Tick nhầm nhập lại thì vào Lịch sử kho bấm Tôi đã tích nhầm để trừ tồn.', '<button class="warehouse-secondary" data-go-history type="button">Lịch sử kho</button>')}<article class="warehouse-table-card"><div class="warehouse-toolbar"><select id="returnStatus"><option>Chờ kiểm tra</option><option>Chờ duyệt</option><option>Đã duyệt</option><option>Hoàn thành</option><option value="">Tất cả</option></select></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU</th><th>HÓA ĐƠN / KHÁCH</th><th>HÌNH THỨC</th><th>HÀNG ĐI ĐÂU</th><th>TRẠNG THÁI</th><th></th></tr></thead><tbody id="warehouseReturnBody"></tbody></table></div></article>`;
           root.querySelector('#returnStatus').addEventListener('change', load);
           root.querySelector('[data-go-history]')?.addEventListener('click', () => context.navigate('warehouse-history'));
         }
@@ -607,6 +754,44 @@
       } catch (error) { context.showToast(error.message, 'error'); }
     };
     await load();
+  };
+
+  const openHistoryDetail = (context, item, onDone) => {
+    const id = item?.recordId;
+    if (!id) return;
+    if (item.kind === 'doi-tra') return inspectReturnModal(context, id, onDone, 'view');
+    if (item.kind === 'kiem-ke') return inventoryCountDetail(context, id, onDone);
+    if (item.kind === 'de-nghi') return detailModal(context, id);
+    if (item.kind === 'phieu-xuat') {
+      if (window.FLY_STOCK_ISSUE?.open) return window.FLY_STOCK_ISSUE.open(context, id, onDone);
+      return context.showToast('Không mở được phiếu xuất.', 'error');
+    }
+    if (item.kind === 'phieu-nhap') {
+      if (window.FLY_RECEIPT?.open) return window.FLY_RECEIPT.open(context, id, onDone);
+      return context.showToast('Không mở được phiếu nhập.', 'error');
+    }
+    context.showToast('Chưa có hồ sơ chi tiết cho loại việc này.', 'error');
+  };
+  const bindHistoryOpeners = (root, context, load) => {
+    const body = root.querySelector('#warehouseHistoryBody');
+    if (!body || body.dataset.historyOpenBound) return;
+    body.dataset.historyOpenBound = '1';
+    const resolveItem = card => (root._historyData?.timeline || []).find(row => row.recordId === card.dataset.historyId && row.kind === card.dataset.historyKind);
+    body.addEventListener('click', event => {
+      if (event.target.closest('button, a, input, textarea, select, label')) return;
+      const card = event.target.closest('[data-history-kind][data-history-id]');
+      if (!card || !body.contains(card)) return;
+      const item = resolveItem(card);
+      if (item) openHistoryDetail(context, item, load);
+    });
+    body.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const card = event.target.closest('[data-history-kind][data-history-id]');
+      if (!card || event.target !== card) return;
+      event.preventDefault();
+      const item = resolveItem(card);
+      if (item) openHistoryDetail(context, item, load);
+    });
   };
 
   const initHistory = async (root, context) => {
@@ -647,6 +832,7 @@
           root.querySelector('#historySearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250); });
           ['historyFrom', 'historyTo', 'historyKind'].forEach(id => root.querySelector(`#${id}`).addEventListener('change', load));
           root.querySelector('#refreshHistory').addEventListener('click', load);
+          bindHistoryOpeners(root, context, load);
           root.querySelector('#printWarehouseHistory').addEventListener('click', () => {
             const current = root._historyData;
             if (!current) return;
@@ -744,5 +930,11 @@
     if (pageName === 'purchasing-inbox') return initPurchasing(root, context);
   };
 
+  window.FLY_WAREHOUSE = {
+    openReturn: inspectReturnModal,
+    openCount: inventoryCountDetail,
+    openRequest: detailModal,
+    openHistory: openHistoryDetail
+  };
   window.FLY_ROLE_PAGES = { templates, init };
 })();

@@ -30,7 +30,7 @@
     'promotions.html': `
       <section class="admin-module">
         <header class="module-heading">
-          <div><p class="module-kicker">UC04 / KHUYẾN MÃI</p><h1>Chương trình khuyến mãi</h1><p>Tạo, cập nhật hoặc ngừng chương trình. Thu ngân chỉ áp dụng KM đang hiệu lực trong hạn.</p></div>
+          <div><p class="module-kicker">DỮ LIỆU DÙNG CHUNG / KHUYẾN MÃI</p><h1>Chương trình khuyến mãi</h1><p>Tạo, cập nhật hoặc ngừng chương trình. Thu ngân chỉ áp dụng KM đang hiệu lực trong hạn.</p></div>
           <div class="heading-actions"><span class="record-count" id="promoCount">0 chương trình</span><button class="btn btn-primary" onclick="openPromoModal()"><svg aria-hidden="true"><use href="#i-plus"/></svg> Thêm khuyến mãi</button></div>
         </header>
         <div class="module-stat-grid compact-stats">

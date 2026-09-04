@@ -534,9 +534,12 @@
 .document-preview-backdrop { position:fixed; inset:0; z-index:2500; display:grid; place-items:center; padding:18px; background:rgba(18,39,30,.68); backdrop-filter:blur(5px); }
 .document-preview-shell { width:min(1180px,98vw); height:min(960px,96vh); display:flex; flex-direction:column; overflow:hidden; border-radius:20px; background:#eef1ef; box-shadow:0 30px 80px rgba(9,27,20,.32); }
 .document-preview-shell > header { flex:none; min-height:72px; height:auto; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:10px 20px; border-bottom:1px solid #d4ddd8; background:#fff; }
-.document-preview-shell > header span,.document-preview-shell > header strong { display:block; }
+.document-preview-shell > header span,.document-preview-shell > header strong,.document-preview-shell > header em { display:block; }
 .document-preview-shell > header span { color:#73827a; font-size:9px; font-weight:850; letter-spacing:.1em; }
 .document-preview-shell > header strong { margin-top:5px; color:#20372c; }
+.print-preview-status { display:block; margin-top:4px; color:#2b6b52; font-size:11px; font-style:normal; font-weight:700; }
+.print-preview-status.is-error { color:#9b3b32; }
+.print-document:disabled { opacity:.6; cursor:wait; }
 .print-preview-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:9px; }
 .print-skin-toggle { display:flex; overflow:hidden; border:1px solid #c5d4cc; border-radius:12px; background:#fff; }
 .print-skin-toggle .print-skin { min-height:38px; padding:0 12px; border:0; background:transparent; color:#355649; font:inherit; font-size:11px; font-weight:800; cursor:pointer; }
@@ -607,8 +610,40 @@
 .return-restock-field { display: flex; align-items: flex-start; gap: 8px; font-weight: 650; }
 .return-restock-field span { display: flex; flex-direction: column; gap: 2px; line-height: 1.35; }
 .return-restock-field small { font-weight: 500; color: #5c6f66; }
+.return-dossier-modal .warehouse-modal-heading span { display: block; margin-top: 4px; color: #74847b; font-size: 12px; }
+.return-dossier-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.return-dossier-trail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin: 0 0 16px;
+}
+.return-dossier-trail > div {
+  padding: 11px 13px;
+  border: 1px solid #d7e4dc;
+  border-radius: 12px;
+  background: #eef5f1;
+}
+.return-dossier-trail span,
+.return-dossier-trail strong,
+.return-dossier-trail small { display: block; }
+.return-dossier-trail span { color: #74857c; font-size: 9px; font-weight: 850; letter-spacing: .07em; }
+.return-dossier-trail strong { margin-top: 5px; color: #213b2f; font-size: 14px; }
+.return-dossier-trail small { margin-top: 3px; color: #78877f; }
+.return-dossier-section {
+  margin: 16px 0 8px;
+  color: #6d7d74;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.return-inspect-result { margin-top: 16px; padding: 14px 16px; }
+.return-inspect-result p { margin: 6px 0 0; color: #355045; line-height: 1.45; }
+.return-inspect-result small { display: block; margin-top: 6px; color: #6d7d74; }
+.return-dossier-table td small { display: block; }
 @media (max-width: 1100px) {
   .return-source-card { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .return-dossier-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
   .warehouse-page { padding: 18px 6px 28px; }
@@ -808,6 +843,39 @@
 .warehouse-history-card:hover {
   border-color: #c5d4cc;
   box-shadow: 0 10px 22px rgba(27, 62, 48, .06);
+}
+.warehouse-history-card.is-openable { cursor: pointer; }
+.warehouse-history-card.is-openable:hover {
+  border-color: #9bb8a8;
+  box-shadow: 0 12px 24px rgba(27, 62, 48, .08);
+}
+.warehouse-history-card.is-openable:focus-visible {
+  outline: 2px solid #2c8565;
+  outline-offset: 2px;
+}
+.warehouse-history-open-hint {
+  margin: 12px 0 0;
+  color: #2c8565;
+  font-size: 12px;
+  font-weight: 750;
+}
+.stock-issue-related-link {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: #1d6b4f;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.stock-issue-summary small {
+  display: block;
+  margin-top: 4px;
+  color: #73847b;
+  font-size: 12px;
+  font-weight: 500;
 }
 .warehouse-history-card-rail {
   display: grid;
@@ -1119,6 +1187,18 @@
 .status-pill.warning { background:#fff3cd; color:#856404; }
 
 /* ── Modal detail upgrades ── */
+.doc-chip-set { display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
+.doc-chip-set .doc-links,
+.doc-chip-set small { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.doc-chip { text-underline-offset:2px; text-decoration:underline; }
+.payment-voucher-table tbody tr[data-debt],
+.acc-history-table tbody tr[data-nk],
+.acc-payout-table tbody tr[data-phieu] { cursor:pointer; }
+.acc-dossier-timeline { list-style:none; margin:14px 0 0; padding:0; }
+.acc-dossier-timeline li { margin-left:6px; padding:6px 0 6px 12px; border-left:2px solid #d5e4db; }
+.acc-dossier-timeline strong,
+.acc-dossier-timeline small { display:block; }
+.acc-detail-modal-wide { max-width:720px; }
 .acc-detail-modal { max-width:540px; }
 .acc-detail-icon { width:20px; height:20px; fill:#267b5b; vertical-align:middle; margin-right:4px; }
 .acc-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px 20px; margin-bottom:16px; }

@@ -104,7 +104,14 @@ const getCountDetail = ownerOnly => async (req, res) => {
                     JOIN DanhMuc dm ON dm.MaDM=sp.MaDM
                     LEFT JOIN TonKho tk ON tk.MaKho=@MaKho AND tk.MaSP=ct.MaSP
                     WHERE ct.MaKK=@MaKK ORDER BY dm.TenDM,sp.TenSP`);
-        res.json({ count: header.recordset[0], lines: lines.recordset });
+        const audit = await pool.request().input('MaBanGhi', sql.VarChar, req.params.id).query(`
+            SELECT nk.ThoiGian, nk.HanhDong, nk.NoiDung, n.TenNV
+            FROM NhatKy nk
+            LEFT JOIN TaiKhoan t ON t.MaTK=nk.MaTK
+            LEFT JOIN NhanVien n ON n.MaNV=t.MaNV
+            WHERE nk.BangLienQuan=N'KiemKe' AND nk.MaBanGhi=@MaBanGhi
+            ORDER BY nk.ThoiGian`);
+        res.json({ count: header.recordset[0], lines: lines.recordset, audit: audit.recordset });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải chi tiết kiểm kê.' });

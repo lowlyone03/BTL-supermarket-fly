@@ -9,12 +9,41 @@
   min-height: 620px;
 }
 
-.cashier-product-panel .warehouse-panel-title input {
-  width: min(340px, 48%);
+.cashier-pos-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(400px, 52%);
+  min-width: 220px;
+}
+
+.cashier-pos-search input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
   padding: 11px 14px;
   border: 1px solid #d7dfda;
   border-radius: 10px;
   background: #fff;
+}
+
+.cashier-pos-search .warehouse-icon-button {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+}
+
+.cashier-pos-search .warehouse-icon-button svg {
+  margin-right: 0;
+}
+
+.cashier-product[hidden],
+.cashier-product.pos-filtered-out {
+  display: none !important;
+}
+
+.cashier-search-empty[hidden] {
+  display: none !important;
 }
 
 .cashier-product-grid {

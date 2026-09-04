@@ -238,7 +238,7 @@
             const salesBody = root.querySelector('#salesShiftBody');
             if (salesBody) salesBody.innerHTML = (liveSales.items || []).map(salesRowHtml).join('') || '<tr><td colspan="8" class="warehouse-empty">Chưa có ca bán hàng trong tuần.</td></tr>';
           } catch { /* giữ snapshot cũ nếu API lỗi */ }
-        }, 15000);
+        }, 30000);
         if (!root._flyApproveBound) {
           root._flyApproveBound = true;
           root.addEventListener('click', event => {
@@ -286,7 +286,17 @@
           ? 'Chấm công ca hành chính 7h30–17h30. Giờ nghỉ trưa 11h30–13h30 không tính lương.'
           : 'Chấm công theo lịch đã được Quản lý công bố trước khi nhận nhiệm vụ hoặc mở quầy.';
         const duty = data.duty || {};
-        const goPos = Boolean(duty.canOpenShift);
+        const roleName = String(context.user?.TenVaiTro || context.user?.ChucVu || '').trim();
+        const isCashier = roleName === 'Thu ngân';
+        const clockedIn = Boolean(today?.ThoiGianVao && !today?.ThoiGianRa);
+        const canOpenSales = Boolean(duty.canOpenShift) && isCashier && !officeToday;
+        const nextAction = !clockedIn ? null
+          : canOpenSales ? { id: 'goNext', label: 'Đi tới mở ca bán hàng', target: 'cashier-shifts' }
+          : roleName === 'Kế toán' ? { id: 'goNext', label: 'Đi tới đối chiếu hóa đơn', target: 'accounting-invoices' }
+          : roleName === 'Thủ kho' ? { id: 'goNext', label: 'Đi tới tổng quan kho', target: 'warehouse-home' }
+          : roleName === 'Nhân viên mua hàng' ? { id: 'goNext', label: 'Đi tới đề nghị từ kho', target: 'purchasing-inbox' }
+          : null;
+        const nextBtn = nextAction ? `<button class="warehouse-primary" id="${nextAction.id}" data-next="${esc(nextAction.target)}">${esc(nextAction.label)}</button>` : '';
         const checkInBtn = !today
           ? ''
           : duty.canCheckIn === false && !today.ThoiGianVao
@@ -298,12 +308,15 @@
                 : '<span class="status-pill ok">Đã hoàn thành chấm công</span>';
         const dutyLine = duty.message && today ? `<p class="workforce-duty-note">${esc(duty.message)}</p>` : '';
         const restNote = data.publishedCount
-          ? `<article class="workforce-no-shift"><svg><use href="#i-calendar"/></svg><h2>Hôm nay bạn được xếp nghỉ</h2><p>Lịch tuần đã được công bố, nhưng hôm nay không có ca của bạn nên chưa hiện nút chấm công.${data.nextShift ? ` Ca gần nhất: <strong>${esc(data.nextShift.TenCa)} · ${shortDate(data.nextShift.NgayLam)}</strong>.` : ''} Muốn mở quầy hôm nay, hãy đăng nhập đúng thu ngân được phân <strong>ca chính 8 giờ</strong> trong ngày.</p></article>`
+          ? `<article class="workforce-no-shift"><svg><use href="#i-calendar"/></svg><h2>Hôm nay bạn được xếp nghỉ</h2><p>Lịch tuần đã được công bố, nhưng hôm nay không có ca của bạn nên chưa hiện nút chấm công.${data.nextShift ? ` Ca gần nhất: <strong>${esc(data.nextShift.TenCa)} · ${shortDate(data.nextShift.NgayLam)}</strong>.` : ''}${isCashier ? ' Muốn mở quầy hôm nay, hãy đăng nhập đúng thu ngân được phân <strong>ca chính 8 giờ</strong> trong ngày.' : ''}</p></article>`
           : `<article class="workforce-no-shift"><svg><use href="#i-calendar"/></svg><h2>Hôm nay chưa có lịch được công bố</h2><p>Bạn chưa thể chấm công. Hãy liên hệ Quản lý cửa hàng nếu lịch cần được điều chỉnh.</p></article>`;
-        root.innerHTML = `<header class="warehouse-heading"><div><p class="warehouse-kicker">NHÂN VIÊN / LỊCH CÁ NHÂN</p><h1>Lịch làm việc của tôi</h1><p>${intro}</p></div><span class="warehouse-chip">Supermarket Fly · Hà Nội</span></header>${today ? `<article class="workforce-today"><div><span class="cashier-live"><i></i> LỊCH HÔM NAY</span><h2>${esc(today.TenCa)} · ${esc(today.GioBatDau)}–${esc(today.GioKetThuc)}${lunch}</h2><p>${esc(today.NhiemVu)}${today.TenQuay ? ` tại ${esc(today.TenQuay)}` : ''}${officeToday ? ' · không mở quầy bán hàng' : ''}</p>${dutyLine}<div class="workforce-today-times"><span>Vào ca <strong>${fmtDateTime(today.ThoiGianVao)}</strong></span><span>Ra ca <strong>${fmtDateTime(today.ThoiGianRa)}</strong></span></div></div><div class="workforce-today-actions">${checkInBtn}${goPos ? '<button class="warehouse-primary" id="goShift">Đi tới mở ca bán hàng</button>' : ''}</div></article>` : restNote}<article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>LỊCH ĐÃ CÔNG BỐ</p><h2>Các lượt làm việc gần đây</h2></div><button class="warehouse-secondary" id="refreshPersonal"><svg><use href="#i-refresh"/></svg>Làm mới</button></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NGÀY</th><th>CA LÀM VIỆC</th><th>NHIỆM VỤ</th><th>QUẦY</th><th>CHẤM CÔNG VÀO</th><th>CHẤM CÔNG RA</th><th>TRẠNG THÁI</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><strong>${shortDate(item.NgayLam)}</strong></td><td>${esc(item.TenCa)}<small>${esc(item.GioBatDau)}–${esc(item.GioKetThuc)}${item.GioNghiBatDau ? ` · nghỉ ${esc(item.GioNghiBatDau)}–${esc(item.GioNghiKetThuc)}` : ''}</small></td><td>${esc(item.NhiemVu)}</td><td>${esc(item.TenQuay || '—')}</td><td>${fmtDateTime(item.ThoiGianVao)}</td><td>${fmtDateTime(item.ThoiGianRa)}</td><td><span class="status-pill ${item.ThoiGianRa ? 'ok' : item.ThoiGianVao ? 'sent' : 'draft'}">${esc(item.TrangThaiChamCong || 'Chưa chấm công')}</span></td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có lịch nào được công bố.</td></tr>'}</tbody></table></div></article>`;
+        root.innerHTML = `<header class="warehouse-heading"><div><p class="warehouse-kicker">NHÂN VIÊN / LỊCH CÁ NHÂN</p><h1>Lịch làm việc của tôi</h1><p>${intro}</p></div><span class="warehouse-chip">Supermarket Fly · Hà Nội</span></header>${today ? `<article class="workforce-today"><div><span class="cashier-live"><i></i> LỊCH HÔM NAY</span><h2>${esc(today.TenCa)} · ${esc(today.GioBatDau)}–${esc(today.GioKetThuc)}${lunch}</h2><p>${esc(today.NhiemVu)}${today.TenQuay ? ` tại ${esc(today.TenQuay)}` : ''}${officeToday ? ' · không mở quầy bán hàng' : ''}</p>${dutyLine}<div class="workforce-today-times"><span>Vào ca <strong>${fmtDateTime(today.ThoiGianVao)}</strong></span><span>Ra ca <strong>${fmtDateTime(today.ThoiGianRa)}</strong></span></div></div><div class="workforce-today-actions">${checkInBtn}${nextBtn}</div></article>` : restNote}<article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>LỊCH ĐÃ CÔNG BỐ</p><h2>Các lượt làm việc gần đây</h2></div><button class="warehouse-secondary" id="refreshPersonal"><svg><use href="#i-refresh"/></svg>Làm mới</button></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NGÀY</th><th>CA LÀM VIỆC</th><th>NHIỆM VỤ</th><th>QUẦY</th><th>CHẤM CÔNG VÀO</th><th>CHẤM CÔNG RA</th><th>TRẠNG THÁI</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><strong>${shortDate(item.NgayLam)}</strong></td><td>${esc(item.TenCa)}<small>${esc(item.GioBatDau)}–${esc(item.GioKetThuc)}${item.GioNghiBatDau ? ` · nghỉ ${esc(item.GioNghiBatDau)}–${esc(item.GioNghiKetThuc)}` : ''}</small></td><td>${esc(item.NhiemVu)}</td><td>${esc(item.TenQuay || '—')}</td><td>${fmtDateTime(item.ThoiGianVao)}</td><td>${fmtDateTime(item.ThoiGianRa)}</td><td><span class="status-pill ${item.ThoiGianRa ? 'ok' : item.ThoiGianVao ? 'sent' : 'draft'}">${esc(item.TrangThaiChamCong || 'Chưa chấm công')}</span></td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có lịch nào được công bố.</td></tr>'}</tbody></table></div></article>`;
         root.querySelector('#checkIn')?.addEventListener('click', async () => { try { const result = await api(context, '/cashier/attendance/check-in', { method: 'POST' }); context.showToast(result.message, 'success'); await load(); } catch (error) { context.showToast(error.message, 'error'); } });
         root.querySelector('#checkOut')?.addEventListener('click', async () => { try { const result = await api(context, '/cashier/attendance/check-out', { method: 'POST' }); context.showToast(result.message, 'success'); await load(); } catch (error) { context.showToast(error.message, 'error'); } });
-        root.querySelector('#goShift')?.addEventListener('click', () => context.navigate('cashier-shifts'));
+        root.querySelector('#goNext')?.addEventListener('click', event => {
+          const target = event.currentTarget.dataset.next;
+          if (target) context.navigate(target);
+        });
         root.querySelector('#refreshPersonal').addEventListener('click', load);
       } catch (error) { context.showToast(error.message, 'error'); }
     };     await load();

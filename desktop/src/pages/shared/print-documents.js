@@ -44,10 +44,12 @@
       const raw = typeof chart.label === 'function' ? chart.label(row) : row[chart.labelKey];
       return `<text x="${x(index)}" y="${height - 8}" text-anchor="middle">${esc(chart.labelFormat === 'date' ? date(raw) : raw)}</text>`;
     }).join('');
-    const paths = series.map(item => {
+    const paths = series.map((item, seriesIndex) => {
+      const shift = series.length <= 1 ? 0 : (seriesIndex - (series.length - 1) / 2) * 6;
+      const dash = seriesIndex === 0 ? '' : ' stroke-dasharray="6 4"';
       const path = item.values.map((value, index) => `${index ? 'L' : 'M'}${x(index)},${y(value)}`).join(' ');
-      const points = item.values.map((value, index) => `<circle cx="${x(index)}" cy="${y(value)}" r="3.6" fill="${item.color}"/>`).join('');
-      return `<path d="${path}" stroke="${item.color}"/>${points}`;
+      const points = item.values.map((value, index) => `<circle cx="${x(index) + shift}" cy="${y(value)}" r="${seriesIndex === 0 ? 4.4 : 3.2}" fill="${item.color}"/>`).join('');
+      return `<path d="${path}" stroke="${item.color}"${dash}/>${points}`;
     }).join('');
     const legend = series.map(item => `<span><i style="background:${item.color}"></i>${esc(item.name)}</span>`).join('');
     return `<section class="report-chart"><div class="section-heading"><div><span>PHÂN TÍCH XU HƯỚNG</span><strong>${esc(chart.title || 'Diễn biến trong kỳ')}</strong></div><div class="chart-legend">${legend}</div></div><svg viewBox="0 0 ${width} ${height}" role="img"><g class="chart-grid">${grid}${labels}</g><g class="chart-lines">${paths}</g></svg></section>`;
@@ -154,7 +156,29 @@
     return `<!doctype html><html lang="vi"><head><meta charset="UTF-8"><title>${esc(config.title)} ${esc(config.number || '')}</title><style>${css}</style></head><body>${body}</body></html>`;
   };
 
-  const show = config => {
+  const pdfFileName = config => {
+    const raw = [config.title, config.number].filter(Boolean).join('-') || 'chung-tu';
+    const safe = String(raw).replace(/[<>:"/\\|?*\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'chung-tu';
+    return `${safe}.pdf`;
+  };
+
+  const htmlFromPreview = (iframe, config, skin) => {
+    const doc = iframe?.contentDocument;
+    if (doc?.documentElement) return `<!doctype html>${doc.documentElement.outerHTML}`;
+    return build({ ...config, skin });
+  };
+
+  const downloadHtmlFallback = (html, fileName) => {
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = String(fileName || 'chung-tu.pdf').replace(/\.pdf$/i, '.html');
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const openPreview = config => {
     const old = document.querySelector('.document-preview-backdrop');
     if (old) old.remove();
     const isReport = isReportDoc(config);
@@ -162,7 +186,7 @@
     const overlay = document.createElement('div');
     overlay.className = `document-preview-backdrop${isReport ? ' report-preview' : ''}`;
     overlay.innerHTML = `<div class="document-preview-shell"><header>
-        <div><span class="print-preview-kicker"></span><strong>${esc(config.title)} · ${esc(config.number || '')}</strong></div>
+        <div><span class="print-preview-kicker"></span><strong>${esc(config.title)} · ${esc(config.number || '')}</strong><em class="print-preview-status" aria-live="polite"></em></div>
         <div class="print-preview-actions">
           <div class="print-skin-toggle" role="radiogroup" aria-label="Chọn bản in">
             <button type="button" class="print-skin" data-skin="system">Bản hệ thống</button>
@@ -176,6 +200,12 @@
     const iframe = overlay.querySelector('iframe');
     const shell = overlay.querySelector('.document-preview-shell');
     const kicker = overlay.querySelector('.print-preview-kicker');
+    const statusEl = overlay.querySelector('.print-preview-status');
+    const printButton = overlay.querySelector('.print-document');
+    const setStatus = (text, isError = false) => {
+      statusEl.textContent = text || '';
+      statusEl.classList.toggle('is-error', Boolean(isError));
+    };
     const render = () => {
       overlay.querySelectorAll('.print-skin').forEach(button => button.classList.toggle('is-active', button.dataset.skin === skin));
       shell.classList.toggle('official-skin', skin === 'official');
@@ -197,9 +227,44 @@
     const close = () => overlay.remove();
     overlay.querySelector('.close-preview').addEventListener('click', close);
     overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
-    overlay.querySelector('.print-document').addEventListener('click', () => iframe.contentWindow?.print());
+    printButton.addEventListener('click', async () => {
+      printButton.disabled = true;
+      setStatus('Đang tạo file PDF...');
+      try {
+        const html = htmlFromPreview(iframe, config, skin);
+        const defaultName = pdfFileName({ ...config, skin });
+        const landscape = config.orientation === 'landscape';
+        if (window.flyDesktop?.savePrintPdf) {
+          const result = await window.flyDesktop.savePrintPdf({ html, defaultName, landscape });
+          if (result?.canceled) { setStatus(''); return; }
+          setStatus('Đã lưu PDF và mở bản in.');
+        } else {
+          downloadHtmlFallback(html, defaultName);
+          setStatus('Đã tải bản in. Mở file để in từ trình xem PDF/HTML.');
+        }
+      } catch (error) {
+        setStatus(error.message || 'Không tạo được bản in.', true);
+      } finally {
+        printButton.disabled = false;
+      }
+    });
     render();
   };
 
-  window.FLY_PRINT = { show, build, money, date };
+  const show = async config => {
+    let resolved = config;
+    if (typeof config?.ensureSaved === 'function') {
+      try {
+        const next = await config.ensureSaved();
+        if (next === false || next == null) return;
+        if (next && typeof next === 'object') resolved = { ...config, ...next, ensureSaved: undefined };
+      } catch (error) {
+        window.alert(error.message || 'Không lưu được chứng từ trước khi in.');
+        return;
+      }
+    }
+    openPreview(resolved);
+  };
+
+  window.FLY_PRINT = { show, build, money, date, pdfFileName };
 })();

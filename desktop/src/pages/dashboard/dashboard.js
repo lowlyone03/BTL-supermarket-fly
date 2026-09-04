@@ -260,8 +260,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const extra = fresh.length > 1 ? ` và ${fresh.length - 1} việc khác` : '';
       window.showToast(`Việc mới: ${fresh[0].title}${extra}`, 'success');
       const currentTarget = currentNav?.dataset.target;
+      const heavyPages = new Set(['accounting-reports', 'manager-reports', 'warehouse-reports', 'cashier-reports', 'purchasing-reports']);
       const shouldReload = fresh.some(item => item.target === currentTarget || (currentTarget === 'home' && item.target === 'manager-purchase-approvals'));
-      if (shouldReload && !workspaceBusy()) refreshCurrentPage();
+      if (shouldReload && !workspaceBusy() && !heavyPages.has(currentTarget)) refreshCurrentPage();
     }
   };
   const refreshCurrentPage = async () => {
@@ -633,7 +634,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   loadInbox();
   clearInterval(inboxTimer);
-  inboxTimer = setInterval(() => loadInbox({ announce: true }), 12000);
+  inboxTimer = setInterval(() => loadInbox({ announce: true }), 30000);
 
   if (isManager) {
     loadOverview();

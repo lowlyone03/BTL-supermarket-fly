@@ -137,12 +137,14 @@ const getPurchaseOrderFile = async (req, res) => {
     try {
         const pool = await poolPromise;
         const header = await pool.request().input('MaPO', sql.VarChar, req.params.id).query(`
-            SELECT po.MaPO,po.MaNCC,ncc.TenNCC,po.SoNgayThanhToan,po.DieuKhoanThanhToan,po.TrangThai
+            SELECT po.MaPO,po.MaNCC,ncc.TenNCC,po.SoNgayThanhToan,po.DieuKhoanThanhToan,po.TrangThai,
+                   po.TongTien,po.NgayLap,po.NgayGiaoDuKien
             FROM DonMuaHang po JOIN NhaCungCap ncc ON ncc.MaNCC=po.MaNCC
             WHERE po.MaPO=@MaPO AND po.TrangThai NOT IN (N'Nháp',N'Chờ duyệt',N'Yêu cầu chỉnh sửa',N'Từ chối')`);
         if (!header.recordset.length) return res.status(404).json({ message: 'Đơn mua chưa đủ điều kiện tiếp nhận hóa đơn.' });
         const lines = await pool.request().input('MaPO', sql.VarChar, req.params.id).query(`
-            SELECT ct.MaSP,sp.TenSP,sp.DonViTinh,ct.SoLuong,ct.DonGia
+            SELECT ct.MaSP,sp.TenSP,sp.DonViTinh,ct.SoLuong,ct.DonGia,
+                   ct.SoLuong*ct.DonGia AS ThanhTien
             FROM ChiTietDonMua ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
             WHERE ct.MaPO=@MaPO ORDER BY sp.TenSP`);
         res.json({ file: header.recordset[0], lines: lines.recordset });

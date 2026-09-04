@@ -144,7 +144,23 @@ const getReceiptDetail = async (req, res) => {
         const lines = await pool.request().input('MaPN', sql.VarChar, req.params.id).query(`
             SELECT ct.*,sp.TenSP,sp.DonViTinh FROM ChiTietPhieuNhap ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
             WHERE ct.MaPN=@MaPN ORDER BY sp.TenSP`);
-        res.json({ receipt: header.recordset[0], lines: lines.recordset });
+        const [audit, stockMoves] = await Promise.all([
+            pool.request().input('MaBanGhi', sql.VarChar, req.params.id).query(`
+                SELECT nk.ThoiGian, nk.HanhDong, nk.NoiDung, n.TenNV
+                FROM NhatKy nk
+                LEFT JOIN TaiKhoan t ON t.MaTK=nk.MaTK
+                LEFT JOIN NhanVien n ON n.MaNV=t.MaNV
+                WHERE nk.BangLienQuan=N'PhieuNhap' AND nk.MaBanGhi=@MaBanGhi
+                ORDER BY nk.ThoiGian`),
+            pool.request().input('MaPN', sql.VarChar, req.params.id).query(`
+                SELECT gd.LoaiGD, gd.SoLuong, gd.NgayGD, gd.GhiChu, sp.MaSP, sp.TenSP, nv.TenNV NguoiGhiSo
+                FROM GiaoDichKho gd
+                JOIN SanPham sp ON sp.MaSP=gd.MaSP
+                JOIN NhanVien nv ON nv.MaNV=gd.MaNV
+                WHERE gd.LoaiChungTu IN (N'Phiếu nhập', N'PhieuNhap') AND gd.MaChungTu=@MaPN
+                ORDER BY gd.NgayGD`)
+        ]);
+        res.json({ receipt: header.recordset[0], lines: lines.recordset, audit: audit.recordset, stockMoves: stockMoves.recordset });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải chi tiết Phiếu nhập.' });

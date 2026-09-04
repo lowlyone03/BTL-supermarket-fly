@@ -75,7 +75,7 @@ const cashierReturnScope = `
 
 const queryReturnDiagnostics = async (pool, period, maNV = null) => {
     const bind = () => bindPeriod(pool, period).input('MaNV', sql.VarChar(20), maNV);
-    const [summary, tickets, products] = await Promise.all([
+    const [summary, tickets, products, lines, audit] = await Promise.all([
         bind().query(`
             SELECT
               COUNT(*) SoPhieu,
@@ -95,8 +95,9 @@ const queryReturnDiagnostics = async (pool, period, maNV = null) => {
               )
               ${cashierReturnScope}`),
         bind().query(`
-            SELECT TOP 20 dt.MaDT, dt.MaHD, dt.NgayLap, dt.NgayHoan, dt.HinhThucXuLy, dt.SoTienHoan,
-                   dt.TrangThai, dt.LyDo, dt.KetQuaKiemTra, dt.MaCaHoan,
+            SELECT TOP 20 dt.MaDT, dt.MaHD, dt.NgayLap, dt.NgayKiemTra, dt.NgayDuyet, dt.NgayHoan,
+                   dt.HinhThucXuLy, dt.SoTienHoan, dt.TrangThai, dt.LyDo, dt.KetQuaKiemTra,
+                   dt.GhiChu, dt.MaCaHoan,
                    kh.TenKH, lap.TenNV NguoiLap, kho.TenNV NguoiKiemTra, duyet.TenNV NguoiDuyet,
                    ${RETURN_STEP_SQL} BuocCanXuLy,
                    ${STOCK_FATE_SQL} HangDiDau
@@ -135,11 +136,54 @@ const queryReturnDiagnostics = async (pool, period, maNV = null) => {
               )
               ${cashierReturnScope}
             GROUP BY sp.MaSP, sp.TenSP
-            ORDER BY SLTra DESC`)
+            ORDER BY SLTra DESC`),
+        bind().query(`
+            SELECT ct.MaDT, ct.MaSP, sp.TenSP, ct.LoaiDong, ct.SoLuong, ct.DonGia, ct.ThanhTien, ct.LyDo
+            FROM ChiTietDoiTra ct
+            JOIN PhieuDoiTra dt ON dt.MaDT=ct.MaDT
+            JOIN SanPham sp ON sp.MaSP=ct.MaSP
+            WHERE dt.TrangThai NOT IN (N'Đã hủy')
+              AND (
+                (dt.NgayLap>=@From AND dt.NgayLap<@ToExclusive)
+                OR (dt.NgayHoan IS NOT NULL AND dt.NgayHoan>=@From AND dt.NgayHoan<@ToExclusive)
+              )
+              ${cashierReturnScope}
+            ORDER BY ct.LoaiDong, sp.TenSP`),
+        bind().query(`
+            SELECT nk.MaNK, nk.MaBanGhi, nk.HanhDong, nk.NoiDung, nk.ThoiGian, n.TenNV
+            FROM NhatKy nk
+            LEFT JOIN TaiKhoan t ON t.MaTK=nk.MaTK
+            LEFT JOIN NhanVien n ON n.MaNV=t.MaNV
+            WHERE nk.BangLienQuan=N'PhieuDoiTra'
+              AND EXISTS (
+                SELECT 1 FROM PhieuDoiTra dt
+                WHERE dt.MaDT=nk.MaBanGhi
+                  AND dt.TrangThai NOT IN (N'Đã hủy')
+                  AND (
+                    (dt.NgayLap>=@From AND dt.NgayLap<@ToExclusive)
+                    OR (dt.NgayHoan IS NOT NULL AND dt.NgayHoan>=@From AND dt.NgayHoan<@ToExclusive)
+                  )
+                  ${cashierReturnScope}
+              )
+            ORDER BY nk.ThoiGian`)
     ]);
+    const linesByTicket = new Map();
+    for (const line of lines.recordset) {
+        if (!linesByTicket.has(line.MaDT)) linesByTicket.set(line.MaDT, []);
+        linesByTicket.get(line.MaDT).push(line);
+    }
+    const auditByTicket = new Map();
+    for (const row of audit.recordset) {
+        if (!auditByTicket.has(row.MaBanGhi)) auditByTicket.set(row.MaBanGhi, []);
+        auditByTicket.get(row.MaBanGhi).push(row);
+    }
     return {
         summary: summary.recordset[0] || {},
-        tickets: tickets.recordset,
+        tickets: tickets.recordset.map(ticket => ({
+            ...ticket,
+            lines: linesByTicket.get(ticket.MaDT) || [],
+            audit: auditByTicket.get(ticket.MaDT) || []
+        })),
         products: products.recordset
     };
 };
@@ -434,7 +478,7 @@ const getWarehouseReport = async (req, res) => {
     try {
         const pool = await poolPromise;
         const { period, latestActivity, fallbackFrom } = await resolveReportPeriod(pool, req.query);
-        const [movement, stock, low, docs, daily, laterMovement, inventoryByCategory, recentDocuments] = await Promise.all([
+        const [movement, stock, low, docs, daily, laterMovement, inventoryByCategory, recentDocuments, dailyDocuments, topProductsByCategory] = await Promise.all([
             bindPeriod(pool, period).query(`
                 SELECT COALESCE(SUM(CASE WHEN LoaiGD=N'Nhập' THEN SoLuong ELSE 0 END),0) SoLuongNhap,
                        COALESCE(SUM(CASE WHEN LoaiGD=N'Xuất' THEN ABS(SoLuong) ELSE 0 END),0) SoLuongXuat,
@@ -469,7 +513,9 @@ const getWarehouseReport = async (req, res) => {
                 SELECT CONVERT(date,NgayGD) Ngay,
                        COALESCE(SUM(CASE WHEN LoaiGD=N'Nhập' THEN SoLuong ELSE 0 END),0) SoLuongNhap,
                        COALESCE(SUM(CASE WHEN LoaiGD=N'Xuất' THEN ABS(SoLuong) ELSE 0 END),0) SoLuongXuat,
-                       COALESCE(SUM(CASE WHEN LoaiGD=N'Điều chỉnh' THEN SoLuong ELSE 0 END),0) DieuChinhRong
+                       COALESCE(SUM(CASE WHEN LoaiGD=N'Điều chỉnh' THEN SoLuong ELSE 0 END),0) DieuChinhRong,
+                       COUNT(DISTINCT CASE WHEN LoaiGD=N'Nhập' THEN ISNULL(MaChungTu, MaGD) END) SoChungTuNhap,
+                       COUNT(DISTINCT CASE WHEN LoaiGD=N'Xuất' THEN ISNULL(MaChungTu, MaGD) END) SoChungTuXuat
                 FROM GiaoDichKho WHERE NgayGD>=@From AND NgayGD<@ToExclusive
                 GROUP BY CONVERT(date,NgayGD) ORDER BY Ngay`),
             bindPeriod(pool, period).query(`
@@ -480,6 +526,7 @@ const getWarehouseReport = async (req, res) => {
                        COALESCE(SUM(tk.GiaTriTon),0) GiaTriTon
                 FROM DanhMuc dm JOIN SanPham sp ON sp.MaDM=dm.MaDM
                 LEFT JOIN TonKho tk ON tk.MaSP=sp.MaSP
+                WHERE sp.TrangThai IN (N'Đang bán',N'Đang kinh doanh')
                 GROUP BY dm.MaDM,dm.TenDM ORDER BY GiaTriTon DESC`),
             bindPeriod(pool, period).query(`
                 SELECT TOP 12 * FROM (
@@ -499,7 +546,30 @@ const getWarehouseReport = async (req, res) => {
                              WHERE ct.MaKK=kk.MaKK),0)
                     FROM KiemKe kk JOIN NhanVien nv ON nv.MaNV=kk.MaNV
                     WHERE kk.NgayKiemKe>=@From AND kk.NgayKiemKe<@ToExclusive
-                ) d ORDER BY NgayChungTu DESC`)
+                ) d ORDER BY NgayChungTu DESC`),
+            bindPeriod(pool, period).query(`
+                SELECT CONVERT(date, NgayGD) Ngay,
+                       MAX(LoaiGD) LoaiGD,
+                       MAX(LoaiChungTu) LoaiChungTu,
+                       MaChungTu,
+                       COUNT(*) SoDong,
+                       SUM(CASE WHEN LoaiGD=N'Nhập' THEN SoLuong WHEN LoaiGD=N'Xuất' THEN ABS(SoLuong) ELSE SoLuong END) SoLuong
+                FROM GiaoDichKho
+                WHERE NgayGD>=@From AND NgayGD<@ToExclusive AND MaChungTu IS NOT NULL
+                GROUP BY CONVERT(date, NgayGD), MaChungTu
+                ORDER BY Ngay, MaChungTu`),
+            pool.request().query(`
+                SELECT MaDM, TenDM, MaSP, TenSP, SLTon, GiaTriTon
+                FROM (
+                    SELECT dm.MaDM, dm.TenDM, sp.MaSP, sp.TenSP,
+                           ISNULL(tk.SLTon,0) SLTon, ISNULL(tk.GiaTriTon,0) GiaTriTon,
+                           ROW_NUMBER() OVER (PARTITION BY dm.MaDM ORDER BY ISNULL(tk.GiaTriTon,0) DESC, sp.TenSP) Hang
+                    FROM SanPham sp
+                    JOIN DanhMuc dm ON dm.MaDM=sp.MaDM
+                    LEFT JOIN TonKho tk ON tk.MaSP=sp.MaSP
+                    WHERE sp.TrangThai IN (N'Đang bán',N'Đang kinh doanh') AND ISNULL(tk.SLTon,0) > 0
+                ) x WHERE Hang <= 3
+                ORDER BY MaDM, GiaTriTon DESC`)
         ]);
         const m = movement.recordset[0];
         const currentQuantity = Number(stock.recordset[0].TongTon || 0);
@@ -521,6 +591,8 @@ const getWarehouseReport = async (req, res) => {
             daily: dailyRows,
             inventoryByCategory: inventoryByCategory.recordset,
             recentDocuments: recentDocuments.recordset,
+            dailyDocuments: dailyDocuments.recordset,
+            topProductsByCategory: topProductsByCategory.recordset,
             doiTra: await queryReturnDiagnostics(pool, period)
         });
     } catch (error) {
@@ -766,6 +838,80 @@ const postStoreProfitLossPlan = async (req, res) => {
     }
 };
 
+const getReportDocuments = async (req, res) => {
+    try {
+        const kind = String(req.query.kind || '').trim().toLowerCase();
+        if (!['purchases', 'inventory', 'cash'].includes(kind)) {
+            return res.status(400).json({ message: 'Chọn đúng nhóm chứng từ: mua hàng, nhập–xuất–tồn hoặc thu–chi.' });
+        }
+        const pool = await poolPromise;
+        const { period } = await resolveReportPeriod(pool, { ...req.query, lockPeriod: '1' });
+        if (kind === 'purchases') {
+            const [orders, receipts, invoices] = await Promise.all([
+                bindPeriod(pool, period).query(`
+                    SELECT TOP 30 po.MaPO, ncc.TenNCC, po.NgayLap, po.TongTien, po.TrangThai
+                    FROM DonMuaHang po JOIN NhaCungCap ncc ON ncc.MaNCC=po.MaNCC
+                    WHERE po.NgayLap>=@From AND po.NgayLap<@ToExclusive
+                      AND po.TrangThai NOT IN (N'Nháp', N'Từ chối')
+                    ORDER BY po.NgayLap DESC`),
+                bindPeriod(pool, period).query(`
+                    SELECT TOP 30 pn.MaPN, pn.MaPO, ncc.TenNCC, pn.NgayXacNhan, pn.TongTien, pn.TrangThai
+                    FROM PhieuNhap pn JOIN NhaCungCap ncc ON ncc.MaNCC=pn.MaNCC
+                    WHERE pn.TrangThai=N'Đã xác nhận' AND pn.NgayXacNhan>=@From AND pn.NgayXacNhan<@ToExclusive
+                    ORDER BY pn.NgayXacNhan DESC`),
+                bindPeriod(pool, period).query(`
+                    SELECT TOP 30 hd.MaHDMH, hd.SoHoaDon, ncc.TenNCC, hd.NgayHoaDon, hd.TongTienHang,
+                           hd.TienThue, hd.TongCong, hd.TrangThaiDoiChieu, hd.MaPO, hd.MaPN
+                    FROM HoaDonMuaHang hd JOIN NhaCungCap ncc ON ncc.MaNCC=hd.MaNCC
+                    WHERE hd.NgayHoaDon>=@From AND hd.NgayHoaDon<@ToExclusive
+                    ORDER BY hd.NgayHoaDon DESC`)
+            ]);
+            return res.json({
+                kind, period,
+                orders: orders.recordset,
+                receipts: receipts.recordset,
+                invoices: invoices.recordset
+            });
+        }
+        if (kind === 'inventory') {
+            const movements = await bindPeriod(pool, period).query(`
+                SELECT TOP 40 gd.NgayGD, gd.LoaiGD, gd.MaChungTu, gd.LoaiChungTu,
+                       sp.MaSP, sp.TenSP, gd.SoLuong, gd.ThanhTienVon, nv.TenNV
+                FROM GiaoDichKho gd
+                JOIN SanPham sp ON sp.MaSP=gd.MaSP
+                LEFT JOIN NhanVien nv ON nv.MaNV=gd.MaNV
+                WHERE gd.NgayGD>=@From AND gd.NgayGD<@ToExclusive
+                ORDER BY gd.NgayGD DESC`);
+            return res.json({ kind, period, movements: movements.recordset });
+        }
+        const [receipts, vouchers] = await Promise.all([
+            bindPeriod(pool, period).query(`
+                SELECT TOP 30 pt.MaPT, pt.MaCa, pt.NgayLap, pt.SoTienTheoHeThong, pt.SoTienThucNop,
+                       pt.TrangThai, nv.TenNV
+                FROM PhieuThu pt
+                LEFT JOIN NhanVien nv ON nv.MaNV=pt.MaNV_Lap
+                WHERE pt.NgayLap>=@From AND pt.NgayLap<@ToExclusive
+                ORDER BY pt.NgayLap DESC`),
+            bindPeriod(pool, period).query(`
+                SELECT TOP 30 pc.MaPhieu, pc.MaCongNo, ncc.TenNCC, pc.NgayChungTu, pc.SoTien,
+                       pc.TrangThai, pc.NoiDung, nv.TenNV NguoiLap
+                FROM PhieuChi pc
+                LEFT JOIN NhaCungCap ncc ON ncc.MaNCC=pc.MaNCC
+                LEFT JOIN NhanVien nv ON nv.MaNV=pc.MaNV
+                WHERE pc.NgayChungTu>=@From AND pc.NgayChungTu<@ToExclusive
+                ORDER BY pc.NgayChungTu DESC`)
+        ]);
+        return res.json({
+            kind, period,
+            receipts: receipts.recordset,
+            vouchers: vouchers.recordset
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không thể tải chứng từ của kỳ báo cáo.' });
+    }
+};
+
 module.exports = {
     getFinancialReport,
     getStoreOperationsReport,
@@ -773,5 +919,6 @@ module.exports = {
     getSalesReport,
     getPurchasingReport,
     getStoreProfitLossReport,
-    postStoreProfitLossPlan
+    postStoreProfitLossPlan,
+    getReportDocuments
 };

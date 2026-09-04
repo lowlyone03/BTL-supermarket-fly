@@ -20,9 +20,10 @@ const writeAudit = (request, user, action, recordId, content) =>
 
 const loadDetail = async (pool, maDT) => {
     const header = await pool.request().input('MaDT', sql.VarChar, maDT).query(`
-        SELECT dt.*, hd.NgayLap NgayHoaDon, hd.TongThanhToan, hd.MaKH, hd.MaCa MaCaGoc,
-               kh.TenKH, kh.SDT, nv.TenNV NguoiLap, nvk.TenNV NguoiKiemTra, nvd.TenNV NguoiDuyet,
-               ban.TenNV ThuNganGoc
+        SELECT dt.*, hd.NgayLap NgayHoaDon, hd.TongThanhToan, hd.MaKH, hd.MaCa MaCaGoc, hd.MaKho,
+               kh.TenKH, kh.SDT, kh.HangThanhVien,
+               nv.TenNV NguoiLap, nvk.TenNV NguoiKiemTra, nvd.TenNV NguoiDuyet,
+               ban.TenNV ThuNganGoc, k.TenKho, k.DiaChi DiaChiKho
         FROM PhieuDoiTra dt
         JOIN HoaDon hd ON hd.MaHD=dt.MaHD
         JOIN NhanVien nv ON nv.MaNV=dt.MaNV_Lap
@@ -30,13 +31,46 @@ const loadDetail = async (pool, maDT) => {
         LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
         LEFT JOIN NhanVien nvk ON nvk.MaNV=dt.MaNV_KiemTra
         LEFT JOIN NhanVien nvd ON nvd.MaNV=dt.MaNV_Duyet
+        LEFT JOIN Kho k ON k.MaKho=hd.MaKho
         WHERE dt.MaDT=@MaDT`);
     if (!header.recordset.length) return null;
-    const lines = await pool.request().input('MaDT', sql.VarChar, maDT).query(`
-        SELECT ct.*, sp.TenSP, sp.DonViTinh
-        FROM ChiTietDoiTra ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
-        WHERE ct.MaDT=@MaDT ORDER BY ct.LoaiDong, sp.TenSP`);
-    return { ticket: header.recordset[0], lines: lines.recordset };
+    const ticket = header.recordset[0];
+    const bind = () => pool.request().input('MaDT', sql.VarChar, maDT).input('MaHD', sql.VarChar, ticket.MaHD);
+    const [lines, payments, audit, stockMoves] = await Promise.all([
+        bind().query(`
+            SELECT ct.*, sp.TenSP, sp.DonViTinh, sp.MaVach, hdct.SoLuong SLBan
+            FROM ChiTietDoiTra ct
+            JOIN SanPham sp ON sp.MaSP=ct.MaSP
+            LEFT JOIN ChiTietHoaDon hdct ON hdct.MaHD=@MaHD AND hdct.MaSP=ct.MaSP
+            WHERE ct.MaDT=@MaDT
+            ORDER BY ct.LoaiDong, sp.TenSP`),
+        bind().query(`
+            SELECT PhuongThuc, SoTien, TrangThai, MaGiaoDich, NgayTT
+            FROM ThanhToan
+            WHERE MaHD=@MaHD AND TrangThai=N'Thành công'
+            ORDER BY NgayTT`),
+        bind().query(`
+            SELECT nk.ThoiGian, nk.HanhDong, nk.NoiDung, n.TenNV
+            FROM NhatKy nk
+            LEFT JOIN TaiKhoan t ON t.MaTK=nk.MaTK
+            LEFT JOIN NhanVien n ON n.MaNV=t.MaNV
+            WHERE nk.BangLienQuan=N'PhieuDoiTra' AND nk.MaBanGhi=@MaDT
+            ORDER BY nk.ThoiGian`),
+        bind().query(`
+            SELECT gd.LoaiGD, gd.SoLuong, gd.NgayGD, gd.GhiChu, sp.MaSP, sp.TenSP, nv.TenNV NguoiGhiSo
+            FROM GiaoDichKho gd
+            JOIN SanPham sp ON sp.MaSP=gd.MaSP
+            JOIN NhanVien nv ON nv.MaNV=gd.MaNV
+            WHERE gd.LoaiChungTu=N'DoiTra' AND gd.MaChungTu=@MaDT
+            ORDER BY gd.NgayGD`)
+    ]);
+    return {
+        ticket,
+        lines: lines.recordset,
+        payments: payments.recordset,
+        audit: audit.recordset,
+        stockMoves: stockMoves.recordset
+    };
 };
 
 const searchInvoices = async (req, res) => {

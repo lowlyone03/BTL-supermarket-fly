@@ -16,6 +16,28 @@
   };
   const heading = (kicker, title, subtitle, action = '') => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(kicker)}</p><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div>${action}</header>`;
 
+  const printReceipt = data => {
+    const receipt = data.receipt;
+    window.FLY_PRINT.show({
+      title: receipt.TrangThai === 'Đã xác nhận' ? 'PHIẾU NHẬP KHO' : 'BIÊN BẢN KIỂM NHẬN HÀNG',
+      number: receipt.MaPN, documentDate: receipt.NgayXacNhan || receipt.NgayNhap, status: receipt.TrangThai,
+      fields: [
+        { label: 'Đơn mua', value: receipt.MaPO }, { label: 'Nhà cung cấp', value: receipt.TenNCC },
+        { label: 'Kho nhập', value: receipt.TenKho }, { label: 'Người kiểm nhận', value: receipt.NguoiKiemNhan }
+      ],
+      columns: [
+        { label: 'Mã hàng', key: 'MaSP' }, { label: 'Tên mặt hàng', key: 'TenSP' }, { label: 'ĐVT', key: 'DonViTinh' },
+        { label: 'SL giao', key: 'SoLuongGiao', align: 'right' }, { label: 'SL nhập', key: 'SoLuongChapNhan', align: 'right' },
+        { label: 'Từ chối', key: 'SoLuongTuChoi', align: 'right' }, { label: 'Đơn giá', key: 'DonGiaNhap', format: 'money', align: 'right' },
+        { label: 'Số lô', key: 'SoLo' }, { label: 'Hạn dùng', key: 'HanSD', format: 'date' }
+      ], rows: data.lines, totals: [
+        { label: 'Tổng số lượng nhập', value: data.lines.reduce((sum, line) => sum + Number(line.SoLuongChapNhan || 0), 0) },
+        { label: 'Tổng giá trị nhập', value: receipt.TongTien, format: 'money' }
+      ], note: receipt.GhiChu || 'Số lượng từ chối không được ghi tăng tồn kho.',
+      signatures: ['Đại diện Nhà cung cấp', 'Thủ kho kiểm nhận', 'Kế toán']
+    });
+  };
+
   const receiptDetail = async (context, id, onDone = async () => {}) => {
     try {
       const data = await api(context, `/warehouse/receipts/${id}`);
@@ -23,27 +45,12 @@
       const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
       const rows = data.lines.map(line => `<tr><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)}</small></td><td class="num">${line.SoLuongGiao}</td><td class="num"><strong>${line.SoLuongChapNhan}</strong></td><td class="num">${line.SoLuongTuChoi}</td><td class="num">${money(line.DonGiaNhap)}</td><td>${esc(line.TinhTrangHang || '—')}<small>${esc(line.LyDoTuChoi || '')}</small></td><td>${esc(line.SoLo || '—')}<small>${line.HanSD ? `HSD ${fmtDate(line.HanSD).split(' ')[0]}` : ''}</small></td></tr>`).join('');
       const confirmAction = receipt.TrangThai === 'Nháp' ? '<button class="warehouse-primary confirm-receipt">Xác nhận nhập kho</button>' : '';
-      overlay.innerHTML = `<div class="warehouse-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">PHIẾU KIỂM NHẬN HÀNG</p><h2>${esc(receipt.MaPN)}</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="warehouse-detail-grid"><div><span>ĐƠN MUA</span><strong>${esc(receipt.MaPO)}</strong></div><div><span>NHÀ CUNG CẤP</span><strong>${esc(receipt.TenNCC)}</strong></div><div><span>KHO NHẬN</span><strong>${esc(receipt.TenKho)}</strong></div><div><span>NGƯỜI KIỂM NHẬN</span><strong>${esc(receipt.NguoiKiemNhan)}</strong></div><div><span>TRẠNG THÁI</span><strong><span class="status-pill ${statusClass(receipt.TrangThai)}">${esc(receipt.TrangThai)}</span></strong></div><div><span>GIÁ TRỊ CHẤP NHẬN</span><strong>${money(receipt.TongTien)}</strong></div></div><p class="warehouse-modal-note"><strong>Nguyên tắc:</strong> chỉ số lượng chấp nhận được cộng vào tồn kho; số lượng từ chối vẫn là phần Nhà cung cấp chưa giao đủ.</p><div class="warehouse-table-wrap warehouse-form-lines"><table class="warehouse-table"><thead><tr><th>MẶT HÀNG</th><th>GIAO</th><th>CHẤP NHẬN</th><th>TỪ CHỐI</th><th>ĐƠN GIÁ</th><th>TÌNH TRẠNG</th><th>LÔ / HSD</th></tr></thead><tbody>${rows}</tbody></table></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Đóng</button><button class="warehouse-secondary print-receipt"><svg><use href="#i-report"/></svg>Xem bản in</button>${confirmAction}</div></div>`;
+      const moves = (data.stockMoves || []).map(move => `<li><strong>${esc(move.LoaiGD)} ${Number(move.SoLuong) > 0 ? '+' : ''}${move.SoLuong}</strong> ${esc(move.TenSP)} <small>${esc(move.GhiChu || '')} · ${esc(move.NguoiGhiSo)} · ${fmtDate(move.NgayGD)}</small></li>`).join('');
+      const logs = (data.audit || []).map(row => `<li><strong>${esc(row.HanhDong)}</strong> <small>${fmtDate(row.ThoiGian)}${row.TenNV ? ` · ${esc(row.TenNV)}` : ''}</small><span>${esc(row.NoiDung || '')}</span></li>`).join('');
+      overlay.innerHTML = `<div class="warehouse-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">PHIẾU KIỂM NHẬN HÀNG</p><h2>${esc(receipt.MaPN)}</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="warehouse-detail-grid"><div><span>ĐƠN MUA</span><strong>${esc(receipt.MaPO)}</strong></div><div><span>NHÀ CUNG CẤP</span><strong>${esc(receipt.TenNCC)}</strong></div><div><span>KHO NHẬN</span><strong>${esc(receipt.TenKho)}</strong></div><div><span>NGƯỜI KIỂM NHẬN</span><strong>${esc(receipt.NguoiKiemNhan)}</strong></div><div><span>TRẠNG THÁI</span><strong><span class="status-pill ${statusClass(receipt.TrangThai)}">${esc(receipt.TrangThai)}</span></strong></div><div><span>GIÁ TRỊ CHẤP NHẬN</span><strong>${money(receipt.TongTien)}</strong></div></div><p class="warehouse-modal-note"><strong>Nguyên tắc:</strong> chỉ số lượng chấp nhận được cộng vào tồn kho; số lượng từ chối vẫn là phần Nhà cung cấp chưa giao đủ.</p>${receipt.GhiChu ? `<p class="warehouse-history-note">${esc(receipt.GhiChu)}</p>` : ''}<div class="warehouse-table-wrap warehouse-form-lines"><table class="warehouse-table"><thead><tr><th>MẶT HÀNG</th><th>GIAO</th><th>CHẤP NHẬN</th><th>TỪ CHỐI</th><th>ĐƠN GIÁ</th><th>TÌNH TRẠNG</th><th>LÔ / HSD</th></tr></thead><tbody>${rows}</tbody></table></div>${moves ? `<div class="warehouse-history-moves"><p>SỔ KHO</p><ul>${moves}</ul></div>` : ''}${logs ? `<p class="return-dossier-section">NHẬT KÝ PHIẾU</p><ul class="warehouse-history-audit">${logs}</ul>` : ''}</div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Đóng</button><button class="warehouse-secondary print-receipt"><svg><use href="#i-report"/></svg>Xem bản in</button>${confirmAction}</div></div>`;
       document.body.appendChild(overlay);
       const close = () => overlay.remove(); overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close)); overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
-      overlay.querySelector('.print-receipt').addEventListener('click', () => window.FLY_PRINT.show({
-        title: receipt.TrangThai === 'Đã xác nhận' ? 'PHIẾU NHẬP KHO' : 'BIÊN BẢN KIỂM NHẬN HÀNG',
-        number: receipt.MaPN, documentDate: receipt.NgayXacNhan || receipt.NgayNhap, status: receipt.TrangThai,
-        fields: [
-          { label: 'Đơn mua', value: receipt.MaPO }, { label: 'Nhà cung cấp', value: receipt.TenNCC },
-          { label: 'Kho nhập', value: receipt.TenKho }, { label: 'Người kiểm nhận', value: receipt.NguoiKiemNhan }
-        ],
-        columns: [
-          { label: 'Mã hàng', key: 'MaSP' }, { label: 'Tên mặt hàng', key: 'TenSP' }, { label: 'ĐVT', key: 'DonViTinh' },
-          { label: 'SL giao', key: 'SoLuongGiao', align: 'right' }, { label: 'SL nhập', key: 'SoLuongChapNhan', align: 'right' },
-          { label: 'Từ chối', key: 'SoLuongTuChoi', align: 'right' }, { label: 'Đơn giá', key: 'DonGiaNhap', format: 'money', align: 'right' },
-          { label: 'Số lô', key: 'SoLo' }, { label: 'Hạn dùng', key: 'HanSD', format: 'date' }
-        ], rows: data.lines, totals: [
-          { label: 'Tổng số lượng nhập', value: data.lines.reduce((sum, line) => sum + Number(line.SoLuongChapNhan || 0), 0) },
-          { label: 'Tổng giá trị nhập', value: receipt.TongTien, format: 'money' }
-        ], note: receipt.GhiChu || 'Số lượng từ chối không được ghi tăng tồn kho.',
-        signatures: ['Đại diện Nhà cung cấp', 'Thủ kho kiểm nhận', 'Kế toán']
-      }));
+      overlay.querySelector('.print-receipt').addEventListener('click', () => printReceipt(data));
       overlay.querySelector('.confirm-receipt')?.addEventListener('click', async () => {
         const button = overlay.querySelector('.confirm-receipt'); button.disabled = true;
         try { const result = await api(context, `/warehouse/receipts/${id}/confirm`, { method: 'POST' }); context.showToast(result.message, 'success'); close(); await onDone(); }
@@ -57,7 +64,7 @@
       const data = await api(context, `/warehouse/receiving/shipments/${shipmentId}`);
       const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
       const rows = data.lines.map(line => `<div class="warehouse-receipt-line" data-product="${esc(line.MaSP)}"><div class="receipt-product"><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · Còn thiếu ${line.SLConThieu} ${esc(line.DonViTinh)}</small></div><input class="delivered" aria-label="Số lượng giao" type="number" min="0" max="${line.SLConThieu}" value="${line.SLConThieu}"><input class="accepted" aria-label="Số lượng chấp nhận" type="number" min="0" max="${line.SLConThieu}" value="${line.SLConThieu}"><input class="rejected" aria-label="Số lượng từ chối" type="number" min="0" max="${line.SLConThieu}" value="0"><input class="receipt-price" aria-label="Đơn giá nhập" type="number" min="0" step="100" value="${Number(line.DonGia)}"><input class="lot" aria-label="Số lô" maxlength="50" placeholder="Số lô">${window.FLY_VI_DATE.dateField(`expiry-${line.MaSP}`, '', 'expiry', true)}<input class="location" aria-label="Vị trí kho" maxlength="100" placeholder="Kệ / vị trí"><input class="reject-reason" aria-label="Tình trạng hoặc lý do từ chối" maxlength="300" placeholder="Tình trạng hàng / lý do từ chối"></div>`).join('');
-      overlay.innerHTML = `<div class="warehouse-modal receipt-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">NHẬN VÀ KIỂM TRA HÀNG</p><h2>${esc(data.order.MaPO)} · ${esc(data.order.TenNCC)}</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="shipment-arrival-summary"><div><span>PHIẾU GIAO</span><strong>${esc(data.order.SoPhieuGiao)}</strong><small>${esc(data.order.MaTBGH)}</small></div><div><span>XE GIAO HÀNG</span><strong>${esc(data.order.BienSoXe || 'Chưa cung cấp')}</strong><small>${esc(data.order.TenTaiXe || '')}${data.order.SDTTaiXe ? ` · ${esc(data.order.SDTTaiXe)}` : ''}</small></div><div><span>XE ĐẾN KHO LÚC</span><strong>${fmtDate(data.order.NgayDen)}</strong><small>${data.order.SoKien === null || data.order.SoKien === undefined ? 'Chưa ghi số kiện' : `${data.order.SoKien} kiện dự kiến`}</small></div></div><div class="warehouse-form-grid"><div class="warehouse-field"><label>Kho nhận hàng *</label><select id="receiptWarehouse">${data.warehouses.map(item => `<option value="${esc(item.MaKho)}">${esc(item.TenKho)} · ${esc(item.DiaChi || 'Hà Nội')}</option>`).join('')}</select></div><div class="warehouse-field"><label>Ghi chú kiểm nhận</label><input id="receiptNote" maxlength="500" placeholder="Tình trạng niêm phong, chứng từ kèm theo..."></div></div><div class="receipt-rule"><svg><use href="#i-warning"></use></svg><span>Kiểm đếm thực tế từng mặt hàng. Số giao = số chấp nhận + số từ chối. Lưu Phiếu chưa làm tăng tồn kho.</span></div><div class="warehouse-receipt-lines"><div class="warehouse-receipt-line heading"><span>MẶT HÀNG</span><span>GIAO</span><span>ĐẠT</span><span>TỪ CHỐI</span><span>ĐƠN GIÁ</span><span>SỐ LÔ</span><span>HẠN DÙNG</span><span>VỊ TRÍ</span><span>TÌNH TRẠNG</span></div>${rows}</div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-primary save-receipt">Lưu Phiếu kiểm nhận</button></div></div>`;
+      overlay.innerHTML = `<div class="warehouse-modal receipt-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">NHẬN VÀ KIỂM TRA HÀNG</p><h2>${esc(data.order.MaPO)} · ${esc(data.order.TenNCC)}</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="shipment-arrival-summary"><div><span>PHIẾU GIAO</span><strong>${esc(data.order.SoPhieuGiao)}</strong><small>${esc(data.order.MaTBGH)}</small></div><div><span>XE GIAO HÀNG</span><strong>${esc(data.order.BienSoXe || 'Chưa cung cấp')}</strong><small>${esc(data.order.TenTaiXe || '')}${data.order.SDTTaiXe ? ` · ${esc(data.order.SDTTaiXe)}` : ''}</small></div><div><span>XE ĐẾN KHO LÚC</span><strong>${fmtDate(data.order.NgayDen)}</strong><small>${data.order.SoKien === null || data.order.SoKien === undefined ? 'Chưa ghi số kiện' : `${data.order.SoKien} kiện dự kiến`}</small></div></div><div class="warehouse-form-grid"><div class="warehouse-field"><label>Kho nhận hàng *</label><select id="receiptWarehouse">${data.warehouses.map(item => `<option value="${esc(item.MaKho)}">${esc(item.TenKho)} · ${esc(item.DiaChi || 'Hà Nội')}</option>`).join('')}</select></div><div class="warehouse-field"><label>Ghi chú kiểm nhận</label><input id="receiptNote" maxlength="500" placeholder="Tình trạng niêm phong, chứng từ kèm theo..."></div></div><div class="receipt-rule"><svg><use href="#i-warning"></use></svg><span>Kiểm đếm thực tế từng mặt hàng. Số giao = số chấp nhận + số từ chối. Lưu Phiếu chưa làm tăng tồn kho.</span></div><div class="warehouse-receipt-lines"><div class="warehouse-receipt-line heading"><span>MẶT HÀNG</span><span>GIAO</span><span>ĐẠT</span><span>TỪ CHỐI</span><span>ĐƠN GIÁ</span><span>SỐ LÔ</span><span>HẠN DÙNG</span><span>VỊ TRÍ</span><span>TÌNH TRẠNG</span></div>${rows}</div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-secondary print-receipt-save" type="button">Lưu và xem bản in</button><button class="warehouse-primary save-receipt">Lưu Phiếu kiểm nhận</button></div></div>`;
       document.body.appendChild(overlay);
       const close = () => overlay.remove(); overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close)); overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
       overlay.querySelectorAll('.warehouse-receipt-line[data-product]').forEach(row => {
@@ -67,15 +74,27 @@
         delivered.addEventListener('input', () => { accepted.max = delivered.value; rejected.max = delivered.value; if (Number(accepted.value) > Number(delivered.value)) accepted.value = delivered.value; syncAccepted(); });
         accepted.addEventListener('input', syncAccepted); rejected.addEventListener('input', syncRejected);
       });
-      overlay.querySelector('.save-receipt').addEventListener('click', async () => {
+      const persistReceipt = async () => {
         const lineNodes = Array.from(overlay.querySelectorAll('.warehouse-receipt-line[data-product]'));
         const deliveredNodes = lineNodes.filter(row => Number(row.querySelector('.delivered').value || 0) > 0);
-        if (!deliveredNodes.length) return context.showToast('Chuyến xe phải có ít nhất một mặt hàng được giao thực tế.', 'error');
+        if (!deliveredNodes.length) { context.showToast('Chuyến xe phải có ít nhất một mặt hàng được giao thực tế.', 'error'); return null; }
         const lines = deliveredNodes.map(row => { const rejected = Number(row.querySelector('.rejected').value || 0); const note = row.querySelector('.reject-reason').value.trim(); return { MaSP: row.dataset.product, SoLuongGiao: Number(row.querySelector('.delivered').value), SoLuongChapNhan: Number(row.querySelector('.accepted').value), SoLuongTuChoi: rejected, DonGiaNhap: Number(row.querySelector('.receipt-price').value), SoLo: row.querySelector('.lot').value, HanSD: row.querySelector('.expiry').value || null, ViTriKho: row.querySelector('.location').value, TinhTrangHang: rejected ? 'Có hàng không đạt' : (note || 'Đạt yêu cầu'), LyDoTuChoi: rejected ? note : null }; });
-        if (lines.some((line, index) => line.SoLuongTuChoi > 0 && !deliveredNodes[index].querySelector('.reject-reason').value.trim())) return context.showToast('Mặt hàng bị từ chối phải ghi rõ lý do.', 'error');
-        try { const result = await api(context, '/warehouse/receipts', { method: 'POST', body: JSON.stringify({ MaPO: data.order.MaPO, MaTBGH: data.order.MaTBGH, MaKho: overlay.querySelector('#receiptWarehouse').value, GhiChu: overlay.querySelector('#receiptNote').value, lines }) }); context.showToast(result.message, 'success'); close(); sessionStorage.setItem('fly_open_receipt', result.MaPN); context.navigate('warehouse-receipts'); await onDone(); }
-        catch (error) { context.showToast(error.message, 'error'); }
-      });
+        if (lines.some((line, index) => line.SoLuongTuChoi > 0 && !deliveredNodes[index].querySelector('.reject-reason').value.trim())) { context.showToast('Mặt hàng bị từ chối phải ghi rõ lý do.', 'error'); return null; }
+        return api(context, '/warehouse/receipts', { method: 'POST', body: JSON.stringify({ MaPO: data.order.MaPO, MaTBGH: data.order.MaTBGH, MaKho: overlay.querySelector('#receiptWarehouse').value, GhiChu: overlay.querySelector('#receiptNote').value, lines }) });
+      };
+      const finishSave = async (preview = false) => {
+        try {
+          const result = await persistReceipt();
+          if (!result) return;
+          context.showToast(preview ? 'Đã lưu phiếu. Mở xem trước để in.' : result.message, 'success');
+          close();
+          await onDone();
+          if (preview) printReceipt(await api(context, `/warehouse/receipts/${result.MaPN}`));
+          else { sessionStorage.setItem('fly_open_receipt', result.MaPN); context.navigate('warehouse-receipts'); }
+        } catch (error) { context.showToast(error.message, 'error'); }
+      };
+      overlay.querySelector('.save-receipt').addEventListener('click', () => finishSave(false));
+      overlay.querySelector('.print-receipt-save').addEventListener('click', () => finishSave(true));
     } catch (error) { context.showToast(error.message, 'error'); }
   };
 
@@ -91,5 +110,6 @@
     let timer; root.querySelector('#receiptSearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250); }); root.querySelector('#receiptStatus').addEventListener('change', load); root.querySelector('#refreshReceipts').addEventListener('click', load); root.querySelector('#newReceiving').addEventListener('click', () => context.navigate('warehouse-receiving')); root.addEventListener('click', event => { const button = event.target.closest('[data-view-receipt]'); if (button) receiptDetail(context, button.dataset.viewReceipt, load); }); await load(); const pending = sessionStorage.getItem('fly_open_receipt'); if (pending) { sessionStorage.removeItem('fly_open_receipt'); receiptDetail(context, pending, load); }
   };
 
+  window.FLY_RECEIPT = { open: receiptDetail };
   window.FLY_ROLE_PAGES = { templates: { ...(previous?.templates || {}), ...templates }, init: async (pageName, context) => { if (pageName === 'warehouse-receiving') return initReceiving(document.querySelector('.warehouse-page'), context); if (pageName === 'warehouse-receipts') return initReceipts(document.querySelector('.warehouse-page'), context); return previous?.init?.(pageName, context); } };
 })();

@@ -2,6 +2,14 @@ const { sql } = require('../config/db');
 
 /** Được chấm công / mở quầy sớm tối đa 10 phút trước BatDauDuKien. Không gia hạn sau giờ kết thúc ca. */
 const GRACE_BEFORE_MINUTES = 10;
+const CASHIER_ROLE = 'Thu ngân';
+const SALES_DUTIES = new Set(['Ca chính full-time', 'Thu ngân']);
+
+const isOfficeShift = (row) => String(row?.MaLoaiCa || '') === 'HANH_CHINH'
+    || String(row?.NhomCa || '') === 'HANH_CHINH';
+const isCashierRole = (chucVu) => String(chucVu || '').trim() === CASHIER_ROLE;
+const isSalesDuty = (row) => SALES_DUTIES.has(String(row?.NhiemVu || '').trim());
+const canRunSalesCounter = (row, chucVu) => Boolean(row && isCashierRole(chucVu) && !isOfficeShift(row) && isSalesDuty(row));
 
 class CashierDutyError extends Error {
     constructor(message, status = 403, duty = null) {
@@ -81,7 +89,10 @@ const loadDutyContext = async (connection, maNV) => {
         WHERE l.MaNV = @MaNV AND l.TrangThai = N'Đã công bố'
           AND l.BatDauDuKien > GETDATE()
         ORDER BY l.BatDauDuKien`);
+    const employee = await requestOf(connection).input('MaNV', sql.VarChar, maNV).query(`
+        SELECT MaNV, TenNV, ChucVu FROM NhanVien WHERE MaNV=@MaNV`);
     return {
+        employee: employee.recordset[0] || { MaNV: maNV, ChucVu: '' },
         schedules: schedules.recordset,
         openShift: openShift.recordset[0] || null,
         closedByLich: new Map(closed.recordset.map(row => [Number(row.MaLich), row])),
@@ -100,6 +111,8 @@ const snapshotDuty = async (connection, maNV) => {
     const ended = after[0] || null;
     const closedForCurrent = current ? ctx.closedByLich.get(Number(current.MaLich)) : null;
     const openMatches = current && ctx.openShift && Number(ctx.openShift.MaLich) === Number(current.MaLich);
+    const chucVu = ctx.employee?.ChucVu || '';
+    const salesAllowed = canRunSalesCounter(current, chucVu);
 
     let status = 'none';
     let message = 'Hôm nay bạn không có lịch làm việc đã công bố. Không chấm công, không mở POS.';
@@ -108,7 +121,9 @@ const snapshotDuty = async (connection, maNV) => {
     }
     if (current) {
         status = 'inside';
-        message = `Đang trong ${caLabel(current)}. Được chấm công sớm tối đa ${GRACE_BEFORE_MINUTES} phút trước giờ vào; hết giờ ca thì không vào lại.`;
+        message = salesAllowed
+            ? `Đang trong ${caLabel(current)}. Được chấm công sớm tối đa ${GRACE_BEFORE_MINUTES} phút trước giờ vào; hết giờ ca thì không vào lại.`
+            : `Đang trong ${caLabel(current)}. Ca này không mở quầy bán hàng — chỉ chấm công vào/ra rồi làm việc theo vai trò.`;
         if (closedForCurrent) {
             status = 'closed';
             message = `${caLabel(current)} đã đóng (${closedForCurrent.MaCa}). Không mở lại ca đã qua.`;
@@ -133,8 +148,8 @@ const snapshotDuty = async (connection, maNV) => {
         openShift: ctx.openShift,
         canCheckIn: Boolean(current && !current.ThoiGianVao),
         canCheckOut: Boolean(current && current.ThoiGianVao && !current.ThoiGianRa),
-        canOpenShift: Boolean(current && current.ThoiGianVao && !current.ThoiGianRa && !closedForCurrent && !ctx.openShift),
-        canSell: Boolean(current && openMatches && !closedForCurrent),
+        canOpenShift: Boolean(salesAllowed && current.ThoiGianVao && !current.ThoiGianRa && !closedForCurrent && !ctx.openShift),
+        canSell: Boolean(salesAllowed && openMatches && !closedForCurrent),
         context: ctx
     };
 };
@@ -152,6 +167,9 @@ const assertCashierDuty = async (connection, maNV, intent = 'sell') => {
     };
 
     if (intent === 'sell') {
+        if (!isCashierRole(ctx.employee?.ChucVu) || (current && isOfficeShift(current))) {
+            deny('Chỉ Thu ngân trên ca bán hàng mới được dùng POS.');
+        }
         if (ctx.openShift && !current) {
             deny(after
                 ? `${caLabel(after)} đã kết thúc. Không bán tiếp trên ca POS ${ctx.openShift.MaCa}. Hãy đóng ca.`
@@ -187,6 +205,9 @@ const assertCashierDuty = async (connection, maNV, intent = 'sell') => {
     }
 
     if (intent === 'open-shift') {
+        if (!canRunSalesCounter(current, ctx.employee?.ChucVu)) {
+            deny('Chỉ Thu ngân trên ca bán hàng (ca chính) mới được mở ca tại quầy. Ca hành chính không mở quầy bán hàng.');
+        }
         const closed = ctx.closedByLich.get(Number(current.MaLich));
         if (closed) {
             deny(`${caLabel(current)} đã đóng (${closed.MaCa}). Không mở lại ca đã qua.`);
@@ -201,5 +222,8 @@ module.exports = {
     GRACE_BEFORE_MINUTES,
     CashierDutyError,
     snapshotDuty,
-    assertCashierDuty
+    assertCashierDuty,
+    isOfficeShift,
+    isCashierRole,
+    canRunSalesCounter
 };

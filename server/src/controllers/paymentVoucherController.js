@@ -99,7 +99,7 @@ const getPayable = async (req, res) => {
         const pool = await poolPromise;
         await ensureFundColumns(pool);
         const result = await pool.request().input('Id', sql.VarChar, clean(req.params.id, 20))
-            .query(`${payableSelect} WHERE cn.MaCNPTra=@Id`);
+            .query(`${payableSelect} WHERE cn.MaCNPTra=@Id OR pc.MaPhieu=@Id`);
         if (!result.recordset.length) return res.status(404).json({ message: 'Không tìm thấy khoản công nợ.' });
         const payable = result.recordset[0];
         const lines = await pool.request().input('MaHD', sql.VarChar, payable.MaHDMH).query(`

@@ -327,20 +327,30 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
+  pointer-events: none;
 }
-.fly-chart-area { pointer-events: none; }
+.fly-chart-area,
+.fly-chart-grid { pointer-events: none; }
 .fly-chart-point,
 .fly-chart-bar,
+.fly-chart-hit,
 .fly-donut-segment {
   outline: none;
-  cursor: crosshair;
-  transition: opacity .16s ease, filter .16s ease, stroke-width .16s ease;
+  cursor: pointer;
+  transition: opacity .16s ease, filter .16s ease, stroke-width .16s ease, fill .16s ease;
 }
 .fly-chart-point { stroke: #fff; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
 .fly-chart-point:hover,
 .fly-chart-point:focus { r: 6.5px; filter: drop-shadow(0 3px 5px rgba(20, 61, 43, .25)); }
 .fly-chart-bar:hover,
-.fly-chart-bar:focus { opacity: .78; filter: drop-shadow(0 3px 5px rgba(20, 61, 43, .18)); }
+.fly-chart-bar:focus,
+.fly-chart-bar.is-active { opacity: .78; filter: drop-shadow(0 3px 5px rgba(20, 61, 43, .18)); }
+.fly-chart-hit {
+  fill: rgba(37, 132, 95, 0);
+}
+.fly-chart-hit:hover,
+.fly-chart-hit:focus { fill: rgba(37, 132, 95, .07); }
+.fly-chart-hit.is-active { fill: rgba(37, 132, 95, .12); }
 .fly-chart-track { fill: #edf2ef; }
 .fly-chart-value { fill: #253e32 !important; font-weight: 800; }
 .fly-chart-canvas.horizontal text { font-size: 12px; }
@@ -422,16 +432,57 @@
 .fly-chart-tooltip {
   position: fixed;
   z-index: 10000;
-  max-width: 220px;
-  padding: 8px 10px;
+  min-width: 210px;
+  max-width: 280px;
+  padding: 10px 12px;
   border: 1px solid rgba(255,255,255,.16);
-  border-radius: 9px;
+  border-radius: 11px;
   background: #163b2d;
   box-shadow: 0 10px 28px rgba(10, 35, 26, .22);
   color: #fff;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   pointer-events: none;
+}
+.fly-chart-tooltip.is-pinned {
+  box-shadow: 0 16px 36px rgba(10, 35, 26, .34);
+}
+.fly-chart-tip-title {
+  display: block;
+  margin-bottom: 7px;
+  color: #d8efe5;
+  font-size: 12px;
+  font-weight: 800;
+}
+.fly-chart-tip-row {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.fly-chart-tip-row i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.fly-chart-tip-row span {
+  color: #e7f3ec;
+  font-size: 11px;
+  font-weight: 650;
+}
+.fly-chart-tip-row b {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+.fly-chart-tip-pin {
+  display: block;
+  margin-top: 8px;
+  color: #9bb8ab;
+  font-size: 10px;
+  font-weight: 650;
 }
 
 .fly-report-insight {
@@ -1990,8 +2041,134 @@
   .financial-reports .report-metric-dictionary dl > div:last-child { border-bottom: 0; }
 }
 
+.financial-reports .report-pair-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+.financial-reports .report-pair-list > div:nth-child(3n) { border-right: 1px solid #e7edea; }
+.financial-reports .report-pair-list > div:nth-child(2n) { border-right: 0; }
+.financial-reports .report-pair-list > div:nth-last-child(-n + 2) { border-bottom: 0; }
+
+.financial-reports .report-inline-hint {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid #d7e6dd;
+  border-radius: 14px;
+  background: #f6faf7;
+}
+.financial-reports .report-inline-hint p {
+  margin: 0 0 8px;
+  color: #1f3d30;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.financial-reports .report-inline-hint ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #5a6e65;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.financial-reports .report-formula-result {
+  margin: 8px 0 16px;
+  color: #1b4332;
+  font-size: 14px;
+}
+.financial-reports .report-formula-result strong {
+  color: #1b4332;
+}
+.financial-reports .gross-profit-steps .step {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.financial-reports .gross-profit-steps .result {
+  min-width: 150px;
+  flex: 1.15;
+}
+.financial-reports .gross-profit-steps .result span,
+.financial-reports .gross-profit-steps .result strong {
+  color: #fff !important;
+}
+
+.financial-reports .report-flow-card,
+.financial-reports .report-flow-row {
+  cursor: pointer;
+}
+.financial-reports .report-flow-card:hover,
+.financial-reports .report-flow-card:focus-visible {
+  box-shadow: 0 10px 24px rgba(25, 58, 44, .1);
+  outline: 2px solid #2d6a4f;
+  outline-offset: 1px;
+}
+.financial-reports .report-flow-row:hover,
+.financial-reports .report-flow-row:focus-visible {
+  background: rgba(45, 106, 79, .06);
+  outline: 2px solid #2d6a4f;
+  outline-offset: -2px;
+}
+.financial-reports .report-card-open-hint {
+  display: block;
+  margin-top: 6px;
+  color: #2d6a4f;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.report-flow-modal .report-flow-subtitle {
+  margin: 16px 0 8px;
+  color: #1f3d30;
+  font-size: 13px;
+}
+.report-flow-modal .report-flow-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin: 12px 0;
+}
+.report-flow-modal .report-flow-muted {
+  margin: 8px 0 0;
+  color: #66786f;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.report-flow-timeline {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.report-flow-timeline li {
+  position: relative;
+  padding: 0 0 14px 18px;
+  border-left: 2px solid #d5e4db;
+}
+.report-flow-timeline li:last-child { padding-bottom: 0; }
+.report-flow-timeline li::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2d6a4f;
+}
+.report-flow-timeline strong { display: block; color: #1e3a2c; font-size: 13px; }
+.report-flow-timeline small { color: #6b7d74; font-size: 11px; }
+.report-flow-timeline p { margin: 4px 0 0; color: #5a6e65; font-size: 12px; }
+.report-flow-modal .report-inline-hint {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid #d7e6dd;
+  border-radius: 14px;
+  background: #f6faf7;
+  color: #5a6e65;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 @media print {
   .financial-reports .report-reading-guide { display: none !important; }
+  .financial-reports .report-inline-hint,
+  .financial-reports .report-card-open-hint { display: none !important; }
 }
 
 .financial-reports .report-return-block {
@@ -2182,5 +2359,360 @@
   .store-pnl-hero strong { font-size: 26px; }
   .store-report-tabs { flex-direction: column; }
   .store-pnl-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Ranking bars — HTML rows so labels stay table-sized.
+   The old SVG viewBox + max-height letterboxed a tiny plot in a wide card. */
+.fly-chart-card.ranking {
+  display: flex;
+  flex-direction: column;
+  container-type: inline-size;
+  container-name: ranking-card;
+}
+
+.fly-chart-canvas.horizontal {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 300px;
+  padding: 8px 16px 16px;
+  align-items: stretch;
+}
+
+.fly-hbar {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 280px;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.fly-hbar-row {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  grid-template-columns: minmax(8.75rem, 30%) minmax(0, 1fr) 9.25rem;
+  align-items: center;
+  gap: 8px 10px;
+  min-height: 52px;
+  max-height: 72px;
+  outline: none;
+}
+
+.fly-hbar-label {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #24382e;
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.fly-hbar-track {
+  height: 38px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #edf2ef;
+}
+
+.fly-hbar-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--bar, #25845f), white 12%), var(--bar, #25845f));
+}
+
+.fly-hbar-value {
+  min-width: 0;
+  color: #1c3328;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.fly-hbar-row:hover .fly-hbar-track i,
+.fly-hbar-row:focus .fly-hbar-track i {
+  filter: saturate(1.12) brightness(.96);
+}
+
+.financial-reports .fly-chart-card.ranking {
+  min-height: 460px;
+}
+
+.financial-reports .fly-chart-card.ranking .fly-chart-canvas,
+.financial-reports .fly-chart-card.ranking .fly-chart-canvas.horizontal {
+  min-height: 360px;
+  padding: 10px 20px 20px;
+  align-items: stretch;
+}
+
+.financial-reports .fly-chart-card.ranking .fly-chart-canvas svg,
+.financial-reports .fly-chart-canvas.horizontal svg {
+  max-height: none;
+}
+
+.financial-reports .fly-hbar-label,
+.financial-reports .fly-hbar-value {
+  font-size: 15px;
+}
+
+.financial-reports .fly-hbar-track {
+  height: 38px;
+}
+
+@container ranking-card (min-width: 680px) {
+  .fly-hbar-row {
+    grid-template-columns: minmax(13rem, 28%) minmax(0, 1fr) 10.5rem;
+    min-height: 56px;
+    gap: 10px 14px;
+  }
+
+  .fly-hbar-label,
+  .fly-hbar-value,
+  .financial-reports .fly-hbar-label,
+  .financial-reports .fly-hbar-value {
+    font-size: 16px;
+  }
+
+  .fly-hbar-track,
+  .financial-reports .fly-hbar-track {
+    height: 40px;
+  }
+}
+
+/* Executive line chart — larger type and no letterboxed plot. */
+.fly-chart-card.executive {
+  display: flex;
+  flex-direction: column;
+}
+
+.fly-chart-note {
+  margin: 0 16px 14px;
+  color: #5d7168;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.financial-reports .fly-chart-card.executive {
+  min-height: 420px;
+}
+
+.financial-reports .fly-chart-card.executive > header small {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.financial-reports .fly-chart-card.executive .fly-chart-legend {
+  gap: 8px 16px;
+  padding: 12px 16px 0;
+  font-size: 13px;
+}
+
+.financial-reports .fly-chart-card.executive .fly-chart-canvas.line,
+.financial-reports .fly-chart-card.executive .fly-chart-canvas.columns {
+  flex: 1 1 auto;
+  min-height: 300px;
+  padding: 8px 14px 12px;
+  align-items: stretch;
+}
+
+.financial-reports .fly-chart-card.executive .fly-chart-canvas.line svg,
+.financial-reports .fly-chart-card.executive .fly-chart-canvas.columns svg {
+  max-height: none;
+  min-height: 280px;
+  height: 100%;
+}
+
+.financial-reports .fly-chart-canvas.line .fly-chart-grid text,
+.financial-reports .fly-chart-card.executive .fly-chart-grid text {
+  fill: #3a4f44;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.fly-chart-point-ring {
+  fill: none;
+}
+
+.fly-chart-legend i.is-line {
+  width: 18px;
+  height: 3px;
+  border-radius: 99px;
+}
+.fly-chart-legend i.is-dashed {
+  background: repeating-linear-gradient(90deg, var(--legend) 0 7px, transparent 7px 11px);
+}
+.fly-chart-axis-right { fill: #4f73c5; }
+
+.fly-donut-legend-row {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  outline: none;
+}
+.fly-donut-legend-row:hover,
+.fly-donut-legend-row:focus,
+.fly-donut-legend-row.is-active {
+  background: #f3f8f5;
+  box-shadow: inset 0 0 0 1px #d7e6de;
+}
+.fly-donut-legend-copy,
+.fly-donut-legend-nums { min-width: 0; }
+.fly-donut-legend-copy span,
+.fly-donut-legend-copy small,
+.fly-donut-legend-nums em,
+.fly-donut-legend-nums strong { display: block; }
+.fly-donut-legend-copy span {
+  color: #24382e;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+.fly-donut-legend-copy small {
+  margin-top: 3px;
+  color: #6b7d74;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.fly-donut-legend-nums { text-align: right; }
+.fly-donut-legend-nums em {
+  color: #2d6a4f;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+.fly-donut-legend-nums strong {
+  margin-top: 2px;
+  color: #1c3328;
+  font-size: 13px;
+}
+.fly-donut-segment.is-active { stroke-width: 38; filter: drop-shadow(0 3px 6px rgba(20, 61, 43, .18)); }
+
+.fly-chart-tooltip.has-actions,
+.fly-chart-tooltip.is-pinned.has-actions {
+  pointer-events: auto;
+  max-width: 320px;
+}
+.fly-chart-tip-note {
+  display: block;
+  margin-top: 6px;
+  color: #c5ddd2;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+.fly-chart-tip-action {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 8px;
+  background: #2a6e53;
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  text-align: left;
+  cursor: pointer;
+}
+.fly-chart-tip-action:hover,
+.fly-chart-tip-action:focus { background: #328563; }
+
+.financial-reports.report-warehouse .report-chart-pair,
+.financial-reports.report-warehouse .report-chart-composition {
+  display: grid !important;
+  width: 100%;
+  min-width: 0;
+  align-items: stretch;
+  gap: 13px;
+  margin: 2px 0 0 !important;
+}
+.financial-reports.report-warehouse .report-chart-pair {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) !important;
+}
+.financial-reports.report-warehouse .report-chart-composition {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+.financial-reports.report-warehouse .report-chart-pair::before,
+.financial-reports.report-warehouse .report-chart-composition::before {
+  grid-column: 1 / -1;
+  display: flex;
+  min-height: 26px;
+  align-items: center;
+  padding-left: 10px;
+  border-left: 3px solid var(--report-accent);
+  color: #63776d;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .11em;
+}
+.financial-reports.report-warehouse .report-chart-pair::before { content: 'PHÂN TÍCH TRỰC QUAN'; }
+.financial-reports.report-warehouse .report-chart-composition::before { content: 'CƠ CẤU TỒN'; }
+
+.financial-reports.report-warehouse .fly-chart-card {
+  min-height: 460px;
+}
+.financial-reports.report-warehouse .fly-chart-card > header h2 { font-size: 18px; }
+.financial-reports.report-warehouse .fly-chart-card > header small { font-size: 13px; line-height: 1.45; }
+.financial-reports.report-warehouse .fly-chart-legend { font-size: 13px; padding: 12px 18px 0; }
+.financial-reports.report-warehouse .fly-chart-note { font-size: 13px; }
+.financial-reports.report-warehouse .fly-chart-canvas {
+  min-height: 300px;
+  padding: 10px 16px 16px;
+}
+.financial-reports.report-warehouse .fly-chart-canvas svg {
+  max-height: none;
+  min-height: 290px;
+}
+.financial-reports.report-warehouse .fly-chart-grid text,
+.financial-reports.report-warehouse .fly-chart-wrap-label {
+  fill: #3a4f44;
+  font-size: 13px;
+  font-weight: 700;
+}
+.financial-reports.report-warehouse .fly-chart-card.operations .fly-chart-bar {
+  filter: drop-shadow(0 4px 8px rgba(37, 132, 95, .16));
+}
+.financial-reports.report-warehouse .report-chart-composition .fly-chart-card {
+  min-height: 420px;
+}
+.financial-reports.report-warehouse .fly-donut-layout {
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: 24px;
+  min-height: 340px;
+  padding: 16px 24px 22px;
+}
+.financial-reports.report-warehouse .fly-donut svg { max-height: 280px; }
+.financial-reports.report-warehouse .fly-donut text { font-size: 13px; }
+.financial-reports.report-warehouse .fly-donut .fly-donut-total { font-size: 18px; }
+.financial-reports.report-warehouse .fly-donut-legend { gap: 8px; }
+.financial-reports.report-warehouse .fly-donut-legend-row { padding: 10px 12px; }
+.financial-reports.report-warehouse .fly-donut-legend-copy span,
+.financial-reports.report-warehouse .fly-donut-legend-nums strong { font-size: 14px; }
+.financial-reports.report-warehouse .fly-donut-legend-nums em { font-size: 13px; }
+
+@media (max-width: 1180px) {
+  .financial-reports.report-warehouse .report-chart-pair {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+@media (max-width: 720px) {
+  .financial-reports.report-warehouse .fly-donut-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 

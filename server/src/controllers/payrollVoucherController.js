@@ -518,6 +518,91 @@ const listBoard = async (req, res) => {
     }
 };
 
+const idsOf = (items, table) => [...new Set(items
+    .filter(item => item.BangLienQuan === table && item.MaBanGhi)
+    .map(item => String(item.MaBanGhi)))];
+
+const rowsByIds = async (pool, ids, query, key) => {
+    const unique = [...new Set((ids || []).filter(Boolean).map(String))];
+    if (!unique.length) return new Map();
+    const request = pool.request();
+    const names = unique.map((id, index) => {
+        request.input(`v${index}`, sql.VarChar, id);
+        return `@v${index}`;
+    });
+    const result = await request.query(query.replace('__IN__', names.join(',')));
+    return new Map(result.recordset.map(row => [String(row[key]), row]));
+};
+
+const enrichAccountantActivity = async items => {
+    if (!items.length) return items;
+    const pool = await poolPromise;
+    const [invoices, payables, vouchers, receipts, payrolls, bangLuong] = await Promise.all([
+        rowsByIds(pool, idsOf(items, 'HoaDonMuaHang'), `
+            SELECT hd.MaHDMH,hd.SoHoaDon,hd.MaPO,hd.MaPN,cn.MaCNPTra
+            FROM HoaDonMuaHang hd
+            LEFT JOIN CongNoPhaiTra cn ON cn.MaHDMH=hd.MaHDMH
+            WHERE hd.MaHDMH IN (__IN__)`, 'MaHDMH'),
+        rowsByIds(pool, idsOf(items, 'CongNoNCC'), `
+            SELECT cn.MaCNPTra,cn.MaHDMH,hd.SoHoaDon,hd.MaPO,hd.MaPN,pc.MaPhieu
+            FROM CongNoPhaiTra cn
+            JOIN HoaDonMuaHang hd ON hd.MaHDMH=cn.MaHDMH
+            LEFT JOIN PhieuChi pc ON pc.MaCongNo=cn.MaCNPTra
+            WHERE cn.MaCNPTra IN (__IN__)`, 'MaCNPTra'),
+        rowsByIds(pool, [...idsOf(items, 'PhieuChi')], `
+            SELECT pc.MaPhieu,pc.MaCongNo AS MaCNPTra,hd.MaHDMH,hd.SoHoaDon,hd.MaPO,hd.MaPN,pc.SoTien,pc.MaGiaoDichNganHang
+            FROM PhieuChi pc
+            JOIN CongNoPhaiTra cn ON cn.MaCNPTra=pc.MaCongNo
+            JOIN HoaDonMuaHang hd ON hd.MaHDMH=cn.MaHDMH
+            WHERE pc.MaPhieu IN (__IN__)`, 'MaPhieu'),
+        rowsByIds(pool, idsOf(items, 'PhieuThu'), `
+            SELECT MaPT,MaCa FROM PhieuThu WHERE MaPT IN (__IN__)`, 'MaPT'),
+        rowsByIds(pool, [...idsOf(items, 'PhieuChiLuong'), ...idsOf(items, 'LichSuChiLuong')], `
+            SELECT pcl.MaPhieu,pcl.MaKy,pcl.MaNV,nv.TenNV,pcl.SoTien,pcl.PhuongThuc,pcl.MaGiaoDichNganHang,pcl.TrangThai
+            FROM PhieuChiLuong pcl
+            JOIN NhanVien nv ON nv.MaNV=pcl.MaNV
+            WHERE pcl.MaPhieu IN (__IN__)`, 'MaPhieu'),
+        rowsByIds(pool, idsOf(items, 'BangLuong'), `
+            SELECT CAST(MaBangLuong AS varchar(30)) MaBangLuong,MaKy,MaNV
+            FROM BangLuong WHERE CAST(MaBangLuong AS varchar(30)) IN (__IN__)`, 'MaBangLuong')
+    ]);
+    const payoutIds = [...payrolls.keys()];
+    const payouts = await rowsByIds(pool, payoutIds, `
+        SELECT ls.MaPhieu,ls.SoTienMatCon,ls.SoTienCKCon,ls.MaGiaoDichNganHang,ls.SoTien
+        FROM LichSuChiLuong ls
+        WHERE ls.MaLS IN (
+            SELECT MAX(MaLS) FROM LichSuChiLuong WHERE MaPhieu IN (__IN__) GROUP BY MaPhieu
+        )`, 'MaPhieu');
+    return items.map(item => {
+        const ma = String(item.MaBanGhi || '');
+        const invoice = invoices.get(ma);
+        const payable = payables.get(ma);
+        const voucher = vouchers.get(ma);
+        const receipt = receipts.get(ma);
+        const payroll = payrolls.get(ma);
+        const bang = bangLuong.get(ma);
+        const payout = payouts.get(ma);
+        const lienKet = {
+            MaHDMH: invoice?.MaHDMH || payable?.MaHDMH || voucher?.MaHDMH || null,
+            SoHoaDon: invoice?.SoHoaDon || payable?.SoHoaDon || voucher?.SoHoaDon || null,
+            MaPO: invoice?.MaPO || payable?.MaPO || voucher?.MaPO || null,
+            MaPN: invoice?.MaPN || payable?.MaPN || voucher?.MaPN || null,
+            MaCNPTra: payable?.MaCNPTra || voucher?.MaCNPTra || invoice?.MaCNPTra || null,
+            MaPhieu: voucher?.MaPhieu || payroll?.MaPhieu || payable?.MaPhieu || null,
+            MaCa: receipt?.MaCa || (item.BangLienQuan === 'CaLamViec' ? ma : null),
+            MaPT: receipt?.MaPT || (item.BangLienQuan === 'PhieuThu' ? ma : null),
+            MaKy: payroll?.MaKy || bang?.MaKy || ((item.BangLienQuan === 'KyLuong' || item.BangLienQuan === 'QuyLuongKy') ? ma : null),
+            MaNV: payroll?.MaNV || bang?.MaNV || null,
+            TenNV: payroll?.TenNV || null,
+            MaGiaoDichNganHang: voucher?.MaGiaoDichNganHang || payroll?.MaGiaoDichNganHang || payout?.MaGiaoDichNganHang || null,
+            SoTienMatCon: payout?.SoTienMatCon ?? null,
+            SoTienCKCon: payout?.SoTienCKCon ?? null
+        };
+        const soTien = item.SoTien || Number(voucher?.SoTien || payroll?.SoTien || payout?.SoTien || 0) || null;
+        return { ...item, lienKet, SoTien: soTien };
+    });
+};
+
 const getAccountantActivity = async (req, res) => {
     if (String(req.user?.TenVaiTro || '').trim() !== 'Kế toán') {
         return res.status(403).json({ message: 'Chỉ Kế toán xem lịch sử hoạt động kế toán của mình.' });
@@ -529,6 +614,7 @@ const getAccountantActivity = async (req, res) => {
             actor: req.user.MaNV,
             kind: req.query.kind == null ? 'nghiep-vu' : req.query.kind
         });
+        data.items = await enrichAccountantActivity(data.items || []);
         res.json(data);
     } catch (error) {
         console.error(error);

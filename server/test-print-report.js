@@ -60,4 +60,12 @@ assert.match(official, /Times New Roman/);
 assert.doesNotMatch(official, /linear-gradient\(120deg,#174a37/);
 assert.doesNotMatch(official, /undefined|NaN/);
 
+assert.equal(window.FLY_PRINT.pdfFileName({ title: 'PHIẾU NHẬP KHO', number: 'PN001' }), 'PHIẾU NHẬP KHO-PN001.pdf');
+assert.match(window.FLY_PRINT.pdfFileName({ title: 'A<>:"/\\|?*B', number: '1' }), /^A B-1\.pdf$/);
+
+const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '../desktop/src/pages/shared/print-documents.js'), 'utf8');
+assert.doesNotMatch(source, /contentWindow\?\.print\(|\.print\(\)/);
+assert.match(source, /savePrintPdf/);
+assert.match(source, /ensureSaved/);
+
 console.log('PRINT REPORT PASS: A4 có thương hiệu, KPI, SVG xu hướng, bảng chi tiết và bản giấy trắng mực đen.');
