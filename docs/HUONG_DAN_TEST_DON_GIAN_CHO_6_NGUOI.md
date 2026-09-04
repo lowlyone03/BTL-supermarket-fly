@@ -2,10 +2,13 @@
 
 Tài liệu này dành cho thành viên **không biết Git**. Các bạn chỉ cần tải ZIP, cài ứng dụng, đăng nhập và test phần được giao.
 
-> **Phương án đã chốt:** mỗi thành viên tải một bản dự án và khôi phục một bản sao database trên
-> chính máy của mình. Sáu database độc lập, không kết nối vào database trên máy người phát triển.
-> Vì vậy dữ liệu một người tạo, sửa hoặc xóa không ảnh hưởng năm người còn lại và không ảnh hưởng
-> dữ liệu gốc của dự án.
+> **Hai cách test:**
+>
+> 1. **Nên dùng khi test quy trình thật (mua → nhập → bán → kế toán):** một máy chủ nhóm, một database.
+>    Mỗi người giữ một tài khoản, không đăng xuất để làm hộ vai trò khác. Xem `HUONG_DAN_TEST_DB_CHUNG.md`.
+>    Máy chủ chạy `4_CHAY_MAY_CHU_NHOM.bat`. Thành viên chạy `5_CHAY_MAY_THANH_VIEN.bat` rồi nhập IP máy chủ.
+> 2. **Cách cũ — mỗi người một database trên máy mình:** phù hợp smoke test lẻ, không nối được chuỗi liên vai trò.
+>    Phần còn lại của file này mô tả cách 2.
 
 Nếu bạn là người phát triển và muốn có sẵn từng câu để sao chép gửi vào nhóm, hãy mở
 `0_TIN_NHAN_GUI_NHOM_TEST_6_NGUOI.txt` trước. File đó đã tách sẵn tin nhắn chung và tin nhắn riêng

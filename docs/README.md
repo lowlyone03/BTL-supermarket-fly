@@ -27,6 +27,15 @@ Chạy app vẫn từ thư mục gốc repo: `1_CAI_DAT_LAN_DAU.bat` rồi `2_CH
 | [HUONG_DAN_KIEM_THU_TOAN_BO_HE_THONG_SUPERMARKET_FLY.txt](HUONG_DAN_KIEM_THU_TOAN_BO_HE_THONG_SUPERMARKET_FLY.txt) | Kịch bản full-system (file lớn) |
 | [HUONG_DAN_KIEM_THU_UC10_UC27_UC29.md](HUONG_DAN_KIEM_THU_UC10_UC27_UC29.md) | UC10 / UC27 / UC29 |
 | [HUONG_DAN_TEST_PHAN_CA_POS_LUONG.md](HUONG_DAN_TEST_PHAN_CA_POS_LUONG.md) | Phân ca → POS → lương |
+| [HUONG_DAN_TEST_DB_CHUNG.md](HUONG_DAN_TEST_DB_CHUNG.md) | **Nên dùng khi test nhóm:** một máy chủ + một database, mỗi người một vai trò |
+
+## Phân công nhóm (7 người CODE)
+
+| File | Nội dung |
+| --- | --- |
+| [PHAN_CONG_7_THANH_VIEN_VA_CHI_TIET_DU_AN_Supermarket_Fly.txt](PHAN_CONG_7_THANH_VIEN_VA_CHI_TIET_DU_AN_Supermarket_Fly.txt) | Mô tả chi tiết dự án + mỗi thành viên code phân hệ nào (UC, file, API, bảng, checklist) |
+
+Khác với kế hoạch **6 người TEST** ở mục dưới: file 7 người là phân công **viết code / báo cáo**, không phải kịch bản kiểm thử.
 
 ## Đối chiếu và thiết kế
 

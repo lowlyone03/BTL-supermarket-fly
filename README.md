@@ -285,13 +285,24 @@ npm run setup:next
 
 4. Copy `server/.env.example` → `server/.env` nếu cần (cổng 3000). **Không commit `.env`.**
 
-### Chạy hàng ngày
+### Chạy hàng ngày (một máy)
 
 ```text
 2_CHAY_SUPERMARKET_FLY.bat
 ```
 
 hoặc `npm start` (mở song song API và Electron).
+
+### Test nhóm trên một database
+
+Một người (máy chủ) giữ SQL Server + API. Các thành viên chỉ mở desktop, nhập IP máy chủ ở màn đăng nhập, mỗi người một vai trò — không cần đăng xuất để test bước tiếp theo.
+
+```text
+4_CHAY_MAY_CHU_NHOM.bat      (máy chủ, giữ cửa sổ mở, gửi IP vào nhóm)
+5_CHAY_MAY_THANH_VIEN.bat    (máy thành viên — không cần SQL Server)
+```
+
+Chi tiết: [docs/HUONG_DAN_TEST_DB_CHUNG.md](docs/HUONG_DAN_TEST_DB_CHUNG.md).
 
 - API: `http://localhost:3000` — kiểm tra `GET /api/health`, `GET /api/test-db`
 - Desktop: cửa sổ Electron. **Đóng hẳn app rồi mở lại** khi vừa kéo JS mới (không chỉ F5)

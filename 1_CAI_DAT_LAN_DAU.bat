@@ -31,7 +31,10 @@ popd
 echo.
 echo ==============================================
 echo CAI DAT THANH CONG
-echo Bay gio hay nhap dup 2_CHAY_SUPERMARKET_FLY.bat
+echo Bay gio:
+echo  - Test mot minh: 2_CHAY_SUPERMARKET_FLY.bat
+echo  - May chu nhom:  4_CHAY_MAY_CHU_NHOM.bat
+echo  - May thanh vien: 5_CHAY_MAY_THANH_VIEN.bat
 echo ==============================================
 pause
 exit /b 0

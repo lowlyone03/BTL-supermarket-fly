@@ -277,6 +277,10 @@ Test case chính:
 
 ## 6. Cách chạy để sáu người không vướng nhau
 
+**Nên dùng khi test chuỗi liên vai trò:** một máy chủ nhóm + một database. Xem `HUONG_DAN_TEST_DB_CHUNG.md`. Máy chủ chạy `4_CHAY_MAY_CHU_NHOM.bat`, thành viên chạy `5_CHAY_MAY_THANH_VIEN.bat` và nhập IP. Mỗi người giữ một tài khoản, không đăng xuất để làm hộ bước của người khác.
+
+Phần còn lại của mục này mô tả cách cũ: mỗi người một database riêng (phù hợp smoke test độc lập).
+
 ### Vòng 0 — Xác nhận cài đặt
 
 Tất cả sáu người gửi lại cho bạn:

@@ -180,10 +180,24 @@ svg { display: block; width: 20px; height: 20px; fill: none; stroke: currentColo
 .btn-login:disabled { opacity: .72; cursor: wait; transform: none; }
 .btn-login:disabled::after { content: ""; width: 15px; height: 15px; margin-left: 9px; display: inline-block; vertical-align: -3px; border: 2px solid rgba(255, 255, 255, .4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
 
+.role-chips { margin: -6px 0 16px; }
+.role-chips p { margin: 0 0 8px; color: #5e7168; font-size: 11px; font-weight: 650; }
+.role-chips > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.role-chips button { padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; color: #35594a; background: #f7faf8; font-size: 11px; font-weight: 700; cursor: pointer; }
+.role-chips button:hover, .role-chips button.is-active { border-color: rgba(39, 121, 91, .35); color: var(--brand-strong); background: var(--mint-soft); }
+
 .login-note { margin-top: 21px; padding: 14px 16px; border: 1px solid rgba(39, 121, 91, .12); border-radius: 14px; background: var(--mint-soft); }
 .login-note p { margin: 0; display: flex; flex-direction: column; gap: 3px; }
 .login-note strong { color: #35594a; font-size: 12px; }
 .login-note span { color: #718078; font-size: 11px; }
+.server-box .server-row { margin-top: 10px; display: flex; gap: 8px; }
+.server-box .input-wrap { flex: 1; min-height: 44px; }
+.btn-check-server { flex: 0 0 auto; padding: 0 12px; border: 1px solid rgba(39, 121, 91, .22); border-radius: 12px; color: var(--brand-strong); background: #fff; font-size: 12px; font-weight: 730; cursor: pointer; }
+.btn-check-server:hover { background: #f3faf6; }
+.btn-check-server:disabled { opacity: .7; cursor: wait; }
+.server-status { display: block; margin-top: 8px; color: #5e7168; font-size: 11px; }
+.server-status.is-ok { color: #1c654a; font-weight: 700; }
+.server-status.is-error { color: #903d31; font-weight: 700; }
 .support-note { position: relative; z-index: 2; margin: 20px 0 0; color: #718078; font-size: 12px; }
 .support-note button { padding: 0; border: 0; color: var(--brand); background: transparent; font-weight: 700; cursor: pointer; }
 .support-note button:hover { text-decoration: underline; }

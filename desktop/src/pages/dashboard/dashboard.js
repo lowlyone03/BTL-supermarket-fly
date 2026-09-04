@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:3000/api';
+const API_BASE = window.flyApi?.getApiBase() || window.FLY_API_BASE || 'http://localhost:3000/api';
 window.FLY_API_BASE = API_BASE;
 const HANOI_TIME_ZONE = 'Asia/Ho_Chi_Minh';
 
@@ -138,6 +138,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('userName').textContent = user.TenNV;
   document.getElementById('userRole').textContent = user.TenVaiTro === 'Quản lý' ? 'Quản lý cửa hàng' : user.TenVaiTro;
   document.getElementById('sidebarRole').textContent = user.TenVaiTro === 'Quản lý' ? 'Quản lý cửa hàng' : user.TenVaiTro;
+  const sidebarServer = document.getElementById('sidebarServer');
+  if (sidebarServer && window.flyApi) {
+    const host = window.flyApi.displayHost(window.flyApi.getOrigin());
+    sidebarServer.textContent = window.flyApi.isLocalHost(window.flyApi.getOrigin())
+      ? 'Dữ liệu: máy này'
+      : `Dữ liệu nhóm · ${host}`;
+  }
   document.getElementById('userInitials').textContent = initials || 'QL';
   document.getElementById('managerHomeNav').style.display = isManager ? '' : 'none';
   document.getElementById('managerApprovalNav').style.display = isManager ? '' : 'none';

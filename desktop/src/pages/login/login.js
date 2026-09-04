@@ -7,6 +7,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const loginButton = document.getElementById('btnLogin');
   const passwordToggle = document.getElementById('passwordToggle');
   const toast = document.getElementById('authToast');
+  const serverHost = document.getElementById('serverHost');
+  const checkServer = document.getElementById('btnCheckServer');
+  const serverStatus = document.getElementById('serverStatus');
+  const roleChips = document.getElementById('roleChips');
   let toastTimer;
 
   const rememberedUsername = localStorage.getItem('fly_remembered_username');
@@ -15,6 +19,12 @@ document.addEventListener('DOMContentLoaded', () => {
     remember.checked = true;
     password.focus();
   }
+
+  const currentOrigin = window.flyApi?.getOrigin() || 'http://localhost:3000';
+  serverHost.value = window.flyApi?.displayHost(currentOrigin) || 'localhost:3000';
+  serverStatus.textContent = window.flyApi?.isLocalHost(currentOrigin)
+    ? 'Đang dùng máy này (localhost).'
+    : `Đang dùng máy chủ nhóm ${window.flyApi.displayHost(currentOrigin)}.`;
 
   const showToast = (message) => {
     window.clearTimeout(toastTimer);
@@ -33,11 +43,44 @@ document.addEventListener('DOMContentLoaded', () => {
     errorBox.textContent = '';
   };
 
+  const saveServer = () => window.flyApi.setOrigin(serverHost.value || 'localhost');
+
+  const setServerStatus = (message, kind) => {
+    serverStatus.textContent = message;
+    serverStatus.classList.toggle('is-ok', kind === 'ok');
+    serverStatus.classList.toggle('is-error', kind === 'error');
+  };
+
   passwordToggle.addEventListener('click', () => {
     const isPassword = password.type === 'password';
     password.type = isPassword ? 'text' : 'password';
     passwordToggle.setAttribute('aria-label', isPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu');
     password.focus();
+  });
+
+  roleChips.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-user]');
+    if (!button) return;
+    username.value = button.dataset.user;
+    password.value = '123';
+    remember.checked = true;
+    roleChips.querySelectorAll('button').forEach((item) => item.classList.toggle('is-active', item === button));
+    clearError();
+  });
+
+  checkServer.addEventListener('click', async () => {
+    checkServer.disabled = true;
+    setServerStatus('Đang kiểm tra máy chủ...', '');
+    try {
+      const origin = saveServer();
+      serverHost.value = window.flyApi.displayHost(origin);
+      await window.flyApi.probe(origin);
+      setServerStatus(`Kết nối được ${window.flyApi.displayHost(origin)}. Có thể đăng nhập.`, 'ok');
+    } catch {
+      setServerStatus('Không kết nối được. Máy chủ phải chạy 4_CHAY_MAY_CHU_NHOM.bat, cùng Wi-Fi, và đã mở cổng 3000.', 'error');
+    } finally {
+      checkServer.disabled = false;
+    }
   });
 
   document.getElementById('forgotPasswordBtn').addEventListener('click', () => {
@@ -64,11 +107,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    const origin = saveServer();
+    serverHost.value = window.flyApi.displayHost(origin);
     loginButton.disabled = true;
     loginButton.querySelector('span').textContent = 'Đang xác thực...';
 
     try {
-      const response = await fetch('http://localhost:3000/api/auth/login', {
+      const response = await fetch(`${window.FLY_API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ TenDangNhap: usernameValue, MatKhau: passwordValue })
@@ -84,7 +129,9 @@ document.addEventListener('DOMContentLoaded', () => {
       window.location.href = '../dashboard/dashboard.html';
     } catch (error) {
       const isConnectionError = error instanceof TypeError;
-      showError(isConnectionError ? 'Không thể kết nối máy chủ. Hãy kiểm tra backend đang chạy ở cổng 3000.' : error.message);
+      showError(isConnectionError
+        ? `Không thể kết nối ${window.flyApi.displayHost(origin)}. Hãy kiểm tra máy chủ nhóm đang chạy và nút Kiểm tra.`
+        : error.message);
     } finally {
       loginButton.disabled = false;
       loginButton.querySelector('span').textContent = 'Đăng nhập';

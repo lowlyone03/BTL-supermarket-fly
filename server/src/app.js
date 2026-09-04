@@ -1,11 +1,24 @@
 const express = require('express');
 const cors = require('cors');
+const os = require('node:os');
 const path = require('node:path');
 require('dotenv').config();
 const { poolPromise } = require('./config/db'); // Đảm bảo gọi file db.js để khởi tạo kết nối
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
+
+const listLanIPv4 = () => {
+    const addresses = [];
+    for (const list of Object.values(os.networkInterfaces())) {
+        for (const net of list || []) {
+            const isV4 = net.family === 4 || net.family === 'IPv4';
+            if (isV4 && !net.internal) addresses.push(net.address);
+        }
+    }
+    return [...new Set(addresses)];
+};
 
 // Middleware
 app.use(cors());
@@ -62,7 +75,14 @@ app.use('/api', (req, res) => {
     res.status(404).json({ message: `Không tìm thấy ${req.method} ${req.originalUrl}. Hãy đóng ứng dụng và chạy lại npm start.` });
 });
 
-// Start Server
-app.listen(PORT, () => {
+// Start Server — 0.0.0.0 để máy khác trong cùng Wi-Fi gọi được API (DB vẫn nằm trên máy này).
+app.listen(PORT, HOST, () => {
     console.log(`🚀 Server đang chạy tại http://localhost:${PORT}`);
+    const lan = listLanIPv4();
+    if (lan.length) {
+        console.log('Cùng Wi-Fi: thành viên nhập IP này ở màn đăng nhập (ô Máy chủ nhóm):');
+        lan.forEach((ip) => console.log(`   ${ip}`));
+    } else {
+        console.log('Không thấy IP LAN. Kiểm tra Wi-Fi / Ethernet rồi chạy lại.');
+    }
 });

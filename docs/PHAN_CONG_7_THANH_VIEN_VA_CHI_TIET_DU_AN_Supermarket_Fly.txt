@@ -1,0 +1,21 @@
+Bản sao để nhóm mở cùng thư mục docs/ (Git).
+
+File gốc đầy đủ (nên sửa ở đây nếu chỉ giữ một chỗ):
+
+  D:\UDTHTKT\BTL\TaiLieu_Du_An\01_Yeu_Cau_Nghiep_Vu\
+  PHAN_CONG_7_THANH_VIEN_VA_CHI_TIET_DU_AN_Supermarket_Fly.txt
+
+Mở file gốc. Nội dung tóm tắt 7 thành viên:
+
+  TV1  Nền tảng hệ thống          UC01, UC02, vỏ app, JWT, CSDL lõi, seed
+  TV2  Quản trị cửa hàng (QL)     UC03, UC04, UC10 + trung tâm phê duyệt
+  TV3  Mua hàng                   UC11–UC14 + duyệt PO UC05
+  TV4  Thủ kho / Kho              UC15–UC21 + duyệt xuất/kiểm kê UC06, UC07
+  TV5  Thu ngân / POS             UC22–UC26 + duyệt đổi trả UC08
+  TV6  Kế toán nghiệp vụ          UC27–UC29 + duyệt phiếu chi NCC UC09
+  TV7  Nhân sự mở rộng + lãi/lỗ   UC30–UC33, quỹ lương, P&L, thông báo
+
+Mỗi người code cả UI Electron + API Express + bảng SQL của phân hệ mình.
+
+Đừng nhầm: cửa hàng có 5 ACTOR / 12 nhân viên. Nhóm đồ án có 7 người CODE.
+File 6 người TEST nằm cạnh đây: KE_HOACH_BAN_GIAO_VA_PHAN_CONG_6_THANH_VIEN_TEST.md

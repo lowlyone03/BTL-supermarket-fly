@@ -106,6 +106,7 @@ button { color: inherit; }
 .role-caption { display: flex; align-items: center; gap: 9px; color: #8fa79b; font-size: 11px; }
 .role-caption svg { width: 15px; height: 15px; fill: none; stroke: #69ad8d; stroke-width: 1.8; }
 .role-caption strong { color: #b9c9c1; font-weight: 600; }
+.sidebar-server { margin: 8px 0 0; color: #7f9a8d; font-size: 10px; line-height: 1.4; word-break: break-all; }
 .logout-button { width: 100%; margin-top: 15px; padding: 7px 0; display: flex; align-items: center; gap: 10px; border: 0; color: #d5e1db; background: transparent; cursor: pointer; font-size: 13px; font-weight: 600; }
 .logout-button:hover { color: #fff; }
 .logout-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; }

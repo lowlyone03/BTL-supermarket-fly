@@ -14,7 +14,7 @@
         ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.token}`, ...(options.headers || {}) }
       });
     } catch {
-      throw new Error('Không kết nối được backend. Hãy mở server tại http://localhost:3000 rồi thử lại.');
+      throw new Error(`Không kết nối được backend. Hãy mở máy chủ tại ${context.apiBase.replace(/\/api$/, '')} rồi thử lại.`);
     }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.message || 'Không thể xử lý yêu cầu.');

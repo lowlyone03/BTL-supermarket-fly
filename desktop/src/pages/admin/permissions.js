@@ -1,5 +1,6 @@
 {
     const token = localStorage.getItem('fly_token');
+    const API = window.FLY_API_BASE || 'http://localhost:3000/api';
     let roles = [];
     let matrix = [];
     const escapeHtml = value => String(value ?? '')
@@ -9,8 +10,8 @@
     window.loadPermissions = async () => {
         try {
             const [rolesRes, matrixRes] = await Promise.all([
-                fetch('http://localhost:3000/api/roles', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('http://localhost:3000/api/roles/permissions', { headers: { 'Authorization': `Bearer ${token}` } })
+                fetch(`${API}/roles`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch(`${API}/roles/permissions`, { headers: { 'Authorization': `Bearer ${token}` } })
             ]);
             roles = await rolesRes.json();
             matrix = await matrixRes.json();
@@ -64,7 +65,7 @@
         }));
 
         try {
-            const res = await fetch('http://localhost:3000/api/roles/permissions', {
+            const res = await fetch(`${API}/roles/permissions`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ permissions: payload })

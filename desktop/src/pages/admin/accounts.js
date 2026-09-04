@@ -1,5 +1,6 @@
 {
     const token = localStorage.getItem('fly_token');
+    const API = window.FLY_API_BASE || 'http://localhost:3000/api';
     const HANOI_TIME_ZONE = 'Asia/Ho_Chi_Minh';
     const currentUser = JSON.parse(localStorage.getItem('fly_user') || '{}');
     let roles = [];
@@ -49,7 +50,7 @@
     window.loadAccounts = async () => {
         document.getElementById('accTableBody').innerHTML = '<tr><td colspan="6" class="empty-state">Đang tải dữ liệu...</td></tr>';
         try {
-            const res = await fetch('http://localhost:3000/api/accounts', { headers: { 'Authorization': `Bearer ${token}` } });
+            const res = await fetch(`${API}/accounts`, { headers: { 'Authorization': `Bearer ${token}` } });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Không thể tải tài khoản.');
             accounts = data;
@@ -60,7 +61,7 @@
     };
 
     window.loadRoles = async () => {
-        const res = await fetch('http://localhost:3000/api/roles', { headers: { 'Authorization': `Bearer ${token}` } });
+        const res = await fetch(`${API}/roles`, { headers: { 'Authorization': `Bearer ${token}` } });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || 'Không thể tải vai trò.');
         roles = data;
@@ -76,7 +77,7 @@
     };
 
     window.loadAvailableEmployees = async () => {
-        const res = await fetch('http://localhost:3000/api/employees/available', { headers: { 'Authorization': `Bearer ${token}` } });
+        const res = await fetch(`${API}/employees/available`, { headers: { 'Authorization': `Bearer ${token}` } });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || 'Không thể tải nhân viên.');
         availableEmployees = data;
@@ -113,7 +114,7 @@
         if (!payload.MaNV) return window.showToast('Không có nhân viên để tạo tài khoản.', 'error');
 
         try {
-            const res = await fetch('http://localhost:3000/api/accounts', {
+            const res = await fetch(`${API}/accounts`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify(payload)
@@ -131,7 +132,7 @@
     window.toggleStatus = async (maTK, username) => {
         if (!confirm(`Bạn có chắc muốn thay đổi trạng thái của tài khoản ${username}?`)) return;
         try {
-            const res = await fetch(`http://localhost:3000/api/accounts/${maTK}/toggle-status`, {
+            const res = await fetch(`${API}/accounts/${maTK}/toggle-status`, {
                 method: 'PATCH', headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = await res.json();
@@ -144,7 +145,7 @@
     window.resetPwd = async (maTK, username) => {
         if (!confirm(`Đặt lại mật khẩu của ${username} về '123'?`)) return;
         try {
-            const res = await fetch(`http://localhost:3000/api/accounts/${maTK}/reset-password`, {
+            const res = await fetch(`${API}/accounts/${maTK}/reset-password`, {
                 method: 'PATCH', headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = await res.json();
@@ -155,7 +156,7 @@
 
     window.updateRole = async (maTK, maVaiTro) => {
         try {
-            const res = await fetch(`http://localhost:3000/api/accounts/${maTK}/role`, {
+            const res = await fetch(`${API}/accounts/${maTK}/role`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ MaVaiTro: Number(maVaiTro) })

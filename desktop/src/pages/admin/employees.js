@@ -1,5 +1,6 @@
 {
     const token = localStorage.getItem('fly_token');
+    const API = window.FLY_API_BASE || 'http://localhost:3000/api';
     let isEditMode = false;
     let employees = [];
     const empModal = document.getElementById('empModal');
@@ -138,7 +139,7 @@
 
         tbody.innerHTML = `<tr><td colspan="${getTableColspan()}" class="empty-state">Đang tải dữ liệu...</td></tr>`;
         try {
-            const res = await fetch('http://localhost:3000/api/employees', {
+            const res = await fetch(`${API}/employees`, {
                 headers: { 'Authorization': `Bearer ${token}` },
                 signal: employeesRequestController.signal
             });
@@ -273,7 +274,7 @@
             : `Mở lại làm việc cho ${emp.TenNV}?`;
         if (!window.confirm(confirmText)) return;
         try {
-            const res = await fetch(`http://localhost:3000/api/employees/${encodeURIComponent(maNV)}`, {
+            const res = await fetch(`${API}/employees/${encodeURIComponent(maNV)}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({
@@ -326,7 +327,7 @@
             TrangThai: document.getElementById('trangThai').value
         };
 
-        const url = isEditMode ? `http://localhost:3000/api/employees/${encodeURIComponent(payload.MaNV)}` : 'http://localhost:3000/api/employees';
+        const url = isEditMode ? `${API}/employees/${encodeURIComponent(payload.MaNV)}` : `${API}/employees`;
         try {
             const res = await fetch(url, {
                 method: isEditMode ? 'PUT' : 'POST',

@@ -1,5 +1,5 @@
 (() => {
-  const API = 'http://localhost:3000/api/admin';
+  const API = `${window.FLY_API_BASE || 'http://localhost:3000/api'}/admin`;
   const token = localStorage.getItem('fly_token');
   const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
   const HANOI = 'Asia/Ho_Chi_Minh';

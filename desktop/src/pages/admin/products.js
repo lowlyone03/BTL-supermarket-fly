@@ -1,5 +1,5 @@
 (() => {
-  const API = 'http://localhost:3000/api/admin/catalog';
+  const API = `${window.FLY_API_BASE || 'http://localhost:3000/api'}/admin/catalog`;
   const token = localStorage.getItem('fly_token');
   let products = [];
   let allProducts = [];

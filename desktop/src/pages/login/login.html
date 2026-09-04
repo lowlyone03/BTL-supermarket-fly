@@ -69,13 +69,33 @@
 
           <form id="loginForm" class="login-form" novalidate>
             <div id="errorMessage" class="error-message" role="alert" hidden></div>
-            <label class="form-field" for="username"><span>Tên đăng nhập</span><div class="input-wrap"><svg><use href="#i-user" /></svg><input type="text" id="username" name="username" placeholder="Ví dụ: quanly01" autocomplete="username" required /></div></label>
+            <label class="form-field" for="username"><span>Tên đăng nhập</span><div class="input-wrap"><svg><use href="#i-user" /></svg><input type="text" id="username" name="username" placeholder="Ví dụ: admin" autocomplete="username" required /></div></label>
             <label class="form-field" for="password"><span>Mật khẩu</span><div class="input-wrap"><svg><use href="#i-lock" /></svg><input type="password" id="password" name="password" placeholder="Nhập mật khẩu của bạn" autocomplete="current-password" required /><button class="password-toggle" id="passwordToggle" type="button" aria-label="Hiện mật khẩu"><svg><use href="#i-eye" /></svg></button></div></label>
             <div class="form-options"><label class="remember-option"><input type="checkbox" id="rememberUsername" /><span>Ghi nhớ tên đăng nhập</span></label><button class="forgot-button" id="forgotPasswordBtn" type="button">Quên mật khẩu?</button></div>
+            <div class="role-chips" id="roleChips">
+              <p>Chọn nhanh tài khoản test — mật khẩu 123</p>
+              <div>
+                <button type="button" data-user="admin">Quản lý</button>
+                <button type="button" data-user="muahang">Mua hàng</button>
+                <button type="button" data-user="thukho">Thủ kho</button>
+                <button type="button" data-user="thungan">Thu ngân</button>
+                <button type="button" data-user="ketoan">Kế toán</button>
+              </div>
+            </div>
             <button type="submit" class="btn-login" id="btnLogin"><span>Đăng nhập</span></button>
           </form>
 
-          <div class="login-note"><p><strong>Kết nối máy chủ nội bộ</strong><span>Thông tin đăng nhập được sử dụng để xác thực tài khoản.</span></p></div>
+          <div class="login-note server-box">
+            <p><strong>Máy chủ nhóm (database chung)</strong><span>Để cả nhóm test cùng một dữ liệu, nhập IP máy đang chạy 4_CHAY_MAY_CHU_NHOM.bat. Để trống hoặc localhost nếu chỉ test trên máy này.</span></p>
+            <div class="server-row">
+              <div class="input-wrap">
+                <svg><use href="#i-database" /></svg>
+                <input type="text" id="serverHost" name="serverHost" placeholder="localhost hoặc 192.168.1.10" autocomplete="off" />
+              </div>
+              <button type="button" class="btn-check-server" id="btnCheckServer">Kiểm tra</button>
+            </div>
+            <small class="server-status" id="serverStatus">Đang dùng máy này (localhost).</small>
+          </div>
         </div>
         <p class="support-note">Bạn chưa có tài khoản? <button id="requestAccessBtn" type="button">Liên hệ quản trị viên</button></p>
       </section>
@@ -83,6 +103,7 @@
 
     <div class="auth-toast" id="authToast" role="status" aria-live="polite"></div>
     <script src="../shared/escape-key.js"></script>
+    <script src="../shared/api-config.js"></script>
     <script src="login.js"></script>
   </body>
 </html>
