@@ -342,14 +342,68 @@
       });
     });
     overlay.querySelector('.open-scrap')?.addEventListener('click', () => {
-      sessionStorage.setItem('fly_stock_issue_prefill', JSON.stringify({
-        LoaiXuat: 'Hủy hàng',
-        GhiChu: `Hàng hỏng/hết hạn sau đợt kiểm kê ${MaKK}`,
-        lines: scrap.map(item => ({ MaSP: item.MaSP, SoLuong: Math.max(1, Number(item.SLThucTe) || 1), GhiChu: item.TinhTrangHang }))
-      }));
       close();
-      context.navigate('warehouse-stock-issues');
+      showScrapIssueConfirm(context, { MaKK, scrap });
     });
+  };
+
+  const showScrapIssueConfirm = (context, { MaKK, scrap = [], existingScrap = null, onSkip } = {}) => {
+    const lines = scrap.filter(item => Number(item.SLThucTe || item.SoLuong) > 0);
+    if (!lines.length) {
+      onSkip?.();
+      return;
+    }
+    const overlay = document.createElement('div');
+    overlay.className = 'warehouse-modal-backdrop';
+    const rows = lines.map(item => `<tr>
+      <td><strong>${esc(item.MaSP)}</strong></td>
+      <td>${esc(item.TenSP || item.MaSP)}</td>
+      <td class="num"><strong>${Number(item.SLThucTe || item.SoLuong)}</strong></td>
+      <td>${esc(item.TinhTrangHang || 'Hỏng')}</td>
+      <td>${esc(item.NguyenNhan || '—')}</td>
+    </tr>`).join('');
+    overlay.innerHTML = `<div class="warehouse-modal count-followup-modal scrap-confirm-modal" role="dialog" aria-modal="true">
+      <div class="warehouse-modal-heading"><div><p class="warehouse-kicker">XUẤT HỦY TỪ KIỂM KÊ / ${esc(MaKK)}</p><h2>Xác nhận hàng hỏng / hết hạn</h2></div><button class="warehouse-icon-button modal-close" type="button" aria-label="Đóng">×</button></div>
+      <div class="warehouse-modal-body">
+        <div class="receipt-rule"><svg><use href="#i-warning"/></svg><span>Hàng hỏng/hết hạn sẽ lập phiếu xuất hủy với số lượng = SL thực tế đã đếm. Quản lý duyệt, Thủ kho xác nhận mới trừ tồn. Không trừ trùng với điều chỉnh chênh lệch số lượng.</span></div>
+        ${existingScrap ? `<p class="count-followup-status">Đã có phiếu xuất <strong>${esc(existingScrap.MaPX)}</strong> (${esc(existingScrap.TrangThai)}).</p>` : ''}
+        <div class="warehouse-table-wrap"><table class="warehouse-table scrap-confirm-table"><thead><tr><th>MÃ SP</th><th>TÊN HÀNG</th><th>SL XUẤT</th><th>TÌNH TRẠNG</th><th>NGUYÊN NHÂN</th></tr></thead><tbody>${rows}</tbody></table></div>
+      </div>
+      <div class="warehouse-modal-actions">
+        <button class="warehouse-secondary skip-scrap" type="button">Bỏ qua</button>
+        <button class="warehouse-secondary create-scrap-draft" type="button">Tạo nháp</button>
+        <button class="warehouse-primary create-scrap-submit" type="button">Tạo và gửi duyệt</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    const close = (skipped = false) => {
+      overlay.remove();
+      if (skipped) onSkip?.();
+    };
+    overlay.querySelectorAll('.modal-close').forEach(button => button.addEventListener('click', () => close(true)));
+    overlay.addEventListener('click', event => { if (event.target === overlay) close(true); });
+    overlay.querySelector('.skip-scrap').addEventListener('click', () => close(true));
+    const createScrap = async (submit) => {
+      const buttons = overlay.querySelectorAll('button');
+      buttons.forEach(button => { button.disabled = true; });
+      try {
+        const result = await api(context, `/warehouse/inventory-counts/${encodeURIComponent(MaKK)}/scrap-issue`, {
+          method: 'POST',
+          body: JSON.stringify({ submit })
+        });
+        context.showToast(result.message, 'success');
+        overlay.remove();
+        if (result.MaPX) {
+          sessionStorage.setItem('fly_open_stock_issue', result.MaPX);
+          context.navigate('warehouse-stock-issues');
+        } else onSkip?.();
+      } catch (error) {
+        buttons.forEach(button => { button.disabled = false; });
+        context.showToast(error.message, 'error');
+      }
+    };
+    overlay.querySelector('.create-scrap-draft').addEventListener('click', () => createScrap(false));
+    overlay.querySelector('.create-scrap-submit').addEventListener('click', () => createScrap(true));
   };
 
   const inventoryCountDetail = async (context, id, onDone, options = {}) => {
@@ -421,7 +475,15 @@
           NguyenNhan: row.querySelector('.inventory-count-reason').value.trim()
         }))
       });
-      const save = async () => api(context, `/warehouse/inventory-counts/${id}`, { method: 'PUT', body: JSON.stringify(payload()) });
+      const save = async () => {
+        const data = payload();
+        const invalid = data.lines.find(line => {
+          const qty = window.FLY_FIELDS?.validateRequiredNonNegativeInteger(line.SLThucTe, 'Số lượng thực tế');
+          return qty ? !qty.ok : !Number.isInteger(Number(line.SLThucTe)) || Number(line.SLThucTe) < 0;
+        });
+        if (invalid) throw new Error(`Số lượng thực tế của ${invalid.MaSP} phải là số nguyên không âm.`);
+        return api(context, `/warehouse/inventory-counts/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+      };
       overlay.querySelector('.save-count')?.addEventListener('click', async () => {
         try { const result = await save(); context.showToast(result.message, 'success'); await onDone(); }
         catch (error) { context.showToast(error.message, 'error'); }
@@ -437,7 +499,12 @@
           const followLines = collectCountLines(overlay);
           const result = await api(context, `/warehouse/inventory-counts/${id}/submit`, { method: 'POST', body: '{}' });
           context.showToast(result.message, 'success'); close(); await onDone();
-          if (preRequest) showCountFollowUp(context, { MaKK: id, TrangThai: result.TrangThai, lines: followLines });
+          const scrap = result.scrapLines?.length ? result.scrapLines : classifyCheckedLines(followLines).scrap;
+          const afterScrap = () => {
+            if (preRequest) showCountFollowUp(context, { MaKK: id, TrangThai: result.TrangThai, lines: followLines });
+          };
+          if (scrap.length) showScrapIssueConfirm(context, { MaKK: id, scrap, existingScrap: result.existingScrap, onSkip: afterScrap });
+          else afterScrap();
         } catch (error) { context.showToast(error.message, 'error'); }
       });
     } catch (error) { context.showToast(error.message, 'error'); }
@@ -555,6 +622,11 @@
         SLDeNghi: Number(row.querySelector('.request-qty').value),
         GhiChu: row.dataset.note || ''
       }));
+      const invalidQty = lines.find(line => {
+        const qty = window.FLY_FIELDS?.validatePositiveInteger(line.SLDeNghi, 'Số lượng đề nghị');
+        return qty ? !qty.ok : !Number.isInteger(line.SLDeNghi) || line.SLDeNghi < 1;
+      });
+      if (invalidQty) return context.showToast(`Số lượng đề nghị của ${invalidQty.MaSP} phải là số nguyên lớn hơn 0.`, 'error');
       const payload = { LyDo: backdrop.querySelector('#requestReason').value, GhiChu: backdrop.querySelector('#requestNote').value, lines };
       try {
         const saved = existing

@@ -2,6 +2,7 @@ const { sql, poolPromise } = require('../config/db');
 const { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS } = require('../services/invoiceReturnSql');
 const { logAudit } = require('../services/auditLog');
 const { assertCashierDuty, CashierDutyError } = require('../services/cashierDuty');
+const { validateRequiredName, validateOptionalVnPhone, validateOptionalEmail, validateOptionalDate, validateOptionalNote } = require('../services/fieldValidators');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 const POINT_EARN_UNIT = Math.max(1, Number(process.env.POINT_EARN_UNIT || 10000));
@@ -78,17 +79,26 @@ const listCustomers = async (req, res) => {
 const saveCustomer = async (req, res) => {
     const transaction = new sql.Transaction(await poolPromise);
     try {
-        const tenKH = clean(req.body.TenKH, 100);
-        const sdt = clean(req.body.SDT, 15) || null;
-        if (!tenKH) throw new Error('Tên khách hàng là bắt buộc.');
+        const tenKHResult = validateRequiredName(req.body.TenKH, 'Tên khách hàng');
+        if (!tenKHResult.ok) throw new Error(tenKHResult.message);
+        const tenKH = tenKHResult.value;
+        const phone = validateOptionalVnPhone(req.body.SDT);
+        if (!phone.ok) throw new Error(phone.message);
+        const email = validateOptionalEmail(req.body.Email);
+        if (!email.ok) throw new Error(email.message);
+        const address = validateOptionalNote(req.body.DiaChi, 300);
+        if (!address.ok) throw new Error(address.message.replace('Ghi chú', 'Địa chỉ'));
+        const birthday = validateOptionalDate(req.body.NgaySinh, 'Ngày sinh');
+        if (!birthday.ok) throw new Error(birthday.message);
+        const sdt = phone.value || null;
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         const prefix = `KH${new Date().getFullYear()}`;
         const maKH = await generateId(transaction, 'KhachHang', 'MaKH', prefix);
         await new sql.Request(transaction).input('MaKH', sql.VarChar, maKH)
             .input('TenKH', sql.NVarChar, tenKH).input('SDT', sql.VarChar, sdt)
-            .input('Email', sql.VarChar, clean(req.body.Email, 150) || null)
-            .input('DiaChi', sql.NVarChar, clean(req.body.DiaChi, 300) || null)
-            .input('NgaySinh', sql.Date, req.body.NgaySinh || null).query(`
+            .input('Email', sql.VarChar, email.value || null)
+            .input('DiaChi', sql.NVarChar, address.value || null)
+            .input('NgaySinh', sql.Date, birthday.value).query(`
                 INSERT KhachHang(MaKH,TenKH,SDT,Email,DiaChi,NgaySinh,DiemTichLuy,HangThanhVien,NgayTao)
                 VALUES(@MaKH,@TenKH,@SDT,@Email,@DiaChi,@NgaySinh,0,N'Thường',GETDATE())`);
         await transaction.commit();
@@ -103,15 +113,23 @@ const saveCustomer = async (req, res) => {
 const updateCustomer = async (req, res) => {
     try {
         const maKH = clean(req.params.id, 20);
-        const tenKH = clean(req.body.TenKH, 100);
-        if (!tenKH) throw new Error('Tên khách hàng là bắt buộc.');
+        const tenKHResult = validateRequiredName(req.body.TenKH, 'Tên khách hàng');
+        if (!tenKHResult.ok) throw new Error(tenKHResult.message);
+        const phone = validateOptionalVnPhone(req.body.SDT);
+        if (!phone.ok) throw new Error(phone.message);
+        const email = validateOptionalEmail(req.body.Email);
+        if (!email.ok) throw new Error(email.message);
+        const address = validateOptionalNote(req.body.DiaChi, 300);
+        if (!address.ok) throw new Error(address.message.replace('Ghi chú', 'Địa chỉ'));
+        const birthday = validateOptionalDate(req.body.NgaySinh, 'Ngày sinh');
+        if (!birthday.ok) throw new Error(birthday.message);
         const pool = await poolPromise;
         const result = await pool.request().input('MaKH', sql.VarChar, maKH)
-            .input('TenKH', sql.NVarChar, tenKH)
-            .input('SDT', sql.VarChar, clean(req.body.SDT, 15) || null)
-            .input('Email', sql.VarChar, clean(req.body.Email, 150) || null)
-            .input('DiaChi', sql.NVarChar, clean(req.body.DiaChi, 300) || null)
-            .input('NgaySinh', sql.Date, req.body.NgaySinh || null).query(`
+            .input('TenKH', sql.NVarChar, tenKHResult.value)
+            .input('SDT', sql.VarChar, phone.value || null)
+            .input('Email', sql.VarChar, email.value || null)
+            .input('DiaChi', sql.NVarChar, address.value || null)
+            .input('NgaySinh', sql.Date, birthday.value).query(`
                 UPDATE KhachHang SET TenKH=@TenKH,SDT=@SDT,Email=@Email,DiaChi=@DiaChi,NgaySinh=@NgaySinh
                 WHERE MaKH=@MaKH;
                 SELECT @@ROWCOUNT affected;`);

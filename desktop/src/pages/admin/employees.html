@@ -83,11 +83,11 @@
                 <div class="emp-form-section">
                     <div class="emp-section-heading"><small>THÔNG TIN CÁ NHÂN</small><h4>Hồ sơ nhân viên</h4></div>
                     <div class="form-grid">
-                        <div class="form-group"><label>Mã nhân viên *</label><input type="text" id="maNV" required placeholder="VD: NV_TN02"><small class="emp-field-error" id="maNV_err"></small></div>
-                        <div class="form-group"><label>Họ và tên *</label><input type="text" id="tenNV" required placeholder="Nhập họ tên nhân viên"><small class="emp-field-error" id="tenNV_err"></small></div>
-                        <div class="form-group"><label>Số điện thoại</label><input type="text" id="sdt" placeholder="09xxxxxxxx" maxlength="11"><small class="emp-field-error" id="sdt_err"></small></div>
-                        <div class="form-group"><label>Email</label><input type="email" id="email" placeholder="ten@supermarket.fly"><small class="emp-field-error" id="email_err"></small></div>
-                        <div class="form-group form-span-2"><label>Địa chỉ</label><input type="text" id="diaChi" placeholder="Nhập địa chỉ liên hệ"></div>
+                        <div class="form-group"><label>Mã nhân viên *</label><input type="text" id="maNV" required placeholder="VD: NV_TN02" maxlength="20"><small class="emp-field-error" id="maNV_err"></small></div>
+                        <div class="form-group"><label>Họ và tên *</label><input type="text" id="tenNV" required placeholder="Nhập họ tên nhân viên" maxlength="150"><small class="emp-field-error" id="tenNV_err"></small></div>
+                        <div class="form-group"><label>Số điện thoại</label><input type="text" id="sdt" placeholder="09xxxxxxxx hoặc +84..." maxlength="20"><small class="emp-field-error" id="sdt_err"></small></div>
+                        <div class="form-group"><label>Email</label><input type="email" id="email" placeholder="ten@supermarket.fly" maxlength="150"><small class="emp-field-error" id="email_err"></small></div>
+                        <div class="form-group form-span-2"><label>Địa chỉ</label><input type="text" id="diaChi" placeholder="Nhập địa chỉ liên hệ" maxlength="300"><small class="emp-field-error" id="diaChi_err"></small></div>
                     </div>
                 </div>
 
@@ -95,7 +95,7 @@
                 <div class="emp-form-section">
                     <div class="emp-section-heading"><small>THÔNG TIN CÔNG VIỆC</small><h4>Vị trí & trạng thái</h4></div>
                     <div class="form-grid">
-                        <div class="form-group"><label>Chức vụ *</label><select id="chucVu" required><option value="Quản lý">Quản lý</option><option value="Nhân viên mua hàng">Nhân viên mua hàng</option><option value="Thủ kho">Thủ kho</option><option value="Thu ngân" selected>Thu ngân</option><option value="Kế toán">Kế toán</option></select></div>
+                        <div class="form-group"><label>Chức vụ *</label><select id="chucVu" required><option value="Quản lý">Quản lý</option><option value="Nhân viên mua hàng">Nhân viên mua hàng</option><option value="Thủ kho">Thủ kho</option><option value="Thu ngân" selected>Thu ngân</option><option value="Kế toán">Kế toán</option></select><small class="emp-field-error" id="chucVu_err"></small></div>
                         <div class="form-group"><label>Trạng thái</label><select id="trangThai"><option value="Đang làm việc">Đang làm việc</option><option value="Nghỉ việc">Nghỉ việc</option></select></div>
                     </div>
                 </div>
@@ -113,4 +113,5 @@
 </div>
 
 <script src="../shared/escape-key.js"></script>
-<script src="../admin/employees.js?v=emp-actions-3"></script>
+<script src="../shared/field-validators.js?v=fields-2"></script>
+<script src="../admin/employees.js?v=emp-validate-1"></script>

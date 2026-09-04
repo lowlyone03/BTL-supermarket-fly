@@ -185,10 +185,10 @@
   <div class="modal-backdrop" id="pwdModal" style="display:none">
     <div class="modal">
       <div class="modal-header"><div><p class="module-kicker">BẢO MẬT TÀI KHOẢN</p><h3>Đổi mật khẩu</h3></div><button type="button" class="close-btn" id="closePwdModal">×</button></div>
-      <div class="modal-body"><form id="pwdForm">
-        <div class="form-group"><label>Mật khẩu hiện tại</label><input type="password" id="oldPwd" required></div>
-        <div class="form-group"><label>Mật khẩu mới</label><input type="password" id="newPwd" required></div>
-        <div class="form-group"><label>Xác nhận mật khẩu mới</label><input type="password" id="confirmPwd" required></div>
+      <div class="modal-body"><form id="pwdForm" novalidate>
+        <div class="form-group"><label>Mật khẩu hiện tại</label><input type="password" id="oldPwd" required><small class="field-error" id="oldPwdError"></small></div>
+        <div class="form-group"><label>Mật khẩu mới</label><input type="password" id="newPwd" required><small class="field-help">Tối thiểu 3 ký tự, khớp mật khẩu khởi tạo hiện có.</small><small class="field-error" id="newPwdError"></small></div>
+        <div class="form-group"><label>Xác nhận mật khẩu mới</label><input type="password" id="confirmPwd" required><small class="field-error" id="confirmPwdError"></small></div>
         <div class="modal-footer"><button type="button" class="btn btn-secondary" id="cancelPwdModal">Hủy</button><button type="submit" class="btn btn-primary">Cập nhật mật khẩu</button></div>
       </form></div>
     </div>
@@ -196,23 +196,24 @@
 
   <script src="../shared/escape-key.js"></script>
   <script src="../shared/api-config.js"></script>
+  <script src="../shared/field-validators.js?v=fields-2"></script>
   <script src="../shared/locale-ui.js?v=store-pnl-1"></script>
   <script src="../shared/search-tools.js?v=search-1"></script>
   <script src="../shared/product-images.js?v=products-1"></script>
   <script src="../shared/report-charts.js?v=charts-7-wh-polish"></script>
   <script src="../shared/report-layout.js?v=report-hint-1"></script>
   <script src="../shared/print-documents.js?v=print-pdf-1"></script>
-  <script src="../admin/admin-page-templates.js?v=emp-actions-3"></script>
-  <script src="../warehouse/warehouse-pages.js?v=print-pdf-1"></script>
-  <script src="../warehouse/supplier-pages.js"></script>
-  <script src="../warehouse/purchase-order-pages.js?v=print-pdf-1"></script>
-  <script src="../warehouse/receipt-pages.js?v=print-pdf-1"></script>
-  <script src="../warehouse/stock-issue-pages.js?v=print-pdf-1"></script>
+  <script src="../admin/admin-page-templates.js?v=emp-validate-1"></script>
+  <script src="../warehouse/warehouse-pages.js?v=fields-qty-1"></script>
+  <script src="../warehouse/supplier-pages.js?v=fields-qty-1"></script>
+  <script src="../warehouse/purchase-order-pages.js?v=fields-qty-1"></script>
+  <script src="../warehouse/receipt-pages.js?v=fields-qty-1"></script>
+  <script src="../warehouse/stock-issue-pages.js?v=fields-qty-1"></script>
   <script src="../accounting/store-pnl.js?v=store-pnl-1"></script>
-  <script src="../accounting/accounting-pages.js?v=acc-drill-1"></script>
-  <script src="../workforce/workforce-pages.js?v=cashier-duty-1"></script>
-  <script src="../cashier/cashier-pages.js?v=pos-filter-1"></script>
+  <script src="../accounting/accounting-pages.js?v=fields-qty-1"></script>
+  <script src="../workforce/workforce-pages.js?v=fields-qty-1"></script>
+  <script src="../cashier/cashier-pages.js?v=fields-qty-1"></script>
   <script src="../shared/role-reports.js?v=charts-7-wh-polish"></script>
-  <script src="dashboard.js?v=store-pnl-1"></script>
+  <script src="dashboard.js?v=pwd-validate-1"></script>
 </body>
 </html>

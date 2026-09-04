@@ -1,0 +1,131 @@
+TIN NHẮN SẴN — TEST 7 THÀNH VIÊN TRÊN MỘT DATABASE
+Sao chép từng khối vào nhóm chat. Điền chỗ <...>.
+
+File hướng dẫn đủ bước:
+docs/HUONG_DAN_TEST_DB_CHUNG.md
+Khác Wi-Fi (mỗi người một nhà):
+docs/HUONG_DAN_KHAC_WIFI.md
+
+
+================================================================================
+TIN 1 — PHÂN CÔNG (gửi trước buổi test)
+================================================================================
+
+Nhóm mình 7 người, test CHUNG một database — mỗi người một việc, không đăng xuất để đóng vai người khác.
+
+Phần mềm chỉ có 5 loại tài khoản (đó là 5 actor cửa hàng, không phải 7). Chia vậy:
+
+TV1 máy chủ + nền tảng: <TÊN>
+TV2 admin (sản phẩm, duyệt đơn): <TÊN>
+TV3 muahang: <TÊN>
+TV4 thukho: <TÊN>
+TV5 thungan: <TÊN>
+TV6 ketoan: <TÊN>
+TV7 admin nhưng CHỈ phân ca / ngày lễ / quỹ lương / lãi lỗ: <TÊN>
+
+Mật khẩu tất cả: 123
+Tài liệu: docs/HUONG_DAN_TEST_DB_CHUNG.md
+
+
+================================================================================
+TIN 0 — TẢI DỰ ÁN VỀ MÁY (gửi TRƯỚC, chưa cần link Cloudflare)
+================================================================================
+
+Mọi người tải dự án về máy trước. Link Cloudflare mình gửi sau — link đó không phải file cài.
+
+1. Máy cần Node.js 22+ (https://nodejs.org bản LTS). Không cần SQL Server.
+
+2. Tải ZIP:
+https://github.com/lowlyone03/BTL-supermarket-fly/archive/refs/heads/main.zip
+
+3. Giải nén vào D:\SupermarketFly (hoặc chỗ ngắn, không dấu).
+   Vào thư mục có file 1_CAI_DAT_LAN_DAU.bat (nếu thấy BTL-supermarket-fly-main thì vào trong đó).
+
+4. Nhấp đúp 1_CAI_DAT_LAN_DAU.bat — chờ CAI DAT THANH CONG.
+
+5. Báo nhóm: ĐÃ TẢI XONG.
+
+Khi cả nhóm xong, mình gửi 1 link https://....trycloudflare.com.
+Lúc đó mọi người chạy 5_CHAY_MAY_THANH_VIEN.bat, dán link vào ô Máy chủ nhóm, bấm Kiểm tra, rồi login đúng vai trò (mật khẩu 123). Đừng chạy file 2.
+
+
+================================================================================
+TIN 2 — TV1 ĐÃ MỞ MÁY CHỦ
+================================================================================
+
+Máy chủ đã mở. Giữ Wi-Fi này, đừng để máy mình ngủ.
+
+GitHub: https://github.com/lowlyone03/BTL-supermarket-fly
+Commit: 5f6cc05
+IP điền vào ô "Máy chủ nhóm": <VÍ DỤ 192.168.1.23>
+
+Thành viên TV2–TV7:
+1. git pull (hoặc tải lại ZIP main)
+2. Lần đầu: 1_CAI_DAT_LAN_DAU.bat
+3. Chạy 5_CHAY_MAY_THANH_VIEN.bat — đừng chạy file 2
+4. Dán IP → Kiểm tra (phải ra chữ xanh)
+5. Bấm đúng nút vai trò của mình → Đăng nhập
+6. Nhìn góc trái dưới: phải có chữ "Dữ liệu nhóm · <IP>"
+7. Chụp ảnh góc đó gửi nhóm rồi để nguyên máy
+
+
+================================================================================
+TIN 2B — KHÁC WIFI (Tailscale, nên dùng)
+================================================================================
+
+Mỗi người một nhà thì IP 192.168 không dùng được.
+
+Cả nhóm cài Tailscale (free): https://tailscale.com/download
+Đăng nhập, icon phải Connected. Cùng mạng với TV1 (mời Gmail hoặc cùng một Google).
+
+TV1 vẫn chạy 4_CHAY_MAY_CHU_NHOM.bat
+IP Máy chủ nhóm (lấy bằng: tailscale ip -4): 100.x.x.x
+
+Thành viên: chạy file 5, ô Máy chủ nhóm dán 100.x.x.x → Kiểm tra → login.
+Không dán IP wifi nhà.
+
+
+================================================================================
+TIN 3 — BÁO ĐÃ VÀO ĐƯỢC
+================================================================================
+
+Mẫu mỗi người gửi:
+
+TV: TV3
+Tên: ...
+Tài khoản: muahang
+Sidebar có chữ: Dữ liệu nhóm · 192.168.x.x
+Ảnh: <đính kèm>
+
+
+================================================================================
+TIN 4 — BẮT ĐẦU CHUỖI (TV1 điều)
+================================================================================
+
+Bắt đầu chuỗi cửa hàng. Làm xong thì nhắn mã chứng từ, người sau mới làm.
+
+1. TV7: công bố lịch ca HÔM NAY cho thungan
+2. TV4: lập đề nghị mua, nhắn mã
+3. TV3: lập đơn từ đề nghị đó, nhắn mã đơn
+4. TV2: duyệt đơn đó
+5. TV4: phiếu nhập, nhắn mã
+6. TV6: đối chiếu 3 chứng từ
+7. TV5: mở ca, bán 1–2 món, nhắn mã HĐ
+8. TV6: phiếu thu nếu đã đóng ca
+9. TV7: mở lãi/lỗ, lập báo cáo, chụp KPI
+
+Kẹt thì ghi BLOCKED: thiếu bước TVx — không tự login hộ.
+
+
+================================================================================
+TIN 5 — BÁO LỖI
+================================================================================
+
+Người: ...
+TV / tài khoản: ...
+Màn hình: ...
+Đã bấm: ...
+Mong đợi: ...
+Thực tế: ...
+Mã chứng từ (nếu có): ...
+Ảnh: ...

@@ -424,6 +424,8 @@
           const items = Array.from(root.querySelectorAll('.rate-heso')).map(input => ({
             MaHeSo: input.dataset.ma, HeSo: Number(input.value)
           }));
+          const invalid = items.find(item => !Number.isFinite(item.HeSo) || item.HeSo < 0);
+          if (invalid) return context.showToast('Hệ số lương phải là số không âm.', 'error');
           try {
             const result = await api(context, '/admin/workforce/pay-rates', {
               method: 'PUT', body: JSON.stringify({ items })

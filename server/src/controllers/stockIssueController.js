@@ -1,6 +1,7 @@
 const { sql, poolPromise } = require('../config/db');
 const { isRestockAccepted } = require('../services/financialRules');
 const { logAudit } = require('../services/auditLog');
+const { scrapLinesFromRows, countScrapNote } = require('../services/countScrap');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 const issueTypes = new Set(['Trả NCC', 'Hủy hàng', 'Sử dụng nội bộ']);
@@ -117,12 +118,28 @@ const listIssues = async (req, res) => {
         const keyword = clean(req.query.search, 100);
         const status = clean(req.query.status, 30);
         const pool = await poolPromise;
-        const result = await pool.request()
+        const bind = () => pool.request()
             .input('MaNV', sql.VarChar, req.user.MaNV)
             .input('TuKhoa', sql.NVarChar, keyword)
             .input('Mau', sql.NVarChar, `%${keyword}%`)
-            .input('TrangThai', sql.NVarChar, status)
-            .query(`SELECT px.MaPX,px.LoaiXuat,px.MaPN,px.NgayXuat,px.TrangThai,px.GhiChu,px.LyDoTuChoi,
+            .input('TrangThai', sql.NVarChar, status);
+        let result;
+        try {
+            result = await bind().query(`SELECT px.MaPX,px.LoaiXuat,px.MaPN,px.MaKK,px.NgayXuat,px.TrangThai,px.GhiChu,px.LyDoTuChoi,
+                           k.TenKho,ncc.TenNCC,COUNT(ct.MaSP) SoMatHang,SUM(ct.SoLuong) TongSoLuong,
+                           SUM(ct.SoLuong*ct.DonGia) TongGiaTriThamChieu
+                    FROM PhieuXuat px JOIN Kho k ON k.MaKho=px.MaKho
+                    LEFT JOIN NhaCungCap ncc ON ncc.MaNCC=px.MaNCC
+                    LEFT JOIN ChiTietPhieuXuat ct ON ct.MaPX=px.MaPX
+                    WHERE px.MaNV=@MaNV AND (@TrangThai=N'' OR px.TrangThai=@TrangThai)
+                      AND (@TuKhoa=N'' OR px.MaPX LIKE @Mau COLLATE Latin1_General_100_CI_AI OR px.LoaiXuat LIKE @Mau COLLATE Latin1_General_100_CI_AI
+                           OR px.MaPN LIKE @Mau COLLATE Latin1_General_100_CI_AI OR px.GhiChu LIKE @Mau COLLATE Latin1_General_100_CI_AI OR ncc.TenNCC LIKE @Mau COLLATE Latin1_General_100_CI_AI)
+                    GROUP BY px.MaPX,px.LoaiXuat,px.MaPN,px.MaKK,px.NgayXuat,px.TrangThai,px.GhiChu,
+                             px.LyDoTuChoi,k.TenKho,ncc.TenNCC
+                    ORDER BY px.NgayXuat DESC`);
+        } catch (columnError) {
+            if (!/Invalid column name|MaKK/i.test(columnError.message || '')) throw columnError;
+            result = await bind().query(`SELECT px.MaPX,px.LoaiXuat,px.MaPN,px.NgayXuat,px.TrangThai,px.GhiChu,px.LyDoTuChoi,
                            k.TenKho,ncc.TenNCC,COUNT(ct.MaSP) SoMatHang,SUM(ct.SoLuong) TongSoLuong,
                            SUM(ct.SoLuong*ct.DonGia) TongGiaTriThamChieu
                     FROM PhieuXuat px JOIN Kho k ON k.MaKho=px.MaKho
@@ -134,6 +151,7 @@ const listIssues = async (req, res) => {
                     GROUP BY px.MaPX,px.LoaiXuat,px.MaPN,px.NgayXuat,px.TrangThai,px.GhiChu,
                              px.LyDoTuChoi,k.TenKho,ncc.TenNCC
                     ORDER BY px.NgayXuat DESC`);
+        }
         res.json({ items: result.recordset });
     } catch (error) {
         console.error(error);
@@ -393,6 +411,134 @@ const createIssueFromReturn = async (req, res) => {
     }
 };
 
+const findActiveCountScrap = async (transaction, maKK) => {
+    try {
+        const existing = await new sql.Request(transaction)
+            .input('MaKK', sql.VarChar, maKK)
+            .query(`SELECT TOP 1 MaPX, TrangThai FROM PhieuXuat WITH (UPDLOCK, HOLDLOCK)
+                    WHERE MaKK=@MaKK AND TrangThai IN (N'Nháp', N'Chờ duyệt', N'Đã duyệt', N'Đã xác nhận')
+                    ORDER BY CASE TrangThai
+                        WHEN N'Nháp' THEN 1 WHEN N'Chờ duyệt' THEN 2 WHEN N'Đã duyệt' THEN 3 ELSE 4 END,
+                        NgayXuat DESC`);
+        return existing.recordset[0] || null;
+    } catch (error) {
+        if (/Invalid column name|MaKK/i.test(error.message || '')) return null;
+        throw error;
+    }
+};
+
+const createIssueFromCount = async (req, res) => {
+    const maKK = clean(req.params.id, 20);
+    const submitNow = Boolean(req.body?.submit);
+    const transaction = new sql.Transaction(await poolPromise);
+    try {
+        if (!maKK) throw new Error('Thiếu mã đợt kiểm kê.');
+        await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        const countResult = await new sql.Request(transaction)
+            .input('MaKK', sql.VarChar, maKK)
+            .input('MaNV', sql.VarChar, req.user.MaNV)
+            .query(`SELECT MaKK, MaKho, MaNV, TrangThai FROM KiemKe WITH (UPDLOCK, HOLDLOCK)
+                    WHERE MaKK=@MaKK AND MaNV=@MaNV`);
+        if (!countResult.recordset.length) throw new Error('Không tìm thấy đợt kiểm kê của bạn.');
+        const count = countResult.recordset[0];
+        if (count.TrangThai === 'Đang kiểm') throw new Error('Hãy gửi đợt kiểm kê trước khi lập phiếu xuất hủy.');
+        if (count.TrangThai === 'Từ chối') throw new Error('Đợt kiểm kê đã bị từ chối, không lập phiếu xuất hủy.');
+
+        const existing = await findActiveCountScrap(transaction, maKK);
+        if (existing) {
+            if (submitNow && existing.TrangThai === 'Nháp') {
+                await new sql.Request(transaction).input('MaPX', sql.VarChar, existing.MaPX)
+                    .query(`UPDATE PhieuXuat SET TrangThai=N'Chờ duyệt',MaNV_Duyet=NULL,NgayDuyet=NULL,LyDoTuChoi=NULL
+                            WHERE MaPX=@MaPX`);
+                await writeAudit(transaction, req.user, 'Gửi duyệt Phiếu xuất kho', existing.MaPX,
+                    `Hủy hàng từ kiểm kê ${maKK}; tồn kho chưa thay đổi`);
+                await transaction.commit();
+                return res.json({
+                    MaPX: existing.MaPX,
+                    existed: true,
+                    submitted: true,
+                    message: `Đã gửi phiếu xuất hủy ${existing.MaPX} (từ ${maKK}) sang Quản lý duyệt.`
+                });
+            }
+            await transaction.commit();
+            const confirmed = existing.TrangThai === 'Đã xác nhận';
+            return res.json({
+                MaPX: existing.MaPX,
+                existed: true,
+                submitted: existing.TrangThai !== 'Nháp',
+                confirmed,
+                message: confirmed
+                    ? `Đã có phiếu xuất ${existing.MaPX} xác nhận trừ tồn cho kiểm kê ${maKK}.`
+                    : `Đã có phiếu xuất ${existing.MaPX} (${existing.TrangThai}) từ kiểm kê ${maKK}.`
+            });
+        }
+
+        const scrapRows = await new sql.Request(transaction).input('MaKK', sql.VarChar, maKK).query(`
+            SELECT ct.MaSP, sp.TenSP, ct.SLThucTe, ct.TinhTrangHang, ct.NguyenNhan
+            FROM ChiTietKiemKe ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
+            WHERE ct.MaKK=@MaKK AND ct.TinhTrangHang IN (N'Hỏng', N'Hết hạn') AND ct.SLThucTe>0`);
+        const scrap = scrapLinesFromRows(scrapRows.recordset);
+        if (!scrap.length) throw new Error('Đợt kiểm kê không có hàng hỏng/hết hạn còn số lượng thực tế để xuất hủy.');
+
+        const warehouse = await getWarehouse(new sql.Request(transaction));
+        const header = {
+            LoaiXuat: 'Hủy hàng',
+            MaPN: null,
+            GhiChu: countScrapNote(maKK, scrap)
+        };
+        const lines = normalizeLines(scrap.map(line => ({
+            MaSP: line.MaSP,
+            SoLuong: line.SLThucTe,
+            GhiChu: `${line.TinhTrangHang}${line.NguyenNhan ? `: ${line.NguyenNhan}` : ''}`
+        })));
+        const validation = await validateIssue(transaction, { ...header, MaKho: warehouse.MaKho }, lines);
+        const maPX = await generateId(transaction, 'PhieuXuat', 'MaPX', datePrefix('PX'));
+        const nextStatus = submitNow ? 'Chờ duyệt' : 'Nháp';
+        try {
+            await new sql.Request(transaction)
+                .input('MaPX', sql.VarChar, maPX)
+                .input('MaKho', sql.VarChar, warehouse.MaKho)
+                .input('MaNV', sql.VarChar, req.user.MaNV)
+                .input('LoaiXuat', sql.NVarChar, header.LoaiXuat)
+                .input('GhiChu', sql.NVarChar, header.GhiChu)
+                .input('MaKK', sql.VarChar, maKK)
+                .input('TrangThai', sql.NVarChar, nextStatus)
+                .query(`INSERT PhieuXuat(MaPX,MaKho,MaNV,LoaiXuat,MaNCC,MaPN,MaKK,NgayXuat,TrangThai,GhiChu)
+                        VALUES(@MaPX,@MaKho,@MaNV,@LoaiXuat,NULL,NULL,@MaKK,GETDATE(),@TrangThai,@GhiChu)`);
+        } catch (error) {
+            if (/Invalid column name|MaKK/i.test(error.message || '')) {
+                throw new Error('Cần chạy migration thêm cột PhieuXuat.MaKK trước khi lập phiếu xuất hủy từ kiểm kê.');
+            }
+            if (error.number === 2601 || error.number === 2627) {
+                const again = await findActiveCountScrap(transaction, maKK);
+                await transaction.commit();
+                return res.json({
+                    MaPX: again?.MaPX,
+                    existed: true,
+                    message: `Đã có phiếu xuất ${again?.MaPX} từ kiểm kê ${maKK}.`
+                });
+            }
+            throw error;
+        }
+        await replaceLines(transaction, maPX, lines, validation.productMap);
+        await writeAudit(transaction, req.user, submitNow ? 'Lập và gửi duyệt Phiếu xuất kho' : 'Lập Phiếu xuất kho', maPX,
+            `Hủy hàng từ kiểm kê ${maKK}; ${nextStatus}; tồn kho chưa thay đổi`);
+        await transaction.commit();
+        res.status(201).json({
+            MaPX: maPX,
+            existed: false,
+            submitted: submitNow,
+            message: submitNow
+                ? `Đã lập phiếu xuất hủy ${maPX} từ ${maKK} và gửi Quản lý duyệt. Thủ kho xác nhận xuất mới trừ tồn.`
+                : `Đã lập phiếu xuất hủy ${maPX} (Nháp) từ ${maKK}. Gửi duyệt rồi Thủ kho xác nhận xuất mới trừ tồn.`
+        });
+    } catch (error) {
+        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không thể lập phiếu xuất hủy từ kiểm kê.' });
+    }
+};
+
 const updateIssue = async (req, res) => {
     const transaction = new sql.Transaction(await poolPromise);
     try {
@@ -565,6 +711,7 @@ module.exports = {
     getSourceReceipt,
     createIssue,
     createIssueFromReturn,
+    createIssueFromCount,
     updateIssue,
     submitIssue,
     approveIssue: decideIssue(true),

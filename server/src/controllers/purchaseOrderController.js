@@ -1,5 +1,9 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
+const {
+    validateShipmentDocument, validateOptionalPackages, validateOptionalVnPlate,
+    validateOptionalName, validateOptionalVnPhone, validateOptionalNote, validateShipmentTimes, firstError
+} = require('../services/fieldValidators');
 
 const editableStatuses = new Set(['Nháp', 'Yêu cầu chỉnh sửa']);
 const clean = (value, max, fallback = null) => String(value ?? '').trim().slice(0, max) || fallback;
@@ -150,6 +154,7 @@ const getDetail = async (req, res) => {
                   AND pokhac.TrangThai NOT IN (N'Từ chối',N'Đã hủy')
             ) phanbo
             WHERE ct.MaPO=@MaPO ORDER BY sp.TenSP`);
+        const tongConThieu = lines.recordset.reduce((sum, line) => sum + Number(line.SLConThieu || 0), 0);
         const shipments = await pool.request().input('MaPO', sql.VarChar, req.params.id).query(`
             SELECT gh.MaTBGH,gh.SoPhieuGiao,gh.NgayXuatPhat,gh.NgayGioDuKienDen,gh.BienSoXe,
                    gh.TenTaiXe,gh.SDTTaiXe,gh.SoKien,gh.TrangThai,gh.NgayDen,gh.GhiChu,gh.NgayTao,
@@ -157,7 +162,11 @@ const getDetail = async (req, res) => {
             FROM ThongBaoGiaoHang gh
             JOIN NhanVien nv ON nv.MaNV=gh.MaNVGhiNhan
             WHERE gh.MaPO=@MaPO ORDER BY gh.NgayTao DESC`);
-        res.json({ order: header.recordset[0], lines: lines.recordset, shipments: shipments.recordset });
+        res.json({
+            order: { ...header.recordset[0], TongConThieu: tongConThieu },
+            lines: lines.recordset,
+            shipments: shipments.recordset
+        });
     } catch (error) { console.error(error); res.status(500).json({ message: 'Không thể tải chi tiết Đơn mua hàng.' }); }
 };
 
@@ -316,20 +325,23 @@ const confirmSupplier = async (req, res) => {
 const recordShipment = async (req, res) => {
     const transaction = new sql.Transaction(await poolPromise);
     try {
-        const SoPhieuGiao = clean(req.body.SoPhieuGiao, 50);
-        const NgayXuatPhat = new Date(req.body.NgayXuatPhat);
-        const NgayGioDuKienDen = new Date(req.body.NgayGioDuKienDen);
-        const BienSoXe = clean(req.body.BienSoXe, 20);
-        const TenTaiXe = clean(req.body.TenTaiXe, 100);
-        const SDTTaiXe = clean(req.body.SDTTaiXe, 20);
-        const rawSoKien = req.body.SoKien;
-        const SoKien = rawSoKien === '' || rawSoKien === null || rawSoKien === undefined ? null : Number(rawSoKien);
-        const GhiChu = clean(req.body.GhiChu, 500);
-        if (!SoPhieuGiao || Number.isNaN(NgayXuatPhat.getTime()) || Number.isNaN(NgayGioDuKienDen.getTime())) {
-            throw new Error('Số phiếu giao, thời gian xuất phát và thời gian dự kiến đến là bắt buộc.');
-        }
-        if (NgayGioDuKienDen < NgayXuatPhat) throw new Error('Thời gian dự kiến đến không được trước thời gian xuất phát.');
-        if (SoKien !== null && (!Number.isInteger(SoKien) || SoKien < 0)) throw new Error('Số kiện phải là số nguyên không âm.');
+        const doc = validateShipmentDocument(req.body.SoPhieuGiao);
+        const times = validateShipmentTimes(req.body.NgayXuatPhat, req.body.NgayGioDuKienDen);
+        const packages = validateOptionalPackages(req.body.SoKien);
+        const plate = validateOptionalVnPlate(req.body.BienSoXe);
+        const driver = validateOptionalName(req.body.TenTaiXe, 'Tên tài xế');
+        const phone = validateOptionalVnPhone(req.body.SDTTaiXe);
+        const note = validateOptionalNote(req.body.GhiChu, 500);
+        const invalid = firstError(doc, times, packages, plate, driver, phone, note);
+        if (invalid) throw new Error(invalid.message);
+        const SoPhieuGiao = doc.value;
+        const NgayXuatPhat = times.departure;
+        const NgayGioDuKienDen = times.arrival;
+        const BienSoXe = plate.value || null;
+        const TenTaiXe = driver.value || null;
+        const SDTTaiXe = phone.value || null;
+        const SoKien = packages.value;
+        const GhiChu = note.value || null;
 
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         const order = await new sql.Request(transaction)

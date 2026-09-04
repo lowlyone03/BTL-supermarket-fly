@@ -89,7 +89,7 @@ const cleanup = async () => {
     await request(`/admin/approvals/purchase-orders/${ids.order}/approve`, manager, { method: 'POST' });
     await request(`/purchasing/purchase-orders/${ids.order}/send-supplier`, purchasing, { method: 'POST' });
     await request(`/purchasing/purchase-orders/${ids.order}/supplier-confirm`, purchasing, { method: 'POST' });
-    const shipment = await request(`/purchasing/purchase-orders/${ids.order}/shipments`, purchasing, { method: 'POST', body: JSON.stringify({ SoPhieuGiao: `PG-${Date.now()}`, NgayXuatPhat: new Date().toISOString(), NgayGioDuKienDen: new Date(Date.now() + 3600000).toISOString(), BienSoXe: '29H-TEST', TenTaiXe: 'Tài xế kiểm thử', SDTTaiXe: '0900000000', SoKien: 1 }) });
+    const shipment = await request(`/purchasing/purchase-orders/${ids.order}/shipments`, purchasing, { method: 'POST', body: JSON.stringify({ SoPhieuGiao: `PG-${Date.now()}`, NgayXuatPhat: new Date().toISOString(), NgayGioDuKienDen: new Date(Date.now() + 3600000).toISOString(), BienSoXe: '29H-123.45', TenTaiXe: 'Tài xế kiểm thử', SDTTaiXe: '0900000000', SoKien: 1 }) });
     ids.shipment = shipment.MaTBGH;
     await request(`/warehouse/receiving/shipments/${ids.shipment}/arrive`, warehouse, { method: 'POST', body: '{}' });
     const createdReceipt = await request('/warehouse/receipts', warehouse, { method: 'POST', body: JSON.stringify({ MaTBGH: ids.shipment, MaPO: ids.order, MaKho: stockBefore.MaKho, GhiChu: 'Lô kiểm thử tự động', lines: [{ MaSP: product.MaSP, SoLuongGiao: 7, SoLuongChapNhan: 7, SoLuongTuChoi: 0, DonGiaNhap: Number(product.GiaNhap), TinhTrangHang: 'Đạt yêu cầu', SoLo: 'TEST-LOT', ViTriKho: 'Kệ kiểm thử' }] }) });

@@ -1,18 +1,14 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
 const { storedPathFor, deleteUploadedProductImage } = require('../middlewares/productImageUpload');
+const {
+    validateRequiredCode, validateRequiredText, validateRequiredNonNegativeNumber,
+    validateRequiredNonNegativeInteger, validateOptionalBarcode
+} = require('../services/fieldValidators');
 
 const text = (value, max, fallback = null) => {
     const normalized = String(value ?? '').trim().slice(0, max);
     return normalized || fallback;
-};
-
-const number = (value, label, { integer = false, min = 0 } = {}) => {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed) || parsed < min || (integer && !Number.isInteger(parsed))) {
-        throw new Error(`${label} không hợp lệ.`);
-    }
-    return parsed;
 };
 
 const writeAudit = (request, user, action, tableName, recordId, content) =>
@@ -36,9 +32,12 @@ const getCategories = async (_req, res) => {
 
 const createCategory = async (req, res) => {
     try {
-        const MaDM = text(req.body.MaDM, 20);
-        const TenDM = text(req.body.TenDM, 100);
-        if (!MaDM || !TenDM) throw new Error('Mã và tên danh mục là bắt buộc.');
+        const maDM = validateRequiredCode(req.body.MaDM, 'Mã danh mục');
+        if (!maDM.ok) throw new Error(maDM.message);
+        const tenDM = validateRequiredText(req.body.TenDM, 'Tên danh mục', { min: 2, max: 100 });
+        if (!tenDM.ok) throw new Error(tenDM.message);
+        const MaDM = maDM.value;
+        const TenDM = tenDM.value;
         const pool = await poolPromise;
         await pool.request()
             .input('MaDM', sql.VarChar, MaDM)
@@ -57,8 +56,9 @@ const createCategory = async (req, res) => {
 
 const updateCategory = async (req, res) => {
     try {
-        const TenDM = text(req.body.TenDM, 100);
-        if (!TenDM) throw new Error('Tên danh mục là bắt buộc.');
+        const tenDM = validateRequiredText(req.body.TenDM, 'Tên danh mục', { min: 2, max: 100 });
+        if (!tenDM.ok) throw new Error(tenDM.message);
+        const TenDM = tenDM.value;
         const pool = await poolPromise;
         const result = await pool.request()
             .input('MaDM', sql.VarChar, req.params.id)
@@ -143,22 +143,34 @@ const getProducts = async (req, res) => {
 };
 
 const normalizeProduct = body => {
-    const product = {
-        MaSP: text(body.MaSP, 20),
-        MaDM: text(body.MaDM, 20),
-        TenSP: text(body.TenSP, 150),
-        DonViTinh: text(body.DonViTinh, 30),
-        MaVach: text(body.MaVach, 30),
-        GiaNhap: number(body.GiaNhap, 'Giá nhập'),
-        GiaBan: number(body.GiaBan, 'Giá bán'),
-        TonKhoToiThieu: number(body.TonKhoToiThieu, 'Tồn kho tối thiểu', { integer: true }),
+    const maSP = validateRequiredCode(body.MaSP, 'Mã sản phẩm');
+    if (!maSP.ok) throw new Error(maSP.message);
+    const maDM = validateRequiredCode(body.MaDM, 'Mã danh mục');
+    if (!maDM.ok) throw new Error(maDM.message);
+    const tenSP = validateRequiredText(body.TenSP, 'Tên sản phẩm', { min: 2, max: 150 });
+    if (!tenSP.ok) throw new Error(tenSP.message);
+    const donVi = validateRequiredText(body.DonViTinh, 'Đơn vị tính', { min: 1, max: 30 });
+    if (!donVi.ok) throw new Error(donVi.message);
+    const barcode = validateOptionalBarcode(body.MaVach);
+    if (!barcode.ok) throw new Error(barcode.message);
+    const giaNhap = validateRequiredNonNegativeNumber(body.GiaNhap, 'Giá nhập');
+    if (!giaNhap.ok) throw new Error(giaNhap.message);
+    const giaBan = validateRequiredNonNegativeNumber(body.GiaBan, 'Giá bán');
+    if (!giaBan.ok) throw new Error(giaBan.message);
+    const tonMin = validateRequiredNonNegativeInteger(body.TonKhoToiThieu, 'Tồn kho tối thiểu');
+    if (!tonMin.ok) throw new Error(tonMin.message);
+    return {
+        MaSP: maSP.value,
+        MaDM: maDM.value,
+        TenSP: tenSP.value,
+        DonViTinh: donVi.value,
+        MaVach: barcode.value || null,
+        GiaNhap: giaNhap.value,
+        GiaBan: giaBan.value,
+        TonKhoToiThieu: tonMin.value,
         DuongDanAnh: text(body.DuongDanAnh, 500),
         TrangThai: body.TrangThai === 'Ngừng bán' ? 'Ngừng bán' : 'Đang bán'
     };
-    if (!product.MaSP || !product.MaDM || !product.TenSP || !product.DonViTinh) {
-        throw new Error('Mã, danh mục, tên sản phẩm và đơn vị tính là bắt buộc.');
-    }
-    return product;
 };
 
 const bindProduct = (request, product, includeCode = true) => {
@@ -275,14 +287,20 @@ const getPromotions = async (req, res) => {
 
 const savePromotion = async (req, res) => {
     try {
-        const MaKM = text(req.params.id || req.body.MaKM, 20);
-        const TenKM = text(req.body.TenKM, 150);
+        const maKM = validateRequiredCode(req.params.id || req.body.MaKM, 'Mã khuyến mãi');
+        if (!maKM.ok) throw new Error(maKM.message);
+        const tenKM = validateRequiredText(req.body.TenKM, 'Tên chương trình khuyến mãi', { min: 2, max: 150 });
+        if (!tenKM.ok) throw new Error(tenKM.message);
+        const MaKM = maKM.value;
+        const TenKM = tenKM.value;
         const LoaiKM = text(req.body.LoaiKM, 20);
-        const GiaTri = number(req.body.GiaTri, 'Giá trị khuyến mãi');
+        const giaTri = validateRequiredNonNegativeNumber(req.body.GiaTri, 'Giá trị khuyến mãi');
+        if (!giaTri.ok) throw new Error(giaTri.message);
+        const GiaTri = giaTri.value;
         const NgayBatDau = text(req.body.NgayBatDau, 10);
         const NgayKetThuc = text(req.body.NgayKetThuc, 10);
         const TrangThai = req.body.TrangThai === 'Ngừng' ? 'Ngừng' : 'Hiệu lực';
-        if (!MaKM || !TenKM || !NgayBatDau || !NgayKetThuc) throw new Error('Mã, tên và thời hạn khuyến mãi là bắt buộc.');
+        if (!NgayBatDau || !NgayKetThuc) throw new Error('Mã, tên và thời hạn khuyến mãi là bắt buộc.');
         if (!['Phần trăm', 'Số tiền'].includes(LoaiKM)) throw new Error('Loại khuyến mãi chỉ nhận Phần trăm hoặc Số tiền.');
         if (LoaiKM === 'Phần trăm' && GiaTri > 100) throw new Error('Khuyến mãi phần trăm không vượt 100%.');
         if (NgayKetThuc < NgayBatDau) throw new Error('Ngày kết thúc phải sau hoặc bằng ngày bắt đầu.');

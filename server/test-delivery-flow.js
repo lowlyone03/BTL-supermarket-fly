@@ -57,7 +57,7 @@ const run = async () => {
                 SoPhieuGiao: 'PG-TEST-01',
                 NgayXuatPhat: '2026-08-24T12:00',
                 NgayGioDuKienDen: '2026-08-24T16:00',
-                BienSoXe: '29H-TEST', TenTaiXe: 'Tài xế thử', SDTTaiXe: '0900000000', SoKien: 1
+                BienSoXe: '29H-123.45', TenTaiXe: 'Tài xế thử', SDTTaiXe: '0900000000', SoKien: 1
             })
         });
         const before = await request('/warehouse/receiving/orders', warehouse);

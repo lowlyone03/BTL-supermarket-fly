@@ -34,6 +34,26 @@
     overlay.querySelector('form').addEventListener('submit', async event => {
       event.preventDefault();
       const payload = { MaNCC: overlay.querySelector('#supplierCode').value, TenNCC: overlay.querySelector('#supplierName').value, MaSoThue: overlay.querySelector('#supplierTax').value, NguoiLienHe: overlay.querySelector('#supplierContact').value, SDT: overlay.querySelector('#supplierPhone').value, Email: overlay.querySelector('#supplierEmail').value, DiaChi: overlay.querySelector('#supplierAddress').value, TrangThai: overlay.querySelector('#supplierStatus').value };
+      const fields = window.FLY_FIELDS;
+      if (fields) {
+        const invalid = fields.firstError(
+          fields.validateRequiredCode(payload.MaNCC, 'Mã Nhà cung cấp'),
+          fields.validateRequiredName(payload.TenNCC, 'Tên Nhà cung cấp'),
+          fields.validateRequiredVnTaxId(payload.MaSoThue),
+          fields.validateOptionalName(payload.NguoiLienHe, 'Người liên hệ'),
+          fields.validateOptionalVnPhone(payload.SDT),
+          fields.validateOptionalEmail(payload.Email),
+          fields.validateOptionalNote(payload.DiaChi, 300)
+        );
+        if (invalid) return context.showToast(invalid.message.replace('Ghi chú', 'Địa chỉ'), 'error');
+        payload.MaNCC = fields.validateRequiredCode(payload.MaNCC, 'Mã Nhà cung cấp').value;
+        payload.TenNCC = fields.validateRequiredName(payload.TenNCC, 'Tên Nhà cung cấp').value;
+        payload.MaSoThue = fields.validateRequiredVnTaxId(payload.MaSoThue).value;
+        payload.NguoiLienHe = fields.validateOptionalName(payload.NguoiLienHe, 'Người liên hệ').value;
+        payload.SDT = fields.validateOptionalVnPhone(payload.SDT).value;
+        payload.Email = fields.validateOptionalEmail(payload.Email).value;
+        payload.DiaChi = fields.validateOptionalNote(payload.DiaChi, 300).value;
+      }
       try {
         const data = await api(context, `/suppliers${existing ? `/${encodeURIComponent(existing.MaNCC)}` : ''}`, { method: existing ? 'PUT' : 'POST', body: JSON.stringify(payload) });
         context.showToast(data.message, 'success'); close(); await refresh();

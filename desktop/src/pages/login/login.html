@@ -86,11 +86,11 @@
           </form>
 
           <div class="login-note server-box">
-            <p><strong>Máy chủ nhóm (database chung)</strong><span>Để cả nhóm test cùng một dữ liệu, nhập IP máy đang chạy 4_CHAY_MAY_CHU_NHOM.bat. Để trống hoặc localhost nếu chỉ test trên máy này.</span></p>
+            <p><strong>Máy chủ nhóm (database chung)</strong><span>Cùng Wi-Fi: dán IP máy chủ, ví dụ 192.168.1.10. Khác Wi-Fi: dán IP Tailscale (100.x.x.x) hoặc link Cloudflare/ngrok TV1 gửi. Máy này: localhost.</span></p>
             <div class="server-row">
               <div class="input-wrap">
                 <svg><use href="#i-database" /></svg>
-                <input type="text" id="serverHost" name="serverHost" placeholder="localhost hoặc 192.168.1.10" autocomplete="off" />
+                <input type="text" id="serverHost" name="serverHost" placeholder="localhost, 192.168.1.10, 100.x.x.x hoặc link https" autocomplete="off" />
               </div>
               <button type="button" class="btn-check-server" id="btnCheckServer">Kiểm tra</button>
             </div>

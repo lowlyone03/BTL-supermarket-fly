@@ -27,6 +27,7 @@
       status: issue.TrangThai,
       fields: [
         { label: 'Loại xuất', value: issue.LoaiXuat }, { label: 'Kho', value: issue.TenKho },
+        { label: 'Đợt kiểm kê', value: issue.MaKK || 'Không liên kết' },
         { label: 'Người lập', value: issue.NguoiLap }, { label: 'Phiếu nhập nguồn', value: issue.MaPN || 'Không áp dụng' },
         { label: 'Nhà cung cấp', value: issue.TenNCC || 'Không áp dụng' }, { label: 'Người duyệt', value: issue.NguoiDuyet || 'Chưa duyệt' }
       ],
@@ -66,6 +67,7 @@
             <div><span>TRẠNG THÁI</span><strong><span class="status-pill ${statusClass(issue.TrangThai)}">${esc(issue.TrangThai)}</span></strong></div>
             <div><span>LOẠI XUẤT</span><strong>${esc(issue.LoaiXuat)}</strong></div>
             <div><span>PHIẾU NHẬP NGUỒN</span><strong>${esc(issue.MaPN || 'Không áp dụng')}</strong></div>
+            <div><span>ĐỢT KIỂM KÊ</span><strong>${esc(issue.MaKK || 'Không liên kết')}</strong></div>
             <div><span>NHÀ CUNG CẤP</span><strong>${esc(issue.TenNCC || 'Không áp dụng')}</strong></div>
             <div><span>NGƯỜI DUYỆT</span><strong>${esc(issue.NguoiDuyet || 'Chưa duyệt')}</strong><small>${issue.NgayDuyet ? fmtDate(issue.NgayDuyet) : ''}</small></div>
             <div><span>NGƯỜI XÁC NHẬN</span><strong>${esc(issue.NguoiXacNhan || (issue.TrangThai === 'Đã xác nhận' ? issue.NguoiLap : 'Chưa xác nhận'))}</strong><small>${issue.NgayXacNhan ? fmtDate(issue.NgayXacNhan) : ''}</small></div>
@@ -195,8 +197,18 @@
         GhiChu: overlay.querySelector('#stockIssueNote').value.trim(),
         lines: readLines()
       });
+      const assertIssueQty = () => {
+        const current = readLines();
+        const invalid = current.find(line => {
+          const qty = window.FLY_FIELDS?.validatePositiveInteger(line.SoLuong, 'Số lượng xuất');
+          return qty ? !qty.ok : !Number.isInteger(line.SoLuong) || line.SoLuong < 1;
+        });
+        if (invalid) throw new Error(`Số lượng xuất của ${invalid.MaSP} phải là số nguyên lớn hơn 0.`);
+        return current;
+      };
       let currentId = id;
       const save = async () => {
+        assertIssueQty();
         const result = await api(context, currentId ? `/warehouse/stock-issues/${currentId}` : '/warehouse/stock-issues', {
           method: currentId ? 'PUT' : 'POST', body: JSON.stringify(payload())
         });

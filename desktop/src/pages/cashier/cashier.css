@@ -358,6 +358,16 @@
   color: #b14e3a;
 }
 
+.cashier-return-handover,
+.cashier-return-wait-note {
+  display: block;
+  margin-top: 5px;
+  color: #8a6d1f;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .cashier-return-done {
   background: #e7f5ed;
   color: #247457;

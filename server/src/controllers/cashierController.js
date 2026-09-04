@@ -2,7 +2,8 @@ const { sql, poolPromise } = require('../config/db');
 const { closeOpenAttendance } = require('../services/attendanceSync');
 const { calculateGrossProfit, RESTOCK_ACCEPTED_SQL } = require('../services/financialRules');
 const { logAudit } = require('../services/auditLog');
-const { snapshotDuty, assertCashierDuty, CashierDutyError } = require('../services/cashierDuty');
+const { snapshotDuty, assertCashierDuty, CashierDutyError, GRACE_AFTER_MINUTES } = require('../services/cashierDuty');
+const { loadPendingApprovedReturns, handoverApprovedReturns, claimHandoverReturns } = require('../services/returnHandover');
 
 const publicDuty = (duty) => {
     if (!duty) return null;
@@ -24,7 +25,10 @@ const publicDuty = (duty) => {
         canCheckOut: duty.canCheckOut,
         canOpenShift: duty.canOpenShift,
         canSell: duty.canSell,
-        openShift: duty.openShift ? { MaCa: duty.openShift.MaCa, MaLich: duty.openShift.MaLich } : null
+        canCompleteReturn: duty.canCompleteReturn,
+        canCloseShift: duty.canCloseShift,
+        graceAfterMinutes: duty.graceAfterMinutes || GRACE_AFTER_MINUTES,
+        openShift: duty.openShift ? { MaCa: duty.openShift.MaCa, MaLich: duty.openShift.MaLich, MaQuay: duty.openShift.MaQuay } : null
     };
 };
 
@@ -191,8 +195,20 @@ const openShift = async (req, res) => {
             severity: 'Quan trọng',
             content: `Thu ngân mở ca với tiền đầu ca ${TienDauCa.toLocaleString('vi-VN')} đồng`
         });
+        const claimed = await claimHandoverReturns(transaction, {
+            maNV: req.user.MaNV,
+            maQuay: assignment.recordset[0].MaQuay,
+            maCa: MaCa
+        });
         await transaction.commit();
-        res.status(201).json({ message: `Đã mở ca ${MaCa}. Bạn có thể bắt đầu bán hàng.`, MaCa });
+        const claimNote = claimed.length
+            ? ` Đã nhận ${claimed.length} phiếu đổi trả đã duyệt từ ca trước cùng quầy.`
+            : '';
+        res.status(201).json({
+            message: `Đã mở ca ${MaCa}. Bạn có thể bắt đầu bán hàng.${claimNote}`,
+            MaCa,
+            claimedReturns: claimed.map(row => row.MaDT)
+        });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);
@@ -271,6 +287,18 @@ const getShiftSummary = async (source, maCa, lock = false) => {
         GiaVonHangGiaoDoi: summary.GiaVonHangGiaoDoi
     });
     Object.assign(summary, profit, { GiaVon: profit.GiaVonHangBanThuan });
+    try {
+        const pendingReturns = await next().input('MaNV', sql.VarChar, summary.MaNV).query(`
+            SELECT dt.MaDT, dt.MaHD, dt.HinhThucXuLy, dt.SoTienHoan, dt.NgayBanGiao
+            FROM PhieuDoiTra dt
+            WHERE dt.TrangThai=N'Đã duyệt'
+              AND COALESCE(dt.MaNV_XuLy, dt.MaNV_Lap)=@MaNV
+            ORDER BY dt.NgayDuyet`);
+        summary.pendingApprovedReturns = pendingReturns.recordset;
+    } catch (error) {
+        if (!/Invalid column name|MaNV_XuLy/i.test(error.message || '')) throw error;
+        summary.pendingApprovedReturns = [];
+    }
     return summary;
 };
 
@@ -298,9 +326,19 @@ const closeShift = async (req, res) => {
                     WHERE MaNV=@MaNV AND TrangThai=N'Đang mở' AND ThoiGianKetThuc IS NULL`);
         if (!lookup.recordset.length) throw new Error('Bạn không có ca bán hàng đang mở.');
         const maCa = lookup.recordset[0].MaCa;
+        await assertCashierDuty(transaction, req.user.MaNV, 'close-shift');
         const summary = await getShiftSummary(transaction, maCa, true);
         if (Number(summary.HoaDonNhap || 0) > 0) throw new Error('Ca còn hóa đơn nháp. Hãy hoàn thành hoặc hủy trước khi đóng ca.');
         if (Number(summary.ThanhToanChoXacNhan || 0) > 0) throw new Error('Ca còn thanh toán chờ xác nhận.');
+        const pendingApproved = await loadPendingApprovedReturns(transaction, { maNV: req.user.MaNV });
+        const handover = pendingApproved.length
+            ? await handoverApprovedReturns(transaction, {
+                fromMaNV: req.user.MaNV,
+                maQuay: summary.MaQuay,
+                fromMaCa: maCa,
+                afterTime: new Date()
+            })
+            : { handed: [], warning: null };
         const tienThucNop = TienCuoiCa - Number(summary.TienDauCa || 0);
         if (tienThucNop < 0) throw new Error('Tiền cuối ca không được nhỏ hơn tiền quỹ đầu ca.');
         await new sql.Request(transaction).input('MaCa', sql.VarChar, maCa)
@@ -325,16 +363,22 @@ const closeShift = async (req, res) => {
         });
         await closeOpenAttendance(transaction, maCa);
         await transaction.commit();
+        const warning = handover.warning;
         res.json({
-            message: `Đã đóng ca ${maCa}. Đã chấm công ra theo giờ chốt ca. Ca đang chờ Kế toán đối soát.`,
+            message: warning
+                ? `Đã đóng ca ${maCa}. ${warning} Đã chấm công ra theo giờ chốt ca. Ca đang chờ Kế toán đối soát.`
+                : `Đã đóng ca ${maCa}. Đã chấm công ra theo giờ chốt ca. Ca đang chờ Kế toán đối soát.`,
             MaCa: maCa,
             TienMatHeThong: summary.TienMatHeThong,
             TienThucNop: tienThucNop,
-            ChenhLech: tienThucNop - summary.TienMatHeThong
+            ChenhLech: tienThucNop - summary.TienMatHeThong,
+            pendingApprovedReturns: pendingApproved,
+            handoverWarning: warning
         });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);
+        if (error instanceof CashierDutyError) return failDuty(res, error);
         res.status(400).json({ message: error.message });
     }
 };

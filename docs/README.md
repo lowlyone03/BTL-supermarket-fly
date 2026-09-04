@@ -27,7 +27,10 @@ Chạy app vẫn từ thư mục gốc repo: `1_CAI_DAT_LAN_DAU.bat` rồi `2_CH
 | [HUONG_DAN_KIEM_THU_TOAN_BO_HE_THONG_SUPERMARKET_FLY.txt](HUONG_DAN_KIEM_THU_TOAN_BO_HE_THONG_SUPERMARKET_FLY.txt) | Kịch bản full-system (file lớn) |
 | [HUONG_DAN_KIEM_THU_UC10_UC27_UC29.md](HUONG_DAN_KIEM_THU_UC10_UC27_UC29.md) | UC10 / UC27 / UC29 |
 | [HUONG_DAN_TEST_PHAN_CA_POS_LUONG.md](HUONG_DAN_TEST_PHAN_CA_POS_LUONG.md) | Phân ca → POS → lương |
-| [HUONG_DAN_TEST_DB_CHUNG.md](HUONG_DAN_TEST_DB_CHUNG.md) | **Nên dùng khi test nhóm:** một máy chủ + một database, mỗi người một vai trò |
+| [HUONG_DAN_TEST_DB_CHUNG.md](HUONG_DAN_TEST_DB_CHUNG.md) | **7 thành viên, một database:** từng bước TV1–TV7, màn đăng nhập, chuỗi test |
+| [HUONG_DAN_KHAC_WIFI.md](HUONG_DAN_KHAC_WIFI.md) | **Khác Wi-Fi:** Tailscale (free) hoặc Cloudflare / ngrok |
+| [HUONG_DAN_CLOUDFLARE_TUNNEL.md](HUONG_DAN_CLOUDFLARE_TUNNEL.md) | **Cloudflare Tunnel từng bước:** chỉ TV1 cài, nhóm dán link |
+| [0_TIN_NHAN_TEST_7_NGUOI_DB_CHUNG.txt](0_TIN_NHAN_TEST_7_NGUOI_DB_CHUNG.txt) | Tin nhắn copy gửi nhóm (phân công + IP + chuỗi test) |
 
 ## Phân công nhóm (7 người CODE)
 

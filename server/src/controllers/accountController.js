@@ -1,6 +1,7 @@
 const { sql, poolPromise } = require('../config/db');
 const bcrypt = require('bcrypt');
 const { logAudit, listAuditLogs, listAuditFilters } = require('../services/auditLog');
+const { validateUsername, validateEmployeeCode } = require('../services/fieldValidators');
 
 // Lấy danh sách tài khoản
 const getAccounts = async (req, res) => {
@@ -24,14 +25,15 @@ const getAccounts = async (req, res) => {
 // Tạo tài khoản mới
 const createAccount = async (req, res) => {
     try {
-        const MaNV = typeof req.body.MaNV === 'string' ? req.body.MaNV.trim() : '';
-        const TenDangNhap = typeof req.body.TenDangNhap === 'string' ? req.body.TenDangNhap.trim().toLowerCase() : '';
+        const maNVResult = validateEmployeeCode(req.body.MaNV);
+        if (!maNVResult.ok) return res.status(400).json({ message: maNVResult.message });
+        const MaNV = maNVResult.value;
+        const usernameResult = validateUsername(req.body.TenDangNhap);
+        if (!usernameResult.ok) return res.status(400).json({ message: usernameResult.message });
+        const TenDangNhap = usernameResult.value;
         const MaVaiTro = Number(req.body.MaVaiTro);
-        if (!MaNV || !TenDangNhap || !Number.isInteger(MaVaiTro)) {
-            return res.status(400).json({ message: 'Vui lòng nhập đầy đủ thông tin!' });
-        }
-        if (!/^[a-z0-9._-]{3,50}$/.test(TenDangNhap)) {
-            return res.status(400).json({ message: 'Tên đăng nhập chỉ gồm chữ thường không dấu, số, dấu chấm, gạch dưới hoặc gạch ngang.' });
+        if (!Number.isInteger(MaVaiTro)) {
+            return res.status(400).json({ message: 'Vui lòng chọn vai trò!' });
         }
 
         const pool = await poolPromise;

@@ -564,6 +564,7 @@
       overlay.querySelector('.save-invoice').addEventListener('click', async () => {
         const SoHoaDon = overlay.querySelector('#supplierInvoiceNo').value.trim();
         if (!SoHoaDon) return context.showToast('Vui lòng nhập số hóa đơn Nhà cung cấp.', 'error');
+        if (!overlay.querySelector('#invoiceDate').value) return context.showToast('Vui lòng chọn ngày hóa đơn.', 'error');
         const mode = currentMode();
         const sourceId = overlay.querySelector('#invoiceSource').value;
         const lines = Array.from(overlay.querySelectorAll('.accounting-invoice-line[data-product]')).map(row => ({
@@ -572,6 +573,15 @@
           DonGia: Number(row.querySelector('.invoice-price').value),
           ThueSuat: Number(row.querySelector('.invoice-tax').value)
         }));
+        const invalid = lines.find(line => {
+          const qty = window.FLY_FIELDS?.validatePositiveInteger(line.SoLuong, 'Số lượng hóa đơn');
+          const price = window.FLY_FIELDS?.validateRequiredNonNegativeNumber(line.DonGia, 'Đơn giá');
+          const taxOk = Number.isFinite(line.ThueSuat) && line.ThueSuat >= 0 && line.ThueSuat <= 100;
+          return (qty ? !qty.ok : !Number.isInteger(line.SoLuong) || line.SoLuong < 1)
+            || (price ? !price.ok : !Number.isFinite(line.DonGia) || line.DonGia < 0)
+            || !taxOk;
+        });
+        if (invalid) return context.showToast(`Dòng ${invalid.MaSP}: số lượng > 0, đơn giá ≥ 0, thuế 0–100.`, 'error');
         try {
           const result = await api(context, '/accounting/purchase-invoices', {
             method: 'POST',

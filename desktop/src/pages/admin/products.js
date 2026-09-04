@@ -311,6 +311,25 @@
 
   document.getElementById('productForm')?.addEventListener('submit', async event => {
     event.preventDefault();
+    const fields = window.FLY_FIELDS;
+    const show = (id, result) => fields?.setFieldError ? fields.setFieldError(id, result.ok, result.message) : result.ok;
+    const codeResult = fields ? fields.validateRequiredCode(document.getElementById('productCode').value, 'Mã sản phẩm') : { ok: Boolean(document.getElementById('productCode').value.trim()), message: 'Mã sản phẩm là bắt buộc.' };
+    const nameResult = fields ? fields.validateRequiredText(document.getElementById('productName').value, 'Tên sản phẩm', { min: 2, max: 150 }) : { ok: Boolean(document.getElementById('productName').value.trim()), message: 'Tên sản phẩm là bắt buộc.' };
+    const unitResult = fields ? fields.validateRequiredText(document.getElementById('productUnit').value, 'Đơn vị tính', { min: 1, max: 30 }) : { ok: Boolean(document.getElementById('productUnit').value.trim()), message: 'Đơn vị tính là bắt buộc.' };
+    const barcodeResult = fields ? fields.validateOptionalBarcode(document.getElementById('productBarcode').value) : { ok: true, value: document.getElementById('productBarcode').value };
+    const costResult = fields ? fields.validateRequiredNonNegativeNumber(document.getElementById('productCost').value, 'Giá nhập') : { ok: Number.isFinite(Number(document.getElementById('productCost').value)), message: 'Giá nhập không hợp lệ.' };
+    const priceResult = fields ? fields.validateRequiredNonNegativeNumber(document.getElementById('productPrice').value, 'Giá bán') : { ok: Number.isFinite(Number(document.getElementById('productPrice').value)), message: 'Giá bán không hợp lệ.' };
+    const minResult = fields ? fields.validateRequiredNonNegativeInteger(document.getElementById('productMinimum').value, 'Tồn kho tối thiểu') : { ok: Number.isInteger(Number(document.getElementById('productMinimum').value)), message: 'Tồn kho tối thiểu không hợp lệ.' };
+    const valid = [
+      show('productCode', codeResult),
+      show('productName', nameResult),
+      show('productUnit', unitResult),
+      show('productBarcode', barcodeResult),
+      show('productCost', costResult),
+      show('productPrice', priceResult),
+      show('productMinimum', minResult)
+    ].every(Boolean);
+    if (!valid) return window.showToast('Vui lòng kiểm tra lại thông tin sản phẩm.', 'error');
     const imageInput = document.getElementById('productImage');
     if (!editingCode && !imageInput.files?.length) {
       return window.showToast('Ảnh sản phẩm là bắt buộc khi thêm mới.', 'error');
@@ -318,14 +337,14 @@
     const wasEditing = Boolean(editingCode);
     const productCode = editingCode;
     const payload = {
-      MaSP: document.getElementById('productCode').value,
+      MaSP: codeResult.value || document.getElementById('productCode').value,
       MaDM: document.getElementById('productCategoryInput').value,
-      TenSP: document.getElementById('productName').value,
-      DonViTinh: document.getElementById('productUnit').value,
-      MaVach: document.getElementById('productBarcode').value,
-      GiaNhap: Number(document.getElementById('productCost').value),
-      GiaBan: Number(document.getElementById('productPrice').value),
-      TonKhoToiThieu: Number(document.getElementById('productMinimum').value),
+      TenSP: nameResult.value || document.getElementById('productName').value,
+      DonViTinh: unitResult.value || document.getElementById('productUnit').value,
+      MaVach: barcodeResult.value ?? document.getElementById('productBarcode').value,
+      GiaNhap: costResult.value ?? Number(document.getElementById('productCost').value),
+      GiaBan: priceResult.value ?? Number(document.getElementById('productPrice').value),
+      TonKhoToiThieu: minResult.value ?? Number(document.getElementById('productMinimum').value),
       TrangThai: document.getElementById('productStatusInput').value
     };
     const formData = new FormData();
@@ -348,7 +367,18 @@
 
   document.getElementById('categoryForm')?.addEventListener('submit', async event => {
     event.preventDefault();
-    const payload = { MaDM: document.getElementById('categoryCode').value, TenDM: document.getElementById('categoryName').value, MoTa: document.getElementById('categoryDescription').value };
+    const fields = window.FLY_FIELDS;
+    const show = (id, result) => fields?.setFieldError ? fields.setFieldError(id, result.ok, result.message) : result.ok;
+    const codeResult = fields ? fields.validateRequiredCode(document.getElementById('categoryCode').value, 'Mã danh mục') : { ok: Boolean(document.getElementById('categoryCode').value.trim()), message: 'Mã danh mục là bắt buộc.' };
+    const nameResult = fields ? fields.validateRequiredText(document.getElementById('categoryName').value, 'Tên danh mục', { min: 2, max: 100 }) : { ok: Boolean(document.getElementById('categoryName').value.trim()), message: 'Tên danh mục là bắt buộc.' };
+    if (!show('categoryCode', codeResult) || !show('categoryName', nameResult)) {
+      return window.showToast('Vui lòng kiểm tra lại thông tin danh mục.', 'error');
+    }
+    const payload = {
+      MaDM: codeResult.value || document.getElementById('categoryCode').value,
+      TenDM: nameResult.value || document.getElementById('categoryName').value,
+      MoTa: document.getElementById('categoryDescription').value
+    };
     try {
       const path = editingCategoryCode ? `/categories/${encodeURIComponent(editingCategoryCode)}` : '/categories';
       const data = await api(path, { method: editingCategoryCode ? 'PUT' : 'POST', body: JSON.stringify(payload) });

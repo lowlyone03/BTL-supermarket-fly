@@ -1,5 +1,9 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
+const {
+    validateRequiredName, validateOptionalVnPhone, validateOptionalEmail, validateOptionalName,
+    validateRequiredCode, validateRequiredVnTaxId, validateOptionalNote
+} = require('../services/fieldValidators');
 
 const clean = (value, max, fallback = null) => {
     const normalized = String(value ?? '').trim().slice(0, max);
@@ -10,21 +14,34 @@ const writeAudit = (request, user, action, recordId, content) =>
     logAudit(request, { user, action, table: 'NhaCungCap', recordId, content, uc: 'UC11' });
 
 const normalizeSupplier = body => {
+    const maNCC = validateRequiredCode(body.MaNCC, 'Mã Nhà cung cấp');
+    if (!maNCC.ok) throw new Error(maNCC.message);
+    const tax = validateRequiredVnTaxId(body.MaSoThue);
+    if (!tax.ok) throw new Error(tax.message);
+    const address = validateOptionalNote(body.DiaChi, 300);
+    if (!address.ok) throw new Error(address.message.replace('Ghi chú', 'Địa chỉ'));
     const supplier = {
-        MaNCC: clean(body.MaNCC, 20),
+        MaNCC: maNCC.value,
         TenNCC: clean(body.TenNCC, 150),
-        MaSoThue: clean(body.MaSoThue, 20),
+        MaSoThue: tax.value,
         SDT: clean(body.SDT, 20),
         Email: clean(body.Email, 100),
-        DiaChi: clean(body.DiaChi, 300),
+        DiaChi: address.value || null,
         NguoiLienHe: clean(body.NguoiLienHe, 100),
         TrangThai: body.TrangThai === 'Ngừng hợp tác' ? 'Ngừng hợp tác' : 'Đang hợp tác'
     };
-    if (!supplier.MaNCC || !supplier.TenNCC || !supplier.MaSoThue) {
-        throw new Error('Mã, tên và mã số thuế Nhà cung cấp là bắt buộc.');
-    }
-    if (supplier.Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(supplier.Email)) throw new Error('Email Nhà cung cấp không đúng định dạng.');
-    if (supplier.SDT && !/^[0-9+().\s-]{8,20}$/.test(supplier.SDT)) throw new Error('Số điện thoại Nhà cung cấp không đúng định dạng.');
+    const ten = validateRequiredName(supplier.TenNCC, 'Tên Nhà cung cấp');
+    if (!ten.ok) throw new Error(ten.message);
+    supplier.TenNCC = ten.value;
+    const contact = validateOptionalName(supplier.NguoiLienHe, 'Người liên hệ');
+    if (!contact.ok) throw new Error(contact.message);
+    supplier.NguoiLienHe = contact.value || null;
+    const email = validateOptionalEmail(supplier.Email);
+    if (!email.ok) throw new Error(email.message);
+    supplier.Email = email.value || null;
+    const phone = validateOptionalVnPhone(supplier.SDT);
+    if (!phone.ok) throw new Error(phone.message);
+    supplier.SDT = phone.value || null;
     return supplier;
 };
 

@@ -1,5 +1,6 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
+const { scrapLinesFromRows } = require('../services/countScrap');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 const conditionValues = new Set(['Bình thường', 'Hỏng', 'Hết hạn']);
@@ -265,10 +266,31 @@ const submitCount = async (req, res) => {
             .input('MaKK', sql.VarChar, req.params.id)
             .input('TrangThai', sql.NVarChar, nextStatus)
             .query('UPDATE KiemKe SET TrangThai=@TrangThai WHERE MaKK=@MaKK');
+        const scrapRows = await new sql.Request(transaction).input('MaKK', sql.VarChar, req.params.id).query(`
+            SELECT ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SLThucTe, ct.TinhTrangHang, ct.NguyenNhan
+            FROM ChiTietKiemKe ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
+            WHERE ct.MaKK=@MaKK AND ct.TinhTrangHang IN (N'Hỏng', N'Hết hạn') AND ct.SLThucTe>0
+            ORDER BY sp.TenSP`);
+        const scrapLines = scrapLinesFromRows(scrapRows.recordset);
+        let existingScrap = null;
+        try {
+            const linked = await new sql.Request(transaction).input('MaKK', sql.VarChar, req.params.id).query(`
+                SELECT TOP 1 MaPX, TrangThai FROM PhieuXuat
+                WHERE MaKK=@MaKK AND TrangThai IN (N'Nháp', N'Chờ duyệt', N'Đã duyệt', N'Đã xác nhận')
+                ORDER BY NgayXuat DESC`);
+            existingScrap = linked.recordset[0] || null;
+        } catch (error) {
+            if (!/Invalid column name|MaKK/i.test(error.message || '')) throw error;
+        }
         await writeAudit(transaction, req.user, hasDifference ? 'Gửi duyệt điều chỉnh tồn' : 'Hoàn thành kiểm kê', req.params.id,
             hasDifference ? `${info.SoChenhLech} mặt hàng chênh lệch, chờ Quản lý duyệt` : 'Không phát sinh chênh lệch, không cập nhật tồn');
         await transaction.commit();
-        res.json({ message: hasDifference ? 'Đã chuyển đợt kiểm kê sang Chờ duyệt điều chỉnh.' : 'Đã hoàn thành kiểm kê, không phát sinh chênh lệch.', TrangThai: nextStatus });
+        res.json({
+            message: hasDifference ? 'Đã chuyển đợt kiểm kê sang Chờ duyệt điều chỉnh.' : 'Đã hoàn thành kiểm kê, không phát sinh chênh lệch.',
+            TrangThai: nextStatus,
+            scrapLines,
+            existingScrap
+        });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);
@@ -298,6 +320,7 @@ const approveCount = async (req, res) => {
         if (changedStock) throw new Error(`Tồn của ${changedStock.MaSP} đã thay đổi sau lúc kiểm đếm. Không thể duyệt trên số liệu cũ.`);
         const adjusted = details.recordset.filter(line => Number(line.ChenhLech) !== 0);
         if (!adjusted.length) throw new Error('Đợt kiểm kê không có chênh lệch để điều chỉnh.');
+        // Hàng hỏng/hết hạn: chỉ đưa tồn về SLThucTe (chênh lệch số lượng). Xuất hủy trừ SLThucTe lúc xác nhận phiếu xuất — không trừ thêm ở đây.
         for (const line of adjusted) {
             const delta = Number(line.ChenhLech);
             const cost = Number(line.DonGiaBinhQuan || 0);

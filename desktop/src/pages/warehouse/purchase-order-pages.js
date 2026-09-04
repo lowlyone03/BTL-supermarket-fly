@@ -145,6 +145,8 @@
           return context.showToast(`${invalidRow.dataset.product} vượt số lượng tối đa của Phiếu đề nghị. Hãy chuyển hồ sơ về Thủ kho nếu cần tăng thêm.`, 'error');
         }
         const lines = selectedRows.map(row => ({ MaSP: row.dataset.product, SoLuong: Number(row.querySelector('.order-qty').value), DonGia: Number(row.querySelector('.order-price').value), ChietKhau: Number(row.querySelector('.order-discount').value) }));
+        const invalidPrice = lines.find(line => !Number.isFinite(line.DonGia) || line.DonGia < 0 || !Number.isFinite(line.ChietKhau) || line.ChietKhau < 0 || line.ChietKhau > 100);
+        if (invalidPrice) return context.showToast(`Đơn giá và chiết khấu của ${invalidPrice.MaSP} không hợp lệ.`, 'error');
         try {
           const result = await api(context, `/purchasing/purchase-orders/${id}`, { method: 'PUT', body: JSON.stringify({ MaDN: order.MaDN, MaNCC: overlay.querySelector('#editSupplier').value, NgayGiaoDuKien: overlay.querySelector('#editDelivery').value, SoNgayThanhToan: Number(overlay.querySelector('#editPaymentDays').value), DieuKhoanThanhToan: overlay.querySelector('#editTerms').value, lines }) });
           if (submit) await api(context, `/purchasing/purchase-orders/${id}/submit`, { method: 'POST' });
@@ -169,7 +171,9 @@
     };
     const overlay = document.createElement('div');
     overlay.className = 'warehouse-modal-backdrop';
-    overlay.innerHTML = `<div class="warehouse-modal shipment-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">THEO DÕI NHÀ CUNG CẤP</p><h2>Ghi nhận chuyến giao hàng</h2><p>${esc(order.MaPO)} · ${esc(order.TenNCC)}</p></div><button class="warehouse-icon-button close" aria-label="Đóng">×</button></div><div class="warehouse-modal-body"><div class="shipment-rule"><svg><use href="#i-truck"></use></svg><div><strong>Ghi nhận theo thông báo của Nhà cung cấp</strong><span>Bước này chuyển hàng sang trạng thái đang vận chuyển. Hàng chưa được tính vào tồn kho cho tới khi Thủ kho kiểm nhận và xác nhận nhập.</span></div></div><div class="warehouse-form-grid"><div class="warehouse-field"><label>Số phiếu giao / vận đơn *</label><input id="shipmentDocument" maxlength="50" placeholder="Ví dụ: PGH-240826-01"></div><div class="warehouse-field"><label>Số kiện dự kiến</label><input id="shipmentPackages" type="number" min="0" step="1" placeholder="Ví dụ: 42"></div><div class="warehouse-field"><label>Thời gian xuất phát *</label>${window.FLY_VI_DATE.datetimeField('shipmentDeparture', localValue(now))}</div><div class="warehouse-field"><label>Dự kiến đến kho *</label>${window.FLY_VI_DATE.datetimeField('shipmentArrival', localValue(expected))}</div><div class="warehouse-field"><label>Biển số xe</label><input id="shipmentPlate" maxlength="20" placeholder="Ví dụ: 29H-123.45"></div><div class="warehouse-field"><label>Tài xế</label><input id="shipmentDriver" maxlength="100" placeholder="Họ tên người giao"></div><div class="warehouse-field"><label>Số điện thoại tài xế</label><input id="shipmentPhone" maxlength="20" placeholder="Số liên hệ khi xe đến"></div><div class="warehouse-field"><label>Ghi chú vận chuyển</label><input id="shipmentNote" maxlength="500" placeholder="Niêm phong, bảo quản lạnh..."></div></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-primary save-shipment"><svg><use href="#i-truck"></use></svg>Ghi nhận đang giao</button></div></div>`;
+    const missing = Number(order.TongConThieu);
+    const packagePrefill = Number.isFinite(missing) && missing > 0 ? String(missing) : '';
+    overlay.innerHTML = `<div class="warehouse-modal shipment-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">THEO DÕI NHÀ CUNG CẤP</p><h2>Ghi nhận chuyến giao hàng</h2><p>${esc(order.MaPO)} · ${esc(order.TenNCC)}</p></div><button class="warehouse-icon-button close" aria-label="Đóng">×</button></div><div class="warehouse-modal-body"><div class="shipment-rule"><svg><use href="#i-truck"></use></svg><div><strong>Ghi nhận theo thông báo của Nhà cung cấp</strong><span>Bước này chuyển hàng sang trạng thái đang vận chuyển. Hàng chưa được tính vào tồn kho cho tới khi Thủ kho kiểm nhận và xác nhận nhập. Số kiện gợi ý theo tổng SL còn thiếu trên đơn — có thể sửa hoặc xóa.</span></div></div><div class="warehouse-form-grid"><div class="warehouse-field"><label>Số phiếu giao / vận đơn *</label><input id="shipmentDocument" maxlength="50" placeholder="Ví dụ: PGH-240826-01"></div><div class="warehouse-field"><label>Số kiện dự kiến</label><input id="shipmentPackages" type="number" min="1" step="1" placeholder="Ví dụ: 42" value="${esc(packagePrefill)}"></div><div class="warehouse-field"><label>Thời gian xuất phát *</label>${window.FLY_VI_DATE.datetimeField('shipmentDeparture', localValue(now))}</div><div class="warehouse-field"><label>Dự kiến đến kho *</label>${window.FLY_VI_DATE.datetimeField('shipmentArrival', localValue(expected))}</div><div class="warehouse-field"><label>Biển số xe</label><input id="shipmentPlate" maxlength="20" placeholder="Ví dụ: 29H-123.45"></div><div class="warehouse-field"><label>Tài xế</label><input id="shipmentDriver" maxlength="100" placeholder="Họ tên người giao"></div><div class="warehouse-field"><label>Số điện thoại tài xế</label><input id="shipmentPhone" maxlength="20" placeholder="Số liên hệ khi xe đến"></div><div class="warehouse-field"><label>Ghi chú vận chuyển</label><input id="shipmentNote" maxlength="500" placeholder="Niêm phong, bảo quản lạnh..."></div></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-primary save-shipment"><svg><use href="#i-truck"></use></svg>Ghi nhận đang giao</button></div></div>`;
     document.body.appendChild(overlay);
     const close = () => overlay.remove();
     overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
@@ -186,7 +190,27 @@
         SDTTaiXe: overlay.querySelector('#shipmentPhone').value,
         GhiChu: overlay.querySelector('#shipmentNote').value
       };
-      if (!body.SoPhieuGiao.trim() || !body.NgayXuatPhat || !body.NgayGioDuKienDen) return context.showToast('Vui lòng nhập số phiếu giao và đủ thời gian vận chuyển.', 'error');
+      const fields = window.FLY_FIELDS;
+      if (fields) {
+        const invalid = fields.firstError(
+          fields.validateShipmentDocument(body.SoPhieuGiao),
+          fields.validateShipmentTimes(body.NgayXuatPhat, body.NgayGioDuKienDen),
+          fields.validateOptionalPackages(body.SoKien),
+          fields.validateOptionalVnPlate(body.BienSoXe),
+          fields.validateOptionalName(body.TenTaiXe, 'Tên tài xế'),
+          fields.validateOptionalVnPhone(body.SDTTaiXe),
+          fields.validateOptionalNote(body.GhiChu, 500)
+        );
+        if (invalid) return context.showToast(invalid.message, 'error');
+        body.SoPhieuGiao = fields.validateShipmentDocument(body.SoPhieuGiao).value;
+        body.SoKien = fields.validateOptionalPackages(body.SoKien).value;
+        body.BienSoXe = fields.validateOptionalVnPlate(body.BienSoXe).value;
+        body.TenTaiXe = fields.validateOptionalName(body.TenTaiXe, 'Tên tài xế').value;
+        body.SDTTaiXe = fields.validateOptionalVnPhone(body.SDTTaiXe).value;
+        body.GhiChu = fields.validateOptionalNote(body.GhiChu, 500).value;
+      } else if (!body.SoPhieuGiao.trim() || !body.NgayXuatPhat || !body.NgayGioDuKienDen) {
+        return context.showToast('Vui lòng nhập số phiếu giao và đủ thời gian vận chuyển.', 'error');
+      }
       button.disabled = true;
       try {
         const result = await api(context, `/purchasing/purchase-orders/${order.MaPO}/shipments`, { method: 'POST', body: JSON.stringify(body) });

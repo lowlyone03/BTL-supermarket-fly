@@ -230,6 +230,18 @@
     overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
     overlay.querySelector('.save').addEventListener('click', async () => {
       const payload = { TenKH: overlay.querySelector('#khName').value, SDT: overlay.querySelector('#khPhone').value, Email: overlay.querySelector('#khEmail').value, DiaChi: overlay.querySelector('#khAddress').value };
+      const fields = window.FLY_FIELDS;
+      if (fields) {
+        const invalid = fields.firstError(
+          fields.validateRequiredName(payload.TenKH, 'Tên khách hàng'),
+          fields.validateOptionalVnPhone(payload.SDT),
+          fields.validateOptionalEmail(payload.Email)
+        );
+        if (invalid) return context.showToast(invalid.message, 'error');
+        payload.TenKH = fields.validateRequiredName(payload.TenKH, 'Tên khách hàng').value;
+        payload.SDT = fields.validateOptionalVnPhone(payload.SDT).value;
+        payload.Email = fields.validateOptionalEmail(payload.Email).value;
+      }
       try {
         const result = existing
           ? await api(context, `/cashier/customers/${existing.MaKH}`, { method: 'PUT', body: JSON.stringify(payload) })
@@ -247,8 +259,12 @@
     const close = () => overlay.remove();
     overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
     overlay.querySelector('.confirm-open').addEventListener('click', async () => {
+      const cash = window.FLY_FIELDS
+        ? window.FLY_FIELDS.validateRequiredNonNegativeNumber(overlay.querySelector('#openingCash').value, 'Tiền mặt đầu ca')
+        : { ok: Number.isFinite(Number(overlay.querySelector('#openingCash').value)) && Number(overlay.querySelector('#openingCash').value) >= 0, value: Number(overlay.querySelector('#openingCash').value), message: 'Tiền mặt đầu ca phải là số không âm.' };
+      if (!cash.ok) return context.showToast(cash.message, 'error');
       try {
-        const result = await api(context, '/cashier/shifts/open', { method: 'POST', body: JSON.stringify({ TienDauCa: Number(overlay.querySelector('#openingCash').value) }) });
+        const result = await api(context, '/cashier/shifts/open', { method: 'POST', body: JSON.stringify({ TienDauCa: cash.value }) });
         context.showToast(result.message, 'success'); close(); await onDone();
       } catch (error) { context.showToast(error.message, 'error'); }
     });
@@ -259,7 +275,11 @@
       const summary = await api(context, '/cashier/shifts/current/summary');
       const overlay = document.createElement('div');
       overlay.className = 'warehouse-modal-backdrop';
-      overlay.innerHTML = `<div class="warehouse-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">ĐÓNG CA &amp; BÀN GIAO</p><h2>${esc(summary.MaCa)}</h2></div><button type="button" class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="warehouse-stats"><article><span>QUỸ ĐẦU CA</span><strong>${money(summary.TienDauCa)}</strong></article><article><span>TIỀN MẶT THU</span><strong>${money(summary.TongTienMat)}</strong></article><article><span>CHUYỂN KHOẢN</span><strong>${money(summary.TongTienChuyenKhoan)}</strong></article><article><span>QR</span><strong>${money(summary.TongTienQR)}</strong></article><article><span>THẺ</span><strong>${money(summary.TongTienThe)}</strong></article><article><span>HOÀN TIỀN MẶT</span><strong>${money(summary.TongTienHoanMat)}</strong></article></div><p class="cashier-payment-help">Tiền mặt vào két = quỹ đầu ca + tiền mặt thu − hoàn tiền mặt = <strong>${money(summary.TienMatTrongKet)}</strong>. Số bàn giao Kế toán (không gồm quỹ đầu ca) = <strong>${money(summary.TienMatHeThong)}</strong>. QR/thẻ/chuyển khoản không đưa vào két.</p><div class="warehouse-field"><label>Tổng tiền mặt thực tế trong két cuối ca *</label><div class="cashier-money-input"><input id="closingCash" type="number" min="0" step="1000" value="${Number(summary.TienMatTrongKet || 0)}"><span>đ</span></div><small>Phải ≥ quỹ đầu ca ${money(summary.TienDauCa)}.</small></div></div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Hủy</button><button type="button" class="warehouse-primary confirm-close">Đóng ca</button></div></div>`;
+      const pending = summary.pendingApprovedReturns || [];
+      const pendingNote = pending.length
+        ? `<div class="return-workflow-hint"><svg><use href="#i-warning"/></svg><div><strong>Còn ${pending.length} phiếu đã duyệt chưa hoàn/đổi</strong><p>${pending.map(item => esc(item.MaDT)).join(', ')}. Đóng ca sẽ chuyển các phiếu này sang ca sau cùng quầy — không chặn cả hai ca.</p></div></div>`
+        : '';
+      overlay.innerHTML = `<div class="warehouse-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">ĐÓNG CA &amp; BÀN GIAO</p><h2>${esc(summary.MaCa)}</h2></div><button type="button" class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body">${pendingNote}<div class="warehouse-stats"><article><span>QUỸ ĐẦU CA</span><strong>${money(summary.TienDauCa)}</strong></article><article><span>TIỀN MẶT THU</span><strong>${money(summary.TongTienMat)}</strong></article><article><span>CHUYỂN KHOẢN</span><strong>${money(summary.TongTienChuyenKhoan)}</strong></article><article><span>QR</span><strong>${money(summary.TongTienQR)}</strong></article><article><span>THẺ</span><strong>${money(summary.TongTienThe)}</strong></article><article><span>HOÀN TIỀN MẶT</span><strong>${money(summary.TongTienHoanMat)}</strong></article></div><p class="cashier-payment-help">Tiền mặt vào két = quỹ đầu ca + tiền mặt thu − hoàn tiền mặt = <strong>${money(summary.TienMatTrongKet)}</strong>. Số bàn giao Kế toán (không gồm quỹ đầu ca) = <strong>${money(summary.TienMatHeThong)}</strong>. QR/thẻ/chuyển khoản không đưa vào két.</p><div class="warehouse-field"><label>Tổng tiền mặt thực tế trong két cuối ca *</label><div class="cashier-money-input"><input id="closingCash" type="number" min="0" step="1000" value="${Number(summary.TienMatTrongKet || 0)}"><span>đ</span></div><small>Phải ≥ quỹ đầu ca ${money(summary.TienDauCa)}.</small></div></div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Hủy</button><button type="button" class="warehouse-primary confirm-close">Đóng ca</button></div></div>`;
       document.body.appendChild(overlay);
       const close = () => overlay.remove();
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
@@ -285,7 +305,7 @@
           ? `<div class="cashier-duty-note"><svg><use href="#i-clock"/></svg><div><strong>Khung giờ ca đã công bố</strong><p>${esc(duty.message)}</p></div></div>`
           : '';
         const openDisabled = duty.canOpenShift === false && !current;
-        root.innerHTML = `${heading('THU NGÂN / CA BÁN HÀNG', 'Mở ca và sẵn sàng tại quầy', 'Phải đúng lịch đã công bố, trong khung giờ ca (sớm tối đa 10 phút). Hết giờ ca thì không vào lại, không bán tiếp.')}${dutyNote}${current ? `<article class="cashier-active-shift"><div class="cashier-shift-copy"><span class="cashier-live"><i></i> CA ĐANG MỞ</span><h2>${esc(current.MaCa)}</h2><p>Ca của <strong>${esc(current.TenNV)}</strong> bắt đầu lúc ${fmtTime(current.ThoiGianBatDau)}.</p><div class="cashier-shift-metrics"><div><span>QUỸ ĐẦU CA</span><strong>${money(s.TienDauCa)}</strong></div><div><span>TIỀN MẶT THU</span><strong>${money(s.TongTienMat)}</strong></div><div><span>CHUYỂN KHOẢN</span><strong>${money(s.TongTienChuyenKhoan)}</strong></div><div><span>QR / THẺ</span><strong>${money(Number(s.TongTienQR || 0) + Number(s.TongTienThe || 0))}</strong></div><div><span>KÉT DỰ KIẾN</span><strong>${money(s.TienMatTrongKet)}</strong></div><div><span>DOANH THU HÓA ĐƠN</span><strong>${money(s.DoanhThuHoaDon)}</strong></div><div><span>TIỀN HOÀN</span><strong>${money(s.TienHoan)}</strong></div><div><span>LÃI GỘP CA</span><strong>${money(s.LoiNhuanGop)}</strong></div></div><div class="gross-profit-steps"><div class="step"><div><span>DOANH THU HÓA ĐƠN</span><strong>${money(s.DoanhThuHoaDon)}</strong></div><b>−</b><div><span>TIỀN HOÀN</span><strong>${money(s.TienHoan)}</strong></div><b>=</b><div class="mid"><span>DOANH THU THUẦN</span><strong>${money(s.DoanhThuThuan)}</strong></div></div><div class="step"><div><span>GIÁ VỐN HÓA ĐƠN</span><strong>${money(s.GiaVonHoaDon)}</strong></div><b>−</b><div><span>GV HÀNG TRẢ NHẬP LẠI</span><strong>${money(s.GiaVonHangTraNhapLai)}</strong></div><b>+</b><div><span>GV HÀNG GIAO ĐỔI</span><strong>${money(s.GiaVonHangGiaoDoi)}</strong></div><b>=</b><div class="mid"><span>GIÁ VỐN THUẦN</span><strong>${money(s.GiaVonHangBanThuan)}</strong></div></div><div class="step"><div class="mid"><span>DOANH THU THUẦN</span><strong>${money(s.DoanhThuThuan)}</strong></div><b>−</b><div class="mid"><span>GIÁ VỐN THUẦN</span><strong>${money(s.GiaVonHangBanThuan)}</strong></div><b>=</b><div class="result"><span>LỢI NHUẬN GỘP</span><strong>${money(s.LoiNhuanGop)}</strong></div></div></div></div><div class="cashier-next-step"><strong>${duty.canSell ? 'Đã sẵn sàng bán hàng' : 'Không bán ngoài giờ ca'}</strong><p>${duty.canSell ? 'Tiền mặt cộng vào két (quỹ đầu ca + thu TM − hoàn TM). CK/QR/thẻ không vào két. Hóa đơn nháp phải hoàn thành hoặc hủy trước khi đóng ca.' : esc(duty.message || 'Hết giờ ca — không lập hóa đơn thêm. Hãy đóng ca.')}</p>${duty.canSell ? '<button type="button" class="warehouse-primary" id="goPos">Vào màn hình bán hàng</button>' : ''}<button type="button" class="warehouse-secondary" id="closeShift">Đóng ca &amp; bàn giao</button></div></article>` : `<article class="cashier-open-shift"><div><p class="warehouse-kicker">BƯỚC 1 · TRƯỚC KHI BÁN HÀNG</p><h2>Chưa có ca bán hàng đang mở</h2><p>${esc(duty.message || 'Nếu không mở được ca: kiểm tra Lịch làm việc — hôm nay phải có ca chính đã công bố, đúng khung giờ, và đã chấm công vào.')}</p><button type="button" class="warehouse-primary" id="openShift" ${openDisabled ? 'disabled' : ''}>Mở ca bán hàng</button></div></article>`}<article class="warehouse-table-card cashier-history"><div class="warehouse-panel-title"><div><p>LỊCH SỬ CÁ NHÂN</p><h2>Các ca gần đây</h2></div><button type="button" class="warehouse-secondary" id="refreshShifts">Làm mới</button></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>MÃ CA</th><th>BẮT ĐẦU</th><th>KẾT THÚC</th><th>QUỸ ĐẦU CA</th><th>HÓA ĐƠN</th><th>DOANH THU</th><th>TRẠNG THÁI</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><strong>${esc(item.MaCa)}</strong></td><td>${fmtTime(item.ThoiGianBatDau)}</td><td>${fmtTime(item.ThoiGianKetThuc)}</td><td class="num">${money(item.TienDauCa)}</td><td class="num">${item.SoHoaDon}</td><td class="num"><strong>${money(item.DoanhThu)}</strong></td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có lịch sử ca bán hàng.</td></tr>'}</tbody></table></div></article>`;
+        root.innerHTML = `${heading('THU NGÂN / CA BÁN HÀNG', 'Mở ca và sẵn sàng tại quầy', 'Phải đúng lịch đã công bố, trong khung giờ ca (sớm tối đa 10 phút). Hết giờ ca còn 15 phút để xác nhận đổi trả / đóng ca — không bán hóa đơn mới.')}${dutyNote}${current ? `<article class="cashier-active-shift"><div class="cashier-shift-copy"><span class="cashier-live"><i></i> CA ĐANG MỞ</span><h2>${esc(current.MaCa)}</h2><p>Ca của <strong>${esc(current.TenNV)}</strong> bắt đầu lúc ${fmtTime(current.ThoiGianBatDau)}.</p><div class="cashier-shift-metrics"><div><span>QUỸ ĐẦU CA</span><strong>${money(s.TienDauCa)}</strong></div><div><span>TIỀN MẶT THU</span><strong>${money(s.TongTienMat)}</strong></div><div><span>CHUYỂN KHOẢN</span><strong>${money(s.TongTienChuyenKhoan)}</strong></div><div><span>QR / THẺ</span><strong>${money(Number(s.TongTienQR || 0) + Number(s.TongTienThe || 0))}</strong></div><div><span>KÉT DỰ KIẾN</span><strong>${money(s.TienMatTrongKet)}</strong></div><div><span>DOANH THU HÓA ĐƠN</span><strong>${money(s.DoanhThuHoaDon)}</strong></div><div><span>TIỀN HOÀN</span><strong>${money(s.TienHoan)}</strong></div><div><span>LÃI GỘP CA</span><strong>${money(s.LoiNhuanGop)}</strong></div></div><div class="gross-profit-steps"><div class="step"><div><span>DOANH THU HÓA ĐƠN</span><strong>${money(s.DoanhThuHoaDon)}</strong></div><b>−</b><div><span>TIỀN HOÀN</span><strong>${money(s.TienHoan)}</strong></div><b>=</b><div class="mid"><span>DOANH THU THUẦN</span><strong>${money(s.DoanhThuThuan)}</strong></div></div><div class="step"><div><span>GIÁ VỐN HÓA ĐƠN</span><strong>${money(s.GiaVonHoaDon)}</strong></div><b>−</b><div><span>GV HÀNG TRẢ NHẬP LẠI</span><strong>${money(s.GiaVonHangTraNhapLai)}</strong></div><b>+</b><div><span>GV HÀNG GIAO ĐỔI</span><strong>${money(s.GiaVonHangGiaoDoi)}</strong></div><b>=</b><div class="mid"><span>GIÁ VỐN THUẦN</span><strong>${money(s.GiaVonHangBanThuan)}</strong></div></div><div class="step"><div class="mid"><span>DOANH THU THUẦN</span><strong>${money(s.DoanhThuThuan)}</strong></div><b>−</b><div class="mid"><span>GIÁ VỐN THUẦN</span><strong>${money(s.GiaVonHangBanThuan)}</strong></div><b>=</b><div class="result"><span>LỢI NHUẬN GỘP</span><strong>${money(s.LoiNhuanGop)}</strong></div></div></div></div><div class="cashier-next-step"><strong>${duty.canSell ? 'Đã sẵn sàng bán hàng' : 'Không bán ngoài giờ ca'}</strong><p>${duty.canSell ? 'Tiền mặt cộng vào két (quỹ đầu ca + thu TM − hoàn TM). CK/QR/thẻ không vào két. Hóa đơn nháp phải hoàn thành hoặc hủy trước khi đóng ca.' : esc(duty.message || 'Hết giờ ca — không lập hóa đơn thêm. Hãy đóng ca.')}</p>${duty.canSell ? '<button type="button" class="warehouse-primary" id="goPos">Vào màn hình bán hàng</button>' : ''}<button type="button" class="warehouse-secondary" id="closeShift">Đóng ca &amp; bàn giao</button></div></article>` : `<article class="cashier-open-shift"><div><p class="warehouse-kicker">BƯỚC 1 · TRƯỚC KHI BÁN HÀNG</p><h2>Chưa có ca bán hàng đang mở</h2><p>${esc(duty.message || 'Nếu không mở được ca: kiểm tra Lịch làm việc — hôm nay phải có ca chính đã công bố, đúng khung giờ, và đã chấm công vào.')}</p><button type="button" class="warehouse-primary" id="openShift" ${openDisabled ? 'disabled' : ''}>Mở ca bán hàng</button></div></article>`}<article class="warehouse-table-card cashier-history"><div class="warehouse-panel-title"><div><p>LỊCH SỬ CÁ NHÂN</p><h2>Các ca gần đây</h2></div><button type="button" class="warehouse-secondary" id="refreshShifts">Làm mới</button></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>MÃ CA</th><th>BẮT ĐẦU</th><th>KẾT THÚC</th><th>QUỸ ĐẦU CA</th><th>HÓA ĐƠN</th><th>DOANH THU</th><th>TRẠNG THÁI</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><strong>${esc(item.MaCa)}</strong></td><td>${fmtTime(item.ThoiGianBatDau)}</td><td>${fmtTime(item.ThoiGianKetThuc)}</td><td class="num">${money(item.TienDauCa)}</td><td class="num">${item.SoHoaDon}</td><td class="num"><strong>${money(item.DoanhThu)}</strong></td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có lịch sử ca bán hàng.</td></tr>'}</tbody></table></div></article>`;
         root.querySelector('#openShift')?.addEventListener('click', () => openShiftModal(context, load));
         root.querySelector('#goPos')?.addEventListener('click', () => context.navigate('cashier-pos'));
         root.querySelector('#closeShift')?.addEventListener('click', () => closeShiftModal(context, load));
@@ -716,6 +736,12 @@
       }));
       overlay.querySelector('#saveReturn').addEventListener('click', async () => {
         const lines = [...overlay.querySelectorAll('.cashier-return-line')].filter(row => row.querySelector('input[type=checkbox]').checked).map(row => ({ MaSP: row.dataset.sp, SoLuong: Number(row.querySelector('input[type=number]').value) }));
+        const invalid = lines.find(line => {
+          const qty = window.FLY_FIELDS?.validatePositiveInteger(line.SoLuong, 'Số lượng trả');
+          return qty ? !qty.ok : !Number.isInteger(line.SoLuong) || line.SoLuong < 1;
+        });
+        if (!lines.length) return context.showToast('Chọn ít nhất một sản phẩm khách trả.', 'error');
+        if (invalid) return context.showToast(`Số lượng trả của ${invalid.MaSP} phải là số nguyên lớn hơn 0.`, 'error');
         try {
           const created = await api(context, '/cashier/returns', { method: 'POST', body: JSON.stringify({ MaHD: inv.MaHD, LyDo: overlay.querySelector('#returnReason').value, HinhThucXuLy: overlay.querySelector('input[name=returnFormType]:checked').value, lines }) });
           await api(context, `/cashier/returns/${created.MaDT}/submit`, { method: 'POST' });
@@ -761,8 +787,22 @@
         catch (error) { context.showToast(error.message, 'error'); }
       }
     };
+    const canCompleteReturn = item => {
+      if (item.TrangThai !== 'Đã duyệt') return false;
+      if (!item.NgayBanGiao) return true;
+      return !item.MaNV_XuLy || item.MaNV_XuLy === context.user?.MaNV;
+    };
+    const returnDutyBadge = item => {
+      if (item.TrangThai === 'Hoàn thành') return '';
+      if (item.TrangThai === 'Đã duyệt' && item.NgayBanGiao && !canCompleteReturn(item)) {
+        return '<small class="cashier-return-handover">Chờ ca sau cùng quầy xác nhận hoàn/đổi</small>';
+      }
+      if (item.TrangThai === 'Đã duyệt') return '<small class="cashier-return-wait-note">Thu ngân chưa xác nhận hoàn/đổi</small>';
+      return '';
+    };
     const returnActionHtml = item => {
       if (item.TrangThai === 'Đã duyệt') {
+        if (!canCompleteReturn(item)) return '<span class="cashier-return-wait">Chờ ca sau cùng quầy</span>';
         const label = item.HinhThucXuLy === 'Hoàn tiền' ? 'Xác nhận hoàn' : 'Xác nhận đổi';
         return `<button type="button" class="warehouse-primary" data-complete="${esc(item.MaDT)}">${label}</button>`;
       }
@@ -839,6 +879,13 @@
         const payload = refund
           ? { PhuongThucHoan: overlay.querySelector('#refundMethod').value, MaGiaoDichHoan: overlay.querySelector('#refundCode')?.value }
           : { exchange: [...overlay.querySelectorAll('.cashier-exchange-row')].map(row => ({ MaSP: row.dataset.sp, SoLuong: Number(row.querySelector('.ex-qty').value) })) };
+        if (!refund) {
+          const invalid = payload.exchange.find(line => {
+            const qty = window.FLY_FIELDS?.validatePositiveInteger(line.SoLuong, 'Số lượng đổi');
+            return qty ? !qty.ok : !Number.isInteger(line.SoLuong) || line.SoLuong < 1;
+          });
+          if (invalid) return context.showToast(`Số lượng đổi của ${invalid.MaSP} phải là số nguyên lớn hơn 0.`, 'error');
+        }
         try {
           const result = await api(context, `/cashier/returns/${id}/complete`, { method: 'POST', body: JSON.stringify(payload) });
           context.showToast(result.message, 'success');
@@ -851,7 +898,7 @@
     const load = async () => {
       try {
         const data = await api(context, '/cashier/returns?scope=mine');
-        root.innerHTML = `${heading('THU NGÂN / ĐỔI TRẢ', 'Yêu cầu đổi hàng hoặc hoàn tiền', 'Lập phiếu → Thủ kho kiểm → Quản lý duyệt → bạn xác nhận hoàn/đổi trên ca đang mở. Cột thao tác hiện Chờ duyệt cho đến khi Quản lý duyệt xong.', '<button class="warehouse-primary" id="newReturn">Lập yêu cầu</button>')}<article class="warehouse-table-card"><div class="warehouse-table-wrap"><table class="warehouse-table cashier-return-table"><thead><tr><th>PHIẾU</th><th>HÓA ĐƠN / KHÁCH</th><th>CA GỐC</th><th>HÌNH THỨC</th><th>SỐ TIỀN HOÀN</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr class="${item.TrangThai === 'Đã duyệt' ? 'cashier-return-ready' : ''}"><td><strong>${esc(item.MaDT)}</strong><small>${fmtTime(item.NgayLap)}</small></td><td>${esc(item.MaHD)}<small>${esc(item.TenKH || 'Khách vãng lai')}</small></td><td>${esc(item.MaCaGoc || '—')}<small>${esc(item.ThuNganGoc || '')}${item.MaCaHoan ? `<br>Hoàn ca ${esc(item.MaCaHoan)}` : ''}</small></td><td>${esc(item.HinhThucXuLy)}</td><td class="num">${money(item.SoTienHoan)}</td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></td><td>${returnActionHtml(item)}</td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có yêu cầu đổi trả.</td></tr>'}</tbody></table></div></article>`;
+        root.innerHTML = `${heading('THU NGÂN / ĐỔI TRẢ', 'Yêu cầu đổi hàng hoặc hoàn tiền', 'Lập phiếu → Thủ kho kiểm → Quản lý duyệt → thu ngân xác nhận hoàn/đổi trên ca đang mở (còn 15 phút sau hết giờ ca). Hết thời gian gia hạn, phiếu đã duyệt chưa hoàn chuyển ca sau cùng quầy.', '<button class="warehouse-primary" id="newReturn">Lập yêu cầu</button>')}<article class="warehouse-table-card"><div class="warehouse-table-wrap"><table class="warehouse-table cashier-return-table"><thead><tr><th>PHIẾU</th><th>HÓA ĐƠN / KHÁCH</th><th>CA GỐC</th><th>HÌNH THỨC</th><th>SỐ TIỀN HOÀN</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr class="${item.TrangThai === 'Đã duyệt' ? 'cashier-return-ready' : ''}"><td><strong>${esc(item.MaDT)}</strong><small>${fmtTime(item.NgayLap)}</small></td><td>${esc(item.MaHD)}<small>${esc(item.TenKH || 'Khách vãng lai')}</small></td><td>${esc(item.MaCaGoc || '—')}<small>${esc(item.ThuNganGoc || '')}${item.MaCaHoan ? `<br>Hoàn ca ${esc(item.MaCaHoan)}` : ''}</small></td><td>${esc(item.HinhThucXuLy)}</td><td class="num">${money(item.SoTienHoan)}</td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span>${returnDutyBadge(item)}</td><td>${returnActionHtml(item)}</td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có yêu cầu đổi trả.</td></tr>'}</tbody></table></div></article>`;
         root.querySelector('#newReturn').addEventListener('click', () => openCreate());
         root.querySelectorAll('[data-complete]').forEach(button => button.addEventListener('click', () => completeModal(button.dataset.complete)));
         root.querySelectorAll('[data-print-return]').forEach(button => button.addEventListener('click', async () => {

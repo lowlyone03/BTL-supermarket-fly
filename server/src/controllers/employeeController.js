@@ -1,12 +1,16 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
 const { ensurePayrollSchema } = require('../services/payrollSchema');
+const {
+    validateRequiredName, validateOptionalVnPhone, validateOptionalEmail,
+    validateEmployeeCode, validateOptionalNote
+} = require('../services/fieldValidators');
 
 const EMPLOYEE_STATUSES = ['Đang làm việc', 'Nghỉ việc'];
 
 const normalizeText = value => typeof value === 'string' ? value.trim() : '';
 
-const validateEmployeeInput = async (pool, body) => {
+const validateEmployeeInput = async (pool, body, { requireCode = false } = {}) => {
     const employee = {
         MaNV: normalizeText(body.MaNV).toUpperCase(),
         TenNV: normalizeText(body.TenNV),
@@ -17,8 +21,25 @@ const validateEmployeeInput = async (pool, body) => {
         TrangThai: normalizeText(body.TrangThai) || 'Đang làm việc'
     };
 
-    if (!employee.TenNV || !employee.ChucVu) {
-        return { error: 'Vui lòng nhập tên nhân viên và chức vụ.' };
+    if (requireCode) {
+        const maNV = validateEmployeeCode(employee.MaNV);
+        if (!maNV.ok) return { error: maNV.message };
+        employee.MaNV = maNV.value;
+    }
+    const tenNV = validateRequiredName(employee.TenNV, 'Họ tên nhân viên');
+    if (!tenNV.ok) return { error: tenNV.message };
+    employee.TenNV = tenNV.value;
+    const phone = validateOptionalVnPhone(employee.SDT);
+    if (!phone.ok) return { error: phone.message };
+    employee.SDT = phone.value || null;
+    const email = validateOptionalEmail(employee.Email);
+    if (!email.ok) return { error: email.message };
+    employee.Email = email.value || null;
+    const address = validateOptionalNote(employee.DiaChi, 300);
+    if (!address.ok) return { error: address.message.replace('Ghi chú', 'Địa chỉ') };
+    employee.DiaChi = address.value || null;
+    if (!employee.ChucVu) {
+        return { error: 'Vui lòng chọn chức vụ.' };
     }
     if (!EMPLOYEE_STATUSES.includes(employee.TrangThai)) {
         return { error: 'Trạng thái nhân viên không hợp lệ.' };
@@ -101,17 +122,11 @@ const getEmployeeById = async (req, res) => {
 const createEmployee = async (req, res) => {
     try {
         const pool = await poolPromise;
-        const validation = await validateEmployeeInput(pool, req.body);
+        const validation = await validateEmployeeInput(pool, req.body, { requireCode: true });
         if (validation.error) {
             return res.status(400).json({ message: validation.error });
         }
         const { MaNV, TenNV, ChucVu, SDT, Email, DiaChi, TrangThai } = validation.employee;
-        if (!MaNV) {
-            return res.status(400).json({ message: 'Vui lòng nhập mã nhân viên.' });
-        }
-        if (!/^[A-Z0-9_-]{2,20}$/.test(MaNV)) {
-            return res.status(400).json({ message: 'Mã nhân viên chỉ gồm chữ in hoa, số, gạch dưới hoặc gạch ngang.' });
-        }
         if (ChucVu === 'Quản lý') {
             const managerCount = await pool.request().query("SELECT COUNT(*) AS Total FROM NhanVien WHERE ChucVu = N'Quản lý' AND TrangThai = N'Đang làm việc'");
             if (managerCount.recordset[0].Total > 0) {

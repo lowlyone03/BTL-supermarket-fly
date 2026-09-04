@@ -18,6 +18,7 @@ router.post('/inventory-counts', requirePermission('UC20'), inventoryCountContro
 router.get('/inventory-counts/:id', requirePermission('UC20'), inventoryCountController.getWarehouseCountDetail);
 router.put('/inventory-counts/:id', requirePermission('UC20'), inventoryCountController.saveCount);
 router.post('/inventory-counts/:id/submit', requirePermission('UC20'), inventoryCountController.submitCount);
+router.post('/inventory-counts/:id/scrap-issue', requirePermission('UC19'), stockIssueController.createIssueFromCount);
 router.get('/stock-issues/options', requirePermission('UC19'), stockIssueController.getOptions);
 router.get('/stock-issues/source-receipts/:id', requirePermission('UC19'), stockIssueController.getSourceReceipt);
 router.get('/stock-issues', requirePermission('UC19'), stockIssueController.listIssues);

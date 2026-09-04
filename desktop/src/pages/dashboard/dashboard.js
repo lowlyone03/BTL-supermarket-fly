@@ -543,7 +543,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const pwdModal = document.getElementById('pwdModal');
   const openPasswordModal = event => { event?.preventDefault(); pwdModal.style.display = 'flex'; document.getElementById('oldPwd').focus(); };
-  const closePasswordModal = () => { pwdModal.style.display = 'none'; document.getElementById('pwdForm').reset(); };
+  const closePasswordModal = () => {
+    pwdModal.style.display = 'none';
+    document.getElementById('pwdForm').reset();
+    ['oldPwd', 'newPwd', 'confirmPwd'].forEach(id => window.FLY_FIELDS?.setFieldError?.(id, true, ''));
+  };
   document.getElementById('btnChangePassword').addEventListener('click', openPasswordModal);
   document.getElementById('menuChangePassword').addEventListener('click', openPasswordModal);
   document.getElementById('closePwdModal').addEventListener('click', closePasswordModal);
@@ -626,7 +630,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const oldPwd = document.getElementById('oldPwd').value;
     const newPwd = document.getElementById('newPwd').value;
     const confirmPwd = document.getElementById('confirmPwd').value;
-    if (newPwd !== confirmPwd) return window.showToast('Mật khẩu xác nhận không khớp.', 'error');
+    const fields = window.FLY_FIELDS;
+    const show = (id, ok, message) => fields?.setFieldError ? fields.setFieldError(id, ok, message) : ok;
+    const oldOk = show('oldPwd', Boolean(oldPwd), 'Vui lòng nhập mật khẩu hiện tại.');
+    const newResult = fields ? fields.validateNewPassword(newPwd) : { ok: Boolean(newPwd.trim()), message: 'Vui lòng nhập mật khẩu mới.' };
+    const newOk = show('newPwd', newResult.ok, newResult.message);
+    const confirmOk = show('confirmPwd', newPwd === confirmPwd, 'Mật khẩu xác nhận không khớp.');
+    if (!oldOk || !newOk || !confirmOk) return;
     try {
       const response = await fetch(`${API_BASE}/auth/change-password`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

@@ -39,9 +39,9 @@
     <div class="modal">
         <div class="modal-header"><div><p class="module-kicker">CẤP QUYỀN TRUY CẬP</p><h3>Tạo tài khoản</h3></div><button type="button" class="close-btn" onclick="closeAccModal()">×</button></div>
         <div class="modal-body">
-            <form id="accForm">
-                <div class="form-group"><label>Nhân viên chưa có tài khoản *</label><select id="maNV_Acc" required></select></div>
-                <div class="form-group"><label>Tên đăng nhập *</label><input type="text" id="tenDangNhap" required placeholder="Chữ thường không dấu"></div>
+            <form id="accForm" novalidate>
+                <div class="form-group"><label>Nhân viên chưa có tài khoản *</label><select id="maNV_Acc" required></select><small class="emp-field-error" id="maNV_Acc_err"></small></div>
+                <div class="form-group"><label>Tên đăng nhập *</label><input type="text" id="tenDangNhap" required placeholder="Chữ thường không dấu" maxlength="50" autocomplete="off"><small class="field-help">3–50 ký tự, chữ thường không dấu, số, dấu . _ -</small><small class="emp-field-error" id="tenDangNhap_err"></small></div>
                 <div class="form-group"><label>Vai trò *</label><select id="maVaiTro" required></select><small class="field-help">Vai trò tự động khớp với chức vụ nhân viên.</small></div>
                 <div class="form-group"><p style="font-size:13px;color:#64748b;margin-top:10px"><em>Mật khẩu mặc định: <strong>123</strong></em></p></div>
                 <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeAccModal()">Hủy</button><button type="submit" class="btn btn-primary">Tạo tài khoản</button></div>
@@ -51,4 +51,5 @@
 </div>
 
 <script src="../shared/escape-key.js"></script>
-<script src="../admin/accounts.js"></script>
+<script src="../shared/field-validators.js?v=fields-2"></script>
+<script src="../admin/accounts.js?v=acc-validate-1"></script>

@@ -56,6 +56,21 @@ const RETURN_STEP_SQL = `
       WHEN dt.TrangThai=N'Nháp' THEN N'Thu ngân chưa gửi Thủ kho'
       WHEN dt.TrangThai=N'Chờ kiểm tra' THEN N'Thủ kho chưa kiểm hàng'
       WHEN dt.TrangThai=N'Chờ duyệt' THEN N'Quản lý chưa duyệt'
+      WHEN dt.TrangThai=N'Đã duyệt' AND dt.NgayBanGiao IS NOT NULL THEN N'Chờ ca sau cùng quầy xác nhận hoàn/đổi'
+      WHEN dt.TrangThai=N'Đã duyệt' THEN N'Thu ngân chưa xác nhận hoàn/đổi'
+      WHEN dt.TrangThai=N'Từ chối' THEN N'Quản lý đã từ chối'
+      WHEN dt.TrangThai=N'Đã hủy' THEN N'Phiếu đã hủy'
+      WHEN ${RESTOCK_REJECTED_SQL} THEN N'Loại bỏ / vứt — không cộng tồn (đã trừ lúc bán)'
+      WHEN ${RESTOCK_ACCEPTED_SQL} THEN N'Nhập lại kho bán'
+      WHEN dt.LyDo LIKE N'%nhầm%' OR dt.LyDo LIKE N'%sai sản phẩm%' THEN N'Thu ngân bán/giao nhầm'
+      ELSE N'Đã xử lý xong tại quầy'
+    END`;
+
+const RETURN_STEP_SQL_LEGACY = `
+    CASE
+      WHEN dt.TrangThai=N'Nháp' THEN N'Thu ngân chưa gửi Thủ kho'
+      WHEN dt.TrangThai=N'Chờ kiểm tra' THEN N'Thủ kho chưa kiểm hàng'
+      WHEN dt.TrangThai=N'Chờ duyệt' THEN N'Quản lý chưa duyệt'
       WHEN dt.TrangThai=N'Đã duyệt' THEN N'Thu ngân chưa xác nhận hoàn/đổi'
       WHEN dt.TrangThai=N'Từ chối' THEN N'Quản lý đã từ chối'
       WHEN dt.TrangThai=N'Đã hủy' THEN N'Phiếu đã hủy'
@@ -94,12 +109,13 @@ const queryReturnDiagnostics = async (pool, period, maNV = null) => {
                 OR (dt.NgayHoan IS NOT NULL AND dt.NgayHoan>=@From AND dt.NgayHoan<@ToExclusive)
               )
               ${cashierReturnScope}`),
-        bind().query(`
+        (async () => {
+            const ticketsSql = (stepSql) => `
             SELECT TOP 20 dt.MaDT, dt.MaHD, dt.NgayLap, dt.NgayKiemTra, dt.NgayDuyet, dt.NgayHoan,
                    dt.HinhThucXuLy, dt.SoTienHoan, dt.TrangThai, dt.LyDo, dt.KetQuaKiemTra,
                    dt.GhiChu, dt.MaCaHoan,
                    kh.TenKH, lap.TenNV NguoiLap, kho.TenNV NguoiKiemTra, duyet.TenNV NguoiDuyet,
-                   ${RETURN_STEP_SQL} BuocCanXuLy,
+                   ${stepSql} BuocCanXuLy,
                    ${STOCK_FATE_SQL} HangDiDau
             FROM PhieuDoiTra dt
             JOIN HoaDon hd ON hd.MaHD=dt.MaHD
@@ -116,7 +132,14 @@ const queryReturnDiagnostics = async (pool, period, maNV = null) => {
             ORDER BY CASE dt.TrangThai
                        WHEN N'Đã duyệt' THEN 0 WHEN N'Chờ duyệt' THEN 1
                        WHEN N'Chờ kiểm tra' THEN 2 WHEN N'Nháp' THEN 3 ELSE 4 END,
-                     COALESCE(dt.NgayHoan, dt.NgayLap) DESC`),
+                     COALESCE(dt.NgayHoan, dt.NgayLap) DESC`;
+            try {
+                return await bind().query(ticketsSql(RETURN_STEP_SQL));
+            } catch (error) {
+                if (!/Invalid column name|NgayBanGiao/i.test(error.message || '')) throw error;
+                return bind().query(ticketsSql(RETURN_STEP_SQL_LEGACY));
+            }
+        })(),
         bind().query(`
             SELECT TOP 8 sp.MaSP, sp.TenSP,
                    SUM(ct.SoLuong) SLTra,

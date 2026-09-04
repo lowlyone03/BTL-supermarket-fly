@@ -71,11 +71,22 @@
         const tenNV = document.getElementById('tenNV').value.trim();
         const sdt = document.getElementById('sdt').value.trim();
         const email = document.getElementById('email').value.trim();
+        const diaChi = document.getElementById('diaChi').value.trim();
+        const chucVu = document.getElementById('chucVu').value;
         let ok = true;
-        if (!validateField('maNV', maNV.length >= 2, 'Mã nhân viên phải có ít nhất 2 ký tự')) ok = false;
-        if (!validateField('tenNV', tenNV.length >= 2, 'Vui lòng nhập họ tên nhân viên')) ok = false;
-        if (!validateField('sdt', !sdt || /^0\d{9,10}$/.test(sdt), 'Số điện thoại không hợp lệ')) ok = false;
-        if (!validateField('email', !email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), 'Email không hợp lệ')) ok = false;
+        const fields = window.FLY_FIELDS;
+        const codeResult = fields ? fields.validateEmployeeCode(maNV) : { ok: maNV.length >= 2, message: 'Mã nhân viên phải có ít nhất 2 ký tự' };
+        const nameResult = fields ? fields.validateRequiredName(tenNV, 'Họ tên nhân viên') : { ok: tenNV.length >= 2, message: 'Vui lòng nhập họ tên nhân viên' };
+        const phoneResult = fields ? fields.validateOptionalVnPhone(sdt) : { ok: !sdt || /^0\d{9,10}$/.test(sdt), message: 'Số điện thoại không hợp lệ' };
+        const emailResult = fields ? fields.validateOptionalEmail(email) : { ok: !email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), message: 'Email không hợp lệ' };
+        const addressResult = fields ? fields.validateOptionalNote(diaChi, 300) : { ok: true };
+        if (addressResult.message) addressResult.message = addressResult.message.replace('Ghi chú', 'Địa chỉ');
+        if (!validateField('maNV', codeResult.ok, codeResult.message || 'Mã nhân viên không hợp lệ')) ok = false;
+        if (!validateField('tenNV', nameResult.ok, nameResult.message || 'Vui lòng nhập họ tên nhân viên')) ok = false;
+        if (!validateField('sdt', phoneResult.ok, phoneResult.message || 'Số điện thoại không hợp lệ')) ok = false;
+        if (!validateField('email', emailResult.ok, emailResult.message || 'Email không hợp lệ')) ok = false;
+        if (!validateField('diaChi', addressResult.ok, addressResult.message || 'Địa chỉ không hợp lệ')) ok = false;
+        if (!validateField('chucVu', Boolean(chucVu), 'Vui lòng chọn chức vụ.')) ok = false;
         return ok;
     };
 
@@ -318,12 +329,17 @@
         event.preventDefault();
         if (!validateForm()) return;
         const payload = {
-            MaNV: document.getElementById('maNV').value.trim(),
-            TenNV: document.getElementById('tenNV').value.trim(),
+            MaNV: window.FLY_FIELDS?.validateEmployeeCode(document.getElementById('maNV').value).value
+                ?? document.getElementById('maNV').value.trim().toUpperCase(),
+            TenNV: window.FLY_FIELDS?.validateRequiredName(document.getElementById('tenNV').value, 'Họ tên nhân viên').value
+                ?? document.getElementById('tenNV').value.trim(),
             ChucVu: document.getElementById('chucVu').value,
-            SDT: document.getElementById('sdt').value.trim(),
-            Email: document.getElementById('email').value.trim(),
-            DiaChi: document.getElementById('diaChi').value.trim(),
+            SDT: window.FLY_FIELDS?.validateOptionalVnPhone(document.getElementById('sdt').value).value
+                ?? document.getElementById('sdt').value.trim(),
+            Email: window.FLY_FIELDS?.validateOptionalEmail(document.getElementById('email').value).value
+                ?? document.getElementById('email').value.trim(),
+            DiaChi: window.FLY_FIELDS?.validateOptionalNote(document.getElementById('diaChi').value, 300).value
+                ?? document.getElementById('diaChi').value.trim(),
             TrangThai: document.getElementById('trangThai').value
         };
 
@@ -357,13 +373,30 @@
 
     // Real-time validation & avatar preview
     document.getElementById('tenNV')?.addEventListener('input', updateAvatarPreview);
-    ['maNV', 'tenNV', 'sdt', 'email'].forEach(id => {
+    ['maNV', 'tenNV', 'sdt', 'email', 'diaChi'].forEach(id => {
         document.getElementById(id)?.addEventListener('blur', () => {
             const v = document.getElementById(id).value.trim();
-            if (id === 'maNV') validateField('maNV', v.length >= 2, 'Mã nhân viên phải có ít nhất 2 ký tự');
-            if (id === 'tenNV') validateField('tenNV', v.length >= 2, 'Vui lòng nhập họ tên nhân viên');
-            if (id === 'sdt') validateField('sdt', !v || /^0\d{9,10}$/.test(v), 'Số điện thoại không hợp lệ');
-            if (id === 'email') validateField('email', !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), 'Email không hợp lệ');
+            const fields = window.FLY_FIELDS;
+            if (id === 'maNV') {
+                const result = fields ? fields.validateEmployeeCode(v) : { ok: v.length >= 2, message: 'Mã nhân viên phải có ít nhất 2 ký tự' };
+                validateField('maNV', result.ok, result.message);
+            }
+            if (id === 'tenNV') {
+                const result = fields ? fields.validateRequiredName(v, 'Họ tên nhân viên') : { ok: v.length >= 2, message: 'Vui lòng nhập họ tên nhân viên' };
+                validateField('tenNV', result.ok, result.message);
+            }
+            if (id === 'sdt') {
+                const result = fields ? fields.validateOptionalVnPhone(v) : { ok: !v || /^0\d{9,10}$/.test(v), message: 'Số điện thoại không hợp lệ' };
+                validateField('sdt', result.ok, result.message);
+            }
+            if (id === 'email') {
+                const result = fields ? fields.validateOptionalEmail(v) : { ok: !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), message: 'Email không hợp lệ' };
+                validateField('email', result.ok, result.message);
+            }
+            if (id === 'diaChi') {
+                const result = fields ? fields.validateOptionalNote(v, 300) : { ok: true };
+                validateField('diaChi', result.ok, result.message?.replace('Ghi chú', 'Địa chỉ'));
+            }
         });
     });
 

@@ -112,11 +112,14 @@ document.addEventListener('DOMContentLoaded', () => {
     loginButton.disabled = true;
     loginButton.querySelector('span').textContent = 'Đang xác thực...';
 
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 20000);
     try {
       const response = await fetch(`${window.FLY_API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ TenDangNhap: usernameValue, MatKhau: passwordValue })
+        body: JSON.stringify({ TenDangNhap: usernameValue, MatKhau: passwordValue }),
+        signal: controller.signal
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Không thể đăng nhập. Vui lòng kiểm tra lại thông tin.');
@@ -128,11 +131,15 @@ document.addEventListener('DOMContentLoaded', () => {
       localStorage.setItem('fly_user', JSON.stringify(data.user));
       window.location.href = '../dashboard/dashboard.html';
     } catch (error) {
+      const isTimeout = error?.name === 'AbortError';
       const isConnectionError = error instanceof TypeError;
-      showError(isConnectionError
-        ? `Không thể kết nối ${window.flyApi.displayHost(origin)}. Hãy kiểm tra máy chủ nhóm đang chạy và nút Kiểm tra.`
-        : error.message);
+      showError(isTimeout
+        ? 'Máy chủ không trả lời. Xóa hết ô Máy chủ nhóm, dán lại nguyên link có https:// (không có :3000), rồi bấm Đăng nhập ngay.'
+        : isConnectionError
+          ? `Không thể kết nối ${window.flyApi.displayHost(origin)}. Dán lại nguyên link https://....trycloudflare.com (không thêm :3000).`
+          : error.message);
     } finally {
+      window.clearTimeout(timeoutId);
       loginButton.disabled = false;
       loginButton.querySelector('span').textContent = 'Đăng nhập';
     }

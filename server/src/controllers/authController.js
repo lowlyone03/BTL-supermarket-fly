@@ -2,12 +2,13 @@ const { sql, poolPromise } = require('../config/db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { logAudit } = require('../services/auditLog');
+const { validateNewPassword } = require('../services/fieldValidators');
 
 const login = async (req, res) => {
     try {
-        const { TenDangNhap, MatKhau } = req.body;
+        const TenDangNhap = typeof req.body.TenDangNhap === 'string' ? req.body.TenDangNhap.trim() : '';
+        const MatKhau = req.body.MatKhau;
 
-        // Validation cơ bản
         if (!TenDangNhap || !MatKhau) {
             return res.status(400).json({ message: 'Vui lòng nhập tên đăng nhập và mật khẩu!' });
         }
@@ -95,12 +96,17 @@ const login = async (req, res) => {
 // Đổi mật khẩu
 const changePassword = async (req, res) => {
     try {
-        const { MatKhauCu, MatKhauMoi } = req.body;
+        const { MatKhauCu } = req.body;
         const maTK = req.user.MaTK; // lấy từ token (verifyToken middleware)
 
-        if (!MatKhauCu || !MatKhauMoi) {
+        if (!MatKhauCu) {
             return res.status(400).json({ message: 'Vui lòng nhập mật khẩu cũ và mới!' });
         }
+        const newPassword = validateNewPassword(req.body.MatKhauMoi);
+        if (!newPassword.ok) {
+            return res.status(400).json({ message: newPassword.message });
+        }
+        const MatKhauMoi = newPassword.value;
 
         const pool = await poolPromise;
 

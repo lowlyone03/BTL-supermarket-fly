@@ -88,8 +88,33 @@
         syncRoleFromEmployee();
     };
 
+    const showAccError = (id, ok, message) => {
+        if (window.FLY_FIELDS?.setFieldError) return window.FLY_FIELDS.setFieldError(id, ok, message);
+        const el = document.getElementById(`${id}_err`);
+        const input = document.getElementById(id);
+        if (el) { el.textContent = ok ? '' : message; el.style.display = ok ? 'none' : 'block'; }
+        if (input) input.classList.toggle('input-error', !ok);
+        return ok;
+    };
+
+    const clearAccErrors = () => {
+        ['maNV_Acc', 'tenDangNhap'].forEach(id => showAccError(id, true, ''));
+    };
+
+    const validateAccForm = () => {
+        const fields = window.FLY_FIELDS;
+        const maNV = document.getElementById('maNV_Acc').value;
+        const username = document.getElementById('tenDangNhap').value;
+        let ok = true;
+        if (!showAccError('maNV_Acc', Boolean(maNV), 'Vui lòng chọn nhân viên chưa có tài khoản.')) ok = false;
+        const userResult = fields ? fields.validateUsername(username) : { ok: Boolean(username.trim()), message: 'Vui lòng nhập tên đăng nhập.' };
+        if (!showAccError('tenDangNhap', userResult.ok, userResult.message || 'Tên đăng nhập không hợp lệ.')) ok = false;
+        return ok;
+    };
+
     window.openAccModal = async () => {
         document.getElementById('accForm').reset();
+        clearAccErrors();
         try {
             await loadAvailableEmployees();
             document.getElementById('accModal').style.display = 'flex';
@@ -103,12 +128,20 @@
     searchInput.addEventListener('input', renderAccounts);
     roleFilter.addEventListener('change', renderAccounts);
     statusFilter.addEventListener('change', renderAccounts);
+    document.getElementById('tenDangNhap')?.addEventListener('blur', () => {
+        const fields = window.FLY_FIELDS;
+        const result = fields ? fields.validateUsername(document.getElementById('tenDangNhap').value) : { ok: true };
+        showAccError('tenDangNhap', result.ok, result.message);
+    });
 
     document.getElementById('accForm').onsubmit = async event => {
         event.preventDefault();
+        if (!validateAccForm()) return;
+        const fields = window.FLY_FIELDS;
         const payload = {
             MaNV: document.getElementById('maNV_Acc').value,
-            TenDangNhap: document.getElementById('tenDangNhap').value.trim(),
+            TenDangNhap: fields?.validateUsername(document.getElementById('tenDangNhap').value).value
+                ?? document.getElementById('tenDangNhap').value.trim().toLowerCase(),
             MaVaiTro: Number(document.getElementById('maVaiTro').value)
         };
         if (!payload.MaNV) return window.showToast('Không có nhân viên để tạo tài khoản.', 'error');
