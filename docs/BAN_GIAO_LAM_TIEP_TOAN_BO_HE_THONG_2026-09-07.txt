@@ -15,9 +15,11 @@ cac file khac khi can chi tiet.
 GitHub (ma nguon) :
   https://github.com/lowlyone03/BTL-supermarket-fly.git
   Nhanh            : main
-  Ban ban giao     : 09c4e6e
-                    Ban giao ban moi nhat de nguoi khac lam tiep FE, BE va CSDL.
-                    Kiem tra: git log -1 --oneline  phai ra 09c4e6e
+  Ban ban giao     : nganh main tren GitHub, ngay 07/09/2026
+                    Commit lon  : 09c4e6e  (FE+BE+migration+file TXT)
+                    Commit stamp: de6338b  (ghi ma 09c4e6e vao file nay)
+                    Kiem tra    : git pull  roi  git log -1 --oneline
+                    Phai thay de6338b hoac commit sau no tren main.
 
 Backup CSDL       :
   File     : SupermarketFlyDB_2026-09-07_191855.bak
