@@ -1,195 +1,196 @@
 ================================================================================
-BAN GIAO LAM TIEP TOAN BO HE THONG
-SUPERMARKET FLY  —  FE + BE + CSDL + TAI LIEU
+BÀN GIAO LÀM TIẾP TOÀN BỘ HỆ THỐNG
+SUPERMARKET FLY  —  FE + BE + CSDL + TÀI LIỆU
 ================================================================================
 
-Ngay dong goi     : 07/09/2026 (toi)
-Muc dich          : Nguoi nhan CHI VIEC LAM TIEP, khong phai doan lai tu dau.
-Pham vi           : Backend (Node/Express), Frontend (Electron), SQL Server,
-                    5 actor / 33 UC, ke toan nghiep vu dang chay.
-Mon               : Ung dung he thong thong tin ke toan (AIS) — bai tap lon.
+Ngày đóng gói     : 07/09/2026 (tối)
+Mục đích          : Người nhận CHỈ VIỆC LÀM TIẾP, không phải đoán lại từ đầu.
+Phạm vi           : Backend (Node/Express), Frontend (Electron), SQL Server,
+                    5 actor / 33 UC, kế toán nghiệp vụ đang chạy.
+Môn               : Ứng dụng hệ thống thông tin kế toán (AIS) — bài tập lớn.
 
-Day la FILE CHINH de nguoi moi bat dau. Doc file nay truoc, roi moi mo
-cac file khac khi can chi tiet.
+Đây là FILE CHÍNH để người mới bắt đầu. Đọc file này trước, rồi mới mở
+các file khác khi cần chi tiết.
 
-GitHub (ma nguon) :
+GitHub (mã nguồn) :
   https://github.com/lowlyone03/BTL-supermarket-fly.git
-  Nhanh            : main
-  Ban ban giao     : nganh main tren GitHub, ngay 07/09/2026
-                    Commit lon  : 09c4e6e  (FE+BE+migration+file TXT)
-                    Commit stamp: de6338b  (ghi ma 09c4e6e vao file nay)
-                    Kiem tra    : git pull  roi  git log -1 --oneline
-                    Phai thay de6338b hoac commit sau no tren main.
+  Nhánh            : main
+  Bản bàn giao     : nhánh main trên GitHub, ngày 07/09/2026
+                    Commit lớn  : 09c4e6e  (FE + BE + migration + file TXT)
+                    Commit ghi mã: de6338b
+                    Commit tiếng Việt: xem git log -1 sau khi git pull
+                    Kiểm tra    : git pull  rồi  git log -1 --oneline
+                    Phải thấy 320239e hoặc commit sau nó trên main.
 
 Backup CSDL       :
-  File     : SupermarketFlyDB_2026-09-07_191855.bak
-  Thu muc  : TaiLieu_Du_An\05_Backup\Database_Backups\
-  SHA256   : 51E98A9151C2C2AAFF5012F3C3027F8E0F70980AC207B77A29730BD1FC73B2AC
-  Kich thuoc: 13.59 MB (14 246 400 bytes)
-  Kiem tra : BACKUP CHECKSUM + RESTORE VERIFYONLY da thanh cong
-  Thong ke luc backup:
+  File      : SupermarketFlyDB_2026-09-07_191855.bak
+  Thư mục   : TaiLieu_Du_An\05_Backup\Database_Backups\
+  SHA256    : 51E98A9151C2C2AAFF5012F3C3027F8E0F70980AC207B77A29730BD1FC73B2AC
+  Kích thước: 13,59 MB (14 246 400 bytes)
+  Kiểm tra  : BACKUP CHECKSUM + RESTORE VERIFYONLY đã thành công
+  Thống kê lúc backup:
       NhanVien = 13
       SanPham  = 36
       HoaDon   = 10
       TaiKhoan = 12
-  Luu y    : Tai khoan van dung 12 (dung 5 vai tro). Co 1 dong NhanVien
-             du so voi Word goc (12 NV). Khong xoa hang loat khi chua
-             doi chieu. Seed mac dinh van la 12 tai khoan / mat khau 123.
+  Lưu ý     : Tài khoản vẫn đúng 12 (đúng 5 vai trò). Có 1 dòng NhanVien
+              dư so với Word gốc (12 NV). Không xóa hàng loạt khi chưa
+              đối chiếu. Seed mặc định vẫn là 12 tài khoản / mật khẩu 123.
 
 
 ================================================================================
-MUC LUC
+MỤC LỤC
 ================================================================================
 
-  0.  30 phut dau — lam dung thu tu nay
-  1.  Goi nhan duoc (3 thanh phan)
-  2.  Du an la gi / khong phai gi
-  3.  Yeu cau may
-  4.  Lay ma nguon tu GitHub
-  5.  Khoi phuc database (.bak)
-  6.  Cai thu vien va chay app
-  7.  Tai khoan test (5 actor / 12 TK)
-  8.  Kien truc FE + BE + CSDL
-  9.  Cay thu muc va ai sua file nao
- 10.  33 Use Case va ma tran quyen
- 11.  Ba quy trinh + ba cot tien (CAM pha)
+  0.  30 phút đầu — làm đúng thứ tự này
+  1.  Gói nhận được (3 thành phần)
+  2.  Dự án là gì / không phải gì
+  3.  Yêu cầu máy
+  4.  Lấy mã nguồn từ GitHub
+  5.  Khôi phục database (.bak)
+  6.  Cài thư viện và chạy app
+  7.  Tài khoản test (5 actor / 12 TK)
+  8.  Kiến trúc FE + BE + CSDL
+  9.  Cây thư mục và ai sửa file nào
+ 10.  33 Use Case và ma trận quyền
+ 11.  Ba quy trình + ba cột tiền (CẤM phá)
  12.  API
  13.  CSDL, migration, setup:next
- 14.  Viec DA XONG (ke ca ban 07/09)
- 15.  Viec duoc phep LAM TIEP (UC34+)
- 16.  Cach code tiep — quy tac khong vo he thong
- 17.  Git: nhanh, commit, khong day gi
- 18.  Test tu dong va test tay
- 19.  Su co thuong gap
- 20.  Tai lieu lien quan (chi mo khi can)
- 21.  Checklist nguoi nhan da san sang
- 22.  Thong diep ngan cho nguoi giao / nguoi nhan
+ 14.  Việc ĐÃ XONG (kể cả bản 07/09)
+ 15.  Việc được phép LÀM TIẾP (UC34+)
+ 16.  Cách code tiếp — quy tắc không vỡ hệ thống
+ 17.  Git: nhánh, commit, không đẩy gì
+ 18.  Test tự động và test tay
+ 19.  Sự cố thường gặp
+ 20.  Tài liệu liên quan (chỉ mở khi cần)
+ 21.  Checklist người nhận đã sẵn sàng
+ 22.  Thông điệp ngắn cho người giao / người nhận
 
 
 ================================================================================
-0. 30 PHUT DAU — LAM DUNG THU TU NAY
+0. 30 PHÚT ĐẦU — LÀM ĐÚNG THỨ TỰ NÀY
 ================================================================================
 
-May Windows moi:
+Máy Windows mới:
 
-  1. Cai Node.js 22+ , Git, SQL Server Express (instance SQLEXPRESS),
+  1. Cài Node.js 22+, Git, SQL Server Express (instance SQLEXPRESS),
      ODBC Driver 17 for SQL Server, SSMS.
   2. Clone repo:
         git clone https://github.com/lowlyone03/BTL-supermarket-fly.git supermarket-fly
         cd supermarket-fly
         git log -1 --oneline
-  3. Nhan file .bak (khong nam trong Git). Restore thanh SupermarketFlyDB
-     (muc 5). KHONG chay npm run setup:next sau khi restore ban nay.
-  4. Tai thu muc supermarket-fly:
+  3. Nhận file .bak (không nằm trong Git). Restore thành SupermarketFlyDB
+     (mục 5). KHÔNG chạy npm run setup:next sau khi restore bản này.
+  4. Tại thư mục supermarket-fly:
         npm install
         cd server && npm install && cd ..
         cd desktop && npm install && cd ..
-        copy server\.env.example server\.env     (neu chua co)
+        copy server\.env.example server\.env     (nếu chưa có)
         npm start
-  5. Mo http://localhost:3000/api/health  — phai ra status ok.
-  6. Dang nhap Electron: admin / 123. Doi vai tro: muahang, thukho,
+  5. Mở http://localhost:3000/api/health  — phải ra status ok.
+  6. Đăng nhập Electron: admin / 123. Đổi vai trò: muahang, thukho,
      ketoan, thungan.
-  7. Doc muc 11 (ba cot tien) TRUOC KHI SUA BAT KY SO NAO.
-  8. Chay: npm run test:next
+  7. Đọc mục 11 (ba cột tiền) TRƯỚC KHI SỬA BẤT KỲ SỐ NÀO.
+  8. Chạy: npm run test:next
 
-Xong 8 buoc tren la duoc phep bat dau code.
+Xong 8 bước trên là được phép bắt đầu code.
 
 
 ================================================================================
-1. GOI NHAN DUOC (3 THANH PHAN)
+1. GÓI NHẬN ĐƯỢC (3 THÀNH PHẦN)
 ================================================================================
 
-Bat buoc du 3 thu. Chi clone GitHub thi THIEU du lieu test.
+Bắt buộc đủ 3 thứ. Chỉ clone GitHub thì THIẾU dữ liệu test.
 
-  A. MA NGUON  (GitHub, thu muc supermarket-fly/)
+  A. MÃ NGUỒN  (GitHub, thư mục supermarket-fly/)
      - Frontend Electron: desktop/
      - Backend Express  : server/
-     - Tai lieu van hanh: supermarket-fly/docs/   (file NAY nam day)
-     - Git CHI nam trong supermarket-fly/.
-       Thu muc cha BTL/ KHONG phai Git repo.
+     - Tài liệu vận hành: supermarket-fly/docs/   (file NÀY nằm đây)
+     - Git CHỈ nằm trong supermarket-fly/.
+       Thư mục cha BTL/ KHÔNG phải Git repo.
 
-  B. DATABASE  (file .bak, NGOAI Git)
+  B. DATABASE  (file .bak, NGOÀI Git)
      D:\UDTHTKT\BTL\TaiLieu_Du_An\05_Backup\Database_Backups\
        SupermarketFlyDB_2026-09-07_191855.bak
-     + file checksum cung thu muc:
+     + file checksum cùng thư mục:
        CHECKSUM_DATABASE_2026-09-07_191855.txt
 
-  C. TAI LIEU MON HOC  (thu muc TaiLieu_Du_An/, NGOAI Git)
-     - 01_Yeu_Cau_Nghiep_Vu  : UC, Word, phan cong 7 thanh vien
-     - 02_Thiet_Ke_CSDL      : mo ta CSDL ban dau (35 bang — da cu)
-     - 03_Tai_Lieu_Mon_Hoc   : PDF de bai
-     - 04_Tai_Nguyen_Anh     : anh san pham nguon
+  C. TÀI LIỆU MÔN HỌC  (thư mục TaiLieu_Du_An/, NGOÀI Git)
+     - 01_Yeu_Cau_Nghiep_Vu  : UC, Word, phân công 7 thành viên
+     - 02_Thiet_Ke_CSDL      : mô tả CSDL ban đầu (35 bảng — đã cũ)
+     - 03_Tai_Lieu_Mon_Hoc   : PDF đề bài
+     - 04_Tai_Nguyen_Anh     : ảnh sản phẩm nguồn
      - 05_Backup             : .bak, checksum
-     - 99_Tam_Xu_Ly          : ban nhap, KHONG dung lam tai lieu chot
+     - 99_Tam_Xu_Ly          : bản nháp, KHÔNG dùng làm tài liệu chốt
 
-Anh san pham MAU nam trong ma nguon / TaiLieu_Du_An.
-Thu muc server/uploads luc ban giao TRONG (0 file runtime).
-Neu sau nay user upload anh, thu muc do bi Git bo qua — phai zip rieng.
+Ảnh sản phẩm MẪU nằm trong mã nguồn / TaiLieu_Du_An.
+Thư mục server/uploads lúc bàn giao TRỐNG (0 file runtime).
+Nếu sau này người dùng tải ảnh lên, thư mục đó bị Git bỏ qua — phải zip riêng.
 
-KHONG gui cong khai:
+KHÔNG gửi công khai:
   - server/.env
-  - mat khau that (demo mon hoc dang dung 123)
-  - cloudflared.exe (binary, tai rieng neu can duong ham)
+  - mật khẩu thật (demo môn học đang dùng 123)
+  - cloudflared.exe (file chạy, tải riêng nếu cần đường hầm)
 
-Cach gui goi B + C: Google Drive / OneDrive gioi han nguoi, hoac USB.
-Khong commit .bak len GitHub.
-
-
-================================================================================
-2. DU AN LA GI / KHONG PHAI GI
-================================================================================
-
-LA:
-  Phan mem quan ly NOI BO mot cua hang sieu thi (1 dia diem, 1 kho logic
-  "Kho cua hang"). Giao dien: "Supermarket FLY · Ha Noi".
-
-  Chuoi nghiep vu:
-    de nghi mua -> don mua -> nhap kho -> ban tai quay -> quy ca
-    -> cong no NCC -> luong -> bao cao lai/lo dieu hanh.
-
-  Ke toan TRONG CODE hien tai = ke toan NGHIEP VU:
-    doi chieu 3 chung tu mua, cong no phai tra, phieu thu ca,
-    lai GOP (DT thuan - GV thuan), bang luong theo cong,
-    P&L dieu hanh (tru chi NCC da tra + luong da khoa).
-
-KHONG PHAI:
-  - Website / app khach. Khach khong dang nhap.
-  - ERP nhieu cong ty, nhieu kho, nhieu chi nhanh.
-  - MISA / FAST / so cai No-Co. Chua co TaiKhoanKeToan, ButToan, KyKeToan.
-  - Phan mem BHXH nha nuoc. Khong tinh BHXH/BHYT/BHTN/cong doan.
-  - Ban chiu (khong TK 131), TMĐT, kho FEFO/lo, HDDT nha nuoc.
-
-Huong "ke toan mini" (so cai, VAT POS, TSCD) da CHOT la Plan A
-NHUNG CHUA CODE. Lam tiep: danh so tu UC34, khong dung UC30-UC33.
+Cách gửi gói B + C: Google Drive / OneDrive giới hạn người, hoặc USB.
+Không commit .bak lên GitHub.
 
 
 ================================================================================
-3. YEU CAU MAY
+2. DỰ ÁN LÀ GÌ / KHÔNG PHẢI GÌ
+================================================================================
+
+LÀ:
+  Phần mềm quản lý NỘI BỘ một cửa hàng siêu thị (1 địa điểm, 1 kho logic
+  "Kho cửa hàng"). Giao diện: "Supermarket FLY · Hà Nội".
+
+  Chuỗi nghiệp vụ:
+    đề nghị mua → đơn mua → nhập kho → bán tại quầy → quỹ ca
+    → công nợ NCC → lương → báo cáo lãi/lỗ điều hành.
+
+  Kế toán TRONG CODE hiện tại = kế toán NGHIỆP VỤ:
+    đối chiếu 3 chứng từ mua, công nợ phải trả, phiếu thu ca,
+    lãi GỘP (DT thuần − GV thuần), bảng lương theo công,
+    P&L điều hành (trừ chi NCC đã trả + lương đã khóa).
+
+KHÔNG PHẢI:
+  - Website / app khách. Khách không đăng nhập.
+  - ERP nhiều công ty, nhiều kho, nhiều chi nhánh.
+  - MISA / FAST / sổ cái Nợ–Có. Chưa có TaiKhoanKeToan, ButToan, KyKeToan.
+  - Phần mềm BHXH nhà nước. Không tính BHXH/BHYT/BHTN/công đoàn.
+  - Bán chịu (không TK 131), thương mại điện tử, kho FEFO/lô, HĐĐT nhà nước.
+
+Hướng "kế toán mini" (sổ cái, VAT POS, TSCĐ) đã CHỐT là Plan A
+NHƯNG CHƯA CODE. Làm tiếp: đánh số từ UC34, không đụng UC30–UC33.
+
+
+================================================================================
+3. YÊU CẦU MÁY
 ================================================================================
 
   - Windows 10 / 11
-  - Node.js 22+ va npm 10+  (da kiem Node 24 / npm 11)
+  - Node.js 22+ và npm 10+  (đã kiểm Node 24 / npm 11)
   - Git
-  - SQL Server Express, instance ten DUNG: SQLEXPRESS
+  - SQL Server Express, instance tên ĐÚNG: SQLEXPRESS
   - ODBC Driver 17 for SQL Server
-      (app dung driver 17 trong server/src/config/db.js)
-  - SSMS de restore .bak cho tien
+      (ứng dụng dùng driver 17 trong server/src/config/db.js)
+  - SSMS để restore .bak cho tiện
 
-Ket noi runtime (Windows Authentication, KHONG dung sa trong .env):
+Kết nối khi chạy (Windows Authentication, KHÔNG dùng sa trong .env):
 
   Server   : localhost\SQLEXPRESS
   Database : SupermarketFlyDB
   Auth     : Trusted Connection
-  Gio      : useUTC: false  (DATETIME = gio Ha Noi)
+  Giờ      : useUTC: false  (DATETIME = giờ Hà Nội)
 
-File server/.env.example co DB_USER=sa nhung db.js DANG dung trusted
-connection. Neu may dung ten instance khac, sua server trong
+File server/.env.example có DB_USER=sa nhưng db.js ĐANG dùng trusted
+connection. Nếu máy dùng tên instance khác, sửa server trong
   server/src/config/db.js
-roi chay lai.
+rồi chạy lại.
 
 
 ================================================================================
-4. LAY MA NGUON TU GITHUB
+4. LẤY MÃ NGUỒN TỪ GITHUB
 ================================================================================
 
 PowerShell:
@@ -201,37 +202,37 @@ PowerShell:
   git log -1 --oneline
   git status --short
 
-Ngay sau clone, git status --short phai TRONG
-(tru khi ban tu sua).
+Ngay sau khi clone, git status --short phải TRỐNG
+(trừ khi bạn tự sửa).
 
-Neu repo rieng tu: duoc them Collaborator, hoac nhan zip/bundle rieng.
+Nếu repo riêng tư: được thêm Collaborator, hoặc nhận zip/bundle riêng.
 
-Thu muc cha BTL/ (TaiLieu_Du_An, README ngoai) KHONG nam trong GitHub.
-Nguoi giao phai gui rieng thu muc TaiLieu_Du_An (it nhat 05_Backup + 01).
+Thư mục cha BTL/ (TaiLieu_Du_An, README ngoài) KHÔNG nằm trong GitHub.
+Người giao phải gửi riêng thư mục TaiLieu_Du_An (ít nhất 05_Backup + 01).
 
 
 ================================================================================
-5. KHOI PHUC DATABASE
+5. KHÔI PHỤC DATABASE
 ================================================================================
 
-5.1. SSMS (khuyen nghi)
+5.1. SSMS (khuyến nghị)
 
-  1. Mo SSMS, ket noi localhost\SQLEXPRESS bang Windows Authentication.
-  2. Chuot phai Databases -> Restore Database...
-  3. Device -> chon file:
+  1. Mở SSMS, kết nối localhost\SQLEXPRESS bằng Windows Authentication.
+  2. Chuột phải Databases → Restore Database...
+  3. Device → chọn file:
        SupermarketFlyDB_2026-09-07_191855.bak
-  4. Ten database dich: SupermarketFlyDB
-  5. Neu may da co DB cung ten: backup cai cu truoc, roi ghi de khi chac.
-  6. Neu SQL bao khong doc duoc .bak: chep file vao thu muc backup mac
-     dinh cua SQL Server roi chon lai.
+  4. Tên database đích: SupermarketFlyDB
+  5. Nếu máy đã có DB cùng tên: backup cái cũ trước, rồi ghi đè khi chắc.
+  6. Nếu SQL báo không đọc được .bak: chép file vào thư mục backup mặc
+     định của SQL Server rồi chọn lại.
 
-5.2. sqlcmd (neu quen SSMS)
+5.2. sqlcmd (nếu quen SSMS)
 
   sqlcmd -S localhost\SQLEXPRESS -E -C -Q "RESTORE DATABASE [SupermarketFlyDB] FROM DISK = N'D:\duong-dan\SupermarketFlyDB_2026-09-07_191855.bak' WITH REPLACE"
 
-  Them -C vi ODBC Driver 18 tren mot so may bat SSL.
+  Thêm -C vì ODBC Driver 18 trên một số máy bắt SSL.
 
-5.3. Kiem tra sau restore
+5.3. Kiểm tra sau restore
 
   USE SupermarketFlyDB;
   SELECT DB_NAME() AS TenDatabase;
@@ -241,112 +242,112 @@ Nguoi giao phai gui rieng thu muc TaiLieu_Du_An (it nhat 05_Backup + 01).
     (SELECT COUNT(*) FROM HoaDon)    AS HoaDon,
     (SELECT COUNT(*) FROM TaiKhoan)  AS TaiKhoan;
 
-  Ky vong ban nay: 13 / 36 / 10 / 12.
+  Kỳ vọng bản này: 13 / 36 / 10 / 12.
 
-5.4. CAM sau khi restore ban backup MOI NHAT
+5.4. CẤM sau khi restore bản backup MỚI NHẤT
 
-  KHONG chay:  npm run setup:next
-  Lenh do danh cho may TRANG / DB cu can nang cap. No se migrate + seed
-  + don du lieu demo va CO THE DOI du lieu test trong .bak.
+  KHÔNG chạy:  npm run setup:next
+  Lệnh đó dành cho máy TRẮNG / DB cũ cần nâng cấp. Nó sẽ migrate + seed
+  + dọn dữ liệu demo và CÓ THỂ ĐỔI dữ liệu test trong .bak.
 
-  May trang (khong dung .bak): tao DB bang
+  Máy trắng (không dùng .bak): tạo DB bằng
     server/migrations/SupermarketFly_CreateDB.sql
-  roi moi  npm run setup:next
+  rồi mới  npm run setup:next
 
 
 ================================================================================
-6. CAI THU VIEN VA CHAY APP
+6. CÀI THƯ VIỆN VÀ CHẠY APP
 ================================================================================
 
-Tai thu muc supermarket-fly:
+Tại thư mục supermarket-fly:
 
   1_CAI_DAT_LAN_DAU.bat
-  hoac:
+  hoặc:
     npm install
     cd server  && npm install && cd ..
     cd desktop && npm install && cd ..
 
-Copy server\.env.example -> server\.env neu chua co (cong 3000).
-KHONG commit .env.
+Copy server\.env.example → server\.env nếu chưa có (cổng 3000).
+KHÔNG commit .env.
 
-Chay hang ngay (1 may):
+Chạy hàng ngày (1 máy):
 
   2_CHAY_SUPERMARKET_FLY.bat
-  hoac:  npm start
+  hoặc:  npm start
 
-npm start = API :3000 + cua so Electron. Giu cua so PowerShell mo.
+npm start = API cổng 3000 + cửa sổ Electron. Giữ cửa sổ PowerShell mở.
 
-Kiem tra:
+Kiểm tra:
   GET http://localhost:3000/api/health
-  GET http://localhost:3000/api/test-db     (can JWT)
+  GET http://localhost:3000/api/test-db     (cần JWT)
 
-Sua JS roi PHAI DONG HAN Electron, mo lai. F5 thuong khong du.
+Sửa JS rồi PHẢI ĐÓNG HẲN Electron, mở lại. F5 thường không đủ.
 
-Test nhom 1 database:
-  May chu     : 4_CHAY_MAY_CHU_NHOM.bat   (giu cua so, gui IP)
-  Thanh vien  : 5_CHAY_MAY_THANH_VIEN.bat (khong can SQL Server)
-  Khac Wi-Fi  : 6_MO_DUONG_HAM_CLOUDFLARE.bat
-                (TV1 tai cloudflared.exe RIENG, khong nam trong Git)
-  Chi tiet    : docs/HUONG_DAN_TEST_DB_CHUNG.md
+Test nhóm 1 database:
+  Máy chủ     : 4_CHAY_MAY_CHU_NHOM.bat   (giữ cửa sổ, gửi IP)
+  Thành viên  : 5_CHAY_MAY_THANH_VIEN.bat (không cần SQL Server)
+  Khác Wi-Fi  : 6_MO_DUONG_HAM_CLOUDFLARE.bat
+                (TV1 tải cloudflared.exe RIÊNG, không nằm trong Git)
+  Chi tiết    : docs/HUONG_DAN_TEST_DB_CHUNG.md
                 docs/HUONG_DAN_CLOUDFLARE_TUNNEL.md
 
-Cong 3000 bi chiem: tat tien trinh cu, khong tu doi cong
-khi chua dong bo desktop.
+Cổng 3000 bị chiếm: tắt tiến trình cũ, không tự đổi cổng
+khi chưa đồng bộ desktop.
 
 
 ================================================================================
-7. TAI KHOAN TEST
+7. TÀI KHOẢN TEST
 ================================================================================
 
-Mat khau mac dinh: 123
+Mật khẩu mặc định: 123
 (seed: server/seed-accounts.js)
 
-  Dang nhap     Vai tro (actor)              Nhan vien mau
+  Đăng nhập     Vai trò (actor)              Nhân viên mẫu
   ------------  ---------------------------  ------------------------------
-  admin         Quan ly cua hang (QL)        Nguyen Minh Anh
-  muahang       Nhan vien mua hang (MH)      Tran Thu Ha
-  thukho        Thu kho (TK)                 Le Duc Long
-  ketoan        Ke toan (KT)                 Hoang Minh Chau
-  thungan       Thu ngan (TN)                Pham Thao Vy
-  thungan02     Thu ngan                     (7 thu ngan con lai)
+  admin         Quản lý cửa hàng (QL)        Nguyễn Minh Anh
+  muahang       Nhân viên mua hàng (MH)      Trần Thu Hà
+  thukho        Thủ kho (TK)                 Lê Đức Long
+  ketoan        Kế toán (KT)                 Hoàng Minh Châu
+  thungan       Thu ngân (TN)                Phạm Thảo Vy
+  thungan02     Thu ngân                     (7 thu ngân còn lại)
   ...
-  thungan08     Thu ngan
+  thungan08     Thu ngân
 
-Dung 5 ACTOR. Tam thu ngan van la MOT actor tren Use Case.
-Khach va NCC KHONG co tai khoan.
+Đúng 5 ACTOR. Tám thu ngân vẫn là MỘT actor trên Use Case.
+Khách và NCC KHÔNG có tài khoản.
 
-Neu mot TK bi khoa / doi MK trong lan test truoc: dung admin kiem tra.
-Khong reset hang loat khi chua ghi nhan ket qua.
+Nếu một TK bị khóa / đổi mật khẩu trong lần test trước: dùng admin kiểm tra.
+Không reset hàng loạt khi chưa ghi nhận kết quả.
 
 
 ================================================================================
-8. KIEN TRUC FE + BE + CSDL
+8. KIẾN TRÚC FE + BE + CSDL
 ================================================================================
 
-  May nhan vien                 May cua hang              SQL Server
+  Máy nhân viên                 Máy cửa hàng              SQL Server
   +------------------+  HTTP    +------------------+      +----------------+
   | Electron (Forge) |  JWT --> | Node Express     | ODBC | Supermarket-   |
-  | HTML/CSS/JS thuan|          | cong 3000        |  17  | FlyDB          |
-  | Khong React/Vue  |          | REST /api/...    | Win  | gio Ha Noi     |
+  | HTML/CSS/JS thuần|          | cổng 3000        |  17  | FlyDB          |
+  | Không React/Vue  |          | REST /api/...    | Win  | giờ Hà Nội     |
   +------------------+          +------------------+ Auth +----------------+
 
-Sau login: dashboard.html + dashboard.js nap trang theo TenVaiTro
-(window.FLY_ROLE_PAGES). Sidebar doi theo vai tro.
+Sau đăng nhập: dashboard.html + dashboard.js nạp trang theo TenVaiTro
+(window.FLY_ROLE_PAGES). Sidebar đổi theo vai trò.
 
-Quyen theo MA USE CASE (requirePermission('UC27')), khong chi ten vai tro.
+Quyền theo MÃ USE CASE (requirePermission('UC27')), không chỉ tên vai trò.
 Middleware: verifyToken, requireRole, requirePermission, requireAnyPermission.
 
-Anh SP: Multer, server/uploads, URL tinh /uploads.
-Tao SP moi BAT BUOC co anh (JPG/PNG/WebP, toi da 5 MB).
+Ảnh sản phẩm: Multer, server/uploads, URL tĩnh /uploads.
+Tạo sản phẩm mới BẮT BUỘC có ảnh (JPG/PNG/WebP, tối đa 5 MB).
 
-Mot chuc nang = SUA 3 CHO:
+Một chức năng = SỬA 3 CHỖ:
   FE   desktop/src/pages/...
   BE   server/src/routes + controllers + services
-  CSDL server/migrations/...   (file SQL theo ngay, idempotent)
+  CSDL server/migrations/...   (file SQL theo ngày, chạy lại được)
 
 
 ================================================================================
-9. CAY THU MUC VA AI SUA FILE NAO
+9. CÂY THƯ MỤC VÀ AI SỬA FILE NÀO
 ================================================================================
 
 supermarket-fly/
@@ -357,18 +358,18 @@ supermarket-fly/
   5_CHAY_MAY_THANH_VIEN.bat
   6_MO_DUONG_HAM_CLOUDFLARE.bat
   package.json                 npm start, setup:next, test:next
-  docs/                        FILE NAY + ke toan chot + huong dan test
+  docs/                        FILE NÀY + kế toán đã chốt + hướng dẫn test
   desktop/src/
     index.js, preload.js
     pages/
       landing, login
-      dashboard/               vo app, sidebar, chuong
-      admin/                   QL: SP, NV, TK, KM, quyen, nhat ky
+      dashboard/               vỏ app, sidebar, chuông
+      admin/                   QL: SP, NV, TK, KM, quyền, nhật ký
       warehouse/               TK + MH
       cashier/                 POS, ca
       accounting/              KT + P&L cho QL
-      workforce/               phan ca, ngay le, cham cong
-      shared/                  in, chart, anh, locale, ho so NV, validator
+      workforce/               phân ca, ngày lễ, chấm công
+      shared/                  in, biểu đồ, ảnh, locale, hồ sơ NV, validator
   server/
     apply-migration.js
     seed-accounts.js, seed-permissions.js
@@ -382,27 +383,27 @@ supermarket-fly/
       middlewares/
       constants/permissions.js
 
-MAP NHANH (phan cong 7 thanh vien CODE — dung de biet FILE NAO THUOC AI):
+BẢNG NHANH (phân công 7 thành viên CODE — để biết FILE NÀO THUỘC AI):
 
-  TV   Phan                      UI chinh                         API prefix
+  TV   Phần                      Giao diện chính                   Tiền tố API
   --   ------------------------  -------------------------------  -------------------
-  1    Nen tang, auth, vo app    landing, login, dashboard        /api/auth /accounts
+  1    Nền tảng, auth, vỏ app    landing, login, dashboard        /api/auth /accounts
                                                                   /roles /employees
-  2    Quan tri QL               admin/*, shared/product-images   /api/admin
-  3    Mua hang                  supplier-pages,                  /api/suppliers
+  2    Quản trị QL               admin/*, shared/product-images   /api/admin
+  3    Mua hàng                  supplier-pages,                  /api/suppliers
                                  purchase-order-pages             /api/purchasing
   4    Kho                       warehouse-pages, receipt,        /api/warehouse
                                  stock-issue
   5    POS                       cashier/                         /api/cashier
-  6    Ke toan nghiep vu         accounting-pages (mua, ca,       /api/accounting
-                                 lai gop)                         (tru /payroll*)
-  7    Ca, luong, quy, P&L       workforce/*, store-pnl.js,       /api/admin/workforce
-                                 khoi payroll trong accounting    /payroll-fund
+  6    Kế toán nghiệp vụ         accounting-pages (mua, ca,       /api/accounting
+                                 lãi gộp)                         (trừ /payroll*)
+  7    Ca, lương, quỹ, P&L       workforce/*, store-pnl.js,       /api/admin/workforce
+                                 khối payroll trong accounting    /payroll-fund
                                                                   /store-profit-loss
                                                                   /api/accounting/payroll*
                                                                   /api/notifications
 
-FILE XUONG — sua rat than trong (vo menu / mount route / ma UC):
+FILE XƯƠNG — sửa rất thận trọng (vỡ menu / gắn route / mã UC):
 
   desktop/src/pages/dashboard/dashboard.html
   desktop/src/pages/dashboard/dashboard.js
@@ -410,162 +411,162 @@ FILE XUONG — sua rat than trong (vo menu / mount route / ma UC):
   server/src/constants/permissions.js
   server/src/middlewares/authMiddleware.js
 
-FILE NOI MODULE — sua dung vung, khong xoa template nguoi khac:
+FILE NỐI MÔ-ĐUN — sửa đúng vùng, không xóa template người khác:
 
-  warehouse/purchase-order-pages.js     TV3 chu; TV2 them ham duyet
-  accounting/accounting-pages.js        TV6 chu UC27-29; TV7 khoi luong
-  adminRoutes.js                        TV2 chu; nguoi khac CHI THEM dong
-  reportController.js                   moi nguoi 1 ham getXxxReport
+  warehouse/purchase-order-pages.js     TV3 chủ; TV2 thêm hàm duyệt
+  accounting/accounting-pages.js        TV6 chủ UC27–29; TV7 khối lương
+  adminRoutes.js                        TV2 chủ; người khác CHỈ THÊM dòng
+  reportController.js                   mỗi người 1 hàm getXxxReport
   returnsController.js                  TV5 create/submit/complete;
                                         TV4 inspect
-  cashierController.js                  TV5 mo/dong ca; TV7 lich/check-in
+  cashierController.js                  TV5 mở/đóng ca; TV7 lịch/check-in
 
 
 ================================================================================
-10. 33 USE CASE VA MA TRAN QUYEN
+10. 33 USE CASE VÀ MA TRẬN QUYỀN
 ================================================================================
 
-Word goc: UC01-UC29. Code GIU 29 UC goc va THEM UC30-UC33.
-Nguon quyen: server/src/constants/permissions.js
+Word gốc: UC01–UC29. Code GIỮ 29 UC gốc và THÊM UC30–UC33.
+Nguồn quyền: server/src/constants/permissions.js
 
-CHUC NANG CHUNG
-  UC01  Dang nhap va su dung tai khoan
+CHỨC NĂNG CHUNG
+  UC01  Đăng nhập và sử dụng tài khoản
 
-A. QUAN LY
-  UC02  Tai khoan va phan quyen
-  UC03  Nhat ky he thong
-  UC04  Nhan vien, san pham, khuyen mai
-  UC05  Phe duyet Don mua
-  UC06  Phe duyet Phieu xuat thu cong
-  UC07  Phe duyet dieu chinh ton (kiem ke)
-  UC08  Phe duyet doi tra / hoan tien
-  UC09  Phe duyet Phieu chi NCC
-  UC10  Bao cao tong hop
-  UC30  Phan ca va giam sat cham cong          (moi so voi Word)
-  UC32  Duyet cong, luong tam tinh             (moi so voi Word)
+A. QUẢN LÝ
+  UC02  Tài khoản và phân quyền
+  UC03  Nhật ký hệ thống
+  UC04  Nhân viên, sản phẩm, khuyến mãi
+  UC05  Phê duyệt Đơn mua
+  UC06  Phê duyệt Phiếu xuất thủ công
+  UC07  Phê duyệt điều chỉnh tồn (kiểm kê)
+  UC08  Phê duyệt đổi trả / hoàn tiền
+  UC09  Phê duyệt Phiếu chi NCC
+  UC10  Báo cáo tổng hợp
+  UC30  Phân ca và giám sát chấm công          (mới so với Word)
+  UC32  Duyệt công, lương tạm tính             (mới so với Word)
 
-B. MUA HANG
-  UC11  Nha cung cap
-  UC12  Tiep nhan de nghi mua
-  UC13  Lap / quan ly Don mua
-  UC14  Theo doi don va giao hang
-  UC31  Lich va cham cong ca nhan              (dung chung 4 actor)
+B. MUA HÀNG
+  UC11  Nhà cung cấp
+  UC12  Tiếp nhận đề nghị mua
+  UC13  Lập / quản lý Đơn mua
+  UC14  Theo dõi đơn và giao hàng
+  UC31  Lịch và chấm công cá nhân              (dùng chung 4 actor)
 
-C. THU KHO
-  UC15-UC21  Ton, de nghi, nhan hang, nhap, xuat, kiem ke, kiem doi tra
+C. THỦ KHO
+  UC15–UC21  Tồn, đề nghị, nhận hàng, nhập, xuất, kiểm kê, kiểm đổi trả
   UC31
 
-D. THU NGAN
-  UC22-UC26  Ca, khach, hoa don, thanh toan, doi tra
+D. THU NGÂN
+  UC22–UC26  Ca, khách, hóa đơn, thanh toán, đổi trả
   UC31
 
-E. KE TOAN
-  UC27  HD mua + doi chieu 3 chung tu
-  UC28  Cong no NCC
-  UC29  Phieu thu ca, doi soat, bao cao noi bo
+E. KẾ TOÁN
+  UC27  Hóa đơn mua + đối chiếu 3 chứng từ
+  UC28  Công nợ NCC
+  UC29  Phiếu thu ca, đối soát, báo cáo nội bộ
   UC31
-  UC33  Lap / khoa / thanh toan bang luong     (moi so voi Word)
+  UC33  Lập / khóa / thanh toán bảng lương     (mới so với Word)
 
-Ma tran DANG CHAY:
+Ma trận ĐANG CHẠY:
 
-  QL       UC01-UC10 + UC30 + UC32
-  MH       UC01, UC11-UC14, UC31
-  TK       UC01, UC15-UC21, UC31
-  TN       UC01, UC22-UC26, UC31
-  KT       UC01, UC27-UC29, UC31, UC33
+  QL       UC01–UC10 + UC30 + UC32
+  MH       UC01, UC11–UC14, UC31
+  TK       UC01, UC15–UC21, UC31
+  TN       UC01, UC22–UC26, UC31
+  KT       UC01, UC27–UC29, UC31, UC33
 
-QL KHONG co UC31 (khong check-in nhu NV).
-QL KHONG co UC33 (bam "Lap / tinh lai" luong -> API 403).
+QL KHÔNG có UC31 (không check-in như nhân viên).
+QL KHÔNG có UC33 (bấm "Lập / tính lại" lương → API 403).
 
-API nghiep vu PHAI requirePermission('UCxx'), khong chi requireRole.
-Khong tu them ma trung UC30-UC33. UC moi = UC34 tro di.
+API nghiệp vụ PHẢI requirePermission('UCxx'), không chỉ requireRole.
+Không tự thêm mã trùng UC30–UC33. UC mới = UC34 trở đi.
 
 
 ================================================================================
-11. BA QUY TRINH + BA COT TIEN  (CAM PHA)
+11. BA QUY TRÌNH + BA CỘT TIỀN  (CẤM PHÁ)
 ================================================================================
 
-Day la luat xuong song. Sua so ma khong di dung buoc = vo do an.
+Đây là luật xương sống. Sửa số mà không đi đúng bước = vỡ đồ án.
 
------ COT A — HANG VA LAI GOP -----
-  HD Hoan thanh: tru TonKho, snapshot DonGiaVon, GiaoDichKho Xuat.
-  Doi tra Hoan thanh: giam DT/GV, khong sua tay ton.
-  Lai gop = DT thuan - GV thuan.
-  PHIEU THU KHONG CONG DOANH THU LAN HAI.
-  Tien tra NCC KHONG tru vao lai gop (tru o P&L dieu hanh, muc rieng).
+----- CỘT A — HÀNG VÀ LÃI GỘP -----
+  Hóa đơn Hoàn thành: trừ TonKho, chốt DonGiaVon, GiaoDichKho Xuất.
+  Đổi trả Hoàn thành: giảm DT/GV, không sửa tay tồn.
+  Lãi gộp = DT thuần − GV thuần.
+  PHIẾU THU KHÔNG CỘNG DOANH THU LẦN HAI.
+  Tiền trả NCC KHÔNG trừ vào lãi gộp (trừ ở P&L điều hành, mục riêng).
 
------ COT B — KET CA / PHIEU THU -----
-  TienMatHeThong = TongTienMat - TongTienHoanMat.
-  QR / The / CK KHONG vao ket.
-  Mot ca DUNG MOT Phieu thu.
-  Chenh lech = TienThucNop - TienMatHeThong; lech bat buoc LyDoChenhLech.
-  Dong ca CHAN neu con HD Nhap hoac ThanhToan "Cho xac nhan".
-  Ban 07/09: SoTienTheoHeThong / SoTienThucNop DUOC AM
-  (ca chi hoan TM, hoan > thu). Van giu CK_PhieuThu_1 (lech phai co ly do).
+----- CỘT B — KÉT CA / PHIẾU THU -----
+  TienMatHeThong = TongTienMat − TongTienHoanMat.
+  QR / Thẻ / CK KHÔNG vào két.
+  Một ca ĐÚNG MỘT Phiếu thu.
+  Chênh lệch = TienThucNop − TienMatHeThong; lệch bắt buộc LyDoChenhLech.
+  Đóng ca CHẶN nếu còn hóa đơn Nháp hoặc ThanhToan "Chờ xác nhận".
+  Bản 07/09: SoTienTheoHeThong / SoTienThucNop ĐƯỢC ÂM
+  (ca chỉ hoàn tiền mặt, hoàn > thu). Vẫn giữ CK_PhieuThu_1 (lệch phải có lý do).
 
------ COT C — CONG NO NCC -----
-  Chi sinh CongNoPhaiTra khi doi chieu 3 ben KHOP
-    (Don mua + Phieu nhap SoLuongChapNhan + Hoa don GTGT).
-  Lap Phieu chi / QL duyet+giao quy / chi that bai: SoTienConLai KHONG DOI.
-  Chi giam no khi KT ghi thanh toan THANH CONG.
-  Khong tra truoc, khong tra tung phan, 1 cong no toi da 1 Phieu chi.
+----- CỘT C — CÔNG NỢ NCC -----
+  Chỉ sinh CongNoPhaiTra khi đối chiếu 3 bên KHỚP
+    (Đơn mua + Phiếu nhập SoLuongChapNhan + Hóa đơn GTGT).
+  Lập Phiếu chi / QL duyệt + giao quỹ / chi thất bại: SoTienConLai KHÔNG ĐỔI.
+  Chỉ giảm nợ khi KT ghi thanh toán THÀNH CÔNG.
+  Không trả trước, không trả từng phần, 1 công nợ tối đa 1 Phiếu chi.
 
-QUY TRINH 1 — MUA / NHAP
-  TK dem that -> het/thieu moi de nghi (KHONG can QL duyet de nghi)
-  -> MH lap PO -> QL duyet PO (lan duy nhat)
-  -> NCC giao -> TK kiem, CHI SL chap nhan vao phieu nhap
-  -> KT nhap HD GTGT -> doi chieu 3 chung tu
-  -> Khop: sinh no 30-45 ngay. Lech: khong ghi no.
-  Cam: nut "de nghi khai truong" (da bo), cong ton hang hu,
-       giam no luc lap/duyet phieu chi.
+QUY TRÌNH 1 — MUA / NHẬP
+  TK đếm thật → hết/thiếu mới đề nghị (KHÔNG cần QL duyệt đề nghị)
+  → MH lập đơn mua → QL duyệt đơn (lần duy nhất)
+  → NCC giao → TK kiểm, CHỈ số lượng chấp nhận vào phiếu nhập
+  → KT nhập hóa đơn GTGT → đối chiếu 3 chứng từ
+  → Khớp: sinh nợ 30–45 ngày. Lệch: không ghi nợ.
+  Cấm: nút "đề nghị khai trương" (đã bỏ), cộng tồn hàng hư,
+       giảm nợ lúc lập/duyệt phiếu chi.
 
-QUY TRINH 2 — BAN / QUY CA
-  QL cong bo lich -> TN dung ngay + trong gio (+ som ~10 phut)
-  -> check-in / mo ca -> ban DU (khong ban chiu)
-  -> HD hoan thanh tru ton + snapshot von
-  -> dong ca -> KT lap Phieu thu (1 ca 1 phieu).
-  Het ca / khong lich / chua check-in: API 403, khong chi khoa nut.
+QUY TRÌNH 2 — BÁN / QUỸ CA
+  QL công bố lịch → TN đúng ngày + trong giờ (vào sớm tối đa khoảng 10 phút)
+  → check-in / mở ca → bán ĐỦ (không bán chịu)
+  → Hóa đơn hoàn thành trừ tồn + chốt giá vốn
+  → đóng ca → KT lập Phiếu thu (1 ca 1 phiếu).
+  Hết ca / không lịch / chưa check-in: API 403, không chỉ khóa nút.
 
-QUY TRINH 3 — LUONG (tat toan mung 10 thang sau)
-  QL duyet cong (OT co phut) -> CHI KT bam Lap/tinh lai
-  -> con cong cho duyet thi CHAN
-  -> chi NV co phut cong duyet > 0; le 8h chi cho nguoi da di lam
-  -> KT khoa ky -> lap phieu (moi NV TM HOAC CK)
-  -> QL duyet tung nguoi hoac Duyet tat ca  (duyet CHUA tra)
-  -> QL giao 1 CUC quy cho ke toan
-  -> KT chi tung NV; CK bat buoc ma GD; fail thi lam lai cung phieu.
-  Bang luong KHONG tru vao lai gop.
-  P&L dieu hanh (man QL) moi tru luong DA KHOA + chi NCC thanh cong.
+QUY TRÌNH 3 — LƯƠNG (tất toán mùng 10 tháng sau)
+  QL duyệt công (OT có phút) → CHỈ KT bấm Lập/tính lại
+  → còn công chờ duyệt thì CHẶN
+  → chỉ nhân viên có phút công duyệt > 0; lễ 8 giờ chỉ cho người đã đi làm
+  → KT khóa kỳ → lập phiếu (mỗi NV tiền mặt HOẶC chuyển khoản)
+  → QL duyệt từng người hoặc Duyệt tất cả  (duyệt CHƯA trả)
+  → QL giao 1 CỤC quỹ cho kế toán
+  → KT chi từng NV; chuyển khoản bắt buộc mã giao dịch; thất bại thì làm lại cùng phiếu.
+  Bảng lương KHÔNG trừ vào lãi gộp.
+  P&L điều hành (màn QL) mới trừ lương ĐÃ KHÓA + chi NCC thành công.
 
-Cong thuc lai gop (khong doi so voi Chuong 6):
-  DT thuan = DT HD hoan thanh - tien hoan da hoan thanh
-  GV thuan = GV HD - GV hang tra nhap lai + GV hang giao doi
-  Lai gop  = DT thuan - GV thuan
+Công thức lãi gộp (không đổi so với Chương 6):
+  DT thuần = DT hóa đơn hoàn thành − tiền hoàn đã hoàn thành
+  GV thuần = GV hóa đơn − GV hàng trả nhập lại + GV hàng giao đổi
+  Lãi gộp  = DT thuần − GV thuần
 
 
 ================================================================================
 12. API
 ================================================================================
 
-Prefix /api. Health: GET /api/health
+Tiền tố /api. Kiểm tra: GET /api/health
 
-  /api/auth            Dang nhap, JWT
+  /api/auth            Đăng nhập, JWT
   /api/accounts
   /api/roles
-  /api/employees       + ho so CCCD / HoSoNhanVien (ban 07/09)
-  /api/admin           Catalog, phe duyet, bao cao, phan ca, le, P&L
-  /api/warehouse       Ton, kiem ke, nhap, xuat, de nghi
+  /api/employees       + hồ sơ CCCD / HoSoNhanVien (bản 07/09)
+  /api/admin           Catalog, phê duyệt, báo cáo, phân ca, lễ, P&L
+  /api/warehouse       Tồn, kiểm kê, nhập, xuất, đề nghị
   /api/purchasing
   /api/suppliers
-  /api/accounting      Doi chieu, cong no, phieu thu, luong, quy
-  /api/cashier         Ca, POS, HD, doi tra
-  /api/notifications   Chuong
+  /api/accounting      Đối chiếu, công nợ, phiếu thu, lương, quỹ
+  /api/cashier         Ca, POS, hóa đơn, đổi trả
+  /api/notifications   Chuông
 
-Endpoint luong / quy / P&L can nho:
+Endpoint lương / quỹ / P&L cần nhớ:
 
-  POST /api/accounting/payroll/:month/build              chi KT
+  POST /api/accounting/payroll/:month/build              chỉ KT
   POST /api/admin/approvals/payroll-vouchers/approve-all
-  POST /api/admin/approvals/payroll-fund/:month/handover  giao quy KT
+  POST /api/admin/approvals/payroll-fund/:month/handover  giao quỹ KT
   GET  /api/admin/reports/store-profit-loss
   POST /api/admin/reports/store-profit-loss/plan
 
@@ -574,11 +575,11 @@ Endpoint luong / quy / P&L can nho:
 13. CSDL, MIGRATION, setup:next
 ================================================================================
 
-May trang: chay CreateDB roi npm run setup:next
-(setup:next = migrate:next + seed quyen/TK + don SP demo + don TN thua
- + chuan bi kho).
+Máy trắng: chạy CreateDB rồi npm run setup:next
+(setup:next = migrate:next + seed quyền/TK + dọn sản phẩm demo + dọn thu ngân thừa
+ + chuẩn bị kho).
 
-Chuoi migrate:next (server/package.json) den 07/09/2026:
+Chuỗi migrate:next (server/package.json) đến 07/09/2026:
 
   20260825_WorkforceScheduling
   20260825_SalesAndWorkforceV2
@@ -590,19 +591,19 @@ Chuoi migrate:next (server/package.json) den 07/09/2026:
   20260904_PayrollCommonFund
   20260905_StoreProfitLoss
   20260906_BumpSellPrices
-  20260907_ReturnHandoverAndCountScrap     ban giao doi tra + huy tu kiem ke
-  20260907_EmployeeProfileCccd             CCCD, ngay sinh, gioi tinh, ngay vao
-  20260907_HoSoNhanVien                    bang 1-1 ho so chi tiet
-  20260907_PhieuThuAllowNegativeHandover   phieu thu cho phep so am
+  20260907_ReturnHandoverAndCountScrap     bàn giao đổi trả + hủy từ kiểm kê
+  20260907_EmployeeProfileCccd             CCCD, ngày sinh, giới tính, ngày vào
+  20260907_HoSoNhanVien                    bảng 1–1 hồ sơ chi tiết
+  20260907_PhieuThuAllowNegativeHandover   phiếu thu cho phép số âm
 
-Chay le:
+Chạy lẻ:
   cd server
   node apply-migration.js <ten-file.sql>
 
-Mot so controller van ensure*Schema() luc goi API (may cu tu ALTER).
-May setup moi VAN nen chay migration.
+Một số controller vẫn ensure*Schema() lúc gọi API (máy cũ tự ALTER).
+Máy setup mới VẪN nên chạy migration.
 
-CSDL Word goc 35 bang. He thong da mo rong (~45+ bang):
+CSDL Word gốc 35 bảng. Hệ thống đã mở rộng (khoảng 45+ bảng):
   LoaiCa, QuayBanHang, LichLamViec, ChamCong, DieuChinhChamCong,
   MucLuongNhanVien, KyLuong, BangLuong, ChiTietBangLuong,
   ThongBaoGiaoHang, HoSoNhanVien, ...
@@ -612,130 +613,132 @@ CSDL Word goc 35 bang. He thong da mo rong (~45+ bang):
 
 
 ================================================================================
-14. VIEC DA XONG (KE CA BAN 07/09)
+14. VIỆC ĐÃ XONG (KỂ CẢ BẢN 07/09)
 ================================================================================
 
-14.1. Nghiep vu loi (UC01-UC33) — DANG CHAY
+14.1. Nghiệp vụ lõi (UC01–UC33) — ĐANG CHẠY
 
-  - Dang nhap JWT, 5 menu theo vai tro, phan quyen theo ma UC
-  - QL: SP (bat buoc anh), NV, TK, KM, trung tam phe duyet, nhat ky, UC10
-  - MH: NCC, hop thu de nghi, PO, chuyen giao
-  - TK: ton, de nghi (khong nut khai truong), nhan/kiem, nhap, xuat,
-        kiem ke, kiem doi tra
-  - TN: lich + check-in, POS, HD, doi tra, dong ca
-  - KT: doi chieu 3 chung tu, cong no, phieu chi NCC, phieu thu ca, lai gop
-  - UC30-33: phan ca, cham cong, luong, quy chung QL->KT, P&L dieu hanh
-  - May chu nhom + Cloudflare tunnel (huong dan + file .bat)
+  - Đăng nhập JWT, 5 menu theo vai trò, phân quyền theo mã UC
+  - QL: sản phẩm (bắt buộc ảnh), nhân viên, tài khoản, khuyến mãi,
+        trung tâm phê duyệt, nhật ký, UC10
+  - MH: nhà cung cấp, hộp thư đề nghị, đơn mua, chuyến giao
+  - TK: tồn, đề nghị (không nút khai trương), nhận/kiểm, nhập, xuất,
+        kiểm kê, kiểm đổi trả
+  - TN: lịch + check-in, POS, hóa đơn, đổi trả, đóng ca
+  - KT: đối chiếu 3 chứng từ, công nợ, phiếu chi NCC, phiếu thu ca, lãi gộp
+  - UC30–33: phân ca, chấm công, lương, quỹ chung QL→KT, P&L điều hành
+  - Máy chủ nhóm + Cloudflare tunnel (hướng dẫn + file .bat)
 
-14.2. Phan MOI so voi commit GitHub cu (e8f1219) — da gom vao ban nay
+14.2. Phần MỚI so với commit GitHub cũ (e8f1219) — đã gộp vào bản này
 
-  FE
-    - Ho so nhan vien (CCCD, ngay sinh, gioi tinh, ngay vao lam)
-      + form ho so chi tiet (desktop/src/pages/shared/employee-profile.js)
-    - Man NV / tai khoan / dashboard / POS / kho / luong: validator,
-      tim kiem, UI dong bo
-    - POS: tim HD, ban giao ca/hang, phuc hoi ca
-    - Kiem ke: nhanh scrap / xuat huy gan MaKK
-    - Doi tra: ban giao phieu da duyet (NV xu ly, quay, ca)
-    - Chuong thong bao (notificationHub)
+  Giao diện
+    - Hồ sơ nhân viên (CCCD, ngày sinh, giới tính, ngày vào làm)
+      + form hồ sơ chi tiết (desktop/src/pages/shared/employee-profile.js)
+    - Màn nhân viên / tài khoản / dashboard / POS / kho / lương: kiểm tra
+      dữ liệu, tìm kiếm, giao diện đồng bộ
+    - POS: tìm hóa đơn, bàn giao ca/hàng, phục hồi ca
+    - Kiểm kê: nhánh hủy hàng / xuất hủy gắn MaKK
+    - Đổi trả: bàn giao phiếu đã duyệt (nhân viên xử lý, quầy, ca)
+    - Chuông thông báo (notificationHub)
 
-  BE / CSDL
-    - Migration 20260907 (4 file, xem muc 13)
+  Backend / CSDL
+    - Migration 20260907 (4 file, xem mục 13)
     - employeeHoSo.js, employeeProfileSchema.js
-    - returnHandover.js mo rong, countApprove.js, countScrapSchema.js
-    - cashierDuty.js: recovery sau su co ca
-    - invoiceSearch.js, phieuThuSchema.js (cho phep so am)
+    - returnHandover.js mở rộng, countApprove.js, countScrapSchema.js
+    - cashierDuty.js: phục hồi sau sự cố ca
+    - invoiceSearch.js, phieuThuSchema.js (cho phép số âm)
     - fieldValidators.js (server + desktop)
-    - shiftScheduler.js / workforceController.js chat hon
+    - shiftScheduler.js / workforceController.js chặt hơn
     - Test: test-cashier-duty-recovery, test-invoice-search,
             test-return-handover, test-field-validators, test-shift-scheduler
 
-  Tai lieu
-    - FILE NAY
-    - docs/PLAN_12_TICH_HOP_VA_KE_TOAN.txt  (ke hoach NANG CAP, chua code)
+  Tài liệu
+    - FILE NÀY
+    - docs/PLAN_12_TICH_HOP_VA_KE_TOAN.txt  (kế hoạch NÂNG CẤP, chưa code)
 
-14.3. Co y CHUA LAM
+14.3. Cố ý CHƯA LÀM
 
-  - So cai, No/Co, TaiKhoanKeToan / ButToan / KyKeToan
-  - VAT tren POS (tach 511 / 33311) — Plan A uu tien so 1 khi lam ke toan
-  - TSCD, sao ke 112, LCTT, BCDKT
-  - Cuoc van chuyen 4.000 d/km + boi 20% khi hu >= 1/3 (plan da chot)
-  - BHXH / BHYT / BHTN / cong doan
-  - TK 242, kho FEFO/lo, nhieu cua hang, HDDT nha nuoc, ban chiu
-  - VNPay / barcode / e-receipt / Telegram / OCR / AI  (PLAN_12, P1-P2)
+  - Sổ cái, Nợ/Có, TaiKhoanKeToan / ButToan / KyKeToan
+  - VAT trên POS (tách 511 / 33311) — Plan A ưu tiên số 1 khi làm kế toán
+  - TSCĐ, sao kê 112, LCTT, BCĐKT
+  - Cước vận chuyển 4.000 đ/km + bồi 20% khi hư ≥ 1/3 (plan đã chốt)
+  - BHXH / BHYT / BHTN / công đoàn
+  - TK 242, kho FEFO/lô, nhiều cửa hàng, HĐĐT nhà nước, bán chịu
+  - VNPay / mã vạch / hóa đơn điện tử / Telegram / OCR / AI  (PLAN_12, P1–P2)
 
 
 ================================================================================
-15. VIEC DUOC PHEP LAM TIEP
+15. VIỆC ĐƯỢC PHÉP LÀM TIẾP
 ================================================================================
 
-Chon 1 trong 2 huong. Khong lam song song neu chi 1 nguoi.
+Chọn 1 trong 2 hướng. Không làm song song nếu chỉ 1 người.
 
-HUONG A — GIU UC01-UC33, sua bug / test / bao cao mon
-  - Chay E2E mua + ban + luong tren 1 DB
-  - npm run test:next phai PASS
-  - Viet bao cao / slide: 33 UC, 45+ bang, khong con cau "chua co luong"
-  - File phan cong 7 TV:
+HƯỚNG A — GIỮ UC01–UC33, sửa lỗi / test / báo cáo môn
+  - Chạy hết chuỗi mua + bán + lương trên 1 database
+  - npm run test:next phải PASS
+  - Viết báo cáo / slide: 33 UC, 45+ bảng, không còn câu "chưa có lương"
+  - File phân công 7 thành viên:
       TaiLieu_Du_An\01_Yeu_Cau_Nghiep_Vu\
       PHAN_CONG_7_THANH_VIEN_VA_CHI_TIET_DU_AN_Supermarket_Fly.txt
 
-HUONG B — KE TOAN TONG HOP (Plan A, CHUA CODE)
-  Doc theo thu tu:
-    1) docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt     luat DANG CHAY
+HƯỚNG B — KẾ TOÁN TỔNG HỢP (Plan A, CHƯA CODE)
+  Đọc theo thứ tự:
+    1) docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt     luật ĐANG CHẠY
     2) docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt
     3) docs/PLAN_12_TICH_HOP_VA_KE_TOAN.txt
-  Thu tu da chot:
-    P0         Nghiep vu dang chay — GIU, khong pha 3 cot tien
-    KT loi     VAT POS + COA + but toan + NKC + So cai + CDPS + KQKD
-    P1         VNPay adapter, barcode, e-receipt, Telegram
-    P2         Replenishment, AI tro ly, OCR
-    KT mo rong TSCD, import sao ke, LCTT, khoa so, BCDKT mini
-  BAT DAU TU UC34. Khong doi nghia UC30-UC33.
-  VAT ban: gia niem yet DA GOM VAT; tach 511/33311 luc ghi so,
-  KHONG cong them thue tren quay.
+  Thứ tự đã chốt:
+    P0         Nghiệp vụ đang chạy — GIỮ, không phá 3 cột tiền
+    KT lõi     VAT POS + danh mục tài khoản + bút toán + nhật ký chung
+               + sổ cái + cân đối phát sinh + kết quả kinh doanh
+    P1         Bộ chuyển VNPay, mã vạch, hóa đơn điện tử, Telegram
+    P2         Gợi ý nhập hàng, trợ lý AI, OCR
+    KT mở rộng TSCĐ, nhập sao kê, LCTT, khóa sổ, BCĐKT thu gọn
+  BẮT ĐẦU TỪ UC34. Không đổi nghĩa UC30–UC33.
+  VAT bán: giá niêm yết ĐÃ GỒM VAT; tách 511/33311 lúc ghi sổ,
+  KHÔNG cộng thêm thuế trên quầy.
 
-KHONG:
-  - Tu sinh cong no
-  - Ban chiu / TK 131
-  - Chatbot duyet PO / chi NCC / completeInvoice
-  - OCR/AI insert CongNoPhaiTra
-  - Khoa POS vao mot cong thanh toan
-  - Train mo hinh AI
+KHÔNG:
+  - Tự sinh công nợ
+  - Bán chịu / TK 131
+  - Chatbot duyệt đơn mua / chi NCC / hoàn thành hóa đơn
+  - OCR/AI tự chèn CongNoPhaiTra
+  - Khóa POS vào một cổng thanh toán
+  - Huấn luyện mô hình AI
 
 
 ================================================================================
-16. CACH CODE TIEP — QUY TAC KHONG VO HE THONG
+16. CÁCH CODE TIẾP — QUY TẮC KHÔNG VỠ HỆ THỐNG
 ================================================================================
 
-  1. Mot UC = 3 tang (UI + API + bang/cot). Khong chi ve form.
-  2. So chi doi dung buoc. Trang thai chung tu: Nhap -> Cho duyet ->
-     Da duyet / Thanh cong / That bai.
-  3. Khong UPDATE TonKho / SoTienConLai / doanh thu tay tren SSMS.
-  4. Khong noi 403 het ca "cho test cho nhanh".
-  5. GET bang luong KHONG tu tao so. Chi KT POST build.
-  6. Migration moi: file SQL idempotent, ten
+  1. Một UC = 3 tầng (giao diện + API + bảng/cột). Không chỉ vẽ form.
+  2. Số chỉ đổi đúng bước. Trạng thái chứng từ: Nháp → Chờ duyệt →
+     Đã duyệt / Thành công / Thất bại.
+  3. Không UPDATE TonKho / SoTienConLai / doanh thu tay trên SSMS.
+  4. Không nới 403 hết ca "cho test cho nhanh".
+  5. GET bảng lương KHÔNG tự tạo số. Chỉ KT gọi POST build.
+  6. Migration mới: file SQL chạy lại được, tên
        SupermarketFly_Migration_YYYYMMDD_TenNgan.sql
-     Them vao cuoi script migrate:next trong server/package.json.
-  7. Them UC: thong nhat ma trong permissions.js, seed lai quyen.
-  8. Test kem: them node --check hoac test-*.js, gan vao npm test
-     neu lien quan tien / ton / no / ca.
-  9. Tien to du lieu test: TEST-<TEN>-<YYYYMMDD>
- 10. Khong xoa du lieu nguoi khac tren DB chung.
+     Thêm vào cuối script migrate:next trong server/package.json.
+  7. Thêm UC: thống nhất mã trong permissions.js, seed lại quyền.
+  8. Test kèm: thêm node --check hoặc test-*.js, gắn vào npm test
+     nếu liên quan tiền / tồn / nợ / ca.
+  9. Tiền tố dữ liệu test: TEST-<TEN>-<YYYYMMDD>
+ 10. Không xóa dữ liệu người khác trên database chung.
 
-Chuoi E2E BAT BUOC chay chung (khong ai "xong mot minh"):
+Chuỗi bắt buộc phải chạy CHUNG (không ai "xong một mình"):
 
-  MUA : TK de nghi -> MH PO -> QL duyet -> MH chuyen -> TK nhap
-        -> KT doi chieu -> KT phieu chi -> QL duyet/giao quy NCC
-        -> KT thanh toan.
+  MUA : TK đề nghị → MH lập đơn → QL duyệt → MH tạo chuyến → TK nhập
+        → KT đối chiếu → KT phiếu chi → QL duyệt/giao quỹ NCC
+        → KT thanh toán.
 
-  BAN : QL cong bo lich -> TN check-in + mo ca + ban -> dong ca
-        -> KT phieu thu.
+  BÁN : QL công bố lịch → TN check-in + mở ca + bán → đóng ca
+        → KT phiếu thu.
 
-  DOI : TN lap -> TK kiem -> QL duyet -> TN hoan tat
-        -> phieu thu ca sau da tru hoan TM.
+  ĐỔI : TN lập → TK kiểm → QL duyệt → TN hoàn tất
+        → phiếu thu ca sau đã trừ hoàn tiền mặt.
 
-  LUONG: QL lich+le -> NV cham -> QL duyet cong -> KT lap+khoa
-         -> KT lap phieu -> QL duyet + giao 1 quy -> KT chi.
+  LƯƠNG: QL lịch + lễ → nhân viên chấm → QL duyệt công → KT lập + khóa
+         → KT lập phiếu → QL duyệt + giao 1 quỹ → KT chi.
 
 
 ================================================================================
@@ -743,43 +746,43 @@ Chuoi E2E BAT BUOC chay chung (khong ai "xong mot minh"):
 ================================================================================
 
 Repo   : https://github.com/lowlyone03/BTL-supermarket-fly.git
-Nhanh  : main   (hien tai nhom dang lam tren main)
-Goi y nhanh theo TV (khi chia):
+Nhánh  : main   (hiện tại nhóm đang làm trên main)
+Gợi ý nhánh theo thành viên (khi chia):
   tv1-platform, tv2-admin, tv3-purchasing, tv4-warehouse,
   tv5-cashier, tv6-accounting, tv7-workforce
 
-CAM commit:
+CẤM commit:
   - server/.env
   - node_modules/
-  - server/uploads/          (anh runtime)
+  - server/uploads/          (ảnh lúc chạy)
   - *.bak
   - cloudflared.exe
   - desktop/out/ , .webpack/
 
-Sau khi sua:
+Sau khi sửa:
   git status
   git diff
-  git add <file lien quan>
-  git commit -m "Mo ta VI SAO sua"
+  git add <file liên quan>
+  git commit -m "Mô tả VÌ SAO sửa"
   git pull --rebase
   git push
 
-Khong push de main khi nguoi khac dang test cung commit.
-Khong dung --force tren main.
+Không đẩy đè main khi người khác đang test cùng commit.
+Không dùng --force trên main.
 
 
 ================================================================================
 18. TEST
 ================================================================================
 
-Tu dong (root repo):
+Tự động (thư mục gốc repo):
 
   3_KIEM_TRA_TU_DONG.bat
-  hoac:  npm run test:next
+  hoặc:  npm run test:next
 
-Ky vong: syntax + nghiep vu + anh SP + upload + tim kiem + in + lich ca.
+Kỳ vọng: cú pháp + nghiệp vụ + ảnh sản phẩm + tải ảnh + tìm kiếm + in + lịch ca.
 
-Rieng server:
+Riêng server:
   npm test
   npm run test:business
   npm run test:payroll
@@ -787,134 +790,134 @@ Rieng server:
   npm run test:store-pnl
   npm run test:scheduler
 
-Test API anh (2 cua so):
-  cua so 1: npm run start:server
-  cua so 2: cd server && npm run test:product-image-api
+Test API ảnh (2 cửa sổ):
+  cửa sổ 1: npm run start:server
+  cửa sổ 2: cd server && npm run test:product-image-api
 
-Test tay 5 actor — thu tu de khong di nguoc luong:
+Test tay 5 actor — thứ tự để không đi ngược luồng:
 
-  1 QL   du 12 TK, tao SP co anh, phan ca + cong bo
-  2 TK   de nghi tu hang thieu that
-  3 MH   lap PO, gui duyet
-  4 QL   duyet PO
-  5 TK   nhan + nhap; ton tang 1 lan dung SL chap nhan
-  6 KT   doi chieu 3 chung tu
-  7 TN   check-in, ban, in HD; ton giam 1 lan
-  8 TN+TK+QL  doi tra
-  9 KT   phieu thu, cong no, lai gop
- 10 QL   P&L cua hang
- 11 KT   lap luong (sau khi QL duyet het cong)
+  1 QL   đủ 12 tài khoản, tạo sản phẩm có ảnh, phân ca + công bố
+  2 TK   đề nghị từ hàng thiếu thật
+  3 MH   lập đơn mua, gửi duyệt
+  4 QL   duyệt đơn mua
+  5 TK   nhận + nhập; tồn tăng 1 lần đúng số lượng chấp nhận
+  6 KT   đối chiếu 3 chứng từ
+  7 TN   check-in, bán, in hóa đơn; tồn giảm 1 lần
+  8 TN + TK + QL  đổi trả
+  9 KT   phiếu thu, công nợ, lãi gộp
+ 10 QL   lãi/lỗ cửa hàng
+ 11 KT   lập lương (sau khi QL duyệt hết công)
 
-Kich ban dai:
+Kịch bản dài:
   docs/HUONG_DAN_KIEM_THU_TOAN_BO_HE_THONG_SUPERMARKET_FLY.txt
   docs/HUONG_DAN_TEST_CHUC_NANG_VA_NGOAI_LE.txt
   docs/HUONG_DAN_KIEM_THU_UC10_UC27_UC29.md
 
 
 ================================================================================
-19. SU CO THUONG GAP
+19. SỰ CỐ THƯỜNG GẶP
 ================================================================================
 
-  Khong mo trang / Failed to fetch
-    -> API chet hoac JS khong load. npm start, GET /api/health.
-       Dong/mo lai Electron.
+  Không mở trang / Failed to fetch
+    → API chết hoặc JS không tải. npm start, GET /api/health.
+      Đóng/mở lại Electron.
 
-  SQL khong ket noi
-    -> Sai instance (khong phai SQLEXPRESS), thieu ODBC 17,
-       chua co SupermarketFlyDB, khong dung Windows Auth.
-    -> sqlcmd Driver 18 bao SSL: them -C.
+  SQL không kết nối
+    → Sai instance (không phải SQLEXPRESS), thiếu ODBC 17,
+      chưa có SupermarketFlyDB, không dùng Windows Authentication.
+    → sqlcmd Driver 18 báo SSL: thêm -C.
 
-  Thu ngan khong vao POS
-    -> Chua co lich Da cong bo hom nay, ngoai gio, het ca, chua check-in.
+  Thu ngân không vào được POS
+    → Chưa có lịch Đã công bố hôm nay, ngoài giờ, hết ca, chưa check-in.
 
-  Khong lap duoc ky luong
-    -> Con ChamCong cho duyet, hoac khong phai KT.
+  Không lập được kỳ lương
+    → Còn ChamCong chờ duyệt, hoặc không phải KT.
 
-  Bang luong 880k du chua lam
-    -> Rule cu cong le cho moi NV. Lap/tinh lai sau khi duyet het cong.
+  Bảng lương 880.000 đồng dù chưa làm
+    → Luật cũ cộng lễ cho mọi nhân viên. Lập/tính lại sau khi duyệt hết công.
 
-  Khong thay "Giao quy cho ke toan"
-    -> 1 cuc cho KT sau khi duyet phieu luong. Khac phieu chi NCC
-       (giao TUNG phieu).
+  Không thấy "Giao quỹ cho kế toán"
+    → 1 cục cho KT sau khi duyệt phiếu lương. Khác phiếu chi NCC
+      (giao TỪNG phiếu).
 
-  Bao cao dau thang trong
-    -> Ky VN, ngay 1-3 lui thang truoc. Bam Lap bao cao khi nut da bat.
+  Báo cáo đầu tháng trống
+    → Kỳ Việt Nam, ngày 1–3 lùi tháng trước. Bấm Lập báo cáo khi nút đã bật.
 
-  Restore xong mat du lieu / TK doi
-    -> Da chay nham setup:next. Restore lai .bak.
+  Restore xong mất dữ liệu / tài khoản đổi
+    → Đã chạy nhầm setup:next. Restore lại .bak.
 
-  Clone GitHub thieu tinh nang 07/09
-    -> Chua git pull ban sau khi push ban giao. git log -1.
+  Clone GitHub thiếu tính năng 07/09
+    → Chưa git pull bản sau khi đẩy bàn giao. git log -1.
 
 
 ================================================================================
-20. TAI LIEU LIEN QUAN (CHI MO KHI CAN)
+20. TÀI LIỆU LIÊN QUAN (CHỈ MỞ KHI CẦN)
 ================================================================================
 
-Bat dau tu FILE NAY. Cac file duoi day la ban day du hon theo chu de.
+Bắt đầu từ FILE NÀY. Các file dưới đây là bản đầy đủ hơn theo chủ đề.
 
   supermarket-fly/README.md
-      Boi canh, 3 quy trinh, anh demo, API, su co.
+      Bối cảnh, 3 quy trình, ảnh demo, API, sự cố.
 
   docs/README.md
-      Muc luc toan docs/.
+      Mục lục toàn bộ docs/.
 
   docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt
-      Luat ke toan DANG NAM TRONG CODE.
+      Luật kế toán ĐANG NẰM TRONG CODE.
 
   docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt
-      Plan A: giu VAT/so cai/TSCD; cat 242 va FEFO.
+      Plan A: giữ VAT/sổ cái/TSCĐ; cắt 242 và FEFO.
 
   docs/PLAN_12_TICH_HOP_VA_KE_TOAN.txt
-      Ke hoach nang cap (chua code).
+      Kế hoạch nâng cấp (chưa code).
 
   docs/HUONG_DAN_BAN_GIAO_CHO_THANH_VIEN_TEST.md
-      Goi tester (ban 30/08). File NAY thay the cho nguoi LAM TIEP.
+      Gói tester (bản 30/08). File NÀY thay thế cho người LÀM TIẾP.
 
   TaiLieu_Du_An/01_Yeu_Cau_Nghiep_Vu/
     PHAN_CONG_7_THANH_VIEN_VA_CHI_TIET_DU_AN_Supermarket_Fly.txt
-      Ai code phan nao (UC, file, API, bang, checklist).
+      Ai code phần nào (UC, file, API, bảng, checklist).
     UC_va_Danh_sach_chuc_nang_Supermarket_Fly.txt
-      29 UC goc.
+      29 UC gốc.
     CAP_NHAT_CHI_TIET_PHAN_MOI_SO_VOI_WORD_Supermarket_Fly.txt
-      Phan moi so voi Word.
+      Phần mới so với Word.
 
   docs/DOI_CHIEU_HE_THONG_HIEN_TAI_VOI_TAI_LIEU_GOC_2026-08-31.md
 
-LOI THOI — khong dung lam buoc tiep theo:
+LỖI THỜI — không dùng làm bước tiếp theo:
   docs/HUONG_DI_VA_THIET_KE_ACTOR_TIEP_THEO.md
   TaiLieu_Du_An/99_Tam_Xu_Ly/.codex-tmp/ke-hoach-ke-toan.txt
 
 
 ================================================================================
-21. CHECKLIST NGUOI NHAN DA SAN SANG
+21. CHECKLIST NGƯỜI NHẬN ĐÃ SẴN SÀNG
 ================================================================================
 
-  [ ] Clone duoc repo, git log -1 trung ban ban giao
-  [ ] Restore .bak, SELECT ra 13 / 36 / 10 / 12 (hoac so da ghi o dau file)
-  [ ] KHONG chay setup:next sau restore
-  [ ] npm install 3 tang, npm start, /api/health = ok
-  [ ] Login 5 vai tro bang mat khau 123
-  [ ] Doc muc 11 (3 cot tien)
+  [ ] Clone được repo, git log -1 trùng bản bàn giao
+  [ ] Restore .bak, SELECT ra 13 / 36 / 10 / 12 (hoặc số đã ghi ở đầu file)
+  [ ] KHÔNG chạy setup:next sau restore
+  [ ] npm install 3 tầng, npm start, /api/health = ok
+  [ ] Đăng nhập 5 vai trò bằng mật khẩu 123
+  [ ] Đọc mục 11 (3 cột tiền)
   [ ] npm run test:next PASS
-  [ ] Biet file xuong (dashboard, app.js, permissions.js) khong sua lung tung
-  [ ] Biet viec tiep theo: Huong A (bug/bao cao) hay Huong B (UC34 so cai)
-  [ ] Co TaiLieu_Du_An (it nhat 01 + 05_Backup) ngoai Git
+  [ ] Biết file xương (dashboard, app.js, permissions.js) không sửa lung tung
+  [ ] Biết việc tiếp theo: Hướng A (lỗi/báo cáo) hay Hướng B (UC34 sổ cái)
+  [ ] Có TaiLieu_Du_An (ít nhất 01 + 05_Backup) ngoài Git
 
 
 ================================================================================
-22. THONG DIEP NGAN
+22. THÔNG ĐIỆP NGẮN
 ================================================================================
 
-Nguoi GIAO da:
-  - Day ma nguon moi nhat len GitHub (main)
-  - Tao backup CSDL 07/09/2026 19:18:55, verify checksum
-  - Viet file huong dan nay
-  - Khong day .env, .bak, cloudflared.exe, uploads rong
+Người GIAO đã:
+  - Đẩy mã nguồn mới nhất lên GitHub (main)
+  - Tạo backup CSDL 07/09/2026 19:18:55, đã kiểm checksum
+  - Viết file hướng dẫn này bằng tiếng Việt có dấu
+  - Không đẩy .env, .bak, cloudflared.exe, uploads trống
 
-Nguoi NHAN chi can:
+Người NHẬN chỉ cần:
   clone + restore .bak + npm install + npm start
-  roi lam tiep tu muc 15.
+  rồi làm tiếp từ mục 15.
 
-Het file.
+Hết file.
 ================================================================================
