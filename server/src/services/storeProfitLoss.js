@@ -2,6 +2,7 @@ const { sql } = require('../config/db');
 const { calculateGrossProfit, roundMoney } = require('./financialRules');
 const { ensurePayrollSchema } = require('./payrollSchema');
 const { logAudit } = require('./auditLog');
+const { notifyInboxChanged } = require('./notificationHub');
 const {
     CAUSE_CATALOG,
     formatVnd,
@@ -510,6 +511,7 @@ const savePlan = async (pool, user, req, resolved, body = {}) => {
             content: `${period.label}: ${lossText}. Đã gửi thông báo cho ${recipients.length} nhân viên đang làm việc.`
         });
         await transaction.commit();
+        notifyInboxChanged({ action: 'Gửi kế hoạch điều chỉnh lãi lỗ', table: 'ThongBaoCuaHang' });
         const roles = [...new Set(recipients.map(item => item.ChucVu))];
         return {
             message: `Đã lưu kế hoạch và gửi thông báo tới ${recipients.length} nhân viên đang làm việc.`,

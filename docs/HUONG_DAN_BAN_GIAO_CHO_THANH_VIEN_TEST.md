@@ -1,6 +1,10 @@
 # Hướng dẫn bàn giao Supermarket Fly cho thành viên kiểm thử
 
-Ngày đóng gói: **30/08/2026**  
+> **Người nhận *làm tiếp* FE + BE + CSDL (bản 07/09/2026):** đừng dùng file này làm file chính.
+> Mở [`BAN_GIAO_LAM_TIEP_TOAN_BO_HE_THONG_2026-09-07.txt`](BAN_GIAO_LAM_TIEP_TOAN_BO_HE_THONG_2026-09-07.txt).
+> Backup mới: `TaiLieu_Du_An/05_Backup/Database_Backups/SupermarketFlyDB_2026-09-07_191855.bak`.
+
+Ngày đóng gói file tester này: **30/08/2026**  
 Phạm vi: ứng dụng quản trị nội bộ Electron, 5 actor, 12 tài khoản nhân viên.
 
 ## 1. Gói cần gửi cho người kiểm thử

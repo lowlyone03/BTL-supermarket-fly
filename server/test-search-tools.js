@@ -32,6 +32,18 @@ const delay = milliseconds => new Promise(resolve => setTimeout(resolve, millise
     assert.match(cashierPages, /customerSearchVersion/);
     assert.match(cashierPages, /returnSearchVersion/);
     assert.match(cashierPages, /exchangeSearchVersion/);
+    assert.match(cashierPages, /invoiceQuery/);
+    assert.match(cashierPages, /Không tìm thấy/);
+    assert.match(cashierPages, /invoiceSearchHint/);
+
+    assert.equal(search.emptyMessage('KJvhjva842889', 'hóa đơn', 'Chưa có hóa đơn.'), 'Không tìm thấy hóa đơn khớp “KJvhjva842889”.');
+    assert.equal(search.emptyMessage('', 'hóa đơn', 'Chưa có hóa đơn.'), 'Chưa có hóa đơn.');
+    assert.equal(search.resolveDestination('HD202609070001', { role: 'cashier' }), 'cashier-invoices');
+    assert.equal(search.resolveDestination('DT0001', { role: 'cashier' }), 'cashier-returns');
+    assert.equal(search.resolveDestination('SP001', { role: 'warehouse' }), 'warehouse-inventory');
+    assert.equal(search.resolveDestination('anything', { role: 'cashier', currentTarget: 'cashier-invoices' }), 'cashier-invoices');
+    assert.equal(search.PAGE_SEARCH_IDS['cashier-invoices'], 'invoiceQuery');
+    assert.equal(search.PAGE_SEARCH_IDS['../admin/accounts.html'], 'accSearch');
 
     const accentAwareControllers = [
         'catalogController.js', 'salesController.js', 'returnsController.js', 'accountingController.js',

@@ -1,8 +1,8 @@
 const { sql, poolPromise } = require('../config/db');
 const {
     generateSchedule, generateOfficeSchedule, parseDate, dateKey, addDays,
-    CASHIER_TEAM_SIZE, OFFICE_TEAM_SIZE, OFFICE_ROLES, OFFICE_SHIFT_CODE,
-    isOfficeShift, officeDutyFor
+    scheduleHistoryFrom, CASHIER_TEAM_SIZE, OFFICE_TEAM_SIZE, OFFICE_ROLES, OFFICE_SHIFT_CODE,
+    isOfficeShift, officeDutyFor, scheduleSlotLockReason, assertScheduleLaborRules
 } = require('../services/shiftScheduler');
 const { splitDayNightMinutes } = require('../services/timeService');
 const { closeOpenAttendance } = require('../services/attendanceSync');
@@ -19,13 +19,13 @@ const localSqlDateTime = value => {
 const MAIN_SHIFT_DUTIES = new Set(['Ca chính full-time', 'Thu ngân']);
 const isMainShiftDuty = duty => MAIN_SHIFT_DUTIES.has(String(duty || '').trim());
 const isOfficeRole = chucVu => OFFICE_ROLES.includes(String(chucVu || '').trim());
-const mondayKey = value => {
-    const date = new Date(`${String(value).slice(0, 10)}T00:00:00Z`);
-    const offset = (date.getUTCDay() + 6) % 7;
-    date.setUTCDate(date.getUTCDate() - offset);
-    return date.toISOString().slice(0, 10);
+const rowDate = value => {
+    if (value instanceof Date && Number.isFinite(value.getTime())) {
+        return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+    }
+    const text = String(value || '').slice(0, 10);
+    return validDate(text) ? text : '';
 };
-
 const SHIFT_SELECT = `MaLoaiCa,TenCa,CONVERT(varchar(5),GioBatDau,108) GioBatDau,
     CONVERT(varchar(5),GioKetThuc,108) GioKetThuc,
     CONVERT(varchar(5),GioNghiBatDau,108) GioNghiBatDau,
@@ -35,7 +35,7 @@ const SHIFT_SELECT = `MaLoaiCa,TenCa,CONVERT(varchar(5),GioBatDau,108) GioBatDau
 const validatePublishRange = async (pool, from, to) => {
     const result = await pool.request().input('From', sql.Date, from).input('To', sql.Date, to).query(`
         SELECT l.MaLich,l.MaNV,nv.TenNV,l.MaLoaiCa,CONVERT(varchar(10),l.NgayLam,23) NgayLam,
-               l.NhiemVu,l.MaQuay,l.BatDauDuKien,l.KetThucDuKien,lc.SoGio,
+               l.NhiemVu,l.MaQuay,l.BatDauDuKien,l.KetThucDuKien,lc.SoGio,lc.LaCaDem,
                tk.TrangThai TrangThaiTaiKhoan
         FROM LichLamViec l JOIN LoaiCa lc ON lc.MaLoaiCa=l.MaLoaiCa
         JOIN NhanVien nv ON nv.MaNV=l.MaNV
@@ -54,26 +54,7 @@ const validatePublishRange = async (pool, from, to) => {
         if (queueKeys.has(key)) throw new Error(`Quầy ${row.MaQuay} bị xếp trùng trong cùng ca.`);
         queueKeys.add(key);
     }
-    const byEmployee = new Map();
-    for (const row of result.recordset) {
-        if (!byEmployee.has(row.MaNV)) byEmployee.set(row.MaNV, []);
-        byEmployee.get(row.MaNV).push(row);
-    }
-    for (const rows of byEmployee.values()) {
-        rows.sort((a, b) => new Date(a.BatDauDuKien) - new Date(b.BatDauDuKien));
-        const weekly = new Map();
-        for (let index = 0; index < rows.length; index += 1) {
-            const row = rows[index];
-            const week = mondayKey(row.NgayLam);
-            weekly.set(week, (weekly.get(week) || 0) + Number(row.SoGio));
-            if (weekly.get(week) > 48) throw new Error(`${row.TenNV} vượt 48 giờ trong tuần bắt đầu ${week}.`);
-            if (index > 0) {
-                const previous = rows[index - 1];
-                const rest = (new Date(row.BatDauDuKien) - new Date(previous.KetThucDuKien)) / 3600000;
-                if (rest < 12) throw new Error(`${row.TenNV} chỉ nghỉ ${Math.max(0, rest).toFixed(1)} giờ giữa hai ca.`);
-            }
-        }
-    }
+    assertScheduleLaborRules(result.recordset);
 };
 
 const getSetup = async (req, res) => {
@@ -122,7 +103,7 @@ const getSchedules = async (req, res) => {
                    CONVERT(varchar(5),lc.GioNghiBatDau,108) GioNghiBatDau,
                    CONVERT(varchar(5),lc.GioNghiKetThuc,108) GioNghiKetThuc,lc.SoGio,
                    l.NhiemVu,l.MaQuay,q.TenQuay,l.TrangThai,l.GhiChu,
-                   cc.ThoiGianVao,cc.ThoiGianRa,cc.TrangThai TrangThaiChamCong,
+                   cc.MaChamCong,cc.ThoiGianVao,cc.ThoiGianRa,cc.TrangThai TrangThaiChamCong,
                    ca.MaCa,ca.TrangThai TrangThaiCaBan
             FROM LichLamViec l
             JOIN NhanVien nv ON nv.MaNV=l.MaNV
@@ -162,20 +143,25 @@ const autoSchedule = async (req, res) => {
         const protectedRows = await request().input('From', sql.Date, from).input('To', sql.Date, to).query(`
             SELECT COUNT(*) Tong FROM LichLamViec WITH (UPDLOCK,HOLDLOCK)
             WHERE NgayLam BETWEEN @From AND @To AND TrangThai=N'Đã công bố'`);
-        if (protectedRows.recordset[0].Tong) throw new Error('Khoảng ngày đã có lịch được công bố. Hãy hủy công bố từng lịch trước khi xếp lại.');
+        if (protectedRows.recordset[0].Tong) {
+            throw new Error('Khoảng ngày đã có lịch được công bố. Hãy sửa từng ô ngoại lệ rồi công bố lại; phân ca tự động không ghi đè lịch đã công bố.');
+        }
         const employeesResult = await request().query(`SELECT nv.MaNV,nv.TenNV,nv.ChucVu FROM NhanVien nv
                 JOIN TaiKhoan tk ON tk.MaNV=nv.MaNV AND tk.TrangThai=1
                 WHERE nv.ChucVu IN (N'Thu ngân', N'Nhân viên mua hàng', N'Thủ kho', N'Kế toán')
                   AND nv.TrangThai=N'Đang làm việc' ORDER BY nv.MaNV`);
         const shiftsResult = await request().query(`SELECT ${SHIFT_SELECT} FROM LoaiCa WHERE TrangThai=1 ORDER BY ThuTu`);
-        const existingResult = await request().input('ContextFrom', sql.Date, dateKey(addDays(first, -7)))
-                .input('ContextTo', sql.Date, dateKey(addDays(last, 7))).query(`
+        const existingResult = await request()
+                .input('ContextFrom', sql.Date, scheduleHistoryFrom(first))
+                .input('ContextTo', sql.Date, dateKey(addDays(last, 7)))
+                .input('RangeFrom', sql.Date, from)
+                .input('RangeTo', sql.Date, to).query(`
                     SELECT l.MaNV,l.MaLoaiCa,CONVERT(varchar(10),l.NgayLam,23) NgayLam,lc.SoGio,
-                           CONVERT(varchar(5),lc.GioBatDau,108) GioBatDau,CONVERT(varchar(5),lc.GioKetThuc,108) GioKetThuc
+                           CONVERT(varchar(5),lc.GioBatDau,108) GioBatDau,CONVERT(varchar(5),lc.GioKetThuc,108) GioKetThuc,
+                           l.NgayCapNhat,l.BatDauDuKien
                     FROM LichLamViec l JOIN LoaiCa lc ON lc.MaLoaiCa=l.MaLoaiCa
                     WHERE l.NgayLam BETWEEN @ContextFrom AND @ContextTo
-                      AND l.TrangThai<>N'Đã hủy' AND NOT (l.NgayLam BETWEEN CONVERT(date,'${from}') AND CONVERT(date,'${to}'))`)
-        ;
+                      AND l.TrangThai<>N'Đã hủy' AND NOT (l.NgayLam BETWEEN @RangeFrom AND @RangeTo)`);
         const cashiers = employeesResult.recordset.filter(item => item.ChucVu === 'Thu ngân');
         const officeStaff = employeesResult.recordset.filter(item => isOfficeRole(item.ChucVu));
         const cashierShifts = shiftsResult.recordset.filter(item => !isOfficeShift(item));
@@ -225,12 +211,15 @@ const autoSchedule = async (req, res) => {
 };
 
 const saveSchedule = async (req, res) => {
+    const transaction = new sql.Transaction(await poolPromise);
     try {
         const MaNV = clean(req.body.MaNV, 20);
         let MaLoaiCa = clean(req.body.MaLoaiCa, 20);
         const NgayLam = clean(req.body.NgayLam, 10);
         let NhiemVu = clean(req.body.NhiemVu, 100);
         let MaQuay = clean(req.body.MaQuay, 20) || null;
+        const requestedLich = Number(req.body.MaLich);
+        const hasLich = Number.isInteger(requestedLich) && requestedLich > 0;
         if (!MaNV || !MaLoaiCa || !validDate(NgayLam)) return res.status(400).json({ message: 'Thông tin phân ca chưa đầy đủ.' });
         const pool = await poolPromise;
         const employee = await pool.request().input('MaNV', sql.VarChar, MaNV)
@@ -250,39 +239,152 @@ const saveSchedule = async (req, res) => {
             if (!NhiemVu) return res.status(400).json({ message: 'Thông tin phân ca chưa đầy đủ.' });
             if (isMainShiftDuty(NhiemVu) && !MaQuay) return res.status(400).json({ message: 'Ca chính full-time phải được chỉ định quầy.' });
         }
-        const result = await pool.request().input('MaNV', sql.VarChar, MaNV).input('MaLoaiCa', sql.VarChar, MaLoaiCa)
-            .input('NgayLam', sql.Date, NgayLam).input('NhiemVu', sql.NVarChar, NhiemVu).input('MaQuay', sql.VarChar, MaQuay)
-            .input('NguoiPhanCong', sql.VarChar, req.user.MaNV).query(`
-                MERGE LichLamViec AS target
-                USING (SELECT @MaNV MaNV,@NgayLam NgayLam,@MaLoaiCa MaLoaiCa,
-                              DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS TIME),GioBatDau),CAST(@NgayLam AS DATETIME)) BatDau,
-                              DATEADD(DAY,CASE WHEN GioKetThuc<=GioBatDau THEN 1 ELSE 0 END,
-                                  DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS TIME),GioKetThuc),CAST(@NgayLam AS DATETIME))) KetThuc
-                       FROM LoaiCa WHERE MaLoaiCa=@MaLoaiCa) source
-                ON target.MaNV=source.MaNV AND target.NgayLam=source.NgayLam
-                WHEN MATCHED AND target.TrangThai=N'Bản nháp' THEN UPDATE SET MaLoaiCa=@MaLoaiCa,NhiemVu=@NhiemVu,
-                    MaQuay=@MaQuay,NguoiPhanCong=@NguoiPhanCong,NguonPhanCong='Manual',
-                    BatDauDuKien=source.BatDau,KetThucDuKien=source.KetThuc,NgayCapNhat=GETDATE()
-                WHEN NOT MATCHED THEN INSERT
-                    (MaNV,MaLoaiCa,NgayLam,NhiemVu,MaQuay,TrangThai,NguoiPhanCong,NguonPhanCong,BatDauDuKien,KetThucDuKien)
-                    VALUES (@MaNV,@MaLoaiCa,@NgayLam,@NhiemVu,@MaQuay,N'Bản nháp',@NguoiPhanCong,'Manual',source.BatDau,source.KetThuc)
-                OUTPUT inserted.MaLich,inserted.TrangThai;`);
-        if (!result.recordset.length) return res.status(400).json({ message: 'Lịch đã công bố nên không thể sửa trực tiếp.' });
-        res.json({ message: 'Đã lưu lịch phân công.', item: result.recordset[0] });
+        await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        const request = () => new sql.Request(transaction);
+        const shift = await request().input('MaLoaiCa', sql.VarChar, MaLoaiCa)
+            .query(`SELECT MaLoaiCa FROM LoaiCa WHERE MaLoaiCa=@MaLoaiCa AND TrangThai=1`);
+        if (!shift.recordset.length) throw new Error('Loại ca không hợp lệ.');
+        const existingQuery = hasLich
+            ? await request().input('MaLich', sql.BigInt, requestedLich).query(`
+                SELECT l.MaLich,l.MaNV,CONVERT(varchar(10),l.NgayLam,23) NgayLam,l.TrangThai,l.GhiChu,
+                       cc.MaChamCong,cc.ThoiGianVao,cc.ThoiGianRa,cc.TrangThai TrangThaiChamCong,
+                       ca.MaCa,ca.TrangThai TrangThaiCaBan
+                FROM LichLamViec l WITH (UPDLOCK, HOLDLOCK)
+                LEFT JOIN ChamCong cc ON cc.MaLich=l.MaLich
+                OUTER APPLY (
+                    SELECT TOP 1 x.MaCa,x.TrangThai
+                    FROM CaLamViec x WHERE x.MaLich=l.MaLich OR (x.MaNV=l.MaNV AND CONVERT(date,x.ThoiGianBatDau)=l.NgayLam)
+                    ORDER BY x.ThoiGianBatDau DESC
+                ) ca
+                WHERE l.MaLich=@MaLich AND l.TrangThai<>N'Đã hủy'`)
+            : await request().input('MaNV', sql.VarChar, MaNV).input('NgayLam', sql.Date, NgayLam).query(`
+                SELECT l.MaLich,l.MaNV,CONVERT(varchar(10),l.NgayLam,23) NgayLam,l.TrangThai,l.GhiChu,
+                       cc.MaChamCong,cc.ThoiGianVao,cc.ThoiGianRa,cc.TrangThai TrangThaiChamCong,
+                       ca.MaCa,ca.TrangThai TrangThaiCaBan
+                FROM LichLamViec l WITH (UPDLOCK, HOLDLOCK)
+                LEFT JOIN ChamCong cc ON cc.MaLich=l.MaLich
+                OUTER APPLY (
+                    SELECT TOP 1 x.MaCa,x.TrangThai
+                    FROM CaLamViec x WHERE x.MaLich=l.MaLich OR (x.MaNV=l.MaNV AND CONVERT(date,x.ThoiGianBatDau)=l.NgayLam)
+                    ORDER BY x.ThoiGianBatDau DESC
+                ) ca
+                WHERE l.MaNV=@MaNV AND l.NgayLam=@NgayLam AND l.TrangThai<>N'Đã hủy'`);
+        const existing = existingQuery.recordset[0] || null;
+        if (hasLich && !existing) throw new Error('Không tìm thấy lượt phân công.');
+        if (existing && rowDate(existing.NgayLam) !== NgayLam) {
+            throw new Error('Không đổi ngày làm khi sửa lượt đã có.');
+        }
+        if (existing) {
+            const lock = scheduleSlotLockReason(existing);
+            if (lock) throw new Error(lock);
+            if (existing.MaNV !== MaNV) {
+                const clash = await request().input('OtherNV', sql.VarChar, MaNV)
+                    .input('NgayLam', sql.Date, NgayLam).input('MaLich', sql.BigInt, existing.MaLich).query(`
+                        SELECT MaLich FROM LichLamViec WITH (UPDLOCK, HOLDLOCK)
+                        WHERE MaNV=@OtherNV AND NgayLam=@NgayLam AND TrangThai<>N'Đã hủy' AND MaLich<>@MaLich`);
+                if (clash.recordset.length) {
+                    throw new Error('Nhân viên được chọn đã có lịch trong ngày này. Hãy xóa hoặc hoán đổi từng ô.');
+                }
+            }
+        }
+        const publishedEdit = existing?.TrangThai === 'Đã công bố';
+        const saved = existing
+            ? await request().input('MaLich', sql.BigInt, existing.MaLich).input('MaNV', sql.VarChar, MaNV)
+                .input('MaLoaiCa', sql.VarChar, MaLoaiCa).input('NgayLam', sql.Date, NgayLam)
+                .input('NhiemVu', sql.NVarChar, NhiemVu).input('MaQuay', sql.VarChar, MaQuay)
+                .input('NguoiPhanCong', sql.VarChar, req.user.MaNV)
+                .input('PublishedNote', sql.NVarChar, publishedEdit ? 'Sửa lịch đã công bố' : null).query(`
+                    UPDATE l SET l.MaNV=@MaNV,l.MaLoaiCa=@MaLoaiCa,l.NhiemVu=@NhiemVu,l.MaQuay=@MaQuay,
+                        l.NguoiPhanCong=@NguoiPhanCong,l.NguonPhanCong='Manual',
+                        l.TrangThai=N'Bản nháp',l.NgayCapNhat=GETDATE(),
+                        l.GhiChu=CASE WHEN @PublishedNote IS NULL THEN l.GhiChu ELSE @PublishedNote END,
+                        l.BatDauDuKien=DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS TIME),lc.GioBatDau),CAST(@NgayLam AS DATETIME)),
+                        l.KetThucDuKien=DATEADD(DAY,CASE WHEN lc.GioKetThuc<=lc.GioBatDau THEN 1 ELSE 0 END,
+                            DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS TIME),lc.GioKetThuc),CAST(@NgayLam AS DATETIME)))
+                    FROM LichLamViec l JOIN LoaiCa lc ON lc.MaLoaiCa=@MaLoaiCa
+                    WHERE l.MaLich=@MaLich
+                    OUTPUT inserted.MaLich,inserted.TrangThai;`)
+            : await request().input('MaNV', sql.VarChar, MaNV).input('MaLoaiCa', sql.VarChar, MaLoaiCa)
+                .input('NgayLam', sql.Date, NgayLam).input('NhiemVu', sql.NVarChar, NhiemVu)
+                .input('MaQuay', sql.VarChar, MaQuay).input('NguoiPhanCong', sql.VarChar, req.user.MaNV).query(`
+                    INSERT LichLamViec
+                        (MaNV,MaLoaiCa,NgayLam,NhiemVu,MaQuay,TrangThai,NguoiPhanCong,NguonPhanCong,BatDauDuKien,KetThucDuKien)
+                    SELECT @MaNV,@MaLoaiCa,@NgayLam,@NhiemVu,@MaQuay,N'Bản nháp',@NguoiPhanCong,'Manual',
+                           DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS TIME),GioBatDau),CAST(@NgayLam AS DATETIME)),
+                           DATEADD(DAY,CASE WHEN GioKetThuc<=GioBatDau THEN 1 ELSE 0 END,
+                               DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS TIME),GioKetThuc),CAST(@NgayLam AS DATETIME)))
+                    FROM LoaiCa WHERE MaLoaiCa=@MaLoaiCa
+                    OUTPUT inserted.MaLich,inserted.TrangThai;`);
+        if (!saved.recordset.length) throw new Error('Không thể lưu lịch phân công.');
+        await logAudit(transaction, {
+            user: req.user, req,
+            action: publishedEdit ? 'Sửa lịch đã công bố' : 'Phân ca thủ công',
+            table: 'LichLamViec', recordId: String(saved.recordset[0].MaLich), uc: 'UC30',
+            severity: publishedEdit ? 'Cảnh báo' : 'Thông tin',
+            content: publishedEdit
+                ? `Sửa lịch đã công bố ${MaNV} ngày ${NgayLam} (${MaLoaiCa}${MaQuay ? ` · ${MaQuay}` : ''}); chờ công bố lại`
+                : `Phân ca thủ công ${MaNV} ngày ${NgayLam} (${MaLoaiCa}${MaQuay ? ` · ${MaQuay}` : ''})`
+        });
+        await transaction.commit();
+        res.json({
+            message: publishedEdit
+                ? 'Đã lưu điều chỉnh ngoại lệ. Hãy bấm Công bố lịch để xác nhận lại tuần.'
+                : 'Đã lưu lịch phân công.',
+            item: saved.recordset[0],
+            needsRepublish: publishedEdit
+        });
     } catch (error) {
+        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);
         res.status(400).json({ message: error.message.includes('UQ_LichLamViec') ? 'Nhân viên đã có lịch trong ngày này.' : error.message });
     }
 };
 
 const deleteSchedule = async (req, res) => {
+    const transaction = new sql.Transaction(await poolPromise);
     try {
-        const pool = await poolPromise;
-        const result = await pool.request().input('MaLich', sql.BigInt, Number(req.params.id))
-            .query(`DELETE FROM LichLamViec WHERE MaLich=@MaLich AND TrangThai=N'Bản nháp'`);
-        if (!result.rowsAffected[0]) return res.status(400).json({ message: 'Chỉ có thể xóa lịch đang ở bản nháp.' });
-        res.json({ message: 'Đã xóa lượt phân công.' });
-    } catch (error) { res.status(400).json({ message: error.message }); }
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id) || id <= 0) throw new Error('Mã lịch không hợp lệ.');
+        await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        const found = await new sql.Request(transaction).input('MaLich', sql.BigInt, id).query(`
+            SELECT l.MaLich,l.MaNV,CONVERT(varchar(10),l.NgayLam,23) NgayLam,l.TrangThai,l.MaLoaiCa,
+                   cc.MaChamCong,cc.ThoiGianVao,cc.ThoiGianRa,cc.TrangThai TrangThaiChamCong,
+                   ca.MaCa,ca.TrangThai TrangThaiCaBan
+            FROM LichLamViec l WITH (UPDLOCK, HOLDLOCK)
+            LEFT JOIN ChamCong cc ON cc.MaLich=l.MaLich
+            OUTER APPLY (
+                SELECT TOP 1 x.MaCa,x.TrangThai
+                FROM CaLamViec x WHERE x.MaLich=l.MaLich OR (x.MaNV=l.MaNV AND CONVERT(date,x.ThoiGianBatDau)=l.NgayLam)
+                ORDER BY x.ThoiGianBatDau DESC
+            ) ca
+            WHERE l.MaLich=@MaLich AND l.TrangThai<>N'Đã hủy'`);
+        if (!found.recordset.length) throw new Error('Không tìm thấy lượt phân công.');
+        const row = found.recordset[0];
+        const lock = scheduleSlotLockReason(row);
+        if (lock) throw new Error(lock);
+        const published = row.TrangThai === 'Đã công bố';
+        await new sql.Request(transaction).input('MaLich', sql.BigInt, id)
+            .query(`DELETE FROM LichLamViec WHERE MaLich=@MaLich`);
+        await logAudit(transaction, {
+            user: req.user, req,
+            action: published ? 'Sửa lịch đã công bố' : 'Xóa lượt phân công',
+            table: 'LichLamViec', recordId: String(id), uc: 'UC30',
+            severity: published ? 'Cảnh báo' : 'Thông tin',
+            content: published
+                ? `Xóa lượt đã công bố ${row.MaNV} ngày ${row.NgayLam}; chờ công bố lại`
+                : `Xóa bản nháp ${row.MaNV} ngày ${row.NgayLam}`
+        });
+        await transaction.commit();
+        res.json({
+            message: published
+                ? 'Đã xóa lượt đã công bố. Hãy xếp người thay và Công bố lịch lại.'
+                : 'Đã xóa lượt phân công.',
+            needsRepublish: published
+        });
+    } catch (error) {
+        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        res.status(400).json({ message: error.message });
+    }
 };
 
 const publishSchedules = async (req, res) => {
@@ -305,12 +407,31 @@ const publishSchedules = async (req, res) => {
             return res.status(400).json({ message: `${item.TenCa} ngày ${new Date(item.NgayLam).toLocaleDateString('vi-VN')} chưa đủ ${item.SoNguoiCan} người.` });
         }
         await validatePublishRange(pool, from, to);
+        const counts = await pool.request().input('From', sql.Date, from).input('To', sql.Date, to).query(`
+            SELECT SUM(CASE WHEN TrangThai=N'Bản nháp' THEN 1 ELSE 0 END) Drafts,
+                   SUM(CASE WHEN TrangThai=N'Đã công bố' THEN 1 ELSE 0 END) Published
+            FROM LichLamViec WHERE NgayLam BETWEEN @From AND @To AND TrangThai IN (N'Bản nháp',N'Đã công bố')`);
+        const draftCount = Number(counts.recordset[0]?.Drafts || 0);
+        const publishedCount = Number(counts.recordset[0]?.Published || 0);
         const result = await pool.request().input('From', sql.Date, from).input('To', sql.Date, to)
             .input('NguoiCongBo', sql.VarChar, req.user.MaNV)
             .query(`UPDATE LichLamViec SET TrangThai=N'Đã công bố',NgayCapNhat=GETDATE(),
                         NgayCongBo=GETDATE(),NguoiCongBo=@NguoiCongBo
                     WHERE NgayLam BETWEEN @From AND @To AND TrangThai=N'Bản nháp'`);
-        res.json({ message: `Đã công bố ${result.rowsAffected[0]} lượt làm việc cho nhân viên.` });
+        const stamped = result.rowsAffected[0];
+        const message = stamped && publishedCount
+            ? `Đã công bố lại ${stamped} lượt điều chỉnh. ${publishedCount} lượt giữ nguyên.`
+            : stamped
+                ? `Đã công bố ${stamped} lượt làm việc cho nhân viên.`
+                : `Lịch tuần đã được xác nhận lại (${publishedCount} lượt đang công bố).`;
+        await logAudit(pool, {
+            user: req.user, req, action: 'Công bố lịch', table: 'LichLamViec', recordId: `${from}_${to}`,
+            uc: 'UC30', severity: 'Quan trọng',
+            content: publishedCount && stamped
+                ? `Công bố lại ${stamped} lượt điều chỉnh ngoại lệ (${from}–${to})`
+                : `Công bố ${stamped} lượt làm việc (${from}–${to})`
+        });
+        res.json({ message, stamped, publishedCount, draftCount });
     } catch (error) { console.error(error); res.status(400).json({ message: error.message }); }
 };
 

@@ -75,7 +75,9 @@
         <td><span class="${statusBadgeClass(status)}">${statusLabel(status)}</span></td>
         <td class="align-right"><div class="action-group"><button class="btn-outline" data-edit-promo="${esc(item.MaKM)}">Cập nhật</button><button class="btn-outline ${item.TrangThai === 'Hiệu lực' ? 'danger-text' : ''}" data-toggle-promo="${esc(item.MaKM)}">${item.TrangThai === 'Hiệu lực' ? 'Ngừng' : 'Kích hoạt'}</button></div></td>
       </tr>`;
-      }).join('') : `<tr><td colspan="5" class="empty-state"><div class="promo-empty-state"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="22" stroke="#d3e1d8" stroke-width="2"/><path d="M16 24l6 6 10-12" stroke="#40916c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><strong>Chưa có chương trình khuyến mãi</strong><span>Tạo chương trình mới để thu ngân có thể chọn trên POS.</span></div></td></tr>`;
+      }).join('') : `<tr><td colspan="5" class="empty-state">${search
+        ? esc(window.FLY_SEARCH?.emptyMessage?.(search, 'chương trình khuyến mãi', 'Không tìm thấy chương trình khuyến mãi.') || 'Không tìm thấy chương trình khuyến mãi.')
+        : `<div class="promo-empty-state"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="22" stroke="#d3e1d8" stroke-width="2"/><path d="M16 24l6 6 10-12" stroke="#40916c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><strong>Chưa có chương trình khuyến mãi</strong><span>Tạo chương trình mới để thu ngân có thể chọn trên POS.</span></div>`}</td></tr>`;
     } catch (error) { window.showToast(error.message, 'error'); }
   };
 

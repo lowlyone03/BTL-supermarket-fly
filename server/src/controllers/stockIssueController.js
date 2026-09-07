@@ -2,6 +2,7 @@ const { sql, poolPromise } = require('../config/db');
 const { isRestockAccepted } = require('../services/financialRules');
 const { logAudit } = require('../services/auditLog');
 const { scrapLinesFromRows, countScrapNote } = require('../services/countScrap');
+const { ensureCountScrapSchema } = require('../services/countScrapSchema');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 const issueTypes = new Set(['Trả NCC', 'Hủy hàng', 'Sử dụng nội bộ']);
@@ -118,6 +119,7 @@ const listIssues = async (req, res) => {
         const keyword = clean(req.query.search, 100);
         const status = clean(req.query.status, 30);
         const pool = await poolPromise;
+        await ensureCountScrapSchema(pool);
         const bind = () => pool.request()
             .input('MaNV', sql.VarChar, req.user.MaNV)
             .input('TuKhoa', sql.NVarChar, keyword)
@@ -430,9 +432,11 @@ const findActiveCountScrap = async (transaction, maKK) => {
 const createIssueFromCount = async (req, res) => {
     const maKK = clean(req.params.id, 20);
     const submitNow = Boolean(req.body?.submit);
-    const transaction = new sql.Transaction(await poolPromise);
+    const pool = await poolPromise;
+    const transaction = new sql.Transaction(pool);
     try {
         if (!maKK) throw new Error('Thiếu mã đợt kiểm kê.');
+        await ensureCountScrapSchema(pool);
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         const countResult = await new sql.Request(transaction)
             .input('MaKK', sql.VarChar, maKK)

@@ -565,7 +565,12 @@ const getHistory = async (req, res) => {
             }))
         ].sort((left, right) => new Date(right.at) - new Date(left.at));
 
-        const match = value => !search || String(value || '').toLocaleLowerCase('vi-VN').includes(search.toLocaleLowerCase('vi-VN'));
+        const unaccent = value => String(value ?? '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[đĐ]/g, 'd')
+            .toLocaleLowerCase('vi-VN');
+        const match = value => !search || unaccent(value).includes(unaccent(search));
         const filtered = timeline.filter(item => {
             if (kind !== 'all' && item.kind !== kind) return false;
             if (!search) return true;

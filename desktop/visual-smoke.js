@@ -84,7 +84,7 @@ const inspectRolePage = async (username, target) => {
     const opened = await window.webContents.executeJavaScript(`(() => { const button=document.querySelector('#newInvoice'); if(!button) return false; button.click(); return true; })()`);
     if (opened) {
       await new Promise(resolve => setTimeout(resolve, 700));
-      metrics.invoiceModal = await window.webContents.executeJavaScript(`(() => { const modal=document.querySelector('.receipt-modal'); return { visible:!!modal, width:modal ? Math.round(modal.getBoundingClientRect().width) : 0, height:modal ? Math.round(modal.getBoundingClientRect().height) : 0, choices:document.querySelectorAll('.accounting-intake-choice label').length, text:(modal?.innerText||'').slice(0,180) }; })()`);
+      metrics.invoiceModal = await window.webContents.executeJavaScript(`(() => { const modal=document.querySelector('.invoice-intake-modal, .receipt-modal'); return { visible:!!modal, width:modal ? Math.round(modal.getBoundingClientRect().width) : 0, height:modal ? Math.round(modal.getBoundingClientRect().height) : 0, choices:document.querySelectorAll('.invoice-intake-tabs label, .accounting-intake-choice label').length, rows:document.querySelectorAll('.invoice-intake-list tbody tr').length, text:(modal?.innerText||'').slice(0,180) }; })()`);
       const modalImage = await window.webContents.capturePage();
       fs.writeFileSync(path.join(outputDir, `${username}-${target}-invoice-modal.png`), modalImage.toPNG());
       await window.webContents.executeJavaScript(`document.querySelector('.receipt-modal .close')?.click()`);

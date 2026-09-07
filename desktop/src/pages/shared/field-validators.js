@@ -7,8 +7,44 @@
   const EMPLOYEE_CODE_RE = /^[A-Z0-9_-]{2,20}$/;
   const ENTITY_CODE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{1,19}$/;
   const VN_TAX_RE = /^\d{10}(\d{3})?$/;
+  const VN_CCCD_RE = /^\d{9}(\d{3})?$/;
+  const VN_BHXH_RE = /^\d{10}$/;
+  const VN_BANK_ACC_RE = /^\d{6,20}$/;
   const BARCODE_RE = /^[A-Za-z0-9]{1,30}$/;
   const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const EMPLOYEE_GENDERS = ['Nam', 'Nữ'];
+  const EMPLOYEE_ETHNICITIES = ['Kinh', 'Tày', 'Thái', 'Mường', 'Khmer', 'Hoa', 'Nùng', 'HMông', 'Dao', 'Gia Rai', 'Ê Đê', 'Ba Na', 'Khác'];
+  const EMPLOYEE_RELIGIONS = ['Không', 'Phật giáo', 'Công giáo', 'Cao Đài', 'Hòa Hảo', 'Khác'];
+  const EMPLOYEE_NATIONALITIES = ['Việt Nam', 'Khác'];
+  const EMPLOYEE_MARITAL = ['Độc thân', 'Đã kết hôn', 'Ly hôn', 'Góa', 'Khác'];
+  const EMPLOYEE_EDUCATION = ['THPT', 'Trung học phổ thông', 'Trung học cơ sở', 'Trung cấp', 'Cao đẳng', 'Đại học', 'Sau đại học', 'Thạc sĩ', 'Tiến sĩ', 'Khác'];
+  const EMPLOYEE_RELATIONS = ['Bố', 'Mẹ', 'Vợ', 'Chồng', 'Con', 'Anh/Chị', 'Em', 'Người thân'];
+  const EMPLOYEE_PROFILE_DEFAULTS = { DanToc: 'Kinh', TonGiao: 'Không', QuocTich: 'Việt Nam' };
+  const EMPLOYEE_PROFILE_FIELD_IDS = {
+    TenNV: 'tenNV',
+    CCCD: 'cccd',
+    NgayCapCCCD: 'ngayCapCCCD',
+    NoiCapCCCD: 'noiCapCCCD',
+    NgaySinh: 'ngaySinh',
+    GioiTinh: 'gioiTinh',
+    NoiSinh: 'noiSinh',
+    NguyenQuan: 'nguyenQuan',
+    DanToc: 'danToc',
+    TonGiao: 'tonGiao',
+    QuocTich: 'quocTich',
+    TinhTrangHonNhan: 'tinhTrangHonNhan',
+    DiaChiThuongTru: 'hoKhauThuongTru',
+    HoKhauThuongTru: 'hoKhauThuongTru',
+    DiaChi: 'diaChi',
+    SDT: 'sdt',
+    Email: 'email',
+    NguoiLienHe: 'nguoiLienHe',
+    SDTLienHe: 'sdtLienHe',
+    TrinhDoHocVan: 'trinhDoHocVan',
+    ChuyenMon: 'chuyenMon',
+    NgayVaoLam: 'ngayVaoLam'
+  };
+  const MARITAL_STATUSES = EMPLOYEE_MARITAL;
 
   const trim = (value, max) => {
     const text = String(value ?? '').trim();
@@ -112,6 +148,56 @@
     return { ok: true, value: tax };
   };
 
+  const validateOptionalVnTaxId = (value) => {
+    const tax = trim(value, 20).replace(/[\s.-]/g, '');
+    if (!tax) return { ok: true, value: '' };
+    if (!VN_TAX_RE.test(tax)) return { ok: false, message: 'Mã số thuế cá nhân phải gồm 10 hoặc 13 chữ số.' };
+    return { ok: true, value: tax };
+  };
+
+  const validateOptionalBhxh = (value) => {
+    const id = trim(value, 20).replace(/[\s.-]/g, '');
+    if (!id) return { ok: true, value: '' };
+    if (!VN_BHXH_RE.test(id)) return { ok: false, message: 'Số BHXH phải gồm 10 chữ số.' };
+    return { ok: true, value: id };
+  };
+
+  const validateOptionalBankAccount = (value) => {
+    const acc = trim(value, 30).replace(/[\s.-]/g, '');
+    if (!acc) return { ok: true, value: '' };
+    if (!VN_BANK_ACC_RE.test(acc)) {
+      return { ok: false, message: 'Số tài khoản ngân hàng phải gồm 6–20 chữ số.' };
+    }
+    return { ok: true, value: acc };
+  };
+
+  const validateOptionalMaritalStatus = (value) => {
+    const status = trim(value, 30);
+    if (!status) return { ok: true, value: '' };
+    if (!MARITAL_STATUSES.includes(status)) {
+      return { ok: false, message: 'Tình trạng hôn nhân không hợp lệ.' };
+    }
+    return { ok: true, value: status };
+  };
+
+  const validateOptionalCccd = (value) => {
+    const id = trim(value, 20).replace(/[\s.-]/g, '');
+    if (!id) return { ok: true, value: '' };
+    if (!VN_CCCD_RE.test(id)) {
+      return { ok: false, message: 'CCCD phải gồm 12 chữ số (hoặc CMND 9 chữ số).' };
+    }
+    return { ok: true, value: id };
+  };
+
+  const validateOptionalGender = (value) => {
+    const gender = trim(value, 10);
+    if (!gender) return { ok: true, value: '' };
+    if (!EMPLOYEE_GENDERS.includes(gender)) {
+      return { ok: false, message: 'Giới tính phải là Nam hoặc Nữ.' };
+    }
+    return { ok: true, value: gender };
+  };
+
   const validateOptionalBarcode = (value) => {
     const code = trim(value, 30);
     if (!code) return { ok: true, value: '' };
@@ -121,6 +207,8 @@
     return { ok: true, value: code };
   };
 
+  const CASH_AMOUNT_LIMIT = 1000000000;
+
   const validateRequiredNonNegativeNumber = (value, label) => {
     if (value === '' || value === null || value === undefined) {
       return { ok: false, message: `${label} là bắt buộc.` };
@@ -128,6 +216,15 @@
     const num = Number(value);
     if (!Number.isFinite(num) || num < 0) return { ok: false, message: `${label} phải là số không âm.` };
     return { ok: true, value: num };
+  };
+
+  const validateClosingCash = (value) => {
+    const base = validateRequiredNonNegativeNumber(value, 'Tiền cuối ca');
+    if (!base.ok) return base;
+    if (base.value > CASH_AMOUNT_LIMIT) {
+      return { ok: false, message: 'Tiền cuối ca vượt quá giới hạn cho phép.' };
+    }
+    return base;
   };
 
   const validateRequiredNonNegativeInteger = (value, label) => {
@@ -153,6 +250,17 @@
     const parsed = new Date(`${text}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) return { ok: false, message: `${label} không hợp lệ.` };
     return { ok: true, value: text };
+  };
+
+  const validateOptionalPastDate = (value, label = 'Ngày') => {
+    const base = validateOptionalDate(value, label);
+    if (!base.ok || !base.value) return base;
+    const parsed = new Date(`${base.value}T00:00:00`);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (parsed > today) return { ok: false, message: `${label} không được ở tương lai.` };
+    if (parsed.getFullYear() < 1950) return { ok: false, message: `${label} không hợp lệ.` };
+    return base;
   };
 
   const validateShipmentDocument = (value) => {
@@ -203,6 +311,197 @@
     return { ok: true, departure: start, arrival: end };
   };
 
+  const toIsoDate = (value) => {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      const year = value.getFullYear();
+      const month = String(value.getMonth() + 1).padStart(2, '0');
+      const day = String(value.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    const match = String(value ?? '').match(/^(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : '';
+  };
+
+  const ageOnDate = (birthIso, onIso) => {
+    const birth = new Date(`${birthIso}T00:00:00`);
+    const on = new Date(`${onIso}T00:00:00`);
+    let age = on.getFullYear() - birth.getFullYear();
+    const monthDiff = on.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && on.getDate() < birth.getDate())) age -= 1;
+    return age;
+  };
+
+  const validateOptionalText = (value, label, { min = 0, max = 150 } = {}) => {
+    const original = String(value ?? '').trim();
+    if (!original) return { ok: true, value: '' };
+    if (original.length > max) return { ok: false, message: `${label} không quá ${max} ký tự.` };
+    const text = trim(value, max);
+    if (min > 0 && text.length < min) {
+      return { ok: false, message: `${label} phải có ít nhất ${min} ký tự.` };
+    }
+    return { ok: true, value: text };
+  };
+
+  const validateRequiredVnPhone = (value, label = 'Số điện thoại') => {
+    const raw = trim(value, 20);
+    if (!raw) return { ok: false, message: `${label} là bắt buộc.` };
+    const result = validateOptionalVnPhone(value);
+    if (!result.ok) {
+      return { ok: false, message: result.message.replace('Số điện thoại', label) };
+    }
+    return result;
+  };
+
+  const validateRequiredCccd = (value) => {
+    const base = validateOptionalCccd(value);
+    if (!base.ok) return base;
+    if (!base.value) return { ok: false, message: 'Số CCCD / CMND là bắt buộc.' };
+    return base;
+  };
+
+  const validateRequiredGender = (value) => {
+    const base = validateOptionalGender(value);
+    if (!base.ok) return base;
+    if (!base.value) return { ok: false, message: 'Giới tính là bắt buộc.' };
+    return base;
+  };
+
+  const validateRequiredPastDate = (value, label) => {
+    const base = validateOptionalPastDate(value, label);
+    if (!base.ok) return base;
+    if (!base.value) return { ok: false, message: `${label} là bắt buộc.` };
+    return base;
+  };
+
+  const validateAllowedOption = (value, list, label, { required = false, max = 50 } = {}) => {
+    const text = trim(value, max);
+    if (!text) {
+      return required ? { ok: false, message: `${label} là bắt buộc.` } : { ok: true, value: '' };
+    }
+    if (!list.includes(text)) return { ok: false, message: `${label} không hợp lệ.` };
+    return { ok: true, value: text };
+  };
+
+  const validateEmployeeProfileFields = (input = {}, { strictCreate = false } = {}) => {
+    const errors = {};
+    const fail = (field, result) => {
+      if (result && result.ok === false && !errors[field]) errors[field] = result.message;
+      return result;
+    };
+
+    const tenNV = fail('TenNV', validateRequiredName(input.TenNV, 'Họ tên nhân viên'));
+    const cccd = fail('CCCD', strictCreate ? validateRequiredCccd(input.CCCD) : validateOptionalCccd(input.CCCD));
+    const ngaySinh = fail(
+      'NgaySinh',
+      strictCreate ? validateRequiredPastDate(toIsoDate(input.NgaySinh) || input.NgaySinh, 'Ngày sinh')
+        : validateOptionalPastDate(toIsoDate(input.NgaySinh) || input.NgaySinh, 'Ngày sinh')
+    );
+    const gioiTinh = fail('GioiTinh', strictCreate ? validateRequiredGender(input.GioiTinh) : validateOptionalGender(input.GioiTinh));
+    const ngayVaoLam = fail(
+      'NgayVaoLam',
+      strictCreate ? validateRequiredPastDate(toIsoDate(input.NgayVaoLam) || input.NgayVaoLam, 'Ngày vào làm')
+        : validateOptionalPastDate(toIsoDate(input.NgayVaoLam) || input.NgayVaoLam, 'Ngày vào làm')
+    );
+    const sdt = fail('SDT', strictCreate ? validateRequiredVnPhone(input.SDT, 'Số điện thoại') : validateOptionalVnPhone(input.SDT));
+    const email = fail('Email', validateOptionalEmail(input.Email));
+    const diaChi = fail('DiaChi', validateOptionalText(input.DiaChi, 'Địa chỉ liên hệ', { max: 300 }));
+    const noiSinh = fail('NoiSinh', validateOptionalText(input.NoiSinh, 'Nơi sinh', { min: 2, max: 200 }));
+    const nguyenQuan = fail('NguyenQuan', validateOptionalText(input.NguyenQuan, 'Nguyên quán', { min: 2, max: 200 }));
+    const chuyenMon = fail('ChuyenMon', validateOptionalText(input.ChuyenMon, 'Chuyên môn', { min: 2, max: 200 }));
+    const nguoiLienHe = fail('NguoiLienHe', validateOptionalName(input.NguoiLienHe, 'Người liên hệ'));
+
+    const danTocValue = trim(input.DanToc, 50) || (strictCreate ? EMPLOYEE_PROFILE_DEFAULTS.DanToc : '');
+    const tonGiaoValue = trim(input.TonGiao, 50) || (strictCreate ? EMPLOYEE_PROFILE_DEFAULTS.TonGiao : '');
+    const quocTichValue = trim(input.QuocTich, 50) || (strictCreate ? EMPLOYEE_PROFILE_DEFAULTS.QuocTich : '');
+    const danToc = fail('DanToc', validateAllowedOption(danTocValue, EMPLOYEE_ETHNICITIES, 'Dân tộc', { required: strictCreate }));
+    const tonGiao = fail('TonGiao', validateAllowedOption(tonGiaoValue, EMPLOYEE_RELIGIONS, 'Tôn giáo', { required: strictCreate }));
+    const quocTich = fail('QuocTich', validateAllowedOption(quocTichValue, EMPLOYEE_NATIONALITIES, 'Quốc tịch', { required: strictCreate }));
+    const honNhan = fail('TinhTrangHonNhan', validateAllowedOption(input.TinhTrangHonNhan, MARITAL_STATUSES, 'Tình trạng hôn nhân'));
+    const hocVan = fail('TrinhDoHocVan', validateAllowedOption(input.TrinhDoHocVan, EMPLOYEE_EDUCATION, 'Trình độ học vấn'));
+    const diaChiThuongTru = fail(
+      'HoKhauThuongTru',
+      validateOptionalText(input.HoKhauThuongTru || input.DiaChiThuongTru, 'Hộ khẩu thường trú', { max: 300 })
+    );
+    const choOHienNay = fail('ChoOHienNay', validateOptionalText(input.ChoOHienNay, 'Chỗ ở hiện nay', { max: 300 }));
+    const mst = fail('MSTCaNhan', validateOptionalVnTaxId(input.MSTCaNhan));
+    const bhxh = fail('SoBHXH', validateOptionalBhxh(input.SoBHXH));
+    const stk = fail('SoTaiKhoanNH', validateOptionalBankAccount(input.SoTaiKhoanNH));
+    const tenNH = fail('TenNganHang', validateOptionalText(input.TenNganHang, 'Tên ngân hàng', { min: 2, max: 100 }));
+    const chiNhanh = fail('ChiNhanhNH', validateOptionalText(input.ChiNhanhNH, 'Chi nhánh ngân hàng', { min: 2, max: 150 }));
+    const quanHe = fail('QuanHeLienHe', validateAllowedOption(input.QuanHeLienHe, EMPLOYEE_RELATIONS, 'Quan hệ người liên hệ'));
+    const ghiChu = fail('GhiChuHoSo', validateOptionalText(input.GhiChuHoSo, 'Ghi chú hồ sơ', { max: 500 }));
+
+    const ngayCap = fail(
+      'NgayCapCCCD',
+      validateOptionalPastDate(toIsoDate(input.NgayCapCCCD) || input.NgayCapCCCD, 'Ngày cấp CCCD')
+    );
+    const hasCccd = Boolean(cccd.ok && cccd.value);
+    const noiCap = fail(
+      'NoiCapCCCD',
+      hasCccd
+        ? validateRequiredText(input.NoiCapCCCD, 'Nơi cấp CCCD', { min: 2, max: 200 })
+        : validateOptionalText(input.NoiCapCCCD, 'Nơi cấp CCCD', { min: 2, max: 200 })
+    );
+    const sdtLienHe = fail(
+      'SDTLienHe',
+      nguoiLienHe.ok && nguoiLienHe.value
+        ? validateRequiredVnPhone(input.SDTLienHe, 'SĐT người liên hệ')
+        : validateOptionalVnPhone(input.SDTLienHe)
+    );
+
+    if (ngaySinh.ok && ngaySinh.value && ngayVaoLam.ok && ngayVaoLam.value && ngayVaoLam.value < ngaySinh.value) {
+      fail('NgayVaoLam', { ok: false, message: 'Ngày vào làm không được trước ngày sinh.' });
+    }
+    if (ngaySinh.ok && ngaySinh.value && ngayVaoLam.ok && ngayVaoLam.value && !errors.NgayVaoLam) {
+      if (ageOnDate(ngaySinh.value, ngayVaoLam.value) < 16) {
+        fail('NgayVaoLam', { ok: false, message: 'Nhân viên phải đủ 16 tuổi tại ngày vào làm.' });
+      }
+    }
+    if (ngaySinh.ok && ngaySinh.value && ngayCap.ok && ngayCap.value && ngayCap.value < ngaySinh.value) {
+      fail('NgayCapCCCD', { ok: false, message: 'Ngày cấp CCCD không được trước ngày sinh.' });
+    }
+
+    const firstField = Object.keys(errors)[0] || '';
+    return {
+      ok: !firstField,
+      message: firstField ? errors[firstField] : '',
+      field: firstField,
+      errors,
+      profile: {
+        TenNV: tenNV.value || '',
+        CCCD: cccd.value || '',
+        NgayCapCCCD: ngayCap.value || null,
+        NoiCapCCCD: noiCap.value || '',
+        NgaySinh: ngaySinh.value || null,
+        GioiTinh: gioiTinh.value || '',
+        NoiSinh: noiSinh.value || '',
+        NguyenQuan: nguyenQuan.value || '',
+        DanToc: danToc.value || '',
+        TonGiao: tonGiao.value || '',
+        QuocTich: quocTich.value || '',
+        TinhTrangHonNhan: honNhan.value || '',
+        DiaChiThuongTru: diaChiThuongTru.value || '',
+        HoKhauThuongTru: diaChiThuongTru.value || '',
+        ChoOHienNay: choOHienNay.value || '',
+        DiaChi: diaChi.value || '',
+        SDT: sdt.value || '',
+        Email: email.value || '',
+        NguoiLienHe: nguoiLienHe.value || '',
+        SDTLienHe: sdtLienHe.value || '',
+        QuanHeLienHe: quanHe.value || '',
+        TrinhDoHocVan: hocVan.value || '',
+        ChuyenMon: chuyenMon.value || '',
+        MSTCaNhan: mst.value || '',
+        SoBHXH: bhxh.value || '',
+        SoTaiKhoanNH: stk.value || '',
+        TenNganHang: tenNH.value || '',
+        ChiNhanhNH: chiNhanh.value || '',
+        GhiChuHoSo: ghiChu.value || '',
+        NgayVaoLam: ngayVaoLam.value || null
+      }
+    };
+  };
+
   const firstError = (...results) => results.find(item => item && item.ok === false) || null;
 
   const setFieldError = (fieldId, ok, message) => {
@@ -218,14 +517,21 @@
 
   window.FLY_FIELDS = {
     EMAIL_RE, VN_PHONE_RE, SHIPMENT_DOC_RE, VN_PLATE_RE,
-    USERNAME_RE, EMPLOYEE_CODE_RE, ENTITY_CODE_RE, VN_TAX_RE, BARCODE_RE,
+    USERNAME_RE, EMPLOYEE_CODE_RE, ENTITY_CODE_RE, VN_TAX_RE, VN_CCCD_RE, VN_BHXH_RE, VN_BANK_ACC_RE,
+    EMPLOYEE_GENDERS, EMPLOYEE_ETHNICITIES, EMPLOYEE_RELIGIONS, EMPLOYEE_NATIONALITIES,
+    EMPLOYEE_MARITAL, EMPLOYEE_EDUCATION, EMPLOYEE_RELATIONS, EMPLOYEE_PROFILE_DEFAULTS,
+    EMPLOYEE_PROFILE_FIELD_IDS, MARITAL_STATUSES, BARCODE_RE,
     trim, normalizeVnPhone,
     validateOptionalEmail, validateOptionalVnPhone,
     validateRequiredName, validateOptionalName, validateRequiredText,
     validateUsername, validateNewPassword, validateEmployeeCode, validateRequiredCode,
-    validateRequiredVnTaxId, validateOptionalBarcode,
-    validateRequiredNonNegativeNumber, validateRequiredNonNegativeInteger, validatePositiveInteger,
-    validateOptionalDate,
+    validateRequiredVnTaxId, validateOptionalVnTaxId, validateOptionalBhxh, validateOptionalBankAccount,
+    validateOptionalMaritalStatus, validateOptionalCccd, validateOptionalGender, validateOptionalBarcode,
+    CASH_AMOUNT_LIMIT, validateRequiredNonNegativeNumber, validateClosingCash,
+    validateRequiredNonNegativeInteger, validatePositiveInteger,
+    validateOptionalDate, validateOptionalPastDate,
+    toIsoDate, validateOptionalText, validateRequiredVnPhone, validateRequiredCccd,
+    validateRequiredGender, validateRequiredPastDate, validateAllowedOption, validateEmployeeProfileFields,
     validateShipmentDocument, validateOptionalPackages, validateOptionalVnPlate,
     validateOptionalNote, parseDateTime, validateShipmentTimes, firstError, setFieldError
   };

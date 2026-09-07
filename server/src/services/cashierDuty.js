@@ -6,12 +6,17 @@ const GRACE_BEFORE_MINUTES = 10;
 const GRACE_AFTER_MINUTES = 15;
 const CASHIER_ROLE = 'Thu ngân';
 const SALES_DUTIES = new Set(['Ca chính full-time', 'Thu ngân']);
+const BOOST_DUTIES = new Set(['Tăng cường part-time', 'Hỗ trợ thu ngân']);
+const COUNTER_DUTIES = new Set([...SALES_DUTIES, ...BOOST_DUTIES]);
 
 const isOfficeShift = (row) => String(row?.MaLoaiCa || '') === 'HANH_CHINH'
     || String(row?.NhomCa || '') === 'HANH_CHINH';
 const isCashierRole = (chucVu) => String(chucVu || '').trim() === CASHIER_ROLE;
 const isSalesDuty = (row) => SALES_DUTIES.has(String(row?.NhiemVu || '').trim());
+const isBoostDuty = (row) => BOOST_DUTIES.has(String(row?.NhiemVu || '').trim());
 const canRunSalesCounter = (row, chucVu) => Boolean(row && isCashierRole(chucVu) && !isOfficeShift(row) && isSalesDuty(row));
+const canHandleReturnCounter = (row, chucVu) => Boolean(row && isCashierRole(chucVu) && !isOfficeShift(row)
+    && COUNTER_DUTIES.has(String(row?.NhiemVu || '').trim()));
 
 const AFTER_HOURS_INTENTS = new Set(['complete-return', 'close-shift']);
 
@@ -55,6 +60,42 @@ const caLabel = (row) => {
     return hours ? `${row.TenCa}${day} (${hours})` : `${row.TenCa || 'ca'}${day}`;
 };
 
+const lichId = (row) => {
+    const value = Number(row?.MaLich);
+    return Number.isFinite(value) ? value : null;
+};
+
+const sameLich = (a, b) => {
+    const left = lichId(a);
+    const right = lichId(b);
+    return left != null && right != null && left === right;
+};
+
+const isOpenAttendance = (row) => Boolean(row?.ThoiGianVao && !row.ThoiGianRa);
+
+const pickOpenAttendance = (schedules) => {
+    const open = (schedules || []).filter(isOpenAttendance)
+        .sort((a, b) => new Date(a.ThoiGianVao) - new Date(b.ThoiGianVao));
+    return open[0] || null;
+};
+
+const scheduleForShift = (schedules, openShift) => (
+    (schedules || []).find(row => sameLich(row, openShift)) || null
+);
+
+const isTodayClaimSession = (row) => Boolean(
+    row
+    && Number(row.LaHomNay) === 1
+    && (row.ViTri === 'truoc' || row.ViTri === 'trong' || row.ViTri === 'grace_sau')
+);
+
+/** Ca cũ còn mở (hôm trước / đã hết giờ) — không gồm ca hôm nay mở sớm để nhận phiếu sót. */
+const isLeftoverSession = (row, calendarCurrent, graceAfter) => {
+    if (!row || sameLich(row, calendarCurrent) || sameLich(row, graceAfter)) return false;
+    if (isTodayClaimSession(row)) return false;
+    return true;
+};
+
 const loadDutyContext = async (connection, maNV) => {
     const schedules = await requestOf(connection)
         .input('MaNV', sql.VarChar, maNV)
@@ -82,8 +123,16 @@ const loadDutyContext = async (connection, maNV) => {
             JOIN LoaiCa lc ON lc.MaLoaiCa = l.MaLoaiCa
             LEFT JOIN ChamCong cc ON cc.MaLich = l.MaLich
             WHERE l.MaNV = @MaNV AND l.TrangThai = N'Đã công bố'
-              AND l.KetThucDuKien >= DATEADD(day, -2, GETDATE())
-              AND l.BatDauDuKien <= DATEADD(day, 2, GETDATE())
+              AND (
+                    (l.KetThucDuKien >= DATEADD(day, -2, GETDATE())
+                     AND l.BatDauDuKien <= DATEADD(day, 2, GETDATE()))
+                 OR (cc.ThoiGianVao IS NOT NULL AND cc.ThoiGianRa IS NULL)
+                 OR EXISTS (
+                        SELECT 1 FROM CaLamViec ca
+                        WHERE ca.MaNV = l.MaNV AND ca.MaLich = l.MaLich
+                          AND ca.TrangThai = N'Đang mở' AND ca.ThoiGianKetThuc IS NULL
+                    )
+              )
             ORDER BY l.BatDauDuKien`);
     const openShift = await requestOf(connection).input('MaNV', sql.VarChar, maNV).query(`
         SELECT TOP 1 ca.MaCa, ca.MaLich, ca.TrangThai, ca.ThoiGianBatDau, ca.ThoiGianKetThuc, ca.MaQuay
@@ -119,8 +168,7 @@ const loadDutyContext = async (connection, maNV) => {
     };
 };
 
-const snapshotDuty = async (connection, maNV) => {
-    const ctx = await loadDutyContext(connection, maNV);
+const buildDutySnapshot = (ctx) => {
     const inside = ctx.schedules.filter(row => row.ViTri === 'trong');
     const graceAfterRows = ctx.schedules.filter(row => row.ViTri === 'grace_sau' && Number(row.LaHomNay) === 1)
         .sort((a, b) => new Date(b.KetThucDuKien) - new Date(a.KetThucDuKien));
@@ -131,12 +179,51 @@ const snapshotDuty = async (connection, maNV) => {
     const graceAfter = graceAfterRows[0] || null;
     const upcoming = before[0] || ctx.nextShift || null;
     const ended = after[0] || graceAfter || null;
+    const openAttendance = pickOpenAttendance(ctx.schedules);
+    const posSchedule = scheduleForShift(ctx.schedules, ctx.openShift);
+    const leftoverAttendance = isLeftoverSession(openAttendance, current, graceAfter);
+    const leftoverPos = Boolean(ctx.openShift && isLeftoverSession(posSchedule, current, graceAfter));
     const closedForCurrent = current ? ctx.closedByLich.get(Number(current.MaLich)) : null;
-    const openMatches = current && ctx.openShift && Number(ctx.openShift.MaLich) === Number(current.MaLich);
-    const openMatchesGrace = graceAfter && ctx.openShift && Number(ctx.openShift.MaLich) === Number(graceAfter.MaLich);
+    const openMatches = current && ctx.openShift && sameLich(ctx.openShift, current);
+    const openMatchesGrace = graceAfter && ctx.openShift && sameLich(ctx.openShift, graceAfter);
     const chucVu = ctx.employee?.ChucVu || '';
     const salesAllowed = canRunSalesCounter(current, chucVu);
     const salesGrace = canRunSalesCounter(graceAfter, chucVu);
+    const flags = {
+        graceMinutes: GRACE_BEFORE_MINUTES,
+        graceAfterMinutes: GRACE_AFTER_MINUTES,
+        openShift: ctx.openShift,
+        openAttendance,
+        staleOpenShift: leftoverPos,
+        context: ctx
+    };
+
+    if (leftoverAttendance || leftoverPos) {
+        const session = openAttendance || scheduleForShift(ctx.schedules, ctx.openShift) || ended || current;
+        let message = leftoverAttendance
+            ? `Bạn còn ${caLabel(openAttendance)} chưa chấm công ra.`
+            : `Ca POS ${ctx.openShift.MaCa} vẫn đang mở từ ca cũ.`;
+        if (ctx.openShift) {
+            message += ` Hãy đóng ca bán hàng ${ctx.openShift.MaCa} trước khi chấm công ra hoặc vào ca mới.`;
+        } else {
+            message += ' Hãy chấm công ra trước khi chấm công vào ca hôm nay.';
+        }
+        if (current && leftoverAttendance) {
+            message += ` ${caLabel(current)} chưa vào — chỉ chấm vào sau khi kết thúc ca cũ.`;
+        }
+        return {
+            ...flags,
+            status: 'stale_session',
+            message,
+            schedule: session,
+            canCheckIn: false,
+            canCheckOut: Boolean(openAttendance && !ctx.openShift),
+            canOpenShift: false,
+            canSell: false,
+            canCompleteReturn: false,
+            canCloseShift: Boolean(ctx.openShift)
+        };
+    }
 
     let status = 'none';
     let message = 'Hôm nay bạn không có lịch làm việc đã công bố. Không chấm công, không mở POS.';
@@ -145,9 +232,18 @@ const snapshotDuty = async (connection, maNV) => {
     }
     if (current) {
         status = 'inside';
-        message = salesAllowed
-            ? `Đang trong ${caLabel(current)}. Được chấm công sớm tối đa ${GRACE_BEFORE_MINUTES} phút trước giờ vào; hết giờ ca còn ${GRACE_AFTER_MINUTES} phút để xác nhận đổi trả / đóng ca — không bán hóa đơn mới.`
-            : `Đang trong ${caLabel(current)}. Ca này không mở quầy bán hàng — chỉ chấm công vào/ra rồi làm việc theo vai trò.`;
+        const clockedIntoCurrent = Boolean(current.ThoiGianVao && !current.ThoiGianRa);
+        if (clockedIntoCurrent) {
+            message = salesAllowed
+                ? `Đang trong ${caLabel(current)}. Được chấm công sớm tối đa ${GRACE_BEFORE_MINUTES} phút trước giờ vào; hết giờ ca còn ${GRACE_AFTER_MINUTES} phút để xác nhận đổi trả / đóng ca — không bán hóa đơn mới.`
+                : `Đang trong ${caLabel(current)}. Ca này không mở quầy bán hàng — chỉ chấm công vào/ra rồi làm việc theo vai trò.`;
+        } else if (current.ThoiGianVao && current.ThoiGianRa) {
+            message = `Bạn đã chấm công xong ${caLabel(current)}.`;
+        } else {
+            message = salesAllowed
+                ? `Trong khung giờ ${caLabel(current)}. Hãy chấm công vào. Được chấm công sớm tối đa ${GRACE_BEFORE_MINUTES} phút trước giờ vào; hết giờ ca còn ${GRACE_AFTER_MINUTES} phút để xác nhận đổi trả / đóng ca — không bán hóa đơn mới.`
+                : `Trong khung giờ ${caLabel(current)}. Hãy chấm công vào. Ca này không mở quầy bán hàng — chỉ chấm công vào/ra rồi làm việc theo vai trò.`;
+        }
         if (closedForCurrent) {
             status = 'closed';
             message = `${caLabel(current)} đã đóng (${closedForCurrent.MaCa}). Không mở lại ca đã qua.`;
@@ -164,36 +260,44 @@ const snapshotDuty = async (connection, maNV) => {
         message = `Chưa đến giờ ca. ${caLabel(row)}. Được chấm công sớm tối đa ${GRACE_BEFORE_MINUTES} phút trước giờ vào — không mở quầy sớm hơn.`;
     } else if (ended) {
         status = 'after';
-        message = `${caLabel(ended)} đã kết thúc và hết ${GRACE_AFTER_MINUTES} phút gia hạn. Không bán tiếp. Phiếu đổi trả đã duyệt chưa hoàn sẽ chuyển ca sau cùng quầy.`;
+        message = `${caLabel(ended)} đã kết thúc và hết ${GRACE_AFTER_MINUTES} phút gia hạn. Không bán tiếp. Phiếu đổi trả dở sẽ chuyển ca sau cùng quầy.`;
         if (ctx.openShift) {
             message += ` Ca POS ${ctx.openShift.MaCa} vẫn đang mở — hãy đóng ca.`;
         }
     }
 
+    const session = current || graceAfter;
+    const returnSession = current || graceAfter || posSchedule;
     const canCompleteReturn = Boolean(
-        (salesAllowed && openMatches && !closedForCurrent)
-        || (salesGrace && openMatchesGrace)
+        ctx.openShift
+        && isCashierRole(chucVu)
+        && returnSession
+        && !isOfficeShift(returnSession)
+        && canHandleReturnCounter(returnSession, chucVu)
+        && (
+            (salesAllowed && openMatches && !closedForCurrent)
+            || (salesGrace && openMatchesGrace)
+            || openMatches
+            || openMatchesGrace
+            || sameLich(ctx.openShift, posSchedule)
+        )
     );
-    const canCloseShift = Boolean(ctx.openShift && (
-        (current && openMatches) || openMatchesGrace || (ctx.openShift && (graceAfter || ended))
-    ));
 
     return {
-        graceMinutes: GRACE_BEFORE_MINUTES,
-        graceAfterMinutes: GRACE_AFTER_MINUTES,
+        ...flags,
         status,
         message,
         schedule: current || graceAfter || before[0] || ended || null,
-        openShift: ctx.openShift,
-        canCheckIn: Boolean(current && !current.ThoiGianVao),
-        canCheckOut: Boolean((current || graceAfter) && (current || graceAfter).ThoiGianVao && !(current || graceAfter).ThoiGianRa),
-        canOpenShift: Boolean(salesAllowed && current.ThoiGianVao && !current.ThoiGianRa && !closedForCurrent && !ctx.openShift),
+        canCheckIn: Boolean(current && !current.ThoiGianVao && !openAttendance && !ctx.openShift),
+        canCheckOut: Boolean(openAttendance && !ctx.openShift && session && sameLich(openAttendance, session)),
+        canOpenShift: Boolean(salesAllowed && current && current.ThoiGianVao && !current.ThoiGianRa && !closedForCurrent && !ctx.openShift),
         canSell: Boolean(salesAllowed && openMatches && !closedForCurrent),
         canCompleteReturn,
-        canCloseShift,
-        context: ctx
+        canCloseShift: Boolean(ctx.openShift)
     };
 };
+
+const snapshotDuty = async (connection, maNV) => buildDutySnapshot(await loadDutyContext(connection, maNV));
 
 const resolveIntentSchedule = (ctx, intent) => {
     const current = ctx.schedules.find(row => row.ViTri === 'trong') || null;
@@ -209,14 +313,45 @@ const resolveIntentSchedule = (ctx, intent) => {
     return { current, before, graceAfter, after, active: current };
 };
 
-const assertCashierDuty = async (connection, maNV, intent = 'sell') => {
-    const duty = await snapshotDuty(connection, maNV);
+const denyDuty = (duty, message, status = 403, extra = {}) => {
+    const error = new CashierDutyError(message, status, { ...duty, context: undefined });
+    Object.assign(error, extra);
+    throw error;
+};
+
+/** Đóng đúng CaLamViec đang mở của chính thu ngân — không so MaLich với ca sáng hôm nay. */
+const assertOwnerCloseShift = (duty, expectedMaCa = null) => {
+    const ctx = duty.context;
+    if (!isCashierRole(ctx.employee?.ChucVu)) {
+        denyDuty(duty, 'Chỉ Thu ngân mới xác nhận hoàn/đổi hoặc đóng ca POS.');
+    }
+    if (!ctx.openShift) {
+        denyDuty(duty, 'Không có ca bán hàng đang mở để đóng.');
+    }
+    if (expectedMaCa && ctx.openShift.MaCa !== expectedMaCa) {
+        denyDuty(duty, `Ca POS đang mở là ${ctx.openShift.MaCa}, không phải ${expectedMaCa}.`);
+    }
+    const posSchedule = scheduleForShift(ctx.schedules, ctx.openShift);
+    const openAttendance = duty.openAttendance || pickOpenAttendance(ctx.schedules);
+    return {
+        duty,
+        schedule: posSchedule || openAttendance || duty.schedule || null,
+        shift: ctx.openShift,
+        inAfterGrace: false,
+        pastGrace: Boolean(duty.staleOpenShift),
+        stale: Boolean(duty.staleOpenShift || (posSchedule && posSchedule.ViTri !== 'trong' && posSchedule.ViTri !== 'grace_sau'))
+    };
+};
+
+const assertDutyFromSnapshot = (duty, intent = 'sell') => {
     const ctx = duty.context;
     const { current, before, graceAfter, after, active } = resolveIntentSchedule(ctx, intent);
+    const openAttendance = duty.openAttendance || pickOpenAttendance(ctx.schedules);
+    const deny = (message, status, extra) => denyDuty(duty, message, status, extra);
 
-    const deny = (message) => {
-        throw new CashierDutyError(message, 403, { ...duty, context: undefined });
-    };
+    if (intent === 'close-shift') {
+        return assertOwnerCloseShift(duty);
+    }
 
     if (intent === 'sell') {
         if (!isCashierRole(ctx.employee?.ChucVu) || (current && isOfficeShift(current))) {
@@ -236,40 +371,84 @@ const assertCashierDuty = async (connection, maNV, intent = 'sell') => {
             deny(duty.message);
         }
         if (!ctx.openShift) deny('Bạn phải mở ca bán hàng trong khung giờ ca đã công bố trước khi dùng POS.');
-        if (Number(ctx.openShift.MaLich) !== Number(current.MaLich)) {
+        if (!sameLich(ctx.openShift, current)) {
             deny(`Ca POS ${ctx.openShift.MaCa} không khớp ${caLabel(current)}. Không bán bằng ca cũ — hãy đóng ca rồi mở đúng ca hôm nay.`);
         }
         return { duty, schedule: current, shift: ctx.openShift };
     }
 
-    if (intent === 'complete-return' || intent === 'close-shift') {
+    if (intent === 'complete-return') {
         if (!isCashierRole(ctx.employee?.ChucVu)) {
             deny('Chỉ Thu ngân mới xác nhận hoàn/đổi hoặc đóng ca POS.');
         }
         if (!ctx.openShift) {
-            deny(intent === 'close-shift'
-                ? 'Không có ca bán hàng đang mở để đóng.'
-                : 'Phải mở ca bán hàng trước khi xác nhận hoàn tiền hoặc giao hàng đổi.');
+            deny('Phải mở ca bán hàng trước khi xác nhận hoàn tiền hoặc giao hàng đổi.');
+        }
+        const posSchedule = scheduleForShift(ctx.schedules, ctx.openShift);
+        const leftoverClaimOpen = posSchedule
+            && !isOfficeShift(posSchedule)
+            && canHandleReturnCounter(posSchedule, ctx.employee?.ChucVu)
+            && !isLeftoverSession(posSchedule, current, graceAfter);
+        if (leftoverClaimOpen) {
+            return {
+                duty,
+                schedule: posSchedule,
+                shift: ctx.openShift,
+                inAfterGrace: posSchedule.ViTri === 'grace_sau'
+            };
         }
         if (active) {
-            if (Number(ctx.openShift.MaLich) !== Number(active.MaLich)) {
-                deny(`Ca POS ${ctx.openShift.MaCa} không khớp ${caLabel(active)}. Hãy đóng đúng ca đang mở.`);
+            if (!sameLich(ctx.openShift, active)) {
+                deny(`Không hoàn/đổi trên ${caLabel(active)} vì ca POS đang mở là ${ctx.openShift.MaCa} (ca cũ). Hãy đóng ca POS đó rồi xử lý đổi trả trên ca hôm nay.`);
             }
-            if (intent === 'complete-return' && !canRunSalesCounter(active, ctx.employee?.ChucVu)) {
+            if (!canHandleReturnCounter(active, ctx.employee?.ChucVu)) {
                 deny('Ca này không phụ trách quầy bán hàng nên không xác nhận hoàn/đổi.');
             }
             return { duty, schedule: active, shift: ctx.openShift, inAfterGrace: active.ViTri === 'grace_sau' };
         }
-        if (intent === 'close-shift' && ctx.openShift) {
-            return { duty, schedule: after || graceAfter || null, shift: ctx.openShift, inAfterGrace: false, pastGrace: true };
-        }
         if (after) {
-            deny(intent === 'complete-return'
-                ? `${caLabel(after)} đã hết ${GRACE_AFTER_MINUTES} phút gia hạn. Phiếu đã duyệt chưa hoàn chuyển ca sau cùng quầy.`
-                : `${caLabel(after)} đã kết thúc. Hãy đóng ca nếu còn ca POS đang mở.`);
+            deny(`${caLabel(after)} đã hết ${GRACE_AFTER_MINUTES} phút gia hạn. Phiếu đổi trả dở chuyển ca sau cùng quầy.`);
         }
         if (before) deny(`Chưa đến giờ ca. ${caLabel(before)}.`);
         deny(duty.message);
+    }
+
+    if (intent === 'check-out') {
+        if (!openAttendance) deny('Không có lượt chấm công đang mở.', 400);
+        if (ctx.openShift) {
+            deny(`Hãy đóng ca bán hàng ${ctx.openShift.MaCa} trước khi chấm công ra.`, 400, {
+                code: 'POS_SHIFT_OPEN',
+                recovery: 'close-shift',
+                MaCa: ctx.openShift.MaCa,
+                stale: Boolean(duty.staleOpenShift)
+            });
+        }
+        return { duty, schedule: openAttendance };
+    }
+
+    if (intent === 'check-in') {
+        if (openAttendance && current && !sameLich(openAttendance, current)) {
+            deny(`Hãy chấm công ra ${caLabel(openAttendance)} trước khi vào ca mới.`);
+        }
+        if (ctx.openShift && (!current || !sameLich(ctx.openShift, current))) {
+            deny(`Hãy đóng ca bán hàng ${ctx.openShift.MaCa} trước khi chấm công vào.`);
+        }
+        if (!current) {
+            if (before) {
+                deny(`Chưa đến giờ ca. ${caLabel(before)}. Được chấm công sớm tối đa ${GRACE_BEFORE_MINUTES} phút trước giờ vào.`);
+            }
+            if (graceAfter || after) {
+                deny(`${caLabel(graceAfter || after)} đã kết thúc. Không vào lại, không mở lại ca đã qua.`);
+            }
+            deny(duty.message);
+        }
+        if (current.ThoiGianVao && current.ThoiGianRa) {
+            deny(`Bạn đã chấm công xong ${caLabel(current)}. Không vào lại ca đã qua.`);
+        }
+        if (current.ThoiGianVao) {
+            deny('Bạn đã chấm công vào ca này.');
+        }
+        return { duty, schedule: current };
     }
 
     if (!current) {
@@ -282,14 +461,13 @@ const assertCashierDuty = async (connection, maNV, intent = 'sell') => {
         deny(duty.message);
     }
 
-    if (intent === 'check-in') {
-        if (current.ThoiGianVao && current.ThoiGianRa) {
-            deny(`Bạn đã chấm công xong ${caLabel(current)}. Không vào lại ca đã qua.`);
-        }
-        return { duty, schedule: current };
-    }
-
     if (intent === 'open-shift') {
+        if (openAttendance && !sameLich(openAttendance, current)) {
+            deny(`Hãy chấm công ra ${caLabel(openAttendance)} trước khi mở ca hôm nay.`);
+        }
+        if (ctx.openShift && !sameLich(ctx.openShift, current)) {
+            deny(`Hãy đóng ca bán hàng ${ctx.openShift.MaCa} trước khi mở ca mới.`);
+        }
         if (!canRunSalesCounter(current, ctx.employee?.ChucVu)) {
             deny('Chỉ Thu ngân trên ca bán hàng (ca chính) mới được mở ca tại quầy. Ca hành chính không mở quầy bán hàng.');
         }
@@ -303,14 +481,26 @@ const assertCashierDuty = async (connection, maNV, intent = 'sell') => {
     return { duty, schedule: current, shift: ctx.openShift };
 };
 
+const assertCashierDuty = async (connection, maNV, intent = 'sell') => (
+    assertDutyFromSnapshot(await snapshotDuty(connection, maNV), intent)
+);
+
 module.exports = {
     GRACE_BEFORE_MINUTES,
     GRACE_AFTER_MINUTES,
     CashierDutyError,
     snapshotDuty,
+    buildDutySnapshot,
     assertCashierDuty,
+    assertDutyFromSnapshot,
+    assertOwnerCloseShift,
     classifyDutyWindow,
+    pickOpenAttendance,
+    sameLich,
     isOfficeShift,
     isCashierRole,
-    canRunSalesCounter
+    isBoostDuty,
+    canRunSalesCounter,
+    canHandleReturnCounter,
+    caLabel
 };

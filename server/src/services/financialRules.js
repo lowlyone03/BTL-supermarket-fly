@@ -34,6 +34,13 @@ const isEqualValueExchange = (returnedValue, exchangeValue) => moneyMatches(
     roundMoney(exchangeValue)
 );
 
+// Két dự kiến = quỹ đầu ca + tiền mặt thu − hoàn tiền mặt. Có thể nhỏ hơn quỹ đầu ca.
+const expectedDrawerCash = ({ TienDauCa = 0, TongTienMat = 0, TongTienHoanMat = 0 } = {}) =>
+    roundMoney(number(TienDauCa) + number(TongTienMat) - number(TongTienHoanMat));
+
+const cashHandoverExcludingOpening = (tienCuoiCa, tienDauCa) =>
+    roundMoney(number(tienCuoiCa) - number(tienDauCa));
+
 const calculateGrossProfit = values => {
     const DoanhThuHoaDon = roundMoney(values.DoanhThuHoaDon ?? values.DoanhThu);
     const TienHoan = roundMoney(values.TienHoan);
@@ -191,6 +198,8 @@ module.exports = {
     isEqualValueExchange,
     roundMoney,
     moneyMatches,
+    expectedDrawerCash,
+    cashHandoverExcludingOpening,
     calculateGrossProfit,
     evaluateThreeWayMatch
 };

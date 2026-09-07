@@ -1,7 +1,7 @@
 /* ============================================================
    CO SO DU LIEU: SupermarketFly
    He thong quan ly sieu thi mini "Supermarket Fly"
-   Microsoft SQL Server  |  35 bang  |  68 khoa ngoai
+   Microsoft SQL Server  |  36 bang  |  69 khoa ngoai
    Sinh tu thiet ke ERD Chuong 6
    ============================================================ */
 
@@ -136,12 +136,50 @@ CREATE TABLE [NhanVien] (
     [MaNV] VARCHAR(20) NOT NULL,
     [TenNV] NVARCHAR(100) NOT NULL,
     [ChucVu] NVARCHAR(50) NOT NULL,
+    [CCCD] VARCHAR(12) NULL,
+    [NgaySinh] DATE NULL,
+    [GioiTinh] NVARCHAR(10) NULL,
     [SDT] VARCHAR(15) NULL UNIQUE,
     [Email] VARCHAR(150) NULL,
     [DiaChi] NVARCHAR(300) NULL,
+    [NgayVaoLam] DATE NULL,
     [TrangThai] NVARCHAR(20) NOT NULL DEFAULT N'Đang làm việc',
     CONSTRAINT [PK_NhanVien] PRIMARY KEY ([MaNV])
 );
+GO
+CREATE UNIQUE INDEX [UX_NhanVien_CCCD] ON [NhanVien] ([CCCD]) WHERE [CCCD] IS NOT NULL;
+GO
+
+-- 2.5b. HoSoNhanVien: Hồ sơ chi tiết (1–1 theo MaNV)
+CREATE TABLE [HoSoNhanVien] (
+    [MaNV] VARCHAR(20) NOT NULL,
+    [QuocTich] NVARCHAR(50) NULL,
+    [DanToc] NVARCHAR(50) NULL,
+    [TonGiao] NVARCHAR(50) NULL,
+    [NoiSinh] NVARCHAR(200) NULL,
+    [NguyenQuan] NVARCHAR(200) NULL,
+    [HoKhauThuongTru] NVARCHAR(300) NULL,
+    [ChoOHienNay] NVARCHAR(300) NULL,
+    [NgayCapCCCD] DATE NULL,
+    [NoiCapCCCD] NVARCHAR(200) NULL,
+    [TinhTrangHonNhan] NVARCHAR(30) NULL,
+    [TrinhDoHocVan] NVARCHAR(80) NULL,
+    [ChuyenMon] NVARCHAR(200) NULL,
+    [MSTCaNhan] VARCHAR(13) NULL,
+    [SoBHXH] VARCHAR(15) NULL,
+    [SoTaiKhoanNH] VARCHAR(30) NULL,
+    [TenNganHang] NVARCHAR(100) NULL,
+    [ChiNhanhNH] NVARCHAR(150) NULL,
+    [NguoiLienHe] NVARCHAR(150) NULL,
+    [QuanHeLienHe] NVARCHAR(50) NULL,
+    [SDTLienHe] VARCHAR(15) NULL,
+    [GhiChuHoSo] NVARCHAR(500) NULL,
+    CONSTRAINT [PK_HoSoNhanVien] PRIMARY KEY ([MaNV])
+);
+GO
+CREATE UNIQUE INDEX [UX_HoSoNhanVien_MSTCaNhan] ON [HoSoNhanVien] ([MSTCaNhan]) WHERE [MSTCaNhan] IS NOT NULL;
+GO
+CREATE UNIQUE INDEX [UX_HoSoNhanVien_SoBHXH] ON [HoSoNhanVien] ([SoBHXH]) WHERE [SoBHXH] IS NOT NULL;
 GO
 
 -- 2.6. Kho: Kho hàng của cửa hàng (một kho logic duy nhất)
@@ -400,8 +438,8 @@ CREATE TABLE [PhieuThu] (
     [MaCa] VARCHAR(20) NOT NULL UNIQUE,
     [MaNV_Lap] VARCHAR(20) NOT NULL,
     [NgayLap] DATETIME NOT NULL DEFAULT GETDATE(),
-    [SoTienTheoHeThong] DECIMAL(18,2) NOT NULL CHECK ([SoTienTheoHeThong] >= 0),
-    [SoTienThucNop] DECIMAL(18,2) NOT NULL CHECK ([SoTienThucNop] >= 0),
+    [SoTienTheoHeThong] DECIMAL(18,2) NOT NULL,
+    [SoTienThucNop] DECIMAL(18,2) NOT NULL,
     [ChenhLech] AS ([SoTienThucNop] - [SoTienTheoHeThong]),
     [LyDoChenhLech] NVARCHAR(500) NULL,
     [NoiDung] NVARCHAR(500) NOT NULL,
@@ -595,6 +633,7 @@ ALTER TABLE [VaiTro_ChucNang] ADD CONSTRAINT [FK_VaiTro_ChucNang_MaChucNang] FOR
 -- Nhóm 2: Danh mục gốc
 ALTER TABLE [SanPham] ADD CONSTRAINT [FK_SanPham_MaDM] FOREIGN KEY ([MaDM]) REFERENCES [DanhMuc] ([MaDM]);
 ALTER TABLE [CaLamViec] ADD CONSTRAINT [FK_CaLamViec_MaNV] FOREIGN KEY ([MaNV]) REFERENCES [NhanVien] ([MaNV]);
+ALTER TABLE [HoSoNhanVien] ADD CONSTRAINT [FK_HoSoNhanVien_MaNV] FOREIGN KEY ([MaNV]) REFERENCES [NhanVien] ([MaNV]);
 
 -- Nhóm 3: Quy trình mua hàng
 ALTER TABLE [DeNghiMuaHang] ADD CONSTRAINT [FK_DeNghiMuaHang_MaNV_Lap] FOREIGN KEY ([MaNV_Lap]) REFERENCES [NhanVien] ([MaNV]);

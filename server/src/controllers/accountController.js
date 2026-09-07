@@ -1,18 +1,26 @@
 const { sql, poolPromise } = require('../config/db');
 const bcrypt = require('bcrypt');
 const { logAudit, listAuditLogs, listAuditFilters } = require('../services/auditLog');
-const { validateUsername, validateEmployeeCode } = require('../services/fieldValidators');
+const { validateUsername, validateEmployeeCode, toIsoDate } = require('../services/fieldValidators');
+const { ensureEmployeeProfileSchema } = require('../services/employeeProfileSchema');
+const { HOSO_SELECT, PROFILE_KEYS, hasProfileInput, upsertEmployeeProfile } = require('../services/employeeHoSo');
+const { validateEmployeeInput, bindEmployeeFields } = require('./employeeController');
 
 // Lấy danh sách tài khoản
 const getAccounts = async (req, res) => {
     try {
         const pool = await poolPromise;
+        await ensureEmployeeProfileSchema(pool);
         const result = await pool.request().query(`
             SELECT t.MaTK, t.TenDangNhap, t.MaNV, t.MaVaiTro, t.TrangThai, t.NgayTao, t.LanDangNhapCuoi,
-                   n.TenNV, n.ChucVu, v.TenVaiTro
+                   n.TenNV, n.ChucVu, n.CCCD, n.NgaySinh, n.GioiTinh, n.SDT, n.Email, n.DiaChi, n.NgayVaoLam,
+                   n.TrangThai AS TrangThaiNV,
+                   v.TenVaiTro,
+                   ${HOSO_SELECT}
             FROM TaiKhoan t
             JOIN NhanVien n ON t.MaNV = n.MaNV
             JOIN VaiTro v ON t.MaVaiTro = v.MaVaiTro
+            LEFT JOIN HoSoNhanVien hs ON hs.MaNV = n.MaNV
             ORDER BY t.NgayTao DESC
         `);
         res.json(result.recordset);
@@ -37,27 +45,29 @@ const createAccount = async (req, res) => {
         }
 
         const pool = await poolPromise;
+        await ensureEmployeeProfileSchema(pool);
 
         // Check nếu nhân viên đã có TK
         const checkNV = await pool.request()
             .input('MaNV', sql.VarChar, MaNV)
-            .query(`SELECT n.MaNV, n.TenNV, n.ChucVu, n.TrangThai, t.MaTK,
-                           v.MaVaiTro AS MaVaiTroTheoChucVu
+            .query(`SELECT n.*, t.MaTK, v.MaVaiTro AS MaVaiTroTheoChucVu, ${HOSO_SELECT}
                     FROM NhanVien n
                     LEFT JOIN TaiKhoan t ON t.MaNV = n.MaNV
                     LEFT JOIN VaiTro v ON v.TenVaiTro = n.ChucVu
+                    LEFT JOIN HoSoNhanVien hs ON hs.MaNV = n.MaNV
                     WHERE n.MaNV = @MaNV`);
         if (checkNV.recordset.length === 0) {
             return res.status(404).json({ message: 'Không tìm thấy nhân viên!' });
         }
-        if (checkNV.recordset[0].MaTK) {
+        const existing = checkNV.recordset[0];
+        if (existing.MaTK) {
             return res.status(400).json({ message: 'Nhân viên này đã có tài khoản!' });
         }
-        if (checkNV.recordset[0].TrangThai !== 'Đang làm việc') {
+        if (existing.TrangThai !== 'Đang làm việc') {
             return res.status(400).json({ message: 'Chỉ có thể tạo tài khoản cho nhân viên đang làm việc.' });
         }
-        if (Number(checkNV.recordset[0].MaVaiTroTheoChucVu) !== MaVaiTro) {
-            return res.status(400).json({ message: `Vai trò phải khớp với chức vụ ${checkNV.recordset[0].ChucVu}.` });
+        if (Number(existing.MaVaiTroTheoChucVu) !== MaVaiTro) {
+            return res.status(400).json({ message: `Vai trò phải khớp với chức vụ ${existing.ChucVu}.` });
         }
 
         // Check nếu tên đăng nhập bị trùng
@@ -68,21 +78,64 @@ const createAccount = async (req, res) => {
             return res.status(400).json({ message: 'Tên đăng nhập đã tồn tại!' });
         }
 
+        const coreKeys = ['TenNV', 'CCCD', 'NgaySinh', 'GioiTinh', 'SDT', 'Email', 'DiaChi', 'NgayVaoLam', 'DiaChiThuongTru'];
+        const postedProfile = {};
+        for (const key of [...coreKeys, ...PROFILE_KEYS]) {
+            if (Object.prototype.hasOwnProperty.call(req.body, key)) postedProfile[key] = req.body[key];
+        }
+        if (req.body.HoSo && typeof req.body.HoSo === 'object') postedProfile.HoSo = req.body.HoSo;
+        const corePosted = coreKeys.some((key) => Object.prototype.hasOwnProperty.call(req.body, key));
+        let profileUpdate = null;
+        if (hasProfileInput(req.body) || corePosted) {
+            const merged = {
+                ...existing,
+                NgaySinh: toIsoDate(existing.NgaySinh) || existing.NgaySinh,
+                NgayVaoLam: toIsoDate(existing.NgayVaoLam) || existing.NgayVaoLam,
+                NgayCapCCCD: toIsoDate(existing.NgayCapCCCD) || existing.NgayCapCCCD,
+                ...postedProfile,
+                MaNV,
+                ChucVu: existing.ChucVu,
+                TrangThai: existing.TrangThai
+            };
+            const validation = await validateEmployeeInput(pool, merged, { excludeMaNV: MaNV, strictCreate: false });
+            if (validation.error) {
+                return res.status(400).json({ message: validation.error });
+            }
+            profileUpdate = validation;
+        }
+
         // Tạo mật khẩu mặc định '123'
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash('123', salt);
 
-        const result = await pool.request()
-            .input('TenDangNhap', sql.VarChar, TenDangNhap)
-            .input('MatKhauHash', sql.VarChar, hashedPassword)
-            .input('MaNV', sql.VarChar, MaNV)
-            .input('MaVaiTro', sql.Int, MaVaiTro)
-            .input('TrangThai', sql.TinyInt, 1)
-            .query(`INSERT INTO TaiKhoan (TenDangNhap, MatKhauHash, MaNV, MaVaiTro, TrangThai, NgayTao)
-                    VALUES (@TenDangNhap, @MatKhauHash, @MaNV, @MaVaiTro, @TrangThai, GETDATE());
-                    SELECT SCOPE_IDENTITY() AS NewMaTK;`);
-
-        const newMaTK = result.recordset[0].NewMaTK;
+        const transaction = new sql.Transaction(pool);
+        await transaction.begin();
+        let newMaTK;
+        try {
+            if (profileUpdate) {
+                await bindEmployeeFields(new sql.Request(transaction).input('MaNV', sql.VarChar, MaNV), profileUpdate.employee)
+                    .query(`UPDATE NhanVien
+                            SET TenNV = @TenNV, ChucVu = @ChucVu, CCCD = @CCCD, NgaySinh = @NgaySinh,
+                                GioiTinh = @GioiTinh, SDT = @SDT, Email = @Email, DiaChi = @DiaChi,
+                                NgayVaoLam = @NgayVaoLam, TrangThai = @TrangThai
+                            WHERE MaNV = @MaNV`);
+                await upsertEmployeeProfile(transaction, MaNV, profileUpdate.profile);
+            }
+            const result = await new sql.Request(transaction)
+                .input('TenDangNhap', sql.VarChar, TenDangNhap)
+                .input('MatKhauHash', sql.VarChar, hashedPassword)
+                .input('MaNV', sql.VarChar, MaNV)
+                .input('MaVaiTro', sql.Int, MaVaiTro)
+                .input('TrangThai', sql.TinyInt, 1)
+                .query(`INSERT INTO TaiKhoan (TenDangNhap, MatKhauHash, MaNV, MaVaiTro, TrangThai, NgayTao)
+                        VALUES (@TenDangNhap, @MatKhauHash, @MaNV, @MaVaiTro, @TrangThai, GETDATE());
+                        SELECT SCOPE_IDENTITY() AS NewMaTK;`);
+            newMaTK = result.recordset[0].NewMaTK;
+            await transaction.commit();
+        } catch (error) {
+            await transaction.rollback();
+            throw error;
+        }
 
         // Ghi nhật ký
         await logAudit(pool, {
@@ -93,6 +146,9 @@ const createAccount = async (req, res) => {
         res.status(201).json({ message: 'Tạo tài khoản thành công với mật khẩu mặc định là 123' });
     } catch (error) {
         console.error(error);
+        if (/UNIQUE KEY|unique index|UX_NhanVien_|UX_HoSoNhanVien_/i.test(error.message || '')) {
+            return res.status(400).json({ message: 'Số CCCD, số điện thoại, Email, MST hoặc BHXH đã bị trùng!' });
+        }
         res.status(500).json({ message: 'Lỗi server' });
     }
 };

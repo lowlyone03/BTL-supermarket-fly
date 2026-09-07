@@ -36,13 +36,14 @@
 .workforce-cell:hover:not(:disabled) { border-color:#63a68b; box-shadow:0 0 0 3px rgba(45,134,101,.08); }
 .workforce-cell strong,.workforce-cell span,.workforce-cell small { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .workforce-cell strong { color:#284739; font-size:11px; }.workforce-cell span { color:#61776b; font-size:10px; }.workforce-cell small { color:#829087; font-size:9px; }
-.workforce-cell.draft { border-color:#ead29a; background:#fff9eb; }.workforce-cell.published { border-color:#c7e1d5; background:#ecf7f1; cursor:default; }.workforce-cell.empty { align-items:center; color:#789087; border-style:dashed; background:#fbfcfb; }
+.workforce-cell.draft { border-color:#ead29a; background:#fff9eb; }.workforce-cell.published { border-color:#c7e1d5; background:#ecf7f1; cursor:pointer; }.workforce-cell.published:disabled { cursor:default; opacity:.88; }.workforce-cell.empty { align-items:center; color:#789087; border-style:dashed; background:#fbfcfb; }
 .workforce-payroll { margin-top:0; }.workforce-payroll-filter input { min-height:42px; border:1px solid #d5dfd9; border-radius:12px; padding:0 12px; color:#29463a; background:#fff; font:inherit; }
 .workforce-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:15px; }.workforce-form-grid label:last-child { grid-column:1/-1; }
 .warehouse-field > span { display:block; margin-bottom:7px; color:#3d574a; font-size:12px; font-weight:750; }
 .workforce-rule { display:flex; gap:10px; margin-top:16px; padding:13px 15px; border-radius:13px; color:#5c7046; background:#f5f8e9; }
 .workforce-rule svg { width:20px; height:20px; flex:0 0 auto; fill:none; stroke:currentColor; stroke-width:1.8; }.workforce-rule p { margin:0; font-size:11px; line-height:1.5; }
 .workforce-today { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:24px; align-items:center; margin-bottom:20px; padding:26px 30px; border:1px solid #cce1d6; border-left:6px solid #2c8866; border-radius:20px; background:linear-gradient(110deg,rgba(237,248,242,.98),rgba(255,255,255,.96)); }
+.workforce-today.is-stuck { border-color:#ead8b8; border-left-color:#c48a2a; background:linear-gradient(110deg,rgba(255,248,237,.98),rgba(255,255,255,.96)); }
 .workforce-today h2 { margin:12px 0 5px; font-size:26px; }.workforce-today p { margin:0; color:#667a70; }
 .workforce-today-times { display:flex; gap:12px; margin-top:18px; }.workforce-today-times span { min-width:170px; padding:11px 13px; border:1px solid #d8e5de; border-radius:12px; color:#7a8981; background:rgba(255,255,255,.8); font-size:10px; }.workforce-today-times strong { display:block; margin-top:4px; color:#29483a; font-size:12px; }
 .workforce-today-actions { flex-direction:column; align-items:stretch; min-width:220px; }.workforce-today-actions button { width:100%; }
@@ -52,6 +53,8 @@
 .workforce-cell em { display:block; margin-top:4px; font-size:9px; font-style:normal; font-weight:800; letter-spacing:.04em; }
 .workforce-cell em.clock-live { color:#9b6500; }
 .workforce-cell em.clock-done { color:#247457; }
+.workforce-cell em.clock-pending { color:#9b6500; }
+.workforce-republish-banner { margin:0 0 16px; }
 .workforce-attendance td small, .workforce-sales-shifts td small { display:block; margin-top:3px; color:#7a8981; font-size:11px; }
 .attendance-approval-modal { width:min(760px,calc(100vw - 32px)); }
 .attendance-approval-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }

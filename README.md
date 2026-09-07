@@ -6,6 +6,10 @@ Phần mềm quản lý **nội bộ một cửa hàng** siêu thị — giao di
 
 Tài liệu test / kế toán đã chốt: **[docs/](docs/README.md)** · UC và tài liệu môn: `../TaiLieu_Du_An/`
 
+**Người nhận dự án (làm tiếp FE + BE + CSDL):** đọc ngay
+[`docs/BAN_GIAO_LAM_TIEP_TOAN_BO_HE_THONG_2026-09-07.txt`](docs/BAN_GIAO_LAM_TIEP_TOAN_BO_HE_THONG_2026-09-07.txt).
+Backup CSDL: `../TaiLieu_Du_An/05_Backup/Database_Backups/SupermarketFlyDB_2026-09-07_191855.bak`.
+
 ---
 
 ## 1. Bối cảnh

@@ -4,6 +4,7 @@ const controller = require('../controllers/notificationController');
 
 const router = express.Router();
 router.use(verifyToken);
+router.get('/stream', controller.stream);
 router.get('/', controller.list);
 
 module.exports = router;

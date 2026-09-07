@@ -3,7 +3,26 @@ const { logAudit } = require('../services/auditLog');
 const { isRestockAccepted, looksUnsellable, isEqualValueExchange, roundMoney } = require('../services/financialRules');
 const { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS } = require('../services/invoiceReturnSql');
 const { assertCashierDuty } = require('../services/cashierDuty');
-const { canCompleteAssignedReturn, assignedCashierOf, handoverApprovedReturns } = require('../services/returnHandover');
+const {
+    canCompleteAssignedReturn, canActOnAssignedReturn, canClaimLeftoverReturn,
+    assignedCashierOf, handoverApprovedReturns, acceptLeftoverReturn,
+    describeReturnHandover, isUnfinishedReturn, isLeftoverReturn,
+    healParkedReturns, claimLeftoverReturnsForShift, ensureReturnHandoverSchema
+} = require('../services/returnHandover');
+
+const historyOf = (item, extra = {}) => describeReturnHandover({
+    openerMaNV: item.MaNV_Lap,
+    openerName: item.NguoiLap,
+    openerAt: item.NgayLap,
+    parkedAt: item.NgayBanGiao,
+    claimerMaNV: item.MaNV_XuLy,
+    claimerName: item.NguoiXuLy,
+    claimerAt: item.NgayTiepNhan,
+    customerName: item.TenKH,
+    completed: item.TrangThai === 'Hoàn thành',
+    completedAt: item.NgayHoan,
+    ...extra
+});
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 
@@ -20,10 +39,11 @@ const writeAudit = (request, user, action, recordId, content) =>
     logAudit(request, { user, action, table: 'PhieuDoiTra', recordId, content, uc: 'UC26', severity: 'Quan trọng' });
 
 const loadDetail = async (pool, maDT) => {
-    const header = await pool.request().input('MaDT', sql.VarChar, maDT).query(`
+    const headerSql = (withXuLy) => `
         SELECT dt.*, hd.NgayLap NgayHoaDon, hd.TongThanhToan, hd.MaKH, hd.MaCa MaCaGoc, hd.MaKho,
                kh.TenKH, kh.SDT, kh.HangThanhVien,
                nv.TenNV NguoiLap, nvk.TenNV NguoiKiemTra, nvd.TenNV NguoiDuyet,
+               ${withXuLy ? 'xu.TenNV NguoiXuLy,' : ''}
                ban.TenNV ThuNganGoc, k.TenKho, k.DiaChi DiaChiKho
         FROM PhieuDoiTra dt
         JOIN HoaDon hd ON hd.MaHD=dt.MaHD
@@ -32,8 +52,16 @@ const loadDetail = async (pool, maDT) => {
         LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
         LEFT JOIN NhanVien nvk ON nvk.MaNV=dt.MaNV_KiemTra
         LEFT JOIN NhanVien nvd ON nvd.MaNV=dt.MaNV_Duyet
+        ${withXuLy ? 'LEFT JOIN NhanVien xu ON xu.MaNV=dt.MaNV_XuLy' : ''}
         LEFT JOIN Kho k ON k.MaKho=hd.MaKho
-        WHERE dt.MaDT=@MaDT`);
+        WHERE dt.MaDT=@MaDT`;
+    let header;
+    try {
+        header = await pool.request().input('MaDT', sql.VarChar, maDT).query(headerSql(true));
+    } catch (error) {
+        if (!/Invalid column name|MaNV_XuLy/i.test(error.message || '')) throw error;
+        header = await pool.request().input('MaDT', sql.VarChar, maDT).query(headerSql(false));
+    }
     if (!header.recordset.length) return null;
     const ticket = header.recordset[0];
     const bind = () => pool.request().input('MaDT', sql.VarChar, maDT).input('MaHD', sql.VarChar, ticket.MaHD);
@@ -66,7 +94,10 @@ const loadDetail = async (pool, maDT) => {
             ORDER BY gd.NgayGD`)
     ]);
     return {
-        ticket,
+        ticket: {
+            ...ticket,
+            LichSuBanGiao: ticket.MaNV_XuLy || ticket.NgayBanGiao ? historyOf(ticket) : ''
+        },
         lines: lines.recordset,
         payments: payments.recordset,
         audit: audit.recordset,
@@ -88,7 +119,8 @@ const searchInvoices = async (req, res) => {
             LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
             ${INVOICE_RETURN_APPLY}
             WHERE hd.TrangThai=N'Hoàn thành'
-              AND (hd.MaHD LIKE @Search COLLATE Latin1_General_100_CI_AI OR kh.TenKH LIKE @Search COLLATE Latin1_General_100_CI_AI OR kh.SDT LIKE @Search COLLATE Latin1_General_100_CI_AI
+              AND (hd.MaHD LIKE @Search COLLATE Latin1_General_100_CI_AI OR ISNULL(hd.MaKH,'') LIKE @Search COLLATE Latin1_General_100_CI_AI
+                   OR kh.TenKH LIKE @Search COLLATE Latin1_General_100_CI_AI OR kh.SDT LIKE @Search COLLATE Latin1_General_100_CI_AI
                    OR nv.TenNV LIKE @Search COLLATE Latin1_General_100_CI_AI OR hd.MaCa LIKE @Search COLLATE Latin1_General_100_CI_AI)
             ORDER BY hd.NgayLap DESC`);
         res.json({ items: result.recordset });
@@ -129,24 +161,55 @@ const listReturns = async (req, res) => {
     try {
         const status = clean(req.query.status, 30);
         const scope = clean(req.query.scope, 20);
+        const search = clean(req.query.search, 100);
         const pool = await poolPromise;
+        await ensureReturnHandoverSchema(pool);
+        await healParkedReturns(pool);
+        const openShift = await pool.request().input('MaNV', sql.VarChar, req.user.MaNV).query(`
+            SELECT TOP 1 MaCa, MaQuay FROM CaLamViec
+            WHERE MaNV=@MaNV AND TrangThai=N'Đang mở' AND ThoiGianKetThuc IS NULL
+            ORDER BY ThoiGianBatDau DESC`);
+        const openQuay = openShift.recordset[0]?.MaQuay || null;
+        if (openShift.recordset[0]?.MaCa && openQuay) {
+            try {
+                const autoClaimed = await claimLeftoverReturnsForShift(pool, {
+                    maNV: req.user.MaNV,
+                    maQuay: openQuay,
+                    maCa: openShift.recordset[0].MaCa
+                });
+                for (const row of autoClaimed) {
+                    await writeAudit(pool.request(), req.user, 'Tiếp nhận đổi trả', row.MaDT, historyOf({
+                        ...row,
+                        NguoiXuLy: req.user.TenNV,
+                        MaNV_XuLy: req.user.MaNV,
+                        NgayTiepNhan: row.NgayTiepNhan || new Date()
+                    }));
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
         const mineFilter = scope === 'mine'
             ? `(dt.MaNV_Lap=@MaNV OR dt.MaNV_XuLy=@MaNV
-                    OR (dt.TrangThai=N'Đã duyệt' AND dt.MaQuayXuLy IS NOT NULL AND EXISTS (
+                    OR (dt.TrangThai NOT IN (N'Hoàn thành', N'Từ chối', N'Đã hủy')
+                        AND dt.NgayHoan IS NULL
+                        AND dt.NgayBanGiao IS NOT NULL AND EXISTS (
                         SELECT 1 FROM CaLamViec ca
                         WHERE ca.MaNV=@MaNV AND ca.TrangThai=N'Đang mở' AND ca.ThoiGianKetThuc IS NULL
-                          AND ca.MaQuay=dt.MaQuayXuLy)))`
+                          AND (dt.MaQuayXuLy IS NULL OR ca.MaQuay=dt.MaQuayXuLy))))`
             : '1=1';
         const mineLegacy = scope === 'mine' ? 'dt.MaNV_Lap=@MaNV' : '1=1';
         let result;
         try {
             result = await pool.request()
                 .input('Status', sql.NVarChar, status)
+                .input('Search', sql.NVarChar, `%${search}%`)
                 .input('MaNV', sql.VarChar, req.user.MaNV).query(`
                 SELECT dt.MaDT, dt.MaHD, dt.NgayLap, dt.HinhThucXuLy, dt.SoTienHoan, dt.TrangThai,
                        dt.LyDo, dt.MaCaHoan, dt.KetQuaKiemTra, dt.NgayKiemTra, dt.MaNV_KiemTra, dt.GhiChu,
-                       dt.MaNV_XuLy, dt.MaQuayXuLy, dt.NgayBanGiao, dt.MaCaBanGiao,
-                       nv.TenNV NguoiLap, xu.TenNV NguoiXuLy, kh.TenKH, hd.MaCa MaCaGoc, ban.TenNV ThuNganGoc
+                       dt.MaNV_Lap, dt.MaNV_XuLy, dt.MaQuayXuLy, dt.NgayBanGiao, dt.MaCaBanGiao,
+                       dt.NgayHoan, dt.NgayTiepNhan,
+                       nv.TenNV NguoiLap, xu.TenNV NguoiXuLy, kh.TenKH, kh.SDT, hd.MaCa MaCaGoc, ban.TenNV ThuNganGoc
                 FROM PhieuDoiTra dt
                 JOIN NhanVien nv ON nv.MaNV=dt.MaNV_Lap
                 JOIN HoaDon hd ON hd.MaHD=dt.MaHD
@@ -154,30 +217,69 @@ const listReturns = async (req, res) => {
                 LEFT JOIN NhanVien xu ON xu.MaNV=dt.MaNV_XuLy
                 LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
                 WHERE (@Status=N'' OR dt.TrangThai=@Status) AND (${mineFilter})
-                ORDER BY CASE dt.TrangThai
+                  AND (@Search=N'%%' OR dt.MaDT LIKE @Search COLLATE Latin1_General_100_CI_AI
+                       OR dt.MaHD LIKE @Search COLLATE Latin1_General_100_CI_AI
+                       OR ISNULL(kh.TenKH,'') LIKE @Search COLLATE Latin1_General_100_CI_AI
+                       OR ISNULL(kh.SDT,'') LIKE @Search COLLATE Latin1_General_100_CI_AI
+                       OR ISNULL(hd.MaCa,'') LIKE @Search COLLATE Latin1_General_100_CI_AI
+                       OR ISNULL(ban.TenNV,'') LIKE @Search COLLATE Latin1_General_100_CI_AI
+                       OR ISNULL(nv.TenNV,'') LIKE @Search COLLATE Latin1_General_100_CI_AI)
+                ORDER BY CASE WHEN dt.TrangThai NOT IN (N'Hoàn thành', N'Từ chối', N'Đã hủy')
+                                   AND dt.NgayHoan IS NULL AND dt.NgayBanGiao IS NOT NULL
+                                   AND (dt.MaNV_XuLy IS NULL OR dt.MaNV_XuLy<>@MaNV)
+                              THEN 0 ELSE 1 END,
+                         CASE dt.TrangThai
                            WHEN N'Đã duyệt' THEN 0 WHEN N'Chờ duyệt' THEN 1
                            WHEN N'Chờ kiểm tra' THEN 2 WHEN N'Nháp' THEN 3 ELSE 4 END,
                          dt.NgayLap DESC`);
+            result.recordset = result.recordset.map(item => {
+                const leftover = isLeftoverReturn(item, req.user.MaNV);
+                const claimed = Boolean(item.NgayBanGiao && item.MaNV_XuLy === req.user.MaNV && isUnfinishedReturn(item));
+                return {
+                    ...item,
+                    SotTuCaTruoc: leftover,
+                    CoTheTiepNhan: canClaimLeftoverReturn(item, req.user.MaNV, openQuay),
+                    TuCaTruoc: leftover || claimed,
+                    DaTiepNhan: claimed,
+                    LichSuBanGiao: leftover || claimed || (item.NguoiXuLy && item.NguoiXuLy !== item.NguoiLap)
+                        ? historyOf(item)
+                        : ''
+                };
+            });
         } catch (error) {
-            if (!/Invalid column name|MaNV_XuLy/i.test(error.message || '')) throw error;
+            if (!/Invalid column name|MaNV_XuLy|NgayTiepNhan/i.test(error.message || '')) throw error;
             result = await pool.request()
                 .input('Status', sql.NVarChar, status)
+                .input('Search', sql.NVarChar, `%${search}%`)
                 .input('MaNV', sql.VarChar, req.user.MaNV).query(`
                 SELECT dt.MaDT, dt.MaHD, dt.NgayLap, dt.HinhThucXuLy, dt.SoTienHoan, dt.TrangThai,
                        dt.LyDo, dt.MaCaHoan, dt.KetQuaKiemTra, dt.NgayKiemTra, dt.MaNV_KiemTra, dt.GhiChu,
-                       nv.TenNV NguoiLap, kh.TenKH, hd.MaCa MaCaGoc, ban.TenNV ThuNganGoc
+                       nv.TenNV NguoiLap, kh.TenKH, kh.SDT, hd.MaCa MaCaGoc, ban.TenNV ThuNganGoc
                 FROM PhieuDoiTra dt
                 JOIN NhanVien nv ON nv.MaNV=dt.MaNV_Lap
                 JOIN HoaDon hd ON hd.MaHD=dt.MaHD
                 JOIN NhanVien ban ON ban.MaNV=hd.MaNV
                 LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
                 WHERE (@Status=N'' OR dt.TrangThai=@Status) AND (${mineLegacy})
+                  AND (@Search=N'%%' OR dt.MaDT LIKE @Search COLLATE Latin1_General_100_CI_AI
+                       OR dt.MaHD LIKE @Search COLLATE Latin1_General_100_CI_AI
+                       OR ISNULL(kh.TenKH,'') LIKE @Search COLLATE Latin1_General_100_CI_AI
+                       OR ISNULL(kh.SDT,'') LIKE @Search COLLATE Latin1_General_100_CI_AI
+                       OR ISNULL(hd.MaCa,'') LIKE @Search COLLATE Latin1_General_100_CI_AI
+                       OR ISNULL(ban.TenNV,'') LIKE @Search COLLATE Latin1_General_100_CI_AI
+                       OR ISNULL(nv.TenNV,'') LIKE @Search COLLATE Latin1_General_100_CI_AI)
                 ORDER BY CASE dt.TrangThai
                            WHEN N'Đã duyệt' THEN 0 WHEN N'Chờ duyệt' THEN 1
                            WHEN N'Chờ kiểm tra' THEN 2 WHEN N'Nháp' THEN 3 ELSE 4 END,
                          dt.NgayLap DESC`);
         }
-        res.json({ items: result.recordset });
+        const items = result.recordset;
+        res.json({
+            items,
+            leftoverFromPreviousShift: items.filter(item => item.SotTuCaTruoc).length,
+            receivedFromPreviousShift: items.filter(item => item.DaTiepNhan).length,
+            openShift: openShift.recordset[0] || null
+        });
     } catch (error) {
         res.status(500).json({ message: 'Không thể tải danh sách đổi trả.' });
     }
@@ -298,12 +400,31 @@ const createReturn = async (req, res) => {
 const submitReturn = async (req, res) => {
     try {
         const pool = await poolPromise;
-        const result = await pool.request().input('MaDT', sql.VarChar, clean(req.params.id, 20))
-            .input('MaNV', sql.VarChar, req.user.MaNV).query(`
-                UPDATE PhieuDoiTra SET TrangThai=N'Chờ kiểm tra'
-                WHERE MaDT=@MaDT AND MaNV_Lap=@MaNV AND TrangThai=N'Nháp';
-                SELECT @@ROWCOUNT affected;`);
-        if (!result.recordset[0].affected) return res.status(400).json({ message: 'Chỉ phiếu nháp do bạn lập mới gửi Thủ kho kiểm tra.' });
+        const maDT = clean(req.params.id, 20);
+        let result;
+        try {
+            result = await pool.request()
+                .input('MaDT', sql.VarChar, maDT)
+                .input('MaNV', sql.VarChar, req.user.MaNV).query(`
+                    UPDATE dt SET dt.TrangThai=N'Chờ kiểm tra'
+                    FROM PhieuDoiTra dt
+                    WHERE dt.MaDT=@MaDT AND dt.TrangThai=N'Nháp'
+                      AND (
+                            (dt.NgayBanGiao IS NULL AND (dt.MaNV_Lap=@MaNV OR dt.MaNV_XuLy=@MaNV))
+                         OR (dt.NgayBanGiao IS NOT NULL AND dt.MaNV_XuLy=@MaNV)
+                      );
+                    SELECT @@ROWCOUNT affected;`);
+        } catch (error) {
+            if (!/Invalid column name|MaNV_XuLy|NgayBanGiao/i.test(error.message || '')) throw error;
+            result = await pool.request().input('MaDT', sql.VarChar, maDT)
+                .input('MaNV', sql.VarChar, req.user.MaNV).query(`
+                    UPDATE PhieuDoiTra SET TrangThai=N'Chờ kiểm tra'
+                    WHERE MaDT=@MaDT AND MaNV_Lap=@MaNV AND TrangThai=N'Nháp';
+                    SELECT @@ROWCOUNT affected;`);
+        }
+        if (!result.recordset[0].affected) {
+            return res.status(400).json({ message: 'Chỉ phiếu nháp bạn đang phụ trách mới gửi Thủ kho. Phiếu sót từ ca trước cần bấm Tiếp nhận trước.' });
+        }
         await writeAudit(pool.request(), req.user, 'Gửi hàng đổi trả cho Thủ kho', req.params.id, 'Chờ kiểm tra tình trạng hàng');
         res.json({ message: 'Đã gửi hàng cho Thủ kho kiểm tra.' });
     } catch (error) {
@@ -513,7 +634,9 @@ const completeReturn = async (req, res) => {
     const transaction = new sql.Transaction(await poolPromise);
     try {
         const maDT = clean(req.params.id, 20);
+        await ensureReturnHandoverSchema(await poolPromise);
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        await healParkedReturns(transaction);
         const header = await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT).query(`
             SELECT dt.*, hd.MaKho FROM PhieuDoiTra dt WITH(UPDLOCK,HOLDLOCK)
             JOIN HoaDon hd ON hd.MaHD=dt.MaHD
@@ -525,13 +648,16 @@ const completeReturn = async (req, res) => {
         try {
             dutyResult = await assertCashierDuty(transaction, req.user.MaNV, 'complete-return');
         } catch (error) {
-            const quay = ticket.MaQuayXuLy || (await new sql.Request(transaction)
+            const openNow = (await new sql.Request(transaction).input('MaNV', sql.VarChar, req.user.MaNV).query(`
+                SELECT TOP 1 MaCa, MaQuay FROM CaLamViec WITH(UPDLOCK,HOLDLOCK)
+                WHERE MaNV=@MaNV AND TrangThai=N'Đang mở' AND ThoiGianKetThuc IS NULL`)).recordset[0];
+            const quay = ticket.MaQuayXuLy || openNow?.MaQuay || (await new sql.Request(transaction)
                 .input('MaDT', sql.VarChar, maDT)
                 .query(`SELECT ca.MaQuay FROM PhieuDoiTra dt
                         JOIN HoaDon hd ON hd.MaHD=dt.MaHD
                         LEFT JOIN CaLamViec ca ON ca.MaCa=hd.MaCa
                         WHERE dt.MaDT=@MaDT`)).recordset[0]?.MaQuay;
-            if (error.status === 403 && quay) {
+            if (error.status === 403 && quay && !openNow) {
                 await handoverApprovedReturns(transaction, {
                     fromMaNV: assignedCashierOf(ticket),
                     maQuay: quay,
@@ -551,9 +677,20 @@ const completeReturn = async (req, res) => {
             WHERE MaNV=@MaNV AND TrangThai=N'Đang mở' AND ThoiGianKetThuc IS NULL`)).recordset[0];
         if (!shift) throw new Error('Phải mở ca bán hàng của bạn trước khi hoàn tiền hoặc giao hàng đổi. Không mở lại ca nhân viên đã đóng.');
         const maQuay = shift.MaQuay || dutyResult.shift?.MaQuay;
+        if (canClaimLeftoverReturn(ticket, req.user.MaNV, maQuay)) {
+            const accepted = await acceptLeftoverReturn(transaction, {
+                maDT, maNV: req.user.MaNV, maQuay, maCa: shift.MaCa
+            });
+            if (accepted) {
+                ticket.MaNV_XuLy = accepted.MaNV_XuLy;
+                ticket.MaQuayXuLy = accepted.MaQuayXuLy;
+                ticket.NgayTiepNhan = accepted.NgayTiepNhan;
+                ticket.NgayBanGiao = accepted.NgayBanGiao;
+            }
+        }
         if (!canCompleteAssignedReturn(ticket, req.user.MaNV, maQuay)
-            && assignedCashierOf(ticket) !== req.user.MaNV) {
-            throw new Error('Phiếu này đã chuyển ca sau cùng quầy. Thu ngân ca hiện tại tại quầy đó sẽ xác nhận hoàn/đổi.');
+            && !canActOnAssignedReturn(ticket, req.user.MaNV, maQuay)) {
+            throw new Error('Phiếu này đã chuyển ca sau cùng quầy. Thu ngân ca hiện tại tiếp nhận rồi mới xác nhận hoàn/đổi.');
         }
         const maCaHoan = shift.MaCa;
         const restock = isRestockAccepted(ticket.KetQuaKiemTra);
@@ -671,9 +808,81 @@ const completeReturn = async (req, res) => {
                 UPDATE PhieuDoiTra SET TrangThai=N'Hoàn thành',
                     NgayHoan=COALESCE(NgayHoan, GETDATE()), MaCaHoan=COALESCE(MaCaHoan, @MaCa)
                 WHERE MaDT=@MaDT`);
-        await writeAudit(new sql.Request(transaction), req.user, 'Hoàn thành đổi trả', maDT, ticket.HinhThucXuLy);
+        const opener = await new sql.Request(transaction).input('MaNV', sql.VarChar, ticket.MaNV_Lap)
+            .query('SELECT TenNV FROM NhanVien WHERE MaNV=@MaNV');
+        const claimerRow = await new sql.Request(transaction).input('MaNV', sql.VarChar, req.user.MaNV)
+            .query('SELECT TenNV FROM NhanVien WHERE MaNV=@MaNV');
+        const customer = await new sql.Request(transaction).input('MaHD', sql.VarChar, ticket.MaHD)
+            .query(`SELECT kh.TenKH FROM HoaDon hd LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH WHERE hd.MaHD=@MaHD`);
+        const completeNote = ticket.NgayBanGiao || (ticket.MaNV_Lap && ticket.MaNV_Lap !== req.user.MaNV)
+            ? describeReturnHandover({
+                openerMaNV: ticket.MaNV_Lap,
+                openerName: opener.recordset[0]?.TenNV,
+                openerAt: ticket.NgayLap,
+                parkedAt: ticket.NgayBanGiao,
+                claimerMaNV: req.user.MaNV,
+                claimerName: claimerRow.recordset[0]?.TenNV,
+                claimerAt: ticket.NgayTiepNhan || new Date(),
+                customerName: customer.recordset[0]?.TenKH,
+                completed: true,
+                completedAt: new Date()
+            })
+            : ticket.HinhThucXuLy;
+        await writeAudit(new sql.Request(transaction), req.user, 'Hoàn thành đổi trả', maDT, completeNote);
         await transaction.commit();
-        res.json({ message: `Đã hoàn thành phiếu đổi trả ${maDT}.`, MaDT: maDT, MaCaHoan: maCaHoan });
+        res.json({ message: `Đã hoàn thành phiếu đổi trả ${maDT}.`, MaDT: maDT, MaCaHoan: maCaHoan, history: completeNote });
+    } catch (error) {
+        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        res.status(error.status || 400).json({ message: error.message });
+    }
+};
+
+const claimReturn = async (req, res) => {
+    const transaction = new sql.Transaction(await poolPromise);
+    try {
+        const maDT = clean(req.params.id, 20);
+        await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        await healParkedReturns(transaction);
+        const duty = await assertCashierDuty(transaction, req.user.MaNV, 'complete-return');
+        const shift = duty.shift || (await new sql.Request(transaction).input('MaNV', sql.VarChar, req.user.MaNV).query(`
+            SELECT TOP 1 MaCa, MaQuay FROM CaLamViec WITH(UPDLOCK,HOLDLOCK)
+            WHERE MaNV=@MaNV AND TrangThai=N'Đang mở' AND ThoiGianKetThuc IS NULL`)).recordset[0];
+        if (!shift) throw new Error('Phải mở ca bán hàng của bạn trước khi tiếp nhận phiếu đổi trả.');
+        const header = await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT).query(`
+            SELECT dt.*, hd.MaKH, kh.TenKH, lap.TenNV NguoiLap
+            FROM PhieuDoiTra dt WITH(UPDLOCK,HOLDLOCK)
+            JOIN HoaDon hd ON hd.MaHD=dt.MaHD
+            JOIN NhanVien lap ON lap.MaNV=dt.MaNV_Lap
+            LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
+            WHERE dt.MaDT=@MaDT`);
+        if (!header.recordset.length) throw new Error('Không tìm thấy phiếu đổi trả.');
+        const ticket = header.recordset[0];
+        if (!canClaimLeftoverReturn(ticket, req.user.MaNV, shift.MaQuay)) {
+            throw new Error('Phiếu này không phải việc sót tại quầy ca đang mở, hoặc đã được tiếp nhận.');
+        }
+        const accepted = await acceptLeftoverReturn(transaction, {
+            maDT,
+            maNV: req.user.MaNV,
+            maQuay: shift.MaQuay,
+            maCa: shift.MaCa
+        });
+        if (!accepted) throw new Error('Không tiếp nhận được phiếu đổi trả.');
+        const claimer = await new sql.Request(transaction).input('MaNV', sql.VarChar, req.user.MaNV)
+            .query('SELECT TenNV FROM NhanVien WHERE MaNV=@MaNV');
+        const history = historyOf({
+            ...ticket,
+            MaNV_XuLy: req.user.MaNV,
+            NguoiXuLy: claimer.recordset[0]?.TenNV,
+            NgayTiepNhan: accepted.NgayTiepNhan || new Date()
+        });
+        await writeAudit(new sql.Request(transaction), req.user, 'Tiếp nhận đổi trả', maDT, history);
+        await transaction.commit();
+        res.json({
+            message: `Đã tiếp nhận ${maDT} trên ca ${shift.MaCa}.`,
+            MaDT: maDT,
+            MaCaBanGiao: shift.MaCa,
+            history
+        });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         res.status(error.status || 400).json({ message: error.message });
@@ -682,5 +891,6 @@ const completeReturn = async (req, res) => {
 
 module.exports = {
     searchInvoices, listRecentInvoices, getInvoiceForReturn, listReturns, getReturn,
-    createReturn, submitReturn, inspectReturn, flagInspectMistake, decideReturn, completeReturn
+    createReturn, submitReturn, inspectReturn, flagInspectMistake, decideReturn,
+    claimReturn, completeReturn
 };

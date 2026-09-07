@@ -36,8 +36,9 @@
   };
 
   const renderBackups = () => {
-    const keyword = (document.getElementById('backupSearch')?.value || '').toLowerCase();
-    const filtered = keyword ? backups.filter(b => b.fileName.toLowerCase().includes(keyword)) : backups;
+    const normalizeSearch = window.FLY_SEARCH?.normalize || (value => String(value ?? '').toLowerCase());
+    const keyword = normalizeSearch(document.getElementById('backupSearch')?.value || '');
+    const filtered = keyword ? backups.filter(b => normalizeSearch(b.fileName).includes(keyword)) : backups;
     document.getElementById('backupTableBody').innerHTML = filtered.length
       ? filtered.map(b => `<tr>
           <td><strong>${esc(b.fileName)}</strong></td>
@@ -45,7 +46,7 @@
           <td>${fmtTime(b.createdAt)}</td>
           <td class="align-right"><button type="button" class="btn btn-outline" style="font-size:9px;padding:4px 10px;border:1px solid #cbd8d0;border-radius:8px;color:#2f5e4a" data-download-backup="${esc(b.fileName)}">Tải xuống</button></td>
         </tr>`).join('')
-      : '<tr><td colspan="4" class="empty-state">Chưa có file backup.</td></tr>';
+      : `<tr><td colspan="4" class="empty-state">${esc(window.FLY_SEARCH?.emptyMessage?.(document.getElementById('backupSearch')?.value, 'file backup', 'Chưa có file backup.') || 'Chưa có file backup.')}</td></tr>`;
   };
 
   const loadSecurityLogs = async () => {

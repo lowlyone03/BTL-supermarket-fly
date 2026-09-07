@@ -1,0 +1,1258 @@
+PLAN TONG 12 TICH HOP HIEN DAI + KE TOAN
+HE THONG QUAN LY NOI BO SUPERMARKET FLY
+================================================================================
+
+Ngay lap: 05/09/2026
+Ngay sua: 05/09/2026 (ban 3 + wording: /payroll QL=UC10 KT=UC33;
+  scanner dien thoai de sau, khong cat han)
+Pham vi: supermarket-fly (Electron desktop + Node Express :3000 + SQL Server)
+
+Tai lieu nen (KHONG DE, KHONG CHON PHUONG AN B):
+  - README.md
+  - docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt
+      Phuong an DANG CHAY trong code (ke toan nghiep vu).
+  - docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt
+      Pham vi ke toan TONG HOP da chot. VAN LA BAN CHOT.
+      So cai / VAT / TSCD / sao ke / LCTT KHONG DUOC GHI VAO MUC CAT.
+
+Cau chuyen he thong:
+  Supermarket Fly khong chi so hoa chung tu, ma ket noi
+  thanh toan so -> POS -> kho -> ca -> so cai / kiem soat ke toan
+  -> canh bao -> phan tich -> ho tro quyet dinh.
+
+Day la ke hoach NANG CAP. Khong pha 3 cot tien. Khong tu sinh cong no.
+Khong ban chiu. Khong huan luyen mo hinh. Khong khoa POS vao mot cong.
+
+
+--------------------------------------------------------------------------------
+0. LUAT BAT BIEN
+--------------------------------------------------------------------------------
+
+0.1. Ba cot tien KHONG DUOC TRON
+
+  COT A — DOANH THU / GIA VON
+    So doi khi HoaDon.TrangThai = "Hoan thanh" (completeInvoice):
+      tru TonKho, snapshot DonGiaVon / ThanhTienVon, GiaoDichKho LoaiGD=Xuat.
+    Doi tra Hoan thanh giam DT/GV, khong sua tay ton.
+    Lai gop = DT thuan - GV thuan.
+    PHIEU THU KHONG CONG DOANH THU LAN HAI.
+    E-receipt KHONG sinh hoa don moi.
+    Tien tra NCC KHONG tru vao lai gop / KQKD (xem 0.4 va B1.5).
+
+  COT B — KET CA / PHIEU THU (UC22 + UC29)
+    TienMatHeThong = TongTienMat - TongTienHoanMat.
+    QR / The / CK KHONG vao ket.
+    Mot ca DUNG MOT Phieu thu.
+    Chen lech = TienThucNop - TienMatHeThong; co lech bat buoc LyDoChenhLech
+    tren phieu, khong lap bien ban rieng.
+    Dong ca CHAN neu con HoaDon Nhap hoac ThanhToan "Cho xac nhan".
+
+  COT C — CONG NO NCC (UC27 + UC28 + UC09)
+    Chi sinh CongNoPhaiTra khi doi chieu 3 ben KHOP
+      (Don mua + Phieu nhap SoLuongChapNhan + Hoa don GTGT).
+    Lap Phieu chi / QL duyet+giao quy / chi that bai: SoTienConLai KHONG DOI.
+    Chi giam no khi KT ghi thanh toan THANH CONG.
+    Khong tra truoc, khong tra tung phan, mot cong no toi da mot Phieu chi.
+    Tra NCC = thanh toan no 331, KHONG PHAI chi phi moi tren KQKD.
+
+QR VNPay (hoac provider khac qua adapter) chi duoc doi COT A + CaLamViec.TongTienQR.
+OCR / AI / replenishment KHONG duoc insert CongNoPhaiTra.
+Chatbot KHONG duoc duyet PO, khong chi NCC, khong completeInvoice.
+
+0.2. Ke toan tong hop KHONG PHAI "lop 2 de sau neu con gio"
+
+  Mon: Ung dung tin hoc trong ke toan.
+  No/Co -> Nhat ky chung -> So cai -> CDPS co gia tri hoc thuat
+  LON HON viec nhet 4-5 integration.
+
+  Chien luoc pha (DA CHOT, khong chon B = bo PHAM_VI 31/08):
+
+    P0        Nghiep vu dang chay (tien, ton, no, ca, luong) — GIU
+    KT loi    VAT POS + COA + but toan + NKC + So cai + CDPS + KQKD
+    P1        VNPay adapter, barcode, e-receipt, Telegram, doi soat dien tu
+    P2        Replenishment, AI tro ly, OCR
+    KT mo rong TSCD, import sao ke, LCTT, khoa so, BCDKT mini
+
+  KHONG VIET: "so cai chi lam khi mon bat buoc / P1+P2 xong som".
+  KHONG DUA vao muc CAT: so cai, but toan, BCDKT, VAT, TSCD, sao ke, LCTT.
+
+0.3. AI — context / knowledge, KHONG phai train data
+
+  Cau chot khi bao ve:
+    Khong huan luyen mo hinh. Nguon tri thuc / ngu canh cua tro ly gom
+    tai lieu nghiep vu noi bo va du lieu thoi gian thuc duoc lay qua
+    cac API chi doc cua Supermarket Fly.
+
+  TRAINING DATA
+    = du lieu dung de huan luyen / thay doi trong so model
+    -> Nhom KHONG LAM.
+
+  CONTEXT / KNOWLEDGE
+    = tai lieu + so lieu Fly dua vao LUC HOI
+    -> Nhom CO LAM.
+
+  Tuyet doi khong goi database / SupermarketFlyDB la "train data".
+
+0.4. KQKD va dong tien la HAI BAO CAO
+
+  KQKD / P&L:
+    Doanh thu
+    - Gia von
+    - Luong
+    - Dien nuoc, thue mat bang, chi phi van hanh trong ky
+    - Khau hao (khi co TSCD)
+    = Loi nhuan
+    KHONG tru tien da tra NCC.
+
+  Dong tien / thu-chi:
+    Tien thu khach
+    - Tien tra NCC
+    - Tra luong
+    - Chi phi
+    - Mua TSCD
+    = Bien dong tien
+
+  Tra NCC: No 331 / Co 111 hoac 112 — thanh toan cong no, khong phai chi phi moi.
+  Neu da DT - GV roi lai tru tien tra NCC = tru gia tri hang HAI LAN.
+
+0.5. Payment gateway theo adapter
+
+  Khong khoa he thong vao mot nha cung cap.
+  Provider mac dinh luc code: VNPay Sandbox.
+  Interface chung: createPayment() / verifyCallback() / queryPayment().
+
+0.6. Moi loai chi phi CHI GHI O MOT NOI
+  Cuoc van chuyen phai chot MOT lan: chi phi mua hang (vao gia tri hang / 156)
+  HOAC chi phi van hanh (642). Khong dong thoi ca hai.
+  Mac dinh do an: CUOC = 642 van hanh, KHONG cong vao DonGiaVon / 156,
+  KHONG tru lan nua tren KQKD nhu "chi NCC".
+  Xem B-KT.5 va B-KT.7.
+
+0.7. Huy hoa don da thu mot phan
+  HoaDon da co it nhat mot ThanhToan = Thanh cong: KHONG HUY TRUC TIEP
+  (khong xoa, khong UPDATE Huy khi van con tien thanh cong).
+  Phai hoan / dao tung dong thanh cong -> audit -> tong Thanh cong = 0
+  roi moi huy nhap. Chi tiet A1.
+
+0.8. Server khong tin so tien tu client / callback
+  IPN du chu ky hop le van phai doi chieu amount voi ThanhToan.SoTien.
+  Xem A1 buoc IPN.
+
+0.9. Kho vat ly vs so cai 156
+  TonKho tang luc PN xac nhan. But toan No 156 / No 1331 / Co 331
+  chi SAU doi chieu 3 ben khop. Khong mo TK 151/338 trong do an.
+  Ghi ro tren bao cao + canh bao "PN da xac nhan chua du chung tu ghi so".
+  Xem B-KT.6.
+
+
+--------------------------------------------------------------------------------
+1. HIEN TRANG LIEN QUAN (DE BIET DANG MOC VAO DAU)
+--------------------------------------------------------------------------------
+
+1.1. Stack
+  Desktop: Electron Forge, HTML/CSS/JS thuan, khong React/Vue.
+  API: Node.js, Express 5, JWT, bcrypt, CORS, Multer, cong 3000, HOST 0.0.0.0 (LAN).
+  DB: SQL Server SupermarketFlyDB, mssql / msnodesqlv8, Windows Auth, useUTC=false.
+
+1.2. 5 vai tro / 33 UC
+  QL  UC01-UC10, UC30, UC32
+  MH  UC01, UC11-UC14, UC31
+  TK  UC01, UC15-UC21, UC31
+  TN  UC01, UC22-UC26, UC31
+  KT  UC01, UC27-UC29, UC31, UC33
+  Ke toan tong hop (CHUA CODE): UC34 tro di. Khong dung lai UC30-UC33.
+
+1.3. Thanh toan POS HIEN TAI — 4 phuong thuc, khong phai 3
+  Validate cung trong server/src/controllers/salesController.js (addPayment):
+    'Tien mat' | 'QR' | 'The' | 'Chuyen khoan'
+    TrangThai: 'Thanh cong' | 'That bai'
+    Dien tu thanh cong BAT BUOC MaGiaoDich.
+  UI: desktop/src/pages/cashier/cashier-pages.js
+    modal cashier-payment-modal, nut TM / QR / The / CK, thanh toan HON HOP.
+  QR HIEN TAI = nhan ghi so: thu ngan TU CHON + TU NHAP ma GD.
+  KHONG co: sinh ma QR, VNPay, PayOS, webhook/IPN.
+
+  Bang ThanhToan (SupermarketFly_CreateDB.sql):
+    MaTT, MaHD, PhuongThuc, MaGiaoDich, SoTien, NgayTT,
+    TrangThai DEFAULT N'Cho xac nhan', NgayXacNhan, GhiChu
+  Unique UX_ThanhToan_MaGiaoDich (migration SalesAndWorkforceV2).
+  Schema da co "Cho xac nhan" nhung flow POS chua dung — day la moc gateway.
+
+1.4. Dong ca / quy
+  cashierController.getShiftSummary:
+    TongTienMat / TongTienQR / TongTienThe / TongTienChuyenKhoan
+    TienMatHeThong = TongTienMat - TongTienHoanMat
+  closeShift: snapshot vao CaLamViec, TrangThaiDoiSoat = "Cho Ke toan doi soat"
+  settlementController: KT lap + xac nhan Phieu thu (chi TM).
+
+1.5. Phieu chi NCC / luong
+  PhieuChi NCC: chi 'Tien mat' | 'Chuyen khoan'
+  HinhThucCapQuy: 'Tien mat' | 'Uy quyen chuyen khoan'
+  PhieuChiLuong: moi NV/ky mot kenh TM hoac CK.
+
+1.6. POS quet ma HIEN TAI
+  SanPham.MaVach da co. Catalog/POS search theo MaVach / MaSP / ten (khong dau).
+  O #posSearch + Enter: dung ma thi addProduct vao gio.
+  Ca gan MaQuay (Q01...). Unique: mot quay mot ca dang mo
+    (UX_CaLamViec_Quay_DangMo).
+  CHUA co webcam/ZXing. May quet USB HID (gia lap ban phim) GAN NHU DA CHAY
+    neu focus dung o tim.
+
+1.7. Thong bao
+  notificationController + dashboard.js poll 30 giay, badge theo vai tro.
+  Khong Telegram, khong Firebase, khong email/SMS that.
+
+1.8. In an
+  print-documents.js + printInvoice trong cashier-pages.js: PDF noi bo,
+  mau he thong / giay trang. Chua QR xem lai hoa don tren dien thoai.
+
+1.9. Kho / de nghi
+  warehouseController: TonKhoToiThieu, CanBoSung, Sap cham dinh muc,
+  ThieuSoVoiDinhMuc. Canh bao CHI GOI Y. Khong tu thanh Don mua.
+  QL KHONG duyet phieu de nghi.
+
+1.10. Doi chieu mua
+  HoaDonMuaHang + ChiTietHoaDonMuaHang (co ThueSuat, TienThue).
+  financialRules.evaluateThreeWayMatch. Lech = khong insert CongNoPhaiTra.
+  Form tiep nhan trong accounting-pages.js — moc OCR.
+
+1.11. BUG P&L QUAN TRI (PHAI SUA KHI LAM KQKD LOI)
+  storeProfitLossMath.calculateOperatingResult:
+    laiLoSauChiPhi = lai gop - chiNhaCungCap - cuocVanChuyen - luong
+  storeProfitLoss.js: chiNhaCungCap = SUM PhieuChi "Thanh toan thanh cong".
+  Nguyen nhan chi_ncc_lon: "Chi nha cung cap lon hon lai gop" — SAI BAN CHAT.
+  Tra NCC la dong tien / giam no, khong phai chi phi an lai.
+  Xu ly: tach 2 dashboard (xem B1.5). Neu man hien tai van show tien tra NCC
+  thi DOI TEN thanh "Bao cao thu-chi / dong tien quan tri", khong goi la P&L.
+
+
+--------------------------------------------------------------------------------
+2. XEP HANG 12 MUC — QUYET DINH TREN DUNG FLY
+--------------------------------------------------------------------------------
+
+  #   Tich hop                         Pha    Quyet dinh
+  1   QR VNPay Sandbox (adapter)       P1     LAM
+  2   AI tro ly (context, 1 LLM)       P2     LAM
+  3   Telegram companion (push+pull)   P1     LAM; read-only, khong duyet
+  4   OCR hoa don NCC (prefill MVP)    P2     LAM; khong chung tuan/nguoi voi #6
+  5   Barcode webcam + USB + go        P1     LAM (kieu 1)
+  6   Smart replenishment              P2     LAM cong thuc
+  7   Du bao theo thoi tiet            --     Rule phu neu con gio; CAT khoi slide
+  8   E-Receipt QR                     P1     LAM
+  9   Workflow n8n                     --     CAT
+  10  Error monitoring Sentry          --     Cai im, khong slide
+  11  Push Firebase                    --     CAT
+  12  AI local Ollama                  --     Fallback cua #2, khong module rieng
+
+Ke toan (KHONG nam trong 12 muc tren, UU TIEN TRUOC P1):
+  KT loi     VAT POS, COA, engine but toan, NKC, So cai, CDPS, KQKD
+  KT mo rong TSCD, sao ke 112, LCTT, khoa so, BCDKT
+
+
+--------------------------------------------------------------------------------
+3. LICH PHA — KE TOAN LOI TRUOC, TICH HOP SAU
+--------------------------------------------------------------------------------
+
+3.1. Thu tu
+
+  P0         Xac nhan E2E dang chay: tien, ton, no, ca, luong tren 1 CSDL.
+  KT loi     Truoc P1. VAT tren POS truoc khi mo TK 33311.
+  P1         VNPay + barcode + e-receipt + Telegram + doi soat dien tu.
+  P2         Replenishment va AI; OCR khong giao chung 1 nguoi / 1 tuan voi replenishment.
+  KT mo rong Song song hoac sau P1 (sao ke can MaGiaoDich tu VNPay).
+
+  6 thanh vien: KT loi va P1 barcode/e-receipt CO THE song song SAU khi
+  VAT POS + schema COA da chot (tranh 2 nhanh sua HoaDon/ChiTietHoaDon).
+
+3.2. Lich tuan (uoc luong, dieu chinh theo nhom)
+
+  Tuan 0      P0 smoke: 1 chuoi mua-ban-ca-luong tren DB chung.
+  Tuan 1-3    KT loi:
+                1  Schema so cai + COA (co 1331, 33311, 211, 214, 334, 111, 112, 156, 331, 511, 632, 642, 911)
+                2  VAT tren POS + in HD + dao thue khi doi tra
+                3  Engine dinh khoan tu chung tu da co
+                4  Nhat ky chung, So cai, CDPS, KQKD (KHONG tru tien tra NCC)
+              Sua bug man lai/lo: tach KQKD vs dong tien.
+  Tuan 4      P1 VNPay adapter + Cho xac nhan + IPN
+              Xong khi: quet/thanh toan VNPay -> HD tu hoan thanh;
+                        dong ca QR khong vao ket.
+  Tuan 5      P1 barcode 3 che do + e-receipt
+              Xong khi: webcam them SP; USB; in HD co QR xem lai.
+  Tuan 6      P1 Telegram companion (lien ket OTP, push mau, /fly)
+              + man doi soat thanh toan dien tu theo ca
+  Tuan 7      P2 replenishment (mot nguoi)
+              P2 AI tro ly context (mot nguoi khac)
+  Tuan 8      P2 OCR prefill MVP (khong chung nguoi voi tuan 7 replenishment)
+  Tuan 9+     KT mo rong: import sao ke + doi chieu 112, TSCD + khau hao,
+              khoa so, LCTT, BCDKT mini. Test 1 thang xuyen.
+
+3.3. Danh gia do kho P1/P2 (giu)
+
+  VNPay + IPN                 kho nhat P1
+  Barcode + e-receipt         kha thi
+  Telegram + doi soat         kha thi
+  OCR + replenishment         khong giao 1 nguoi trong 1 tuan
+  AI (gioi han scope)         kha thi
+
+
+================================================================================
+PHAN A — CHI TIET 12 TICH HOP
+================================================================================
+
+
+--------------------------------------------------------------------------------
+A1. QR PAYMENT VNPay SANDBOX (ADAPTER)             Uu tien 1    Pha P1
+--------------------------------------------------------------------------------
+
+MUC TIEU
+  Thay "QR = nhan + nhap ma tay" bang: tao thanh toan qua payment adapter,
+  khach thanh toan tren VNPay Sandbox (QR/URL), IPN xac nhan,
+  he thong tu Thanh cong + completeInvoice khi du tien.
+
+PROVIDER
+  Mac dinh: VNPay Sandbox.
+    vnp_TmnCode, vnp_HashSecret
+    Tao payment URL / QR
+    IPN (server-to-server) + return URL
+    Verify checksum
+  PayOS: file provider stub, KHONG khoa POS. (PayOS khong co sandbox rieng;
+    neu sau nay dung thi production test nho — khong doi ten controller.)
+
+VI SAO ADAPTER
+  "Nhom thiet ke theo payment adapter, khong khoa he thong vao mot nha
+  cung cap." Doi VNPay <-> PayOS khong dung business logic POS.
+
+FILE / API (KHONG dat payosController.js)
+  server/src/controllers/paymentGatewayController.js
+  server/src/services/paymentGatewayService.js
+  server/src/services/providers/vnpay.js
+  server/src/services/providers/payos.js          (stub)
+  Interface:
+    createPayment({ MaHD, MaTT, SoTien, MoTa, returnUrl, ipnUrl })
+    verifyCallback(payload) -> { ok, MaThamChieu, SoTien, MaGiaoDich }
+    queryPayment(MaThamChieu)
+
+  Moc san co:
+    salesController.addPayment / completeInvoice
+    cashierController.getShiftSummary / closeShift
+    cashier-pages.js openPayment() / #cashier-payment-modal
+    cashierRoutes POST /invoices/:id/payments va /complete  UC25
+
+  Them:
+    POST /api/cashier/invoices/:id/payments/qr     UC25  (ten giu, goi adapter)
+    GET  /api/cashier/invoices/:id/payments/:maTT
+    POST /api/payments/gateway/ipn                 KHONG JWT, verify chu ky
+    GET  /api/payments/gateway/return              return URL VNPay
+
+THIET KE LUONG (GIU NGUYEN NGHIEP VU)
+  1. TN them hang -> quote (KM, diem) nhu hien tai.
+  2. POST /cashier/invoices -> HoaDon Nhap (neu chua co).
+  3. Chon QR (co the hon hop: 1 dong TM + 1 dong QR).
+  4. POST .../payments/qr
+       SoTien = phan con lai (hoac so TN nhap, khong vuot con lai)
+       INSERT ThanhToan:
+         PhuongThuc = N'QR'
+         TrangThai  = N'Cho xac nhan'
+         SoTien, NgayTT=GETDATE(), NgayXacNhan=NULL
+       Goi adapter.createPayment(...)
+       Tra ve: MaTT, qrCode / paymentUrl, expiredAt
+  5. Modal POS hien QR hoac mo URL sandbox + "Dang cho khach thanh toan".
+     Poll 2s hoac SSE cho den Thanh cong / That bai / timeout.
+  6. IPN / verifyCallback — KHONG TIN SO TIEN TU CALLBACK
+       Thu tu BAT BUOC:
+         a. Verify chu ky (checksum VNPay).
+         b. Map MaThamChieuCong / orderId -> MaTT. Khong thay -> reject, khong update.
+         c. Kiem tra amount callback = ThanhToan.SoTien (sai lech 0d).
+            Vi du MaTT yeu cau 250.000, IPN 25.000: DU chu ky hop le
+            VAN KHONG danh dau 250.000 thanh cong. Ghi log + That bai / Cho xu ly.
+         d. Kiem tra trang thai gateway = paid / success.
+         e. Kiem tra dong nay CHUA xu ly (TrangThai != Thanh cong).
+            Idempotent: IPN lan 2 khong tru ton 2 lan
+            (completeInvoice da co nhanh alreadyCompleted).
+         f. Moi UPDATE ThanhToan Thanh cong + NgayXacNhan + MaGiaoDich.
+         g. Neu tong Thanh cong = TongThanhToan: goi completeInvoice
+            (tru ton, DonGiaVon, diem, audit UC25).
+       Return URL chi de UX; QUYET DINH so lieu nam o IPN + buoc c.
+
+  7. Timeout / khach khong tra / VNPay that bai:
+       TrangThai = That bai. Khong tru ton. TN co the tao GD moi
+       (MaGiaoDich moi, khong tai su dung ma cu).
+
+  8. HUY / KHACH BO GIUA HON HOP (BAT BUOC — EDGE CASE)
+       Vi du: HD 100.000; TM 80.000 Thanh cong; QR 20.000 That bai;
+       khach: "Thoi em khong mua nua."
+       HoaDon van Nhap. KHONG DUOC huy truc tiep / xoa HD.
+
+       Rule:
+         HoaDon da co >= 1 ThanhToan = Thanh cong
+         -> cancelInvoice TRA VE 400.
+         (Code hien tai salesController.cancelInvoice da CHAN neu co
+          ThanhToan Thanh cong — GIU va BO SUNG luong hoan.)
+
+       Neu khach huy:
+         1. Hoan / dao TUNG dong Thanh cong (P1: hoan TM ghi so noi bo
+            vao ket ca / TongTienHoanMat hoac dong ThanhToan Loai=Hoan;
+            QR/The/CK: xac nhan tay, khong refund tu dong qua VNPay).
+         2. Audit UC25: "Hoan truoc khi huy nhap MaTT... so tien..."
+         3. Khi tong Thanh cong con lai = 0 (cac dong cu van CON, khong xoa)
+         4. Moi cho Huy hoa don nhap.
+
+       Cau do an (neu can rut gon slide):
+         "Neu thanh toan hon hop da co mot phan Thanh cong, Thu ngan
+          bat buoc hoan tat phan con lai HOAC lam quy trinh hoan tien
+          truoc khi huy hoa don."
+
+       Dong ca: van chan neu con Cho xac nhan. Neu con Thanh cong tren
+       HD Nhap: cung khong cho dong ca (bo sung check: HoaDon Nhap
+       khong duoc phep con tien Thanh cong — phai hoan hoac complete).
+
+  9. Fallback: van giu dong QR thu cong (nhap MaGiaoDich + tick Thanh cong)
+     de demo mat mang / sandbox chet.
+ 10. Dong ca: neu con Cho xac nhan -> 400 nhu hien tai.
+
+SCHEMA / ENV
+  .env:
+    PAYMENT_PROVIDER=vnpay
+    VNPAY_TMN_CODE, VNPAY_HASH_SECRET, VNPAY_URL
+    VNPAY_IPN_URL, VNPAY_RETURN_URL
+  Cot tuy chon:
+    ThanhToan.NguonXacNhan NVARCHAR(20)  'ThuCong' | 'VNPay' | 'PayOS'
+    ThanhToan.MaThamChieuCong VARCHAR(80)
+  Unique UX_ThanhToan_MaGiaoDich giu nguyen.
+
+KE TOAN
+  HD hoan thanh qua IPN = GHI DOANH THU 1 LAN nhu completeInvoice hom nay.
+  TongTienQR tang. TienMatHeThong KHONG tang.
+  Phieu thu van chi TM.
+  Hon hop 80.000 TM + 20.000 QR (CA HAI Thanh cong):
+    ket +80.000, TongTienQR +20.000, DT +100.000 mot lan.
+  Hon hop 80.000 TM Thanh cong + 20.000 QR That bai roi huy:
+    Phai hoan 80.000 TM truoc; HD Nhap moi Huy; KHONG ghi DT;
+    ket: +80 roi -80 (hoac khong kip vao snapshot neu chua dong ca —
+    hoan trong ca dang mo tru vao TM thu).
+  Khi KT loi da co: No 111 (TM) va/hoac 112 (QR) / Co 511 + 33311; No 632 / Co 156.
+  MaGiaoDich la VET de KT mo rong import sao ke doi chieu 112
+    — cau noi, KHONG phai ly do tri hoan so cai.
+  Hoan QR tu dong qua cong: KHONG lam o P1.
+
+MAN KT CAN LAM KEM (UC29 mo rong nhe) — P1
+  "Doi soat thanh toan dien tu theo ca"
+  Cot: MaHD, PhuongThuc, MaGiaoDich, NguonXacNhan, TrangThai, NgayTT, NgayXacNhan.
+  Tong QR/The/CK so voi snapshot CaLamViec.
+  KHONG cong vao SoTienTheoHeThong cua Phieu thu.
+
+AUDIT
+  UC25: "Tao thanh toan gateway MaTT... provider VNPay..."
+  UC25: "IPN xac nhan MaGD... hoan thanh HD..."
+
+DEMO
+  TM+QR mot HD -> dong ca -> KT thay QR khong vao PT, TM khop ket;
+  so cai (neu KT loi xong) thay 111/112 dung.
+
+CAU HOI HOI DONG
+  Q: Day la QR that hay gia?
+  A: VNPay Sandbox, IPN ky checksum, khong phai tick tay.
+  Q: Doi cong thi sua het POS?
+  A: Khong. POS goi adapter; chi thay providers/vnpay.js.
+  Q: Doanh thu bi cong 2 lan (cong + Phieu thu)?
+  A: Khong. DT chi luc HD Hoan thanh. PT chi ban giao TM.
+  Q: IPN gui 25.000 cho giao dich 250.000?
+  A: Chu ky dung van reject. Doi chieu amount voi ThanhToan.SoTien.
+  Q: Khach tra 80.000 TM roi bo mua?
+  A: Khong huy HD. Hoan 80.000, audit, tong thanh cong = 0, roi moi huy nhap.
+
+KHONG LAM O P1
+  MoMo / ZaloPay song song.
+  Hoan QR tu dong qua VNPay (hoan QR/The/CK van xac nhan tay).
+  Tach nhan "MoMo" vs "VietQR" (van PhuongThuc='QR').
+
+
+--------------------------------------------------------------------------------
+A2. AI TRO LY                                      Uu tien 2    Pha P2
+--------------------------------------------------------------------------------
+
+KHUNG BAO VE (BAT BUOC — KHONG NOI TRAIN DATA)
+  Khong huan luyen mo hinh. Nguon tri thuc / ngu canh cua tro ly gom
+  tai lieu nghiep vu noi bo va du lieu thoi gian thuc duoc lay qua
+  cac API chi doc cua Supermarket Fly.
+
+  TRAINING DATA  = huan luyen / thay trong so  -> KHONG LAM
+  CONTEXT / KNOWLEDGE = tai lieu + so lieu luc hoi -> CO LAM
+
+  Khong goi SupermarketFlyDB la train data.
+  Giong tro ly nghiep vu (Copilot trong PM ke toan), khong phai ChatGPT chung.
+
+PHAM VI CAU HOI THEO VAI TRO
+  QL  PO cho duyet, PX/KK/doi tra/phieu chi, cong no toi han,
+      KQKD vs dong tien (khong nham tra NCC la chi phi), lech quy ca.
+  KT  3 chung tu, Phieu thu, Phieu chi, luong, 3 cot tien, so cai / CDPS (khi co).
+  TN  mo/dong ca, hon hop TM+QR, doi tra, khong ban chiu.
+  TK  ton min, de nghi, nhan hang, xuat huy.
+  MH  de nghi -> PO, theo doi giao.
+
+CAM TUYET DOI
+  INSERT/UPDATE chung tu.
+  Duyet PO, duyet phieu chi, completeInvoice, giam SoTienConLai.
+
+FILE / API
+  Them server/src/controllers/assistantController.js
+  POST /api/assistant/ask          JWT, UC01 + loc theo TenVaiTro
+  Knowledge (context, khong phai tap huan luyen):
+    docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt
+    docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt
+    README.md muc 7
+    FAQ 40-60 cau (docs/ASSISTANT_FAQ.txt — tao khi code)
+  Tools CHI DOC (GET / SELECT san co):
+    listInboxForEmployee
+    /admin/dashboard
+    cong no, ton CanBoSung, shift summary, bao cao KQKD / dong tien
+
+UI
+  Nut "Tro ly" tren dashboard. Panel ben phai.
+  Tra loi kem ma chung tu. Khong chac: "Mo man X".
+
+NGUON CAU TRA LOI (BAT BUOC — enterprise copilot)
+  Moi cau tra loi so lieu phai liet ke nguon ngay duoi:
+    AI: Co 2 cong no sap den han.
+    Nguon:
+      CN00023 – han 07/09/2026
+      CN00025 – han 08/09/2026
+  Hoac: "Theo bao cao KQKD thang 09/2026..."
+  FAQ/quy trinh: trich ten tai lieu (vi du PHUONG_AN_KE_TOAN_DA_CHOT muc 3).
+  Khong nguon -> khong duoc bia so.
+
+LLM
+  Mac dinh: Gemini hoac OpenAI (env ASSISTANT_PROVIDER, ASSISTANT_API_KEY).
+  Ollama = fallback CUNG endpoint (A12). Khong slide 2 o AI.
+
+KE TOAN
+  Chi DOC. Khong ghi so, khong sinh but toan.
+  Cau mau:
+    "Khach nua TM nua QR thi phieu thu tinh sao?"
+    -> Chi TM vao ket; QR khong vao PT; DT da ghi luc HD hoan thanh.
+    "Tra NCC 10 trieu thi lai gop giam 10 trieu?"
+    -> Khong. Tra no 331. Nam o bao cao dong tien.
+
+DEMO
+  "Hom nay can chu y gi?" -> inbox + ton min + cong no han + lech quy (doc API).
+
+
+--------------------------------------------------------------------------------
+A3. TELEGRAM BOT — MOBILE MONITORING COMPANION     Uu tien 3    Pha P1
+--------------------------------------------------------------------------------
+
+DINH VI
+  Dien thoai QL = mini dashboard. Khong can app mobile.
+  Muc tieu: "Khong mang laptop van biet cua hang dang the nao."
+  Telegram loi / tat bot: nghiep vu Electron van chay binh thuong (fallback).
+
+CHUC NANG
+  Push: canh bao / su kien quan trong (chi tiet nhu duoi, khong chi 1 dong).
+  Pull: Admin/QL (va NV da lien ket dung vai tro) hoi so lieu live.
+  Read-only: KHONG doi chung tu.
+  Role-based: chi ChatId da lien ket TaiKhoan hop le + dung UC.
+  Audit: ghi command quan trong (MaNV, ChatId, lenh, luc).
+  Fallback: Telegram down khong chan POS / so cai / ca.
+
+RANH GIOI (KHONG DOI)
+  XEM qua Telegram: duoc (neu vai tro do xem duoc trong Fly).
+  DUYET / GHI SO / THANH TOAN / SUA du lieu: KHONG.
+    Duyet Phieu chi / PO     X
+    Hoan thanh hoa don       X
+    Tra NCC                  X
+    Sua cham cong            X
+  Ly do: duyet tren Telegram = xac thuc 2 lop, replay, transaction,
+  audit, tai khoan Telegram bi chiem, xac nhan lan 2 — qua tam do an.
+  Thao tac nghiep vu quan trong van quay ve Supermarket Fly.
+
+LIEN KET TAI KHOAN (KHONG HARD-CODE ChatId)
+  NhanVien mo Fly -> [Tao ma lien ket Telegram] -> OTP 6 so (vd 482913)
+    -> Telegram: /start 482913
+    -> Backend luu ChatId <-> MaNV. Chi ChatId da dang ky moi dung bot.
+  Khong viet: if (chatId === '123456789').
+
+  Bang TelegramDangKy
+    MaNV, ChatId, Bat, NgayDangKy, NgayXacThuc, LanHoatDongCuoi
+    (co the them MaOTP, HetHanOTP, SoLanSai — xoa OTP sau xac thuc)
+
+  Moi command:
+    Telegram ChatId -> TelegramDangKy (Bat=1)
+    -> TaiKhoan / NhanVien -> VaiTro -> Permission (UC)
+    -> API READ (cung endpoint inbox / dashboard / cong no / ton / ca)
+    Khong quyen -> "Tai khoan cua ban khong xem muc nay trong Fly."
+
+PUSH — MAU TIN (QL duoc xem trong app thi bot duoc gui cung muc)
+  Phieu chi cho duyet:
+    PHIẾU CHI CHỜ DUYỆT
+    Ma: PC00028
+    NCC: Cong ty ABC
+    Cong no: CN00125
+    So tien: 12.500.000d
+    Phuong thuc: Chuyen khoan
+    Han thanh toan: 08/09/2026
+    Nguoi lap: Ke toan
+    Trang thai: Cho duyet
+    Mo Supermarket Fly -> Trung tam phe duyet
+
+  Ca lech ket:
+    CHÊNH LỆCH KẾT CA
+    Ca: CA20260905-02
+    Quay: Q02
+    Thu ngan: NV008
+    Tien he thong: 4.820.000d
+    Thuc nop: 4.700.000d
+    Chenh lech: -120.000d
+    Ly do: Chua nhap
+    Trang thai: Can xu ly
+
+  Bao cao cuoi ngay (1 tin / ngay, sau dong ca cuoi hoac cron 22:00):
+    SUPERMARKET FLY – 05/09/2026
+    Doanh thu / Gia von / Lai gop
+    Tien mat / QR / The / Chuyen khoan
+    Cong no den han, GD chua doi soat, SP can bo sung, Ca lech quy
+    KHONG tru tien tra NCC vao lai gop (dung cot A / B1.5).
+
+  Su kien khac (map inbox): PO/PX/KK/doi tra cho duyet; HD cho doi chieu;
+  han no; da giao quy can chi NCC; ton CanBoSung (gop, khong spam tung SP).
+  Rate limit: 1 su kien / chung tu / 10 phut.
+
+PULL — LENH READ-ONLY
+  /fly         menu inline keyboard (khong can nho lenh)
+  /today       bao cao hom nay (DT, GV, lai gop, 4 kenh TT)
+  /debt        cong no: tong, den han 7 ngay, qua han + top dong
+  /lowstock    hang CanBoSung (TenSP + SLTon)
+  /shifts      ca hom nay / ca dang mo / lech quy
+  /payments    thanh toan dien tu trong ngay (so luong, tong QR/The/CK, cho xac nhan)
+  /pending     phieu cho duyet (PO, PC, PX, KK, doi tra) — dung UC
+  /payroll     QL xem tom tat theo quyen bao cao UC10 (khong kem MaNV).
+               KT xem giao dich / chi tiet bang luong theo UC33:
+               /payroll NV008 moi ra gio ngay/dem + tong 1 NV.
+               Bot chi DOC; khong duyet, khong sua.
+               Khong push tu dong chi tiet luong tung NV.
+
+  Menu /fly (inline keyboard):
+    Bao cao hom nay | Doanh thu | Cong no | Ton kho
+    Phieu cho duyet | Nhan su hom nay | Thanh toan dien tu | Canh bao
+
+LUONG
+  QL (UC10): /payroll = tom tat ky (tong luong, so NV da/chua thanh toan).
+  KT (UC33): /payroll MaNV = chi tiet 1 nguoi (gio ngay/dem, tong).
+  Khong gop QL/Admin/UC33/UC10 thanh mot quyen.
+  Khong push tu dong chi tiet luong tung NV. Neu push: chi summary ky.
+  Chi tiet khi nguoi du quyen chu dong goi lenh. Chi ChatId da lien ket.
+
+KE TOAN
+  Moi so lieu pull/push LAY TU API DOC, khong ghi so.
+  Alert lech quy khong sua TienMatHeThong.
+  Alert han no / xem PC khong lap Phieu chi, khong giam 331.
+
+DEMO (AN DIEM)
+  Laptop POS ban / dong ca lech -> dien thoai QL nhan tin chi tiet ngay.
+  Bam /fly -> Bao cao hom nay -> so live tu SQL Server.
+  Thay hoi duyet tren Telegram: "Xem duoc; duyet van trong Fly de giu
+  phan quyen, transaction, audit."
+
+FILE
+  server/src/services/telegramNotify.js      push
+  server/src/controllers/telegramBotController.js  webhook Telegram + command
+  desktop: man ho so / admin "Lien ket Telegram" (OTP)
+  migration TelegramDangKy (+ NgayXacThuc, LanHoatDongCuoi)
+  Env TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_URL
+  Audit: bang TelegramNhatKy hoac logAudit action "Telegram /debt"
+
+KHONG LAM
+  Nut Duyet / Tu choi tren Telegram.
+  Cho moi nguoi (chua /start OTP) hoi bot.
+  Firebase (#11).
+
+
+--------------------------------------------------------------------------------
+A4. OCR HOA DON NCC                                Uu tien 4    Pha P2
+--------------------------------------------------------------------------------
+
+MUC TIEU
+  Anh/PDF HD GTGT -> GOI Y form tiep nhan. KT sua -> Luu -> Doi chieu 3 ben nhu cu.
+  OCR khong tu tao cong no, khong hach toan tu dong.
+
+MVP (KHONG DAT MUC TIEU DOC HET TUNG DONG)
+  Doc tot: So HD, Ngay, MST, Tong tien hang, VAT, Tong cong.
+  Chi tiet hang: CONG DIEM neu doc duoc. Layout HD thuc te da dang.
+
+FILE / API
+  POST /api/accounting/invoices/ocr     UC27, multer
+  server/uploads/invoices/
+  Migration: HoaDonMuaHang.DuongDanAnh NVARCHAR(300) NULL
+  Engine: Tesseract.js local hoac Google Vision free tier.
+
+KE TOAN
+  OCR KHONG set TrangThaiDoiChieu = "Da khop".
+  OCR KHONG insert CongNoPhaiTra.
+  Lech PO/PN van "Chenh lech". evaluateThreeWayMatch giu nguyen.
+  Audit: "OCR goi y..., KT xac nhan / da sua..."
+
+PHAN CONG
+  Khong giao chung 1 nguoi / 1 tuan voi replenishment (A6).
+
+DEMO
+  Anh HD -> form 5-6 truong (so, ngay, MST, tien hang, VAT, tong)
+  -> KT kiem -> luu -> 3-way match. Du wow.
+  Khong can OCR 30 dong SP 100%. Video du phong neu can.
+
+KHONG LAM
+  HDDT co quan thue.
+  Tu but toan 1331/331 tu OCR (engine dinh khoan chi chay SAU KT xac nhan khop).
+
+
+--------------------------------------------------------------------------------
+A5. QUET BARCODE — 3 CHE DO TREN CUNG POS          Uu tien 5    Pha P1
+--------------------------------------------------------------------------------
+
+CHOT (KHONG SUA LON)
+  Kieu 1 — webcam may tinh TAI QUAY: lam truoc, mien phi, demo on dinh.
+  Kieu 2 — dien thoai ket noi POS: de sau.
+  USB HID: ho tro luon (gia lap ban phim).
+  3 che do: Go tay / May quet USB / Camera scanner.
+  Hoi dong: "Khong co may quet?" -> webcam.
+  "Trien khai that?" -> cam USB.
+
+HIEN TRANG
+  findExactPosProduct(MaVach / MaSP); #posSearch + Enter -> addProduct.
+  NEN SUA: sau moi dong, focus lai #posSearch (USB khong go nham field khac).
+
+KIEU 1 — WEBCAM
+  Nut "Mo camera" canh o tim.
+  getUserMedia + ZXing / html5-qrcode. Electron: permission camera.
+  EAN-13 / UPC / Code128 -> addProduct. Beep. Chong trung 800ms.
+
+USB HID
+  Khong them thu vien. Sung go + Enter vao #posSearch.
+
+GO TAY
+  Giu nguyen. Ten khong dau, loc danh muc.
+
+UI
+  Thanh: [ Go ] [ USB ] [ Camera ]
+
+KIEU 2 — DIEN THOAI (KHONG P1)
+  QR token bind MaCa + MaQuay, het han khi dong ca.
+  /scan?token= -> POST /cashier/shifts/current/scan -> POS SSE/poll.
+  Phuc tap LAN/Tailscale + dung quay/ca. Lam sau kieu 1.
+
+KE TOAN
+  Khong dung tien. Sai ma = sai dong HD = sai DonGiaVon luc complete.
+
+
+--------------------------------------------------------------------------------
+A6. SMART REPLENISHMENT                            Uu tien 6    Pha P2
+--------------------------------------------------------------------------------
+
+MUC TIEU
+  Goi y SL tren phieu de nghi. TK van quyet dinh. Khong tu PO, khong tu no.
+
+CONG THUC BAN DAU
+  NhuCauNgay = TB ban 7 ngay (HD Hoan thanh - hang tra nhap lai)
+  DiemDatHang / TonAnToan = TonKhoToiThieu
+  SoNgayCheo = 7 (sua tren form)
+  SLGoiY = max(0, ceil(NhuCauNgay * SoNgayCheo - SLTon + TonKhoToiThieu))
+  SLTon > TonKhoToiThieu -> SLGoiY = 0 (dung rule hien tai).
+
+NANG P2 (NEN CO; KHONG CHAN BAN DAU NEU THIEU GIO)
+  TonKhaDungDuKien = TonHienTai + HangDangDatChuaNhan
+    (PO da duyet / da gui NCC, chua nhap du SoLuongChapNhan)
+  SLGoiY = max(0, NhuCauNgay * SoNgayCheo + TonAnToan - TonKhaDungDuKien)
+  Neu khong tru hang dang dat: de nghi trung (vd da dat 100 chai chua ve).
+
+BONUS SAU MVP (KHONG THEM VAO SLIDE CHINH)
+  Thay SoNgayCheo = 7 bang LeadTimeNCC + SoNgayAnToan.
+  Vi du NCC A TB giao 2 ngay -> coverage 2+2=4; NCC B 5 ngay -> 5+2=7.
+  Du lieu: ThongBaoGiaoHang + ETA + ngay giao thuc te da co tren PO.
+  Tinh lead time thuc te theo NCC — nang bac, khong bat buoc P2.
+
+FILE / API
+  GET /api/warehouse/replenishment-suggest     UC16
+  Cot SL goi y + nut "Ap dung goi y". TK sua duoc.
+
+CAM
+  Khong INSERT DonMuaHang. Khong doi gia von / cong no.
+
+PHAN CONG
+  Khong chung 1 nguoi / 1 tuan voi OCR.
+
+THOI TIET (A7)
+  Neu con gio: he so rule tren SLGoiY. Khong goi mo hinh du bao.
+
+
+--------------------------------------------------------------------------------
+A7. DU BAO THEO THOI TIET                          Uu tien 7    CAT SLIDE
+--------------------------------------------------------------------------------
+
+Khong du lich su de goi mo hinh. De slide se bi hoi correlation / dataset / accuracy.
+Open-Meteo chi la rule phu tren A6 neu con gio. Khong slide rieng.
+
+
+--------------------------------------------------------------------------------
+A8. E-RECEIPT QR                                   Uu tien 8    Pha P1
+--------------------------------------------------------------------------------
+
+MUC TIEU
+  Xem / tai DUNG hoa don goc. Khong tao HD thu hai. Khong phai HDDT thue.
+
+TOKEN (BAT BUOC)
+  GET /receipts/:token  — public, KHONG JWT.
+  Token: random du dai, khong doan duoc tu MaHD,
+  expiration ~30 ngay, khong nhung SĐT/CCCD/luong/NV thua.
+  Bang/cot: HoaDon.TokenXem UNIQUE, HetHan DATETIME.
+
+NOI DUNG TRANG PUBLIC (KHONG JWT)
+  MaHD, NgayLap, quay/ca, dong hang, TongThanhToan, diem.
+  Dong thanh toan: CHI phuong thuc + so tien.
+    Vi du: "Thanh toan QR: 120.000d"
+    HOAC che: "QR ••••3821" (4 ky tu cuoi).
+  KHONG hien toan bo MaGiaoDich tren /receipts/:token.
+  KT / TN da dang nhap (GET /cashier/invoices/:id) moi xem ma GD day du.
+  Khach chi thay du lieu can thiet cua hoa don.
+
+  QR tren ban in (print-documents.js) tro toi URL LAN / Tailscale / tunnel.
+
+KE TOAN
+  Cung HD goc. Khong cong DT lan 2.
+  Doi tra: phieu DT in rieng; HD goc khong bi thay.
+  In lai e-receipt KHONG sinh but toan thue lan 2 (khi KT loi da co VAT).
+
+
+--------------------------------------------------------------------------------
+A9. n8n                                            Uu tien 9    CAT
+--------------------------------------------------------------------------------
+
+Workflow duyet da nam trong app (UC + audit). Telegram da la kenh ra ngoai.
+n8n = may thu hai luc bao ve. Khong cai, khong slide.
+
+
+--------------------------------------------------------------------------------
+A10. SENTRY                                        Uu tien 10   KHONG SLIDE
+--------------------------------------------------------------------------------
+
+Co the cai @sentry/node tren app.js (free). Khong UC, khong demo AIS.
+
+
+--------------------------------------------------------------------------------
+A11. FIREBASE                                      Uu tien 11   CAT
+--------------------------------------------------------------------------------
+
+Electron noi bo, khong actor khach. Telegram da la push dien thoai.
+
+
+--------------------------------------------------------------------------------
+A12. OLLAMA                                        Uu tien 12   FALLBACK A2
+--------------------------------------------------------------------------------
+
+Cung POST /api/assistant/ask.
+Env ASSISTANT_PROVIDER = openai | gemini | ollama.
+Khong slide thanh module AI local rieng. Khong "train tren hoa don".
+
+
+================================================================================
+PHAN B — PLAN KE TOAN
+================================================================================
+
+Hai nguon su that:
+  PHUONG_AN_KE_TOAN_DA_CHOT.txt     = nghiep vu DANG CHAY (B1)
+  PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08 = tong hop PHAI LAM (B-KT loi + B-KT mo rong)
+
+Khong chon B (bo file 31/08). Khong ghi so cai vao muc CAT.
+
+
+--------------------------------------------------------------------------------
+B1. NGHIEP VU DANG CHAY (PHAI GIU)
+--------------------------------------------------------------------------------
+
+B1.1. Ban hang (TN, UC24-UC26)
+  Khach tra DU. Khong ban chiu, khong TK 131.
+  HD Hoan thanh -> tru ton, GiaoDichKho Xuat, DonGiaVon.
+  Lai gop = DT thuan - GV thuan. Luong KHONG tru vao lai gop.
+  Doi tra: khong cong DT lan hai.
+
+B1.2. Quy ca (UC22 + UC29)
+  TienMatHeThong = TM thu - hoan TM. QR/The/CK khong vao ket.
+  Mot ca mot Phieu thu. PT KHONG sinh doanh thu.
+
+B1.3. Mua hang va cong no NCC (UC27, UC28, UC09)
+  Khop 3 ben moi insert CongNoPhaiTra. SoTienNo = TongCong (hang + thue).
+  Lap PC / duyet+giao quy / chi fail: no KHONG DOI.
+  Chi thanh cong: SoTienConLai = 0. Khong tra truoc, khong tra tung phan.
+  Y nghia ke toan: tra NCC = giam 331 + giam 111/112, khong ghi them chi phi hang.
+
+B1.4. Luong (UC30-UC33)
+  Gio cong, ngay le VN, he so. QL giao mot quy, KT chi tung nguoi.
+  Huong tat toan mung 10. Khong BHXH/BHYT.
+  Khi KT loi: No 642 / Co 334; chi: No 334 / Co 111 hoac 112.
+
+B1.5. TACH KQKD VA DONG TIEN (SUA LOI HIEN TAI)
+
+  SAI (code hien tai + plan cu):
+    "Lai/lo sau chi phi = lai gop - chi NCC da tra - luong da khoa"
+    Vi du: mua 10tr, ban DT 15tr GV 10tr -> lai gop 5tr;
+    tra NCC 10tr roi tinh 5tr - 10tr = -5tr -> KHONG CON LA LOI NHUAN.
+
+  DUNG — hai dashboard:
+
+    KQKD / P&L
+      Doanh thu
+      - Gia von
+      - Luong (642)
+      - Dien nuoc, thue, VP trong ky (642, khi co UC36)
+      - Khau hao (642, khi co TSCD)
+      = Loi nhuan
+      KHONG tru PhieuChi NCC thanh cong.
+
+    Dong tien / thu-chi quan tri
+      Tien thu khach (TM nop + QR/The/CK thanh cong)
+      - Tien tra NCC
+      - Tra luong
+      - Chi phi da chi
+      - Mua TSCD
+      = Bien dong tien
+
+  Man QL hien tai (storeProfitLoss.js):
+    Doi ten / tach. Neu van hien tien tra NCC -> goi "Bao cao thu-chi quan tri".
+    Xoa / sua nguyen nhan chi_ncc_lon khoi danh sach "vi sao lo" cua P&L.
+    Ke hoach dieu chinh khi LO van dung, nhung canh bao lo phai dua tren KQKD
+    (hoac dong tien AM), khong lay "lai gop tru tra NCC".
+
+  Day la loi QUAN TRONG HON UI. Sua khi lam KQKD loi (tuan 1-3).
+
+
+--------------------------------------------------------------------------------
+B-KT LOI — LAM TRUOC P1 (UC34+)
+--------------------------------------------------------------------------------
+
+Dieu kien: P0 E2E pass. Khong mo 33311 khi POS chua luu thue
+(canh bao dung trong PHAM_VI 31/08).
+
+B-KT.1. VAT tren POS (uu tien ke toan so 1)
+  Gia niem yet tren quay DA GOM VAT. Khach tra TongThanhToan nhu hien tai.
+  Them:
+    SanPham.ThueSuat
+    ChiTietHoaDon.ThueSuat, TienThue
+    HoaDon.TienThue
+  Tach sau KM va diem:
+    Tien thue dong = round( ThanhTienSauGiam * t / (100 + t) )
+    511 = ThanhTienSauGiam - Tien thue dong
+  1 HD 2 dong thue suat khac nhau: tach 33311 theo dong.
+  Doi tra: dao 511 va 33311 theo thue suat da LUU tren dong HD goc.
+  Khong nhap lai kho thi khong dao 632.
+  In HD: thanh tien gom VAT + tien thue / DT chua thue.
+  In lai / e-receipt: khong sinh but toan thue lan 2.
+
+B-KT.2. Schema so cai + COA + ky
+  TaiKhoanKeToan, ButToan, ChiTietButToan, KyKeToan, so du dau ky.
+  COA toi thieu: 111, 112, 1331, 156, 211, 214, 331, 33311, 334,
+    511, 5212, 632, 642, 911.
+  UC34, UC35.
+
+B-KT.3. Engine dinh khoan tu dong (UC37)
+  Chi sinh but toan khi chung tu dat trang thai hop le (nhu 3 cot tien).
+
+  Su kien                         No              Co
+  HD hoan thanh                    111 va/hoac 112 511 + 33311
+  Gia von luc ban                  632             156
+  Phieu thu ca                     KHONG (DT da ghi)
+  Doi tra hoan tien                5212 + 33311    111 hoac 112
+  Doi tra nhap lai kho             156             632
+  Khop 3 ben                       156 + 1331      331
+  Lap PC / giao quy                KHONG (quy noi bo; nhat ky)
+  Chi NCC thanh cong               331             111 hoac 112
+  Trich luong                      642             334
+  Chi luong                        334             111 hoac 112
+  Chi phi van hanh trong ky        642 (+1331)     111 hoac 112
+  Cuoc van chuyen (mac dinh)       642             111 hoac 112
+                                   KHONG vao 156 / DonGiaVon
+  Mua TSCD (tach VAT)              211 + 1331      111 / 112 / 331
+                                   211 = nguyen gia CHUA VAT
+
+B-KT.4. Nhat ky chung, So cai, CDPS, KQKD (UC38, UC43 mot phan)
+  NKC: moi but toan theo ngay.
+  So cai: tap hop theo TK.
+  CDPS: so du dau + phat sinh No/Co + so du cuoi.
+  KQKD: dung cong thuc B1.5 (khong tru tra NCC).
+  Tieu chi nghiem thu VAT: giu nguyen muc 6 cua file 31/08.
+
+B-KT.5. Chi phi van hanh trong ky (UC36)
+  Dien, nuoc, thue mat bang, VP. Ghi thang 642. Khong 242.
+
+B-KT.6. KHO VAT LY VS 156 — HANG NHAP ROI HOA DON DEN SAU
+  Nghiep vu kho: NCC giao -> TK nhan -> SoLuongChapNhan tang TonKho
+  -> HD mua co the den sau -> moi 3-way match.
+  Khoang thoi gian: TonKho da tang, so cai 156 CHUA tang.
+  KHONG them TK 151 / 338 trong do an.
+
+  Cau bao ve (viet vao bao cao):
+    "Trong pham vi do an, but toan mua hang duoc ghi nhan sau khi
+     hoan tat doi chieu ba chung tu. Truoc thoi diem do he thong
+     quan ly so luong vat ly o phan he kho nhung chung tu chua du
+     dieu kien ghi so ke toan."
+
+  Man KT: canh bao
+    "N phieu nhap da xac nhan nhung chua du chung tu de ghi so."
+    (PN xac nhan, chua HoaDonMuaHang khop / chua insert CongNo).
+
+B-KT.7. CUOC VAN CHUYEN — CHOT MOT NOI (luat 0.6)
+  Mac dinh: No 642 / Co 111 hoac 112. Khong cong vao gia von hang mua.
+  Code cu storeProfitLossMath cong cuocVanChuyen vao "chi phi ben thu 3"
+  cung chi NCC — SAI (vua nham tra NCC la chi phi, vua co the double
+  neu sau nay cuoc lai vao 156).
+  Khi sua KQKD: cuoc chi xuat hien 1 lan, o 642, khong tru kem tra NCC.
+
+
+--------------------------------------------------------------------------------
+B-KT MO RONG — VAN TRONG SCOPE, KHONG CAT
+--------------------------------------------------------------------------------
+
+Lam SAU hoac song song P1 khi KT loi da ra so 111/112.
+
+  Import sao ke + doi chieu 112 (UC42)
+    CSV/Excel: ngay, so tien, dien giai, ma GD.
+    Khop MaGiaoDich POS/Phieu chi/luong (vet VNPay P1).
+    Trang thai: Chua khop / Khop tu dong / Khop thu cong / Chenh lech.
+    So 112 LAY TU BUT TOAN, khong lay thuan tu file.
+
+  TSCD + khau hao (UC41)
+    May POS, may tinh, tu, dieu hoa, may in...
+    Neu HD mua TSCD co VAT (nhat quan VAT dau vao da lam):
+      No 211     nguyen gia CHUA VAT
+      No 1331    VAT dau vao
+          Co 111 / 112 / 331
+    KHONG ghi 211 da gom VAT tru khi nhom doi chot bang van ban.
+    Cuoi ky: No 642 / Co 214. Gia tri con lai = nguyen gia - KH luy ke.
+
+  Khoa so, LCTT, BCDKT mini (UC39, UC43)
+    LCTT SAU sao ke va TSCD (file 31/08 muc 4).
+    Hoat dong: ban, tra NCC, chi phi, luong.
+    Dau tu: mua TSCD.
+    Tong 3 nhom = bien dong 111+112.
+
+  Bang ke VAT dau vao / dau ra / chenh lech theo ky (UC40) — muc do an,
+  khong ke khai thue nha nuoc.
+
+
+--------------------------------------------------------------------------------
+B2. VIEC KE TOAN GAN P1 / P2
+--------------------------------------------------------------------------------
+
+B2.1. Doi soat thanh toan dien tu theo ca     P1, gan UC29
+B2.2. Timeline thanh toan tren HD             P1, data GET invoice da co
+B2.3. OCR = prefill UC27                      P2
+B2.4. Replenishment khong qua so              P2
+B2.5. Telegram companion = xem tu xa, khong ghi so   P1
+B2.6. E-receipt = ban xem HD                  P1
+B2.7. AI = doc luat B1 + KQKD vs dong tien    P2
+B2.8. VNPay MaGiaoDich = vet 112              P1, dung o KT mo rong
+
+
+--------------------------------------------------------------------------------
+B3. HOAN TIEN / DOI TRA SAU GATEWAY
+--------------------------------------------------------------------------------
+
+P1: PhuongThucHoan 4 nhan nhu ban. Hoan TM tru ket (da co).
+Hoan QR: xac nhan tay, KHONG refund tu dong qua VNPay o P1.
+HD goc khong sua TongThanhToan.
+
+Hoan TRUOC KHI HUY NHAP (A1 edge case): cung chung tu hoan / dong
+ThanhToan loai Hoan; khong xoa dong Thanh cong cu. Audit bat buoc.
+
+
+--------------------------------------------------------------------------------
+B4. PHAN QUYEN UC
+--------------------------------------------------------------------------------
+
+P1-P2: khong can UC moi neu gan duoc UC cu
+  Gateway / IPN     UC25 + webhook he thong
+  Barcode           UC24
+  E-receipt         token public; in UC24/UC25
+  Telegram          lien ket OTP UC01; cau hinh bot QL UC02;
+                    command doc theo dung UC (QL UC10 /today /payroll tom tat;
+                    KT UC33 /payroll MaNV; UC15 /lowstock...)
+  Doi soat DT       UC29
+  OCR               UC27
+  Replenish         UC16
+  Assistant         UC01 + loc vai tro
+
+KT loi / mo rong (tu 31/08, khong trung 30-33):
+  UC34 Tai khoan ke toan
+  UC35 Ky ke toan / so du dau ky
+  UC36 Chi phi van hanh trong ky
+  UC37 Tu dong sinh but toan
+  UC38 Nhat ky chung / So cai
+  UC39 Khoa ky
+  UC40 Thue GTGT dau vao / dau ra / tong hop ky
+  UC41 TSCD va khau hao
+  UC42 Import sao ke va doi chieu ngan hang
+  UC43 Bao cao KQKD, BCDKT, LCTT mini
+
+
+================================================================================
+PHAN C — FILE SE SUA / THEM KHI CODE
+================================================================================
+
+  KT loi
+    migration schema TaiKhoanKeToan, ButToan, ChiTietButToan, KyKeToan
+    SanPham.ThueSuat; ChiTietHoaDon.ThueSuat, TienThue; HoaDon.TienThue
+    server/src/services/journalEngine.js                 (them)
+    server/src/controllers/ledgerController.js           (them)
+    salesController completeInvoice / returns (tach thue, goi engine)
+    storeProfitLoss.js + storeProfitLossMath.js          (tach KQKD / dong tien)
+    desktop accounting + POS in HD VAT
+    seed-permissions UC34+
+
+  P1 VNPay
+    paymentGatewayController.js / paymentGatewayService.js
+    services/providers/vnpay.js + payos.js (stub)
+    salesController.js (addPayment, completeInvoice, cancelInvoice + hoan truoc huy)
+    cashier-pages.js, cashierRoutes.js, app.js
+    migration cot NguonXacNhan / MaThamChieuCong (neu can)
+    IPN: doi chieu amount voi ThanhToan.SoTien truoc UPDATE
+    .env.example
+    KHONG tao payosController.js
+
+  P1 Barcode
+    cashier-pages.js, desktop/src/index.js hoac preload (camera)
+    ZXing / html5-qrcode
+
+  P1 E-receipt
+    receiptPublicController.js, print-documents.js, cashier-pages.js
+
+  P1 Telegram + doi soat
+    telegramNotify.js, telegramBotController.js
+    notificationController.js, settlementController.js, accounting-pages.js
+    desktop: Lien ket Telegram (OTP)
+    migration TelegramDangKy (NgayXacThuc, LanHoatDongCuoi)
+
+  P2 OCR
+    accountingController.js, accounting-pages.js, DuongDanAnh
+
+  P2 Replenishment
+    warehouseController.js, warehouse-pages.js
+
+  P2 AI
+    assistantController.js, assistantTools.js, dashboard.js
+    docs/ASSISTANT_FAQ.txt
+    Khong goi file/knowledge la "training set"
+
+  Khong tao
+    flow n8n, Firebase, man Sentry, module Ollama rieng
+
+
+================================================================================
+PHAN D — DEMO CHINH 8 BUOC (RUT GON)
+================================================================================
+
+  1. Camera quet hang
+  2. TM + QR VNPay (hon hop)
+  3. HD tu hoan thanh
+  4. QR e-receipt tren dien thoai
+  5. Dong ca: QR khong vao ket
+  6. Ke toan thay giao dich (doi soat dien tu; so cai 111/112 neu KT loi xong)
+  7. Smart replenishment (SL goi y, TK sua, khong tu PO)
+  8. AI: "Hom nay can chu y gi?" (context + API doc)
+
+OCR va Telegram: bonus — demo cuc nhanh hoac video du phong.
+Khong nhet tat ca vao 7 phut.
+
+Cau ket:
+  Fly so hoa chung tu, roi noi thanh toan so -> POS -> kho -> ca
+  -> so cai / kiem soat -> canh bao -> ho tro quyet dinh.
+  Khong huan luyen AI. Khong tu mua hang. Khong tu ghi no NCC.
+  Tra NCC khong tru vao loi nhuan.
+
+
+================================================================================
+PHAN E — CHOT SCOPE 4 TANG + CAT
+================================================================================
+
+CORE — PHAI CHAY
+  P0 nghiep vu hien tai
+  KT loi: VAT POS, COA, but toan, Nhat ky chung, So cai, CDPS, KQKD
+  Sua bug P&L (tach dong tien; khong tru tra NCC)
+
+DIGITAL — PHAI CO
+  Payment gateway QR (VNPay adapter)
+  Camera / USB / go barcode
+  E-Receipt (an MaGiaoDich public)
+  Telegram companion: push chi tiet + /fly pull; khong duyet
+  Doi soat thanh toan dien tu
+  Rule huy HD hon hop + IPN doi chieu amount
+
+SMART — LAM SAU
+  Smart replenishment (tru hang dang dat)
+  AI assistant (context + cited source)
+  OCR prefill MVP
+
+ACCOUNTING ADVANCED — VAN TRONG SCOPE
+  TSCD + khau hao (211 chua VAT + 1331)
+  Import sao ke, doi chieu 112
+  Khoa so, bang ke VAT, BCDKT mini, LCTT
+
+DE SAU (KHONG CAT HAN)
+  Scanner dien thoai: khong lam o P1, de huong phat trien sau
+  (khop A5 kieu 2; khong hieu la bo hang).
+
+KHONG LAM
+  FEFO / TonKhoTheoLo
+  TK 131 / ban chiu
+  Multi-store, actor nhan su rieng
+  n8n, Firebase
+  AI forecasting / thoi tiet-nhu-mo hinh
+  HDDT Nha nuoc
+  TK 151/338 (hang di duong)
+  Ollama nhu module rieng
+  242, BHXH/BHYT
+
+KHONG DUOC GHI VAO MUC CAT
+  So cai, but toan, Nhat ky chung, CDPS
+  KQKD, BCDKT mini, LCTT
+  VAT ban 33311, VAT mua 1331
+  TSCD, import sao ke
+  Chi phi van hanh trong ky, luong 642/334
+
+
+================================================================================
+PHAN F — CHECKLIST TRUOC BAO VE
+================================================================================
+
+  [ ] P0 E2E con chay tren DB chung
+  [ ] VAT POS: 1 HD 2 thue suat; KM/diem truoc thue; in lai khong but toan 2 lan
+  [ ] NKC / So cai / CDPS / KQKD: KQKD KHONG tru tien tra NCC
+  [ ] Man QL: P&L va thu-chi tach ten; khong con chi_ncc_lon nhu "chi phi an lai"
+  [ ] VNPay Sandbox + IPN; video du phong neu mat mang
+  [ ] Adapter: POS khong import truc tiep SDK VNPay
+  [ ] Dong ca + PT: QR khong lan TM; con Cho xac nhan thi khong dong ca
+  [ ] Hon hop TM+QR: DT 1 lan, ket chi TM
+  [ ] IPN amount != ThanhToan.SoTien: reject du chu ky dung
+  [ ] HD 80k TM thanh cong + QR fail: khong huy; hoan TM roi moi huy
+  [ ] Webcam + go + (neu co) USB tren CUNG POS
+  [ ] E-receipt: token dai, het han, khong doan tu MaHD; KHONG hien MaGiaoDich day du
+  [ ] Telegram: lien ket OTP, khong hard-code ChatId; push PC/lech ca/cuoi ngay
+  [ ] Telegram /fly /debt /lowstock /today: dung quyen UC; KHONG nut duyet
+  [ ] /payroll: QL UC10 tom tat; KT UC33 /payroll MaNV; khong push chi tiet tung NV
+  [ ] AI: moi cau so lieu co muc Nguon (ma chung tu / ten bao cao)
+  [ ] Man KT: canh bao PN da xac nhan chua du chung tu ghi so
+  [ ] TSCD: 211 chua VAT + 1331; cuoc van chuyen chi o 642
+  [ ] Khong noi "minh train AI" / "train data la database"
+  [ ] Slide khong liet ke n8n / Firebase / Sentry / Ollama rieng
+  [ ] Slide khong ghi so cai / VAT / TSCD / sao ke / LCTT la "cat"
+  [ ] Demo chinh 8 buoc; Telegram/OCR bonus hoac video
+
+
+================================================================================
+HET FILE
+================================================================================
+Nguon doi chieu code: salesController.addPayment/completeInvoice,
+cashierController.getShiftSummary/closeShift, settlementController,
+paymentVoucherController, notificationController, warehouseController,
+storeProfitLoss.js, storeProfitLossMath.js (bug tru PhieuChi NCC),
+accounting-pages.js, cashier-pages.js, permissions.js UC01-UC33,
+migrations/SupermarketFly_CreateDB.sql,
+README muc 4 va 7,
+docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt,
+docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt (KHONG DE).
+================================================================================

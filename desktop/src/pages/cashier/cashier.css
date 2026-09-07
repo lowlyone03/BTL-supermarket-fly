@@ -358,6 +358,39 @@
   color: #b14e3a;
 }
 
+.cashier-return-received,
+.cashier-return-leftover-banner {
+  margin: 0 0 16px;
+}
+
+.cashier-return-leftover-note,
+.cashier-return-history {
+  display: block;
+  margin-top: 5px;
+  color: #8a6d1f;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.cashier-return-history {
+  color: #355045;
+  font-weight: 600;
+}
+
+.warehouse-table tr.cashier-return-leftover {
+  background: #fff8e8;
+}
+
+.cashier-return-received-note {
+  display: block;
+  margin-top: 5px;
+  color: #1f6b4a;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .cashier-return-handover,
 .cashier-return-wait-note {
   display: block;

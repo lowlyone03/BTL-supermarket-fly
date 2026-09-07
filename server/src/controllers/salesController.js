@@ -3,6 +3,7 @@ const { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS } = require('../services/in
 const { logAudit } = require('../services/auditLog');
 const { assertCashierDuty, CashierDutyError } = require('../services/cashierDuty');
 const { validateRequiredName, validateOptionalVnPhone, validateOptionalEmail, validateOptionalDate, validateOptionalNote } = require('../services/fieldValidators');
+const { invoiceListMatchSql, invoiceViewSql, resolveInvoiceListScope } = require('../services/invoiceSearch');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 const POINT_EARN_UNIT = Math.max(1, Number(process.env.POINT_EARN_UNIT || 10000));
@@ -146,26 +147,41 @@ const listInvoices = async (req, res) => {
         const search = clean(req.query.search, 100);
         const status = clean(req.query.status, 30);
         const pool = await poolPromise;
+        const openShift = await pool.request()
+            .input('MaNV', sql.VarChar, req.user.MaNV)
+            .query(`
+                SELECT TOP 1 ca.MaCa
+                FROM CaLamViec ca
+                WHERE ca.MaNV=@MaNV AND ca.TrangThai=N'Đang mở' AND ca.ThoiGianKetThuc IS NULL`);
+        const currentShift = openShift.recordset[0]?.MaCa || '';
+        const scoped = resolveInvoiceListScope({ search, maCa: currentShift });
         const result = await pool.request()
             .input('MaNV', sql.VarChar, req.user.MaNV)
+            .input('MaCa', sql.VarChar, currentShift)
             .input('Search', sql.NVarChar, `%${search}%`)
             .input('TrangThai', sql.NVarChar, status).query(`
             SELECT TOP 80 hd.MaHD,hd.NgayLap,hd.TongTienHang,hd.TienGiamGia,hd.TienDiemQuyDoi,
-                   hd.TongThanhToan,hd.TrangThai,hd.MaKH,kh.TenKH,kh.SDT,ca.MaCa,
+                   hd.TongThanhToan,hd.TrangThai,hd.MaKH,hd.MaNV,kh.TenKH,kh.SDT,ca.MaCa,nv.TenNV,
                    ${INVOICE_RETURN_COLUMNS}
             FROM HoaDon hd
             JOIN CaLamViec ca ON ca.MaCa=hd.MaCa
+            JOIN NhanVien nv ON nv.MaNV=hd.MaNV
             LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
             ${INVOICE_RETURN_APPLY}
-            WHERE hd.MaNV=@MaNV
+            WHERE ${scoped.accessSql}
+              AND ${scoped.shiftSql}
               AND (
                     @TrangThai=N''
                     OR (@TrangThai=N'Có đổi trả' AND COALESCE(dt.SoPhieu,0)>0)
                     OR (@TrangThai NOT IN (N'', N'Có đổi trả') AND hd.TrangThai=@TrangThai)
                   )
-              AND (@Search=N'%%' OR hd.MaHD LIKE @Search COLLATE Latin1_General_100_CI_AI OR kh.TenKH LIKE @Search COLLATE Latin1_General_100_CI_AI OR kh.SDT LIKE @Search COLLATE Latin1_General_100_CI_AI)
+              AND (@Search=N'%%' OR ${invoiceListMatchSql})
             ORDER BY hd.NgayLap DESC`);
-        res.json({ items: result.recordset });
+        res.json({
+            items: result.recordset,
+            scope: scoped.scope,
+            currentShift: currentShift || null
+        });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải danh sách hóa đơn.' });
@@ -311,7 +327,7 @@ const getInvoice = async (req, res) => {
             JOIN CaLamViec ca ON ca.MaCa=hd.MaCa
             LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
             ${INVOICE_RETURN_APPLY}
-            WHERE hd.MaHD=@MaHD AND hd.MaNV=@MaNV`);
+            WHERE hd.MaHD=@MaHD AND ${invoiceViewSql}`);
         if (!header.recordset.length) return res.status(404).json({ message: 'Không tìm thấy hóa đơn.' });
         const [lines, payments, returns] = await Promise.all([
             pool.request().input('MaHD', sql.VarChar, req.params.id).query(`
@@ -508,5 +524,6 @@ const completeInvoice = async (req, res) => {
 
 module.exports = {
     getCatalog, listCustomers, saveCustomer, updateCustomer, listInvoices, quoteInvoice,
-    createInvoice, getInvoice, cancelInvoice, addPayment, completeInvoice
+    createInvoice, getInvoice, cancelInvoice, addPayment, completeInvoice,
+    invoiceListMatchSql, resolveInvoiceListScope
 };

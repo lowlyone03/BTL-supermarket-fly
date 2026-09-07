@@ -119,7 +119,8 @@ const listPurchaseOrderFiles = async (req, res) => {
         const pool = await poolPromise;
         const result = await pool.request().query(`
             SELECT po.MaPO,po.MaNCC,ncc.TenNCC,po.NgayLap,po.SoNgayThanhToan,po.TongTien,po.TrangThai,
-                   COUNT(ct.MaSP) AS SoMatHang,SUM(ct.SoLuong) AS TongSoLuong
+                   COUNT(ct.MaSP) AS SoMatHang,SUM(ct.SoLuong) AS TongSoLuong,
+                   CASE WHEN EXISTS (SELECT 1 FROM HoaDonMuaHang hd WHERE hd.MaPO=po.MaPO) THEN 1 ELSE 0 END AS DaTiepNhanHoaDon
             FROM DonMuaHang po
             JOIN NhaCungCap ncc ON ncc.MaNCC=po.MaNCC
             JOIN ChiTietDonMua ct ON ct.MaPO=po.MaPO

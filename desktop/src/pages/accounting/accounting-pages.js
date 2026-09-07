@@ -531,75 +531,132 @@
         api(context, '/accounting/purchase-order-files')
       ]);
       const receipts = receiptsData.items.filter(item => !item.DaTiepNhanHoaDon);
-      const orders = ordersData.items;
-      if (!receipts.length && !orders.length) return context.showToast('Chưa có Đơn mua hợp lệ để tiếp nhận hóa đơn.', 'error');
+      const waitingReceipts = new Set(receipts.map(item => item.MaPO));
+      const orders = ordersData.items.filter(item => !item.DaTiepNhanHoaDon && !waitingReceipts.has(item.MaPO));
+      if (!receipts.length && !orders.length) return context.showToast('Chưa có Đơn mua hoặc Phiếu nhập chờ tiếp nhận hóa đơn.', 'error');
       const overlay = document.createElement('div');
       overlay.className = 'warehouse-modal-backdrop';
-      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
-      overlay.innerHTML = `<div class="warehouse-modal receipt-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">TIẾP NHẬN HÓA ĐƠN NHÀ CUNG CẤP</p><h2>Lưu chứng từ để Kế toán kiểm tra</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="accounting-intake-choice"><label><input type="radio" name="invoiceMode" value="receipt" ${receipts.length ? 'checked' : ''}><span><strong>Đã có Phiếu nhập</strong><small>Lưu hồ sơ ở trạng thái Chờ đối chiếu</small></span></label><label><input type="radio" name="invoiceMode" value="order" ${receipts.length ? '' : 'checked'}><span><strong>Hóa đơn đến trước</strong><small>Lưu chờ Phiếu nhập, chưa tạo công nợ</small></span></label></div><div class="warehouse-form-grid accounting-invoice-header"><div class="warehouse-field"><label>Hồ sơ tham chiếu *</label><select id="invoiceSource"></select></div><div class="warehouse-field"><label>Số hóa đơn Nhà cung cấp *</label><input id="supplierInvoiceNo" maxlength="50" placeholder="Ví dụ: 00001234"></div><div class="warehouse-field"><label>Ngày hóa đơn *</label>${window.FLY_VI_DATE.dateField('invoiceDate', today)}</div><div class="warehouse-field"><label>Điều khoản thanh toán</label><input id="paymentTerm" disabled></div></div><div class="receipt-rule"><svg><use href="#i-approve"></use></svg><span>Nút “Lưu hóa đơn” chỉ tiếp nhận chứng từ. Sau đó Kế toán phải mở bảng đối chiếu Đơn mua – Phiếu nhập – Hóa đơn và xác nhận riêng thì công nợ mới được ghi nhận.</span></div><div id="invoiceLines" class="warehouse-receipt-lines"></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-primary save-invoice">Lưu hồ sơ hóa đơn</button></div></div>`;
+      overlay.innerHTML = `<div class="warehouse-modal receipt-modal invoice-intake-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">TIẾP NHẬN HÓA ĐƠN NHÀ CUNG CẤP</p><h2 id="intakeTitle">Chọn hồ sơ cần gắn hóa đơn</h2><span id="intakeHint">Xem chi tiết trước, rồi mới nhập số hóa đơn.</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body" id="intakeBody"></div><div class="warehouse-modal-actions" id="intakeActions"></div></div>`;
       document.body.appendChild(overlay);
       const close = () => overlay.remove();
-      overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
-      const currentMode = () => overlay.querySelector('input[name="invoiceMode"]:checked').value;
-      const fillSources = async () => {
-        const mode = currentMode();
-        const source = overlay.querySelector('#invoiceSource');
-        const items = mode === 'receipt' ? receipts : orders;
-        source.innerHTML = items.length ? items.map(item => `<option value="${esc(mode === 'receipt' ? item.MaPN : item.MaPO)}">${esc(mode === 'receipt' ? `${item.MaPN} · ${item.TenNCC}` : `${item.MaPO} · ${item.TenNCC}`)}</option>`).join('') : '<option value="">Chưa có hồ sơ phù hợp</option>';
-        source.disabled = !items.length;
-        overlay.querySelector('.save-invoice').disabled = !items.length;
-        if (items.length) await loadLines(); else overlay.querySelector('#invoiceLines').innerHTML = '<div class="warehouse-empty">Chưa có hồ sơ phù hợp với lựa chọn này.</div>';
+      overlay.querySelector('.close').addEventListener('click', close);
+      overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+      const body = overlay.querySelector('#intakeBody');
+      const actions = overlay.querySelector('#intakeActions');
+      const setHeading = (title, hint) => {
+        overlay.querySelector('#intakeTitle').textContent = title;
+        overlay.querySelector('#intakeHint').textContent = hint;
       };
-      const loadLines = async () => {
-        const mode = currentMode();
-        const id = overlay.querySelector('#invoiceSource').value;
-        if (!id) return;
-        const data = await api(context, mode === 'receipt' ? `/accounting/receipt-files/${id}` : `/accounting/purchase-order-files/${id}`);
-        overlay.querySelector('#paymentTerm').value = `${data.file.SoNgayThanhToan} ngày theo Đơn mua ${data.file.MaPO}`;
-        overlay.querySelector('#invoiceLines').innerHTML = lineMarkup(data.lines);
-        bindLineTotals(overlay);
+      const sourceOf = (mode, id) => (mode === 'receipt' ? receipts : orders).find(item => (mode === 'receipt' ? item.MaPN : item.MaPO) === id);
+      const matchesQuery = (item, query, mode) => {
+        if (!query) return true;
+        const hay = `${mode === 'receipt' ? item.MaPN : item.MaPO} ${item.MaPO} ${item.TenNCC} ${item.MaNCC}`.toLowerCase();
+        return hay.includes(String(query).trim().toLowerCase());
       };
-      overlay.querySelectorAll('input[name="invoiceMode"]').forEach(input => input.addEventListener('change', fillSources));
-      overlay.querySelector('#invoiceSource').addEventListener('change', loadLines);
-      overlay.querySelector('.save-invoice').addEventListener('click', async () => {
-        const SoHoaDon = overlay.querySelector('#supplierInvoiceNo').value.trim();
-        if (!SoHoaDon) return context.showToast('Vui lòng nhập số hóa đơn Nhà cung cấp.', 'error');
-        if (!overlay.querySelector('#invoiceDate').value) return context.showToast('Vui lòng chọn ngày hóa đơn.', 'error');
-        const mode = currentMode();
-        const sourceId = overlay.querySelector('#invoiceSource').value;
-        const lines = Array.from(overlay.querySelectorAll('.accounting-invoice-line[data-product]')).map(row => ({
-          MaSP: row.dataset.product,
-          SoLuong: Number(row.querySelector('.invoice-qty').value),
-          DonGia: Number(row.querySelector('.invoice-price').value),
-          ThueSuat: Number(row.querySelector('.invoice-tax').value)
+      let listMode = receipts.length ? 'receipt' : 'order';
+      let listQuery = '';
+
+      const renderList = () => {
+        const items = (listMode === 'receipt' ? receipts : orders).filter(item => matchesQuery(item, listQuery, listMode));
+        setHeading('Chọn hồ sơ cần gắn hóa đơn', 'Danh sách chứng từ chờ. Xem chi tiết rồi mới tiếp nhận.');
+        body.innerHTML = `<div class="accounting-intake-choice invoice-intake-tabs"><label><input type="radio" name="intakeMode" value="receipt" ${listMode === 'receipt' ? 'checked' : ''} ${receipts.length ? '' : 'disabled'}><span><strong>Đã có Phiếu nhập</strong><small>${receipts.length} phiếu chờ hóa đơn</small></span></label><label><input type="radio" name="intakeMode" value="order" ${listMode === 'order' ? 'checked' : ''} ${orders.length ? '' : 'disabled'}><span><strong>Hóa đơn đến trước</strong><small>${orders.length} đơn mua chưa nhập kho</small></span></label></div><label class="warehouse-search invoice-intake-search"><svg><use href="#i-search"></use></svg><input id="intakeSearch" placeholder="Tìm mã phiếu, đơn mua hoặc Nhà cung cấp..." value="${esc(listQuery)}"></label><div class="receipt-rule"><svg><use href="#i-approve"></use></svg><span>Lưu hóa đơn chỉ lưu chứng từ cho Kế toán đối chiếu. Không trừ tồn — tồn đã tăng lúc Thủ kho xác nhận Phiếu nhập.</span></div><div class="warehouse-table-wrap invoice-intake-list"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NHÀ CUNG CẤP</th><th>NGÀY</th><th>SỐ LƯỢNG</th><th>GIÁ TRỊ</th><th>THAO TÁC</th></tr></thead><tbody>${items.length ? items.map(item => {
+          const id = listMode === 'receipt' ? item.MaPN : item.MaPO;
+          return `<tr><td><strong>${esc(id)}</strong><small>${listMode === 'receipt' ? `Đơn ${esc(item.MaPO)}` : esc(item.TrangThai)}</small></td><td><strong>${esc(item.TenNCC)}</strong><small>${esc(item.MaNCC)}</small></td><td>${fmtDate(listMode === 'receipt' ? item.NgayXacNhan : item.NgayLap)}</td><td><strong>${item.SoMatHang || 0} mặt hàng</strong><small>${item.TongSoLuong || 0} đơn vị</small></td><td class="num">${money(item.TongTien)}</td><td><div class="warehouse-row-actions"><button type="button" data-intake-detail="${esc(id)}">Xem chi tiết</button><button type="button" class="send" data-intake-receive="${esc(id)}">Tiếp nhận</button></div></td></tr>`;
+        }).join('') : `<tr><td colspan="6" class="warehouse-empty">${listQuery ? 'Không có hồ sơ khớp tìm kiếm.' : (listMode === 'receipt' ? 'Không còn Phiếu nhập chờ hóa đơn.' : 'Không còn Đơn mua chờ hóa đơn đến trước.')}</td></tr>`}</tbody></table></div>`;
+        actions.innerHTML = '<button class="warehouse-secondary close-intake" type="button">Đóng</button>';
+        actions.querySelector('.close-intake').addEventListener('click', close);
+        body.querySelectorAll('input[name="intakeMode"]').forEach(input => input.addEventListener('change', () => {
+          if (input.disabled) return;
+          listMode = input.value;
+          renderList();
         }));
-        const invalid = lines.find(line => {
-          const qty = window.FLY_FIELDS?.validatePositiveInteger(line.SoLuong, 'Số lượng hóa đơn');
-          const price = window.FLY_FIELDS?.validateRequiredNonNegativeNumber(line.DonGia, 'Đơn giá');
-          const taxOk = Number.isFinite(line.ThueSuat) && line.ThueSuat >= 0 && line.ThueSuat <= 100;
-          return (qty ? !qty.ok : !Number.isInteger(line.SoLuong) || line.SoLuong < 1)
-            || (price ? !price.ok : !Number.isFinite(line.DonGia) || line.DonGia < 0)
-            || !taxOk;
+        const search = body.querySelector('#intakeSearch');
+        search.addEventListener('input', () => {
+          listQuery = search.value;
+          const cursor = search.selectionStart;
+          renderList();
+          const next = body.querySelector('#intakeSearch');
+          if (next) {
+            next.focus();
+            const pos = Math.min(cursor ?? next.value.length, next.value.length);
+            next.setSelectionRange(pos, pos);
+          }
         });
-        if (invalid) return context.showToast(`Dòng ${invalid.MaSP}: số lượng > 0, đơn giá ≥ 0, thuế 0–100.`, 'error');
+        body.querySelectorAll('[data-intake-detail]').forEach(button => button.addEventListener('click', () => renderDetail(listMode, button.dataset.intakeDetail)));
+        body.querySelectorAll('[data-intake-receive]').forEach(button => button.addEventListener('click', () => renderForm(listMode, button.dataset.intakeReceive)));
+      };
+
+      const renderDetail = async (mode, id) => {
+        const source = sourceOf(mode, id);
+        if (!source) return context.showToast('Không tìm thấy hồ sơ đã chọn.', 'error');
         try {
-          const result = await api(context, '/accounting/purchase-invoices', {
-            method: 'POST',
-            body: JSON.stringify({
-              [mode === 'receipt' ? 'MaPN' : 'MaPO']: sourceId,
-              SoHoaDon,
-              NgayHoaDon: overlay.querySelector('#invoiceDate').value,
-              lines
-            })
-          });
-          context.showToast(result.message, result.TrangThaiDoiChieu === 'Chênh lệch' ? 'error' : 'success');
-          close();
-          await onDone();
-          invoiceDetail(context, result.MaHDMH);
+          const data = await api(context, mode === 'receipt' ? `/accounting/receipt-files/${id}` : `/accounting/purchase-order-files/${id}`);
+          const file = data.file;
+          setHeading(mode === 'receipt' ? `Chi tiết Phiếu nhập ${file.MaPN}` : `Chi tiết Đơn mua ${file.MaPO}`, 'Kiểm tra mặt hàng rồi bấm Tiếp nhận hóa đơn.');
+          const rows = (data.lines || []).map(line => {
+            const qty = line.SoLuongChapNhan ?? line.SoLuong;
+            const price = line.DonGiaNhap ?? line.DonGia;
+            const amount = line.ThanhTienPhieuNhap ?? line.ThanhTien;
+            return `<tr><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)}</small></td><td class="num">${line.SoLuongDat != null ? line.SoLuongDat : qty}</td><td class="num"><strong>${qty}</strong></td><td class="num">${money(price)}</td><td class="num"><strong>${money(amount)}</strong></td></tr>`;
+          }).join('');
+          body.innerHTML = `<div class="warehouse-detail-grid"><div><span>NHÀ CUNG CẤP</span><strong>${esc(file.TenNCC)}</strong></div><div><span>${mode === 'receipt' ? 'PHIẾU NHẬP' : 'ĐƠN MUA'}</span><strong>${esc(mode === 'receipt' ? file.MaPN : file.MaPO)}</strong></div><div><span>${mode === 'receipt' ? 'ĐƠN MUA' : 'TRẠNG THÁI'}</span><strong>${esc(mode === 'receipt' ? file.MaPO : file.TrangThai)}</strong></div><div><span>${mode === 'receipt' ? 'NGÀY XÁC NHẬN' : 'NGÀY LẬP'}</span><strong>${fmtDate(mode === 'receipt' ? file.NgayXacNhan : file.NgayLap)}</strong></div><div><span>THANH TOÁN</span><strong>${file.SoNgayThanhToan} ngày</strong></div><div><span>GIÁ TRỊ</span><strong>${money(file.TongTien)}</strong></div></div><div class="receipt-rule"><svg><use href="#i-report"></use></svg><span>Đây là số liệu tham chiếu dưới hệ thống. Bước tiếp theo mới nhập số hóa đơn giấy của Nhà cung cấp.</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>MẶT HÀNG</th><th>${mode === 'receipt' ? 'SL ĐẶT' : 'SL ĐƠN'}</th><th>${mode === 'receipt' ? 'SL NHẬP' : 'SL THAM CHIẾU'}</th><th>ĐƠN GIÁ</th><th>THÀNH TIỀN</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="warehouse-empty">Không có dòng hàng.</td></tr>'}</tbody></table></div>`;
+          actions.innerHTML = '<button class="warehouse-secondary back-intake" type="button">Quay lại danh sách</button><button class="warehouse-primary go-receive" type="button">Tiếp nhận hóa đơn này</button>';
+          actions.querySelector('.back-intake').addEventListener('click', renderList);
+          actions.querySelector('.go-receive').addEventListener('click', () => renderForm(mode, id));
         } catch (error) { context.showToast(error.message, 'error'); }
-      });
-      await fillSources();
-      overlay.querySelector('#supplierInvoiceNo').focus();
+      };
+
+      const renderForm = async (mode, id) => {
+        const source = sourceOf(mode, id);
+        if (!source) return context.showToast('Không tìm thấy hồ sơ đã chọn.', 'error');
+        try {
+          const data = await api(context, mode === 'receipt' ? `/accounting/receipt-files/${id}` : `/accounting/purchase-order-files/${id}`);
+          const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
+          setHeading('Nhập số hóa đơn Nhà cung cấp', `${mode === 'receipt' ? data.file.MaPN : data.file.MaPO} · ${data.file.TenNCC}`);
+          body.innerHTML = `<div class="warehouse-detail-grid"><div><span>HỒ SƠ THAM CHIẾU</span><strong>${esc(mode === 'receipt' ? data.file.MaPN : data.file.MaPO)}</strong><small>${esc(data.file.TenNCC)}</small></div><div><span>ĐƠN MUA</span><strong>${esc(data.file.MaPO)}</strong></div><div><span>ĐIỀU KHOẢN</span><strong>${data.file.SoNgayThanhToan} ngày</strong></div><div><span>GIÁ TRỊ THAM CHIẾU</span><strong>${money(data.file.TongTien)}</strong></div></div><div class="warehouse-form-grid accounting-invoice-header"><div class="warehouse-field"><label>Số hóa đơn Nhà cung cấp *</label><input id="supplierInvoiceNo" maxlength="50" placeholder="Ví dụ: 00001234"></div><div class="warehouse-field"><label>Ngày hóa đơn *</label>${window.FLY_VI_DATE.dateField('invoiceDate', today)}</div></div><div class="receipt-rule"><svg><use href="#i-approve"></use></svg><span>Nút “Lưu hóa đơn” chỉ tiếp nhận chứng từ. Công nợ chỉ ghi nhận sau khi Kế toán đối chiếu Đơn mua – Phiếu nhập – Hóa đơn. Không trừ tồn kho.</span></div><div id="invoiceLines" class="warehouse-receipt-lines">${lineMarkup(data.lines)}</div>`;
+          actions.innerHTML = '<button class="warehouse-secondary back-detail" type="button">Quay lại chi tiết</button><button class="warehouse-primary save-invoice" type="button">Lưu hồ sơ hóa đơn</button>';
+          bindLineTotals(overlay);
+          actions.querySelector('.back-detail').addEventListener('click', () => renderDetail(mode, id));
+          actions.querySelector('.save-invoice').addEventListener('click', async () => {
+            const SoHoaDon = body.querySelector('#supplierInvoiceNo').value.trim();
+            if (!SoHoaDon) return context.showToast('Vui lòng nhập số hóa đơn Nhà cung cấp.', 'error');
+            if (!body.querySelector('#invoiceDate').value) return context.showToast('Vui lòng chọn ngày hóa đơn.', 'error');
+            const lines = Array.from(body.querySelectorAll('.accounting-invoice-line[data-product]')).map(row => ({
+              MaSP: row.dataset.product,
+              SoLuong: Number(row.querySelector('.invoice-qty').value),
+              DonGia: Number(row.querySelector('.invoice-price').value),
+              ThueSuat: Number(row.querySelector('.invoice-tax').value)
+            }));
+            const invalid = lines.find(line => {
+              const qty = window.FLY_FIELDS?.validatePositiveInteger(line.SoLuong, 'Số lượng hóa đơn');
+              const price = window.FLY_FIELDS?.validateRequiredNonNegativeNumber(line.DonGia, 'Đơn giá');
+              const taxOk = Number.isFinite(line.ThueSuat) && line.ThueSuat >= 0 && line.ThueSuat <= 100;
+              return (qty ? !qty.ok : !Number.isInteger(line.SoLuong) || line.SoLuong < 1)
+                || (price ? !price.ok : !Number.isFinite(line.DonGia) || line.DonGia < 0)
+                || !taxOk;
+            });
+            if (invalid) return context.showToast(`Dòng ${invalid.MaSP}: số lượng > 0, đơn giá ≥ 0, thuế 0–100.`, 'error');
+            try {
+              const result = await api(context, '/accounting/purchase-invoices', {
+                method: 'POST',
+                body: JSON.stringify({
+                  [mode === 'receipt' ? 'MaPN' : 'MaPO']: id,
+                  SoHoaDon,
+                  NgayHoaDon: body.querySelector('#invoiceDate').value,
+                  lines
+                })
+              });
+              context.showToast(result.message, result.TrangThaiDoiChieu === 'Chênh lệch' ? 'error' : 'success');
+              close();
+              await onDone();
+              invoiceDetail(context, result.MaHDMH);
+            } catch (error) { context.showToast(error.message, 'error'); }
+          });
+          body.querySelector('#supplierInvoiceNo').focus();
+        } catch (error) { context.showToast(error.message, 'error'); }
+      };
+
+      renderList();
     } catch (error) { context.showToast(error.message, 'error'); }
   };
 
@@ -652,10 +709,10 @@
         const match = root.querySelector('#invoiceMatch').value;
         const data = await api(context, `/accounting/purchase-invoices?search=${encodeURIComponent(search)}&match=${encodeURIComponent(match)}`);
         items = data.items;
-        root.querySelector('#invoiceBody').innerHTML = items.length ? items.map(item => `<tr><td><strong>${esc(item.SoHoaDon)}</strong><small>${esc(item.MaHDMH)}</small></td><td><strong>${esc(item.TenNCC)}</strong><small>${esc(item.MaNCC)}</small></td><td><strong>${esc(item.MaPO || '—')}</strong><small>${item.MaPN ? `Nhập ${esc(item.MaPN)}` : 'Chờ Phiếu nhập'}</small></td><td>${fmtDate(item.NgayHoaDon)}</td><td class="num"><strong>${money(item.TongCong)}</strong><small>Thuế ${money(item.TienThue)}</small></td><td><span class="status-pill ${matchClass(item.TrangThaiDoiChieu)}">${esc(item.TrangThaiDoiChieu)}</span></td><td>${item.MaCNPTra ? `<strong>${esc(item.MaCNPTra)}</strong><small>Hạn ${fmtDate(item.HanThanhToan)}</small>` : '<span class="status-pill cancelled">Chưa phát sinh</span>'}</td><td><div class="warehouse-row-actions"><button data-invoice="${esc(item.MaHDMH)}">Chi tiết</button>${item.TrangThaiDoiChieu !== 'Đã khớp' ? `<button class="send" data-reconcile="${esc(item.MaHDMH)}">Đối chiếu</button>` : ''}</div></td></tr>`).join('') : '<tr><td colspan="8" class="warehouse-empty">Chưa có hóa đơn mua hàng phù hợp.</td></tr>';
+        root.querySelector('#invoiceBody').innerHTML = items.length ? items.map(item => `<tr><td><strong>${esc(item.SoHoaDon)}</strong><small>${esc(item.MaHDMH)}</small></td><td><strong>${esc(item.TenNCC)}</strong><small>${esc(item.MaNCC)}</small></td><td><strong>${esc(item.MaPO || '—')}</strong><small>${item.MaPN ? `Nhập ${esc(item.MaPN)}` : 'Chờ Phiếu nhập'}</small></td><td>${fmtDate(item.NgayHoaDon)}</td><td class="num"><strong>${money(item.TongCong)}</strong><small>Thuế ${money(item.TienThue)}</small></td><td><span class="status-pill ${matchClass(item.TrangThaiDoiChieu)}">${esc(item.TrangThaiDoiChieu)}</span></td><td>${item.MaCNPTra ? `<strong>${esc(item.MaCNPTra)}</strong><small>Hạn ${fmtDate(item.HanThanhToan)}</small>` : '<span class="status-pill cancelled">Chưa phát sinh</span>'}</td><td><div class="warehouse-row-actions"><button data-invoice="${esc(item.MaHDMH)}">Chi tiết</button>${item.TrangThaiDoiChieu !== 'Đã khớp' ? `<button class="send" data-reconcile="${esc(item.MaHDMH)}">Đối chiếu</button>` : ''}</div></td></tr>`).join('') : `<tr><td colspan="8" class="warehouse-empty">${esc(window.FLY_SEARCH?.emptyMessage?.(search, 'hóa đơn mua hàng', 'Chưa có hóa đơn mua hàng phù hợp.') || 'Chưa có hóa đơn mua hàng phù hợp.')}</td></tr>`;
       } catch (error) { context.showToast(error.message, 'error'); }
     };
-    root.innerHTML = `${heading('KẾ TOÁN / MUA HÀNG', 'Đối chiếu hóa đơn Nhà cung cấp', 'Tiếp nhận hóa đơn trước hoặc sau Phiếu nhập; chỉ hồ sơ được Kế toán xác nhận khớp ba bên mới ghi nhận công nợ.', '<button class="warehouse-primary" id="newInvoice"><svg><use href="#i-plus"></use></svg>Tiếp nhận hóa đơn</button>')}<div class="accounting-flow"><span>Đơn mua đã duyệt</span><i>→</i><span>Phiếu nhập đã xác nhận</span><i>→</i><span>Hóa đơn Nhà cung cấp</span><i>→</i><strong>Kế toán xác nhận đối chiếu</strong><i>→</i><strong>Công nợ phải trả</strong></div><article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"></use></svg><input id="invoiceSearch" placeholder="Tìm số hóa đơn, Đơn mua hoặc Nhà cung cấp..."></label><div class="warehouse-toolbar-actions"><select id="invoiceMatch"><option value="">Tất cả kết quả</option><option>Chờ Phiếu nhập</option><option>Chờ đối chiếu</option><option>Đã khớp</option><option>Chênh lệch</option></select><button class="warehouse-icon-button" id="refreshInvoices"><svg><use href="#i-refresh"></use></svg></button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HÓA ĐƠN</th><th>NHÀ CUNG CẤP</th><th>HỒ SƠ NGUỒN</th><th>NGÀY HÓA ĐƠN</th><th>TỔNG CỘNG</th><th>ĐỐI CHIẾU</th><th>CÔNG NỢ</th><th>THAO TÁC</th></tr></thead><tbody id="invoiceBody"></tbody></table></div></article>`;
+    root.innerHTML = `${heading('KẾ TOÁN / MUA HÀNG', 'Đối chiếu hóa đơn Nhà cung cấp', 'Bấm Tiếp nhận hóa đơn để mở danh sách Phiếu nhập/Đơn mua chờ. Xem chi tiết rồi mới lưu số hóa đơn. Công nợ chỉ ghi sau đối chiếu ba bên.', '<button class="warehouse-primary" id="newInvoice"><svg><use href="#i-plus"></use></svg>Tiếp nhận hóa đơn</button>')}<div class="accounting-flow"><span>Đơn mua đã duyệt</span><i>→</i><span>Phiếu nhập đã xác nhận</span><i>→</i><span>Hóa đơn Nhà cung cấp</span><i>→</i><strong>Kế toán xác nhận đối chiếu</strong><i>→</i><strong>Công nợ phải trả</strong></div><article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"></use></svg><input id="invoiceSearch" placeholder="Tìm số hóa đơn, Đơn mua hoặc Nhà cung cấp..." value="${esc(window.FLY_SEARCH?.takePendingQuery?.('accounting-invoices') || '')}"></label><div class="warehouse-toolbar-actions"><select id="invoiceMatch"><option value="">Tất cả kết quả</option><option>Chờ Phiếu nhập</option><option>Chờ đối chiếu</option><option>Đã khớp</option><option>Chênh lệch</option></select><button class="warehouse-icon-button" id="refreshInvoices"><svg><use href="#i-refresh"></use></svg></button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HÓA ĐƠN</th><th>NHÀ CUNG CẤP</th><th>HỒ SƠ NGUỒN</th><th>NGÀY HÓA ĐƠN</th><th>TỔNG CỘNG</th><th>ĐỐI CHIẾU</th><th>CÔNG NỢ</th><th>THAO TÁC</th></tr></thead><tbody id="invoiceBody"></tbody></table></div></article>`;
     let timer;
     root.querySelector('#invoiceSearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250); });
     root.querySelector('#invoiceMatch').addEventListener('change', load);
@@ -757,7 +814,7 @@
         const daysBadgeClass = daysLeft < 0 ? 'overdue' : daysLeft === 0 ? 'due-today' : daysLeft <= 5 ? 'due-soon' : 'safe';
         const daysText = daysLeft < 0 ? `Quá ${Math.abs(daysLeft)} ngày` : daysLeft === 0 ? 'Đến hạn hôm nay' : `Còn ${daysLeft} ngày`;
         return `<tr class="${rowClass}" data-debt="${esc(item.MaCNPTra)}" tabindex="0" role="button" aria-label="Mở hồ sơ công nợ ${esc(item.MaCNPTra)}"><td>${docChip('cn', item.MaCNPTra, item.MaCNPTra)}<small>Phát sinh ${fmtDate(item.NgayPhatSinh)}</small></td><td><strong>${esc(item.TenNCC)}</strong><small>${esc(item.MaNCC)}</small></td><td><div class="doc-chip-set">${docChip('invoice', item.MaHDMH, `HĐ ${item.SoHoaDon}`)}<small>${docChip('po', item.MaPO, item.MaPO)} · ${docChip('pn', item.MaPN, item.MaPN || '—')}</small></div></td><td><strong>${fmtDate(item.HanThanhToan)}</strong><small><span class="days-badge ${daysBadgeClass}">${daysText}</span></small></td><td class="num"><strong>${money(item.SoTienConLai)}</strong><small>Gốc ${money(item.SoTienNo)}</small></td><td>${item.MaPhieu ? `${docChip('pc', item.MaPhieu, item.MaPhieu)}<small>${esc(item.PhuongThuc)}</small><span class="status-pill ${voucherClass(item.TrangThaiPhieuChi)}">${esc(item.TrangThaiPhieuChi)}</span>` : '<span class="status-pill draft">Chưa lập Phiếu chi</span>'}</td><td>${action}</td></tr>`;
-      }).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có công nợ phù hợp.</td></tr>';
+      }).join('') : `<tr><td colspan="7" class="warehouse-empty">${esc(window.FLY_SEARCH?.emptyMessage?.(root.querySelector('#accountingPayableSearch')?.value, 'công nợ', 'Chưa có công nợ phù hợp.') || 'Chưa có công nợ phù hợp.')}</td></tr>`;
     };
     const load = async () => {
       try {
@@ -824,7 +881,7 @@
           <td>${item.TrangThaiPhieuChi === 'Chờ duyệt'
             ? `<button class="warehouse-primary manager-debt-detail" data-fund-voucher="${esc(item.MaPhieu)}">Giao tiền</button>`
             : `<button class="warehouse-secondary manager-debt-detail" data-manager-debt="${esc(item.MaCNPTra)}">Xem</button>`}</td>
-        </tr>`; }).join('') : '<tr><td colspan="8" class="warehouse-empty">Chưa phát sinh công nợ phải trả phù hợp với bộ lọc.</td></tr>';
+        </tr>`; }).join('') : `<tr><td colspan="8" class="warehouse-empty">${esc(window.FLY_SEARCH?.emptyMessage?.(search, 'công nợ', 'Chưa phát sinh công nợ phải trả phù hợp với bộ lọc.') || 'Chưa phát sinh công nợ phải trả phù hợp với bộ lọc.')}</td></tr>`;
       root.querySelector('#managerDebtCount').textContent = `${items.length} khoản hiển thị`;
     };
     const load = async () => {
@@ -919,15 +976,24 @@
   const openSettlementDetail = async (context, maCa, onDone) => {
     const detail = await api(context, `/accounting/shift-settlements/${maCa}`);
     const shift = detail.shift;
+    const refunds = detail.refunds || [];
     const revenue = detail.invoices.filter(row => row.TrangThai === 'Hoàn thành').reduce((sum, row) => sum + Number(row.TongThanhToan || 0), 0);
     const difference = Number(shift.TienThucNop) - Number(shift.TienMatHeThong);
+    const negativeCash = Number(shift.TienMatHeThong) < 0;
+    const refundNote = negativeCash
+      ? `<div class="manager-readonly-note"><svg><use href="#i-warning"/></svg><div><strong>Tiền âm là do hoàn trả, không phải lỗi quỹ</strong><span>Ca này hoàn TM ${money(shift.TongTienHoanMat)} trong khi thu TM ${money(shift.TongTienMat)}. Thường là đổi trả hóa đơn ca trước / ca tồn đọng. Lập Phiếu thu với số âm rồi xác nhận — không từ chối ca.</span></div></div>`
+      : '';
+    const refundTable = refunds.length
+      ? `<div class="warehouse-table-wrap warehouse-form-lines"><table class="warehouse-table"><thead><tr><th>PHIẾU ĐỔI TRẢ</th><th>HÓA ĐƠN GỐC</th><th>CA BÁN</th><th>NGƯỜI HOÀN</th><th>SỐ TIỀN</th><th>THỜI ĐIỂM</th></tr></thead><tbody>${refunds.map(row => `<tr><td><strong>${esc(row.MaDT)}</strong><small>${esc(row.HinhThucXuLy || '')}</small></td><td>${esc(row.MaHD || '—')}</td><td>${esc(row.MaCaBan && row.MaCaBan !== shift.MaCa ? row.MaCaBan : 'Ca này / không gắn')}</td><td>${esc(row.NguoiHoan || '—')}</td><td class="num">${money(row.SoTienHoan)}</td><td>${fmtDateTime(row.NgayHoan)}</td></tr>`).join('')}</tbody></table></div>`
+      : '';
     const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
     overlay.innerHTML = `<div class="warehouse-modal order-detail-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">ĐỐI SOÁT DOANH THU THEO CA</p><h2>${esc(shift.MaCa)}</h2></div><button type="button" class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body">
       <div class="warehouse-stats"><article><span>THỰC THU / DOANH THU CA</span><strong>${money(revenue)}</strong><small>${detail.invoices.filter(row => row.TrangThai === 'Hoàn thành').length} hóa đơn hoàn thành</small></article><article><span>TIỀN MẶT THU</span><strong>${money(shift.TongTienMat)}</strong></article><article><span>CHUYỂN KHOẢN</span><strong>${money(shift.TongTienChuyenKhoan)}</strong></article><article><span>QR</span><strong>${money(shift.TongTienQR)}</strong></article><article><span>THẺ</span><strong>${money(shift.TongTienThe)}</strong></article><article><span>HOÀN TIỀN MẶT</span><strong>${money(shift.TongTienHoanMat)}</strong></article></div>
-      <p class="receipt-rule">Thực thu = tổng hóa đơn Hoàn thành. Tiền mặt phải bàn giao = TM thành công − hoàn TM (không gồm quỹ đầu ca, QR/thẻ/CK). Phiếu thu không ghi doanh thu lần hai.</p>
+      ${refundNote}<p class="receipt-rule">Thực thu = tổng hóa đơn Hoàn thành. Tiền mặt phải bàn giao = TM thành công − hoàn TM (không gồm quỹ đầu ca, QR/thẻ/CK). Phiếu thu không ghi doanh thu lần hai${negativeCash ? ' và được phép âm khi hoàn TM lớn hơn thu TM' : ''}.</p>
       <div class="warehouse-detail-grid"><div><span>THU NGÂN</span><strong>${esc(shift.TenNV)}</strong></div><div><span>QUẦY</span><strong>${esc(shift.TenQuay || '—')}</strong></div><div><span>BẮT ĐẦU</span><strong>${fmtDateTime(shift.ThoiGianBatDau)}</strong></div><div><span>KẾT THÚC</span><strong>${fmtDateTime(shift.ThoiGianKetThuc)}</strong></div><div><span>TM HỆ THỐNG</span><strong>${money(shift.TienMatHeThong)}</strong></div><div><span>THỰC NỘP</span><strong>${money(shift.TienThucNop)}</strong></div><div><span>CHÊNH LỆCH</span><strong>${money(difference)}</strong></div><div><span>PHIẾU THU</span><strong>${esc(shift.MaPT || 'Chưa lập')}</strong></div></div>
-      <div class="warehouse-table-wrap warehouse-form-lines"><table class="warehouse-table"><thead><tr><th>HÓA ĐƠN</th><th>THỜI ĐIỂM</th><th>TỔNG THANH TOÁN</th><th>TRẠNG THÁI</th></tr></thead><tbody>${detail.invoices.length ? detail.invoices.map(row => `<tr><td><strong>${esc(row.MaHD)}</strong></td><td>${fmtDateTime(row.NgayLap)}</td><td class="num">${money(row.TongThanhToan)}</td><td>${esc(row.TrangThai)}</td></tr>`).join('') : '<tr><td colspan="4" class="warehouse-empty">Không có hóa đơn.</td></tr>'}</tbody></table></div>
-    </div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Đóng</button>${shift.TrangThaiPhieuThu === 'Đã xác nhận' ? '<button type="button" class="warehouse-primary print-receipt">In Phiếu thu</button>' : shift.MaPT ? '<button type="button" class="warehouse-primary confirm-receipt">Xác nhận Phiếu thu</button>' : '<button type="button" class="warehouse-primary create-receipt">Lập Phiếu thu</button>'}</div></div>`;
+      ${refundTable}
+      <div class="warehouse-table-wrap warehouse-form-lines"><table class="warehouse-table"><thead><tr><th>HÓA ĐƠN</th><th>THỜI ĐIỂM</th><th>TỔNG THANH TOÁN</th><th>TRẠNG THÁI</th></tr></thead><tbody>${detail.invoices.length ? detail.invoices.map(row => `<tr><td><strong>${esc(row.MaHD)}</strong></td><td>${fmtDateTime(row.NgayLap)}</td><td class="num">${money(row.TongThanhToan)}</td><td>${esc(row.TrangThai)}</td></tr>`).join('') : '<tr><td colspan="4" class="warehouse-empty">Không có hóa đơn bán trong ca — chỉ có hoàn trả thì doanh thu = 0.</td></tr>'}</tbody></table></div>
+    </div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Đóng</button>${shift.TrangThaiPhieuThu === 'Đã xác nhận' ? '<button type="button" class="warehouse-primary print-receipt">In Phiếu thu</button>' : shift.MaPT ? '<button type="button" class="warehouse-primary confirm-receipt">Xác nhận Phiếu thu</button>' : `<button type="button" class="warehouse-primary create-receipt">${negativeCash ? 'Lập Phiếu thu (số âm do hoàn trả)' : 'Lập Phiếu thu'}</button>`}</div></div>`;
     document.body.appendChild(overlay);
     const close = () => overlay.remove();
     overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
@@ -960,10 +1026,10 @@
         const data = await api(context, '/accounting/shift-settlements');
         const items = data.items || [];
         const summary = data.summary || {};
-        root.innerHTML = `${heading('KẾ TOÁN / ĐỐI SOÁT BÁN LẺ', 'Doanh thu theo ca và Phiếu thu', 'Thực thu = tổng hóa đơn hoàn thành của ca. Phiếu thu chỉ đối soát tiền mặt bàn giao, không ghi doanh thu lần hai.')}
+        root.innerHTML = `${heading('KẾ TOÁN / ĐỐI SOÁT BÁN LẺ', 'Doanh thu theo ca và Phiếu thu', 'Thực thu = tổng hóa đơn hoàn thành của ca. Phiếu thu chỉ đối soát tiền mặt bàn giao, không ghi doanh thu lần hai. TM hệ thống âm là do hoàn trả (thường hóa đơn ca trước), vẫn lập Phiếu thu được.')}
           <div class="warehouse-stats"><article><span>THỰC THU CÁC CA ĐÃ CHỐT</span><strong>${money(summary.DoanhThu)}</strong><small>${items.length} ca đã đóng</small></article><article><span>TIỀN MẶT HỆ THỐNG</span><strong>${money(summary.TienMatHeThong)}</strong><small>TM thành công − hoàn TM</small></article><article><span>THỰC NỘP</span><strong>${money(summary.TienThucNop)}</strong><small>Tiền mặt thu ngân bàn giao</small></article><article><span>ĐIỆN TỬ (CK + QR + THẺ)</span><strong>${money(Number(summary.TongTienChuyenKhoan || 0) + Number(summary.TongTienQR || 0) + Number(summary.TongTienThe || 0))}</strong><small>Đối chiếu sao kê, không vào két</small></article></div>
           <article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>CA ĐÃ ĐÓNG</p><h2>Hàng đợi đối soát doanh thu và tiền mặt</h2></div><button class="warehouse-secondary" id="refreshSettlements"><svg><use href="#i-refresh"/></svg>Làm mới</button></div>
-          <div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>CA / THU NGÂN</th><th>KẾT THÚC</th><th>THỰC THU</th><th>TM / CK / QR / THẺ</th><th>TM HỆ THỐNG</th><th>THỰC NỘP</th><th>CHÊNH LỆCH</th><th>ĐỐI SOÁT</th><th>THAO TÁC</th></tr></thead><tbody>${items.length ? items.map(item => `<tr><td><strong>${esc(item.MaCa)}</strong><small>${esc(item.TenNV)} · ${esc(item.TenQuay || '—')}</small></td><td>${fmtDateTime(item.ThoiGianKetThuc)}</td><td class="num"><strong>${money(item.DoanhThu)}</strong><small>${item.SoHoaDon || 0} HĐ</small></td><td class="num"><small>TM ${money(item.TongTienMat)}<br>CK ${money(item.TongTienChuyenKhoan)}<br>QR ${money(item.TongTienQR)} · Thẻ ${money(item.TongTienThe)}</small></td><td class="num">${money(item.TienMatHeThong)}</td><td class="num">${money(item.TienThucNop)}</td><td class="num"><strong>${money(item.ChenhLech)}</strong></td><td><span class="status-pill ${item.TrangThaiDoiSoat === 'Đã đối soát' ? 'ok' : 'sent'}">${esc(item.TrangThaiDoiSoat)}</span></td><td><button class="warehouse-primary settlement-action" data-ca="${item.MaCa}">Xem thực thu</button></td></tr>`).join('') : '<tr><td colspan="9" class="warehouse-empty">Chưa có ca đã đóng. Thu ngân phải đóng ca bán hàng trước.</td></tr>'}</tbody></table></div></article>`;
+          <div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>CA / THU NGÂN</th><th>KẾT THÚC</th><th>THỰC THU</th><th>TM / CK / QR / THẺ</th><th>TM HỆ THỐNG</th><th>THỰC NỘP</th><th>CHÊNH LỆCH</th><th>ĐỐI SOÁT</th><th>THAO TÁC</th></tr></thead><tbody>${items.length ? items.map(item => `<tr><td><strong>${esc(item.MaCa)}</strong><small>${esc(item.TenNV)} · ${esc(item.TenQuay || '—')}</small></td><td>${fmtDateTime(item.ThoiGianKetThuc)}</td><td class="num"><strong>${money(item.DoanhThu)}</strong><small>${item.SoHoaDon || 0} HĐ</small></td><td class="num"><small>TM ${money(item.TongTienMat)}<br>CK ${money(item.TongTienChuyenKhoan)}<br>QR ${money(item.TongTienQR)} · Thẻ ${money(item.TongTienThe)}</small></td><td class="num">${money(item.TienMatHeThong)}${Number(item.TienMatHeThong) < 0 ? `<small>Hoàn TM ${money(item.TongTienHoanMat)} — không phải lỗi quỹ</small>` : ''}</td><td class="num">${money(item.TienThucNop)}</td><td class="num"><strong>${money(item.ChenhLech)}</strong></td><td><span class="status-pill ${item.TrangThaiDoiSoat === 'Đã đối soát' ? 'ok' : 'sent'}">${esc(item.TrangThaiDoiSoat)}</span></td><td><button class="warehouse-primary settlement-action" data-ca="${item.MaCa}">Xem thực thu</button></td></tr>`).join('') : '<tr><td colspan="9" class="warehouse-empty">Chưa có ca đã đóng. Thu ngân phải đóng ca bán hàng trước.</td></tr>'}</tbody></table></div></article>`;
         root.querySelector('#refreshSettlements').addEventListener('click', load);
         root.querySelectorAll('.settlement-action').forEach(button => button.addEventListener('click', async () => {
           try { await openSettlementDetail(context, button.dataset.ca, load); }

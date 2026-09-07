@@ -14,12 +14,22 @@ document.addEventListener('DOMContentLoaded', () => {
   let inboxStamp = '';
   let inboxItems = [];
   let inboxTimer = 0;
+  let inboxSource = null;
+  let inboxAbort = null;
+  let inboxReconnectTimer = 0;
+  let inboxReadyWatch = 0;
+  let inboxBackoff = 2000;
+  let inboxToastTimer = 0;
+  let inboxLive = false;
+  const announcedInboxIds = new Set();
+  let closeInboxPanel = () => {};
 
   window.showToast = (message, type = 'success') => {
     clearTimeout(toastTimer);
     toast.textContent = message;
     toast.className = `toast visible ${type}`;
-    toastTimer = setTimeout(() => toast.classList.remove('visible'), 3200);
+    const hold = String(message || '').length > 70 ? 9000 : 3200;
+    toastTimer = setTimeout(() => toast.classList.remove('visible'), hold);
   };
 
   const selectMenu = document.createElement('div');
@@ -190,11 +200,86 @@ document.addEventListener('DOMContentLoaded', () => {
   const formatMoney = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
 
   const seenKey = () => `fly_inbox_seen_${user.MaNV || 'nv'}`;
+  const soundKey = () => `fly_inbox_sound_${user.MaNV || 'nv'}`;
   const readSeen = () => {
     try { return new Set(JSON.parse(localStorage.getItem(seenKey()) || '[]')); }
     catch { return new Set(); }
   };
   const writeSeen = ids => localStorage.setItem(seenKey(), JSON.stringify([...ids].slice(-200)));
+  const isInboxMuted = () => {
+    try { return localStorage.getItem(soundKey()) === 'off'; }
+    catch { return false; }
+  };
+  const setInboxMuted = muted => {
+    try { localStorage.setItem(soundKey(), muted ? 'off' : 'on'); }
+    catch { /* ignore quota */ }
+  };
+  let inboxAudio;
+  const unlockInboxAudio = () => {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return Promise.resolve();
+      if (!inboxAudio) inboxAudio = new Ctx();
+      if (inboxAudio.state === 'suspended') return inboxAudio.resume();
+    } catch { /* trình duyệt chặn tiếng thì bỏ qua */ }
+    return Promise.resolve();
+  };
+  const playInboxChime = () => {
+    if (isInboxMuted()) return;
+    Promise.resolve(unlockInboxAudio()).then(() => {
+      const ctx = inboxAudio;
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      const ping = (freq, start, dur, gain) => {
+        const osc = ctx.createOscillator();
+        const amp = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + start);
+        amp.gain.setValueAtTime(0.0001, now + start);
+        amp.gain.exponentialRampToValueAtTime(gain, now + start + 0.012);
+        amp.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
+        osc.connect(amp);
+        amp.connect(ctx.destination);
+        osc.start(now + start);
+        osc.stop(now + start + dur + 0.03);
+      };
+      ping(880, 0, 0.09, 0.07);
+      ping(1175, 0.1, 0.13, 0.055);
+    }).catch(() => {});
+  };
+  const hideInboxToast = () => {
+    const el = document.getElementById('inboxToast');
+    if (!el) return;
+    el.classList.remove('visible');
+    clearTimeout(inboxToastTimer);
+    inboxToastTimer = setTimeout(() => { el.hidden = true; }, 240);
+  };
+  const showInboxToast = (item, extraCount) => {
+    const el = document.getElementById('inboxToast');
+    if (!el) return;
+    document.getElementById('inboxToastTitle').textContent = item.title || 'Việc mới';
+    const extra = extraCount > 1 ? ` và ${extraCount - 1} việc khác` : '';
+    document.getElementById('inboxToastDetail').textContent = `${item.detail || ''}${extra}`.trim();
+    el.hidden = false;
+    requestAnimationFrame(() => el.classList.add('visible'));
+    clearTimeout(inboxToastTimer);
+    inboxToastTimer = setTimeout(hideInboxToast, 5600);
+  };
+  const syncSoundToggle = () => {
+    const button = document.getElementById('notificationSoundToggle');
+    if (!button) return;
+    const muted = isInboxMuted();
+    const icon = button.querySelector('use');
+    if (icon) {
+      const href = muted ? '#i-sound-off' : '#i-sound-on';
+      icon.setAttribute('href', href);
+      icon.setAttribute('xlink:href', href);
+    }
+    button.classList.toggle('is-muted', muted);
+    button.setAttribute('aria-pressed', muted ? 'true' : 'false');
+    button.title = muted ? 'Bật tiếng thông báo' : 'Tắt tiếng thông báo';
+    button.setAttribute('aria-label', button.title);
+  };
   const fmtInboxTime = value => value
     ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: HANOI_TIME_ZONE }).format(new Date(value))
     : '';
@@ -241,7 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const items = data.items || [];
     const previous = new Set(inboxItems.map(item => item.id));
     const seen = readSeen();
-    const fresh = items.filter(item => !previous.has(item.id) && !seen.has(item.id) && inboxStamp);
+    const fresh = items.filter(item => !previous.has(item.id) && !seen.has(item.id) && !announcedInboxIds.has(item.id) && inboxStamp);
     inboxItems = items;
     inboxStamp = data.stamp || items.map(item => item.id).join('|');
     window._flyInboxHint = data.hint;
@@ -249,9 +334,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const unread = items.filter(item => !seen.has(item.id)).length;
     const countEl = document.getElementById('notificationCount');
     const dot = document.getElementById('notificationDot');
-    countEl.textContent = String(unread);
-    countEl.classList.toggle('visible', unread > 0);
+    const bell = document.getElementById('notificationButton');
+    const count = items.length;
+    countEl.textContent = count > 99 ? '99+' : String(count);
+    countEl.classList.toggle('visible', count > 0);
     dot.classList.toggle('visible', unread > 0);
+    bell?.classList.toggle('has-unread', unread > 0);
+    if (announce && fresh.length) {
+      countEl.classList.remove('pulse');
+      void countEl.offsetWidth;
+      countEl.classList.add('pulse');
+    }
     const byTarget = items.reduce((map, item) => {
       map[item.target] = (map[item.target] || 0) + 1;
       return map;
@@ -260,12 +353,17 @@ document.addEventListener('DOMContentLoaded', () => {
     setNavBadge('purchasing-inbox', byTarget['purchasing-inbox'] || 0);
     setNavBadge('warehouse-returns', byTarget['warehouse-returns'] || 0);
     setNavBadge('warehouse-receiving', byTarget['warehouse-receiving'] || 0);
+    setNavBadge('warehouse-inventory-counts', byTarget['warehouse-inventory-counts'] || 0);
     setNavBadge('accounting-settlements', byTarget['accounting-settlements'] || 0);
     setNavBadge('cashier-returns', byTarget['cashier-returns'] || 0);
     if (!document.getElementById('notificationPanel').hidden) renderInboxPanel();
     if (announce && fresh.length) {
-      const extra = fresh.length > 1 ? ` và ${fresh.length - 1} việc khác` : '';
-      window.showToast(`Việc mới: ${fresh[0].title}${extra}`, 'success');
+      fresh.forEach(item => announcedInboxIds.add(item.id));
+      if (announcedInboxIds.size > 300) {
+        [...announcedInboxIds].slice(0, announcedInboxIds.size - 240).forEach(id => announcedInboxIds.delete(id));
+      }
+      playInboxChime();
+      if (document.getElementById('notificationPanel')?.hidden) showInboxToast(fresh[0], fresh.length);
       const currentTarget = currentNav?.dataset.target;
       const heavyPages = new Set(['accounting-reports', 'manager-reports', 'warehouse-reports', 'cashier-reports', 'purchasing-reports']);
       const shouldReload = fresh.some(item => item.target === currentTarget || (currentTarget === 'home' && item.target === 'manager-purchase-approvals'));
@@ -287,6 +385,120 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await apiGet('/notifications');
       applyInbox(data, { announce });
     } catch { /* giữ inbox cũ nếu API tạm lỗi */ }
+  };
+  const stopInboxPoll = () => {
+    if (inboxTimer) {
+      clearInterval(inboxTimer);
+      inboxTimer = 0;
+    }
+  };
+  const startInboxPoll = () => {
+    if (inboxTimer) return;
+    inboxTimer = setInterval(() => loadInbox({ announce: true }), 3000);
+  };
+  const markInboxLive = () => {
+    inboxLive = true;
+    inboxBackoff = 2000;
+    if (inboxReadyWatch) {
+      clearTimeout(inboxReadyWatch);
+      inboxReadyWatch = 0;
+    }
+    stopInboxPoll();
+  };
+  const scheduleInboxReconnect = () => {
+    inboxLive = false;
+    startInboxPoll();
+    if (inboxReconnectTimer) return;
+    const wait = inboxBackoff;
+    inboxBackoff = Math.min(Math.round(inboxBackoff * 1.6), 15000);
+    inboxReconnectTimer = setTimeout(() => {
+      inboxReconnectTimer = 0;
+      connectInboxStream();
+    }, wait);
+  };
+  const closeInboxStream = () => {
+    if (inboxReadyWatch) {
+      clearTimeout(inboxReadyWatch);
+      inboxReadyWatch = 0;
+    }
+    if (inboxSource) {
+      inboxSource.close();
+      inboxSource = null;
+    }
+    if (inboxAbort) {
+      inboxAbort.abort();
+      inboxAbort = null;
+    }
+  };
+  const consumeInboxFetchStream = async () => {
+    inboxAbort = new AbortController();
+    const response = await fetch(`${API_BASE}/notifications/stream`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: inboxAbort.signal
+    });
+    if (response.status === 401) {
+      localStorage.removeItem('fly_token');
+      localStorage.removeItem('fly_user');
+      window.location.href = '../login/login.html';
+      return;
+    }
+    if (!response.ok || !response.body) throw new Error('stream');
+    markInboxLive();
+    loadInbox({ announce: true });
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop();
+      for (const block of parts) {
+        if (/event:\s*inbox/.test(block)) loadInbox({ announce: true });
+      }
+    }
+    throw new Error('ended');
+  };
+  const connectInboxStream = () => {
+    if (inboxReconnectTimer) {
+      clearTimeout(inboxReconnectTimer);
+      inboxReconnectTimer = 0;
+    }
+    closeInboxStream();
+    const useFetchStream = () => {
+      closeInboxStream();
+      consumeInboxFetchStream().catch(error => {
+        if (error?.name === 'AbortError') return;
+        scheduleInboxReconnect();
+      });
+    };
+    if (!window.EventSource) {
+      useFetchStream();
+      return;
+    }
+    try {
+      inboxSource = new EventSource(`${API_BASE}/notifications/stream?token=${encodeURIComponent(token)}`);
+    } catch {
+      useFetchStream();
+      return;
+    }
+    const onPing = () => {
+      markInboxLive();
+      loadInbox({ announce: true });
+    };
+    inboxSource.addEventListener('ready', onPing);
+    inboxSource.addEventListener('inbox', onPing);
+    inboxSource.onerror = () => {
+      if (inboxLive && inboxSource && inboxSource.readyState !== EventSource.CLOSED) return;
+      startInboxPoll();
+      if (inboxSource && inboxSource.readyState !== EventSource.CLOSED) return;
+      useFetchStream();
+    };
+    inboxReadyWatch = setTimeout(() => {
+      if (inboxLive) return;
+      useFetchStream();
+    }, 2500);
   };
   const updatePendingIndicators = total => {
     pendingTotal = Number(total || 0);
@@ -487,6 +699,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const openPage = async navItem => {
     closeSelectMenu();
+    closeInboxPanel();
     currentNav = navItem;
     const target = navItem.dataset.target;
     setActiveNav(target);
@@ -554,35 +767,60 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('cancelPwdModal').addEventListener('click', closePasswordModal);
 
   const profileMenu = document.getElementById('profileMenu');
-  document.getElementById('profileButton').addEventListener('click', event => {
-    event.stopPropagation();
-    profileMenu.hidden = !profileMenu.hidden;
-  });
-  document.addEventListener('click', () => { profileMenu.hidden = true; });
   const notificationPanel = document.getElementById('notificationPanel');
   const notificationButton = document.getElementById('notificationButton');
-  const closeInboxPanel = () => {
+  const inboxBackdrop = document.getElementById('inboxBackdrop');
+  closeInboxPanel = () => {
     notificationPanel.hidden = true;
+    if (inboxBackdrop) inboxBackdrop.hidden = true;
+    document.body.classList.remove('inbox-open');
     notificationButton.setAttribute('aria-expanded', 'false');
   };
   const openInboxPanel = () => {
+    closeSelectMenu();
     profileMenu.hidden = true;
+    hideInboxToast();
     renderInboxPanel();
     notificationPanel.hidden = false;
+    if (inboxBackdrop) inboxBackdrop.hidden = false;
+    document.body.classList.add('inbox-open');
     notificationButton.setAttribute('aria-expanded', 'true');
     writeSeen(new Set([...readSeen(), ...inboxItems.map(item => item.id)]));
-    document.getElementById('notificationCount').classList.remove('visible');
     document.getElementById('notificationDot').classList.remove('visible');
+    notificationButton.classList.remove('has-unread');
+    const countEl = document.getElementById('notificationCount');
+    const count = inboxItems.length;
+    countEl.textContent = count > 99 ? '99+' : String(count);
+    countEl.classList.toggle('visible', count > 0);
   };
+  document.getElementById('profileButton').addEventListener('click', event => {
+    event.stopPropagation();
+    closeInboxPanel();
+    profileMenu.hidden = !profileMenu.hidden;
+  });
+  document.addEventListener('click', () => { profileMenu.hidden = true; });
   notificationButton.addEventListener('click', event => {
     event.stopPropagation();
+    unlockInboxAudio();
     if (notificationPanel.hidden) openInboxPanel();
     else closeInboxPanel();
+  });
+  document.getElementById('notificationSoundToggle')?.addEventListener('click', event => {
+    event.stopPropagation();
+    unlockInboxAudio();
+    setInboxMuted(!isInboxMuted());
+    syncSoundToggle();
+    if (!isInboxMuted()) playInboxChime();
+  });
+  document.getElementById('inboxToast')?.addEventListener('click', event => {
+    event.stopPropagation();
+    openInboxPanel();
   });
   document.getElementById('notificationClose').addEventListener('click', event => {
     event.stopPropagation();
     closeInboxPanel();
   });
+  inboxBackdrop?.addEventListener('click', closeInboxPanel);
   notificationPanel.addEventListener('click', event => {
     event.stopPropagation();
     const button = event.target.closest('[data-inbox-target]');
@@ -591,38 +829,74 @@ document.addEventListener('DOMContentLoaded', () => {
     const nav = pageNavItems.find(item => item.dataset.target === button.dataset.inboxTarget);
     if (nav) openPage(nav);
   });
-  document.addEventListener('click', closeInboxPanel);
+  document.addEventListener('click', event => {
+    if (notificationPanel.hidden) return;
+    if (event.target.closest('#notificationPanel, #notificationButton, .notification-cluster')) return;
+    closeInboxPanel();
+  });
+  window.FLY_ESCAPE?.register({
+    isOpen: () => !notificationPanel.hidden,
+    close: closeInboxPanel
+  });
 
-  document.getElementById('globalSearchForm').addEventListener('submit', async event => {
-    event.preventDefault();
-    const query = document.getElementById('globalSearch').value.trim();
-    if (!query) return;
-    const normalizeSearch = window.FLY_SEARCH?.normalize || (value => String(value ?? '').trim().toLocaleLowerCase('vi-VN'));
-    const normalizedQuery = normalizeSearch(query);
+  const searchRole = isWarehouse ? 'warehouse' : isPurchasing ? 'purchasing' : isCashier ? 'cashier' : isAccounting ? 'accounting' : 'manager';
+  const searchTools = () => window.FLY_SEARCH || {};
+  const applyHeaderToPage = query => {
+    const input = searchTools().findPageSearch?.();
+    return Boolean(searchTools().applyToPageSearch?.(input, query));
+  };
+  const runGlobalSearch = async query => {
+    const q = String(query || '').trim();
+    if (!q) return;
+    const normalizeSearch = searchTools().normalize || (value => String(value ?? '').trim().toLocaleLowerCase('vi-VN'));
+    const normalizedQuery = normalizeSearch(q);
     const matchingNavigation = pageNavItems.find(item => {
       if (item.offsetParent === null) return false;
-      const label = normalizeSearch(item.textContent);
-      return label && (label.includes(normalizedQuery) || normalizedQuery.includes(label));
+      const label = normalizeSearch(item.querySelector('span')?.textContent || item.textContent);
+      return label && (label === normalizedQuery || (label.length >= 4 && (label.includes(normalizedQuery) || normalizedQuery.includes(label))));
     });
-    if (matchingNavigation) {
+    if (matchingNavigation && normalizedQuery.length >= 3 && /[a-zà-ỹ]/i.test(normalizedQuery) && !/[0-9]/.test(normalizedQuery)) {
       await openPage(matchingNavigation);
       window.showToast(`Đã mở ${matchingNavigation.textContent.trim()}.`, 'success');
       return;
     }
-    const destination = isWarehouse ? 'warehouse-inventory'
-      : isPurchasing ? 'purchasing-inbox'
-      : isCashier ? 'cashier-invoices'
-      : isAccounting ? 'accounting-invoices'
-      : '../admin/employees.html';
+    const currentTarget = currentNav?.dataset.target;
+    const destination = searchTools().resolveDestination?.(q, { role: searchRole, currentTarget })
+      || (isWarehouse ? 'warehouse-inventory'
+        : isPurchasing ? 'purchasing-inbox'
+        : isCashier ? 'cashier-invoices'
+        : isAccounting ? 'accounting-invoices'
+        : '../admin/employees.html');
     const destinationNav = pageNavItems.find(item => item.dataset.target === destination);
     if (!destinationNav) return;
+    if (currentTarget === destination && applyHeaderToPage(q)) return;
+    searchTools().stashPendingQuery?.(destination, q);
     await openPage(destinationNav);
-    const search = document.getElementById(isWarehouse ? 'inventorySearch' : isPurchasing ? 'purchasingSearch' : isCashier ? 'invoiceQuery' : isAccounting ? 'invoiceSearch' : 'empSearch');
-    if (search) {
-      search.value = query;
-      search.dispatchEvent(new Event('input', { bubbles: true }));
-      search.focus();
-    }
+    applyHeaderToPage(q);
+  };
+  document.getElementById('globalSearchForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    await runGlobalSearch(document.getElementById('globalSearch').value);
+  });
+  const headerSearch = document.getElementById('globalSearch');
+  const syncHeaderToPage = (searchTools().debounce || ((fn, delay) => {
+    let timer;
+    return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); };
+  }))(() => {
+    const pageInput = searchTools().findPageSearch?.();
+    if (!pageInput || document.activeElement === pageInput) return;
+    if (pageInput.value === headerSearch.value) return;
+    pageInput.value = headerSearch.value;
+    pageInput.dispatchEvent(new Event('input', { bubbles: true }));
+  }, 250);
+  headerSearch.addEventListener('input', syncHeaderToPage);
+  document.addEventListener('input', event => {
+    const pageInput = event.target;
+    if (!(pageInput instanceof HTMLInputElement) || pageInput === headerSearch) return;
+    if (!pageInput.closest('#contentArea')) return;
+    const hint = `${pageInput.id || ''} ${pageInput.placeholder || ''}`;
+    if (pageInput.type !== 'search' && !/search|query|tìm/i.test(hint)) return;
+    if (headerSearch.value !== pageInput.value) headerSearch.value = pageInput.value;
   });
 
   document.getElementById('pwdForm').addEventListener('submit', async event => {
@@ -649,9 +923,16 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) { window.showToast(error.message, 'error'); }
   });
 
+  syncSoundToggle();
+  document.addEventListener('pointerdown', unlockInboxAudio, { once: true });
+  document.addEventListener('keydown', unlockInboxAudio, { once: true });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') loadInbox({ announce: true });
+  });
+  window.addEventListener('focus', () => loadInbox({ announce: true }));
   loadInbox();
-  clearInterval(inboxTimer);
-  inboxTimer = setInterval(() => loadInbox({ announce: true }), 30000);
+  connectInboxStream();
+  if (!inboxLive) startInboxPoll();
 
   if (isManager) {
     loadOverview();

@@ -85,4 +85,15 @@ app.listen(PORT, HOST, () => {
     } else {
         console.log('Không thấy IP LAN. Kiểm tra Wi-Fi / Ethernet rồi chạy lại.');
     }
+    poolPromise.then(async (pool) => {
+        try {
+            const { ensureStoreProfitLossSchema } = require('./services/storeProfitLoss');
+            const { ensureReturnHandoverSchema, healParkedReturns } = require('./services/returnHandover');
+            await ensureStoreProfitLossSchema(pool);
+            await ensureReturnHandoverSchema(pool);
+            await healParkedReturns(pool);
+        } catch (error) {
+            console.error('Không thể bổ sung schema thông báo / bàn giao đổi trả:', error.message);
+        }
+    }).catch(() => {});
 });

@@ -2,9 +2,16 @@ const jwt = require('jsonwebtoken');
 const { sql, poolPromise } = require('../config/db');
 
 // Middleware xác thực Token (Để dùng cho các API sau này)
-const verifyToken = (req, res, next) => {
+const tokenFromRequest = req => {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Định dạng: Bearer <token>
+    const bearer = authHeader && authHeader.split(' ')[1];
+    if (bearer) return bearer;
+    const queryToken = req.query?.token || req.query?.access_token;
+    return queryToken ? String(queryToken) : '';
+};
+
+const verifyToken = (req, res, next) => {
+    const token = tokenFromRequest(req);
 
     if (!token) {
         return res.status(401).json({ message: 'Vui lòng đăng nhập!' });

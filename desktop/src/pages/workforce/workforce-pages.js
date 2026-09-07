@@ -17,7 +17,14 @@
       throw new Error(`Không kết nối được backend. Hãy mở máy chủ tại ${context.apiBase.replace(/\/api$/, '')} rồi thử lại.`);
     }
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.message || 'Không thể xử lý yêu cầu.');
+    if (!response.ok) {
+      const error = new Error(data.message || 'Không thể xử lý yêu cầu.');
+      error.recovery = data.recovery;
+      error.MaCa = data.MaCa;
+      error.stale = data.stale;
+      error.duty = data.duty;
+      throw error;
+    }
     return data;
   };
   const dateKey = date => {
@@ -49,24 +56,41 @@
   const expectedCoverage = (shift, days) => isOfficeShift(shift)
     ? Number(shift.SoNguoiCan) * days.filter(day => !isSunday(day)).length
     : Number(shift.SoNguoiCan) * days.length;
+  const slotLockReason = item => {
+    if (!item) return '';
+    if (item.MaChamCong || item.ThoiGianVao || item.ThoiGianRa) return 'Ca này đã chấm công nên không thể sửa.';
+    if (item.TrangThaiChamCong === 'Đã duyệt' || item.TrangThaiChamCong === 'Đang làm việc' || item.TrangThaiChamCong === 'Chờ duyệt') {
+      return 'Ca này đã có dữ liệu chấm công nên không thể sửa.';
+    }
+    if (item.TrangThaiCaBan === 'Đang mở' || item.TrangThaiCaBan === 'Đã chốt' || item.MaCa) {
+      return 'Ca POS đã mở hoặc đã chốt trên lượt này nên không thể sửa lịch.';
+    }
+    return '';
+  };
 
-  const renderGrid = (employees, days, byEmployeeDay, group) => `
+  const renderGrid = (employees, days, byEmployeeDay, group, weekHasPublished) => `
     <div class="workforce-grid-wrap"><table class="workforce-grid"><thead><tr><th>Nhân viên</th>${days.map(day => `<th>${shortDate(day)}</th>`).join('')}</tr></thead>
     <tbody>${employees.map(employee => `<tr><th><span class="workforce-avatar">${initials(employee.TenNV)}</span><div><strong>${esc(employee.TenNV)}</strong><small>${esc(employee.ChucVu)} · ${esc(employee.MaNV)} · ${money(employee.LuongGio)}/giờ</small></div></th>${days.map(day => {
       const item = byEmployeeDay.get(`${employee.MaNV}|${day}`);
       const restSunday = group === 'office' && isSunday(day) && !item;
       if (restSunday) return `<td><div class="workforce-cell rest">Nghỉ Chủ nhật</div></td>`;
-      const disabled = item?.TrangThai === 'Đã công bố';
+      const lockReason = slotLockReason(item);
+      const pending = item && item.TrangThai !== 'Đã công bố' && weekHasPublished;
+      const cellClass = !item ? 'empty' : item.TrangThai === 'Đã công bố' ? 'published' : pending ? 'draft republish' : 'draft';
       const lunch = item?.GioNghiBatDau && item?.GioNghiKetThuc ? ` · nghỉ ${esc(item.GioNghiBatDau)}–${esc(item.GioNghiKetThuc)}` : '';
       const clockBadge = item?.ThoiGianRa || item?.TrangThaiCaBan === 'Đã chốt'
         ? '<em class="clock-done">Đã ra ca</em>'
         : item?.ThoiGianVao || item?.TrangThaiCaBan === 'Đang mở'
           ? '<em class="clock-live">Đang trong ca</em>'
-          : '';
-      return `<td><button class="workforce-cell ${item ? (item.TrangThai === 'Đã công bố' ? 'published' : 'draft') : 'empty'}" data-employee="${employee.MaNV}" data-day="${day}" ${disabled ? 'disabled' : ''}>${item ? `<strong>${esc(item.TenCa)}</strong><span>${esc(item.GioBatDau)}–${esc(item.GioKetThuc)}${lunch}</span><small>${esc(item.NhiemVu)}${item.TenQuay ? ` · ${esc(item.TenQuay)}` : ''}</small>${clockBadge}` : '<span>+ Xếp ca</span>'}</button></td>`;
+          : pending
+            ? '<em class="clock-pending">Chờ công bố lại</em>'
+            : '';
+      return `<td><button class="workforce-cell ${cellClass}" data-employee="${employee.MaNV}" data-day="${day}" ${lockReason ? `disabled title="${esc(lockReason)}"` : ''}>${item ? `<strong>${esc(item.TenCa)}</strong><span>${esc(item.GioBatDau)}–${esc(item.GioKetThuc)}${lunch}</span><small>${esc(item.NhiemVu)}${item.TenQuay ? ` · ${esc(item.TenQuay)}` : ''}</small>${clockBadge}` : '<span>+ Xếp ca</span>'}</button></td>`;
     }).join('')}</tr>`).join('')}</tbody></table></div>`;
 
   const openEditModal = (context, setup, employee, day, current, onDone) => {
+    const lockReason = slotLockReason(current);
+    if (lockReason) { context.showToast(lockReason, 'error'); return; }
     const office = isOfficeEmployee(employee);
     const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
     const availableShifts = setup.shifts.filter(item => office ? isOfficeShift(item) : !isOfficeShift(item));
@@ -74,12 +98,25 @@
       const lunch = item.GioNghiBatDau ? ` · nghỉ ${esc(item.GioNghiBatDau)}–${esc(item.GioNghiKetThuc)}` : '';
       return `<option value="${esc(item.MaLoaiCa)}" ${current?.MaLoaiCa === item.MaLoaiCa ? 'selected' : ''}>${esc(item.TenCa)} · ${esc(item.GioBatDau)}–${esc(item.GioKetThuc)}${lunch}</option>`;
     }).join('');
+    const peers = office
+      ? (setup.officeStaff || setup.employees.filter(isOfficeEmployee))
+      : (setup.cashiers || setup.employees.filter(item => item.ChucVu === 'Thu ngân'));
+    const employeeField = current
+      ? `<label class="warehouse-field"><span>Nhân viên</span><select id="editEmployee">${peers.map(item => `<option value="${esc(item.MaNV)}" ${item.MaNV === employee.MaNV ? 'selected' : ''}>${esc(item.TenNV)} · ${esc(item.MaNV)}</option>`).join('')}</select></label>`
+      : '';
     const duty = current?.NhiemVu || (office ? 'Hành chính cố định' : 'Ca chính full-time');
-    overlay.innerHTML = `<div class="warehouse-modal workforce-edit-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">PHÂN CÔNG THỦ CÔNG</p><h2>${esc(employee.TenNV)}</h2><span>${shortDate(day)} · ${esc(employee.ChucVu)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="workforce-form-grid"><label class="warehouse-field"><span>Ca làm việc</span><select id="editShift">${shiftOptions}</select></label>${office ? `<label class="warehouse-field"><span>Nhiệm vụ</span><input id="editDuty" value="${esc(duty)}" disabled></label>` : `<label class="warehouse-field"><span>Nhiệm vụ</span><select id="editDuty"><option ${duty === 'Ca chính full-time' || duty === 'Thu ngân' ? 'selected' : ''}>Ca chính full-time</option><option ${duty === 'Tăng cường part-time' || duty === 'Hỗ trợ thu ngân' ? 'selected' : ''}>Tăng cường part-time</option></select></label><label class="warehouse-field"><span>Quầy phụ trách</span><select id="editRegister"><option value="">Không mở quầy</option>${setup.registers.map(item => `<option value="${item.MaQuay}" ${current?.MaQuay === item.MaQuay ? 'selected' : ''}>${esc(item.TenQuay)}</option>`).join('')}</select></label>`}</div><div class="workforce-rule"><svg><use href="#i-warning"/></svg><p>${office ? 'Mua hàng, Thủ kho và Kế toán làm cố định 7h30–17h30, nghỉ trưa 11h30–13h30 (2 giờ nghỉ không tính lương). Lịch tự động xếp Thứ 2–Thứ 7, Chủ nhật nghỉ.' : 'Ca chính 8 giờ mở quầy; tăng cường 4 giờ chỉ hỗ trợ. Khung 10–14h và 18–22h sẽ có 2 người: 1 ca chính + 1 tăng cường.'}</p></div></div><div class="warehouse-modal-actions">${current?.TrangThai === 'Bản nháp' ? '<button class="warehouse-danger remove" type="button">Xóa lượt này</button>' : '<span></span>'}<button class="warehouse-secondary close" type="button">Hủy</button><button class="warehouse-primary save" type="button">Lưu bản nháp</button></div></div>`;
+    const published = current?.TrangThai === 'Đã công bố';
+    const rule = published
+      ? 'Lịch này đã công bố. Chỉ điều chỉnh khi có ngoại lệ (ốm, hoán đổi, bất khả kháng). Sau khi lưu phải bấm Công bố lịch lại — chấm công, POS và lương chỉ dùng bản đã công bố.'
+      : office
+        ? 'Mua hàng, Thủ kho và Kế toán làm cố định 7h30–17h30, nghỉ trưa 11h30–13h30 (2 giờ nghỉ không tính lương). Lịch tự động xếp Thứ 2–Thứ 7, Chủ nhật nghỉ.'
+        : 'Ca chính 8 giờ mở quầy; tăng cường 4 giờ chỉ hỗ trợ. Khung 10–14h và 18–22h sẽ có 2 người: 1 ca chính + 1 tăng cường.';
+    overlay.innerHTML = `<div class="warehouse-modal workforce-edit-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">${published ? 'ĐIỀU CHỈNH NGOẠI LỆ' : 'PHÂN CÔNG THỦ CÔNG'}</p><h2>${esc(employee.TenNV)}</h2><span>${shortDate(day)} · ${esc(employee.ChucVu)}${published ? ' · đã công bố' : ''}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="workforce-form-grid">${employeeField}<label class="warehouse-field"><span>Ca làm việc</span><select id="editShift">${shiftOptions}</select></label>${office ? `<label class="warehouse-field"><span>Nhiệm vụ</span><input id="editDuty" value="${esc(duty)}" disabled></label>` : `<label class="warehouse-field"><span>Nhiệm vụ</span><select id="editDuty"><option ${duty === 'Ca chính full-time' || duty === 'Thu ngân' ? 'selected' : ''}>Ca chính full-time</option><option ${duty === 'Tăng cường part-time' || duty === 'Hỗ trợ thu ngân' ? 'selected' : ''}>Tăng cường part-time</option></select></label><label class="warehouse-field"><span>Quầy phụ trách</span><select id="editRegister"><option value="">Không mở quầy</option>${setup.registers.map(item => `<option value="${item.MaQuay}" ${current?.MaQuay === item.MaQuay ? 'selected' : ''}>${esc(item.TenQuay)}</option>`).join('')}</select></label>`}</div><div class="workforce-rule"><svg><use href="#i-warning"/></svg><p>${rule}</p></div></div><div class="warehouse-modal-actions">${current ? '<button class="warehouse-danger remove" type="button">Xóa lượt này</button>' : '<span></span>'}<button class="warehouse-secondary close" type="button">Hủy</button><button class="warehouse-primary save" type="button">${published ? 'Lưu điều chỉnh' : 'Lưu bản nháp'}</button></div></div>`;
     document.body.appendChild(overlay);
     const shiftSelect = overlay.querySelector('#editShift');
     const dutySelect = overlay.querySelector('#editDuty');
     const registerSelect = overlay.querySelector('#editRegister');
+    const employeeSelect = overlay.querySelector('#editEmployee');
     if (!office) {
       const syncDuty = () => {
         dutySelect.value = isReinforcementShift(shiftSelect.value) ? 'Tăng cường part-time' : 'Ca chính full-time';
@@ -90,17 +127,23 @@
     }
     overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', () => overlay.remove()));
     overlay.querySelector('.save').addEventListener('click', async () => {
+      if (published && !window.confirm('Đây là lịch đã công bố. Chỉ lưu khi có ngoại lệ (ốm, hoán đổi, bất khả kháng). Sau khi lưu phải bấm Công bố lịch lại.')) return;
       try {
+        const selectedEmployee = employeeSelect?.value || employee.MaNV;
         const payload = office
-          ? { MaNV: employee.MaNV, NgayLam: day, MaLoaiCa: 'HANH_CHINH', NhiemVu: dutySelect.value, MaQuay: null }
-          : { MaNV: employee.MaNV, NgayLam: day, MaLoaiCa: shiftSelect.value, NhiemVu: dutySelect.value, MaQuay: isMainShiftDuty(dutySelect.value) ? (registerSelect.value || 'Q01') : null };
-        await api(context, '/admin/workforce/schedules', { method: 'PUT', body: JSON.stringify(payload) });
-        context.showToast('Đã lưu lịch phân công.', 'success'); overlay.remove(); await onDone();
+          ? { MaNV: selectedEmployee, NgayLam: day, MaLoaiCa: 'HANH_CHINH', NhiemVu: dutySelect.value, MaQuay: null }
+          : { MaNV: selectedEmployee, NgayLam: day, MaLoaiCa: shiftSelect.value, NhiemVu: dutySelect.value, MaQuay: isMainShiftDuty(dutySelect.value) ? (registerSelect.value || 'Q01') : null };
+        if (current?.MaLich) payload.MaLich = current.MaLich;
+        const result = await api(context, '/admin/workforce/schedules', { method: 'PUT', body: JSON.stringify(payload) });
+        context.showToast(result.message || 'Đã lưu lịch phân công.', 'success'); overlay.remove(); await onDone();
       } catch (error) { context.showToast(error.message, 'error'); }
     });
     overlay.querySelector('.remove')?.addEventListener('click', async () => {
-      try { await api(context, `/admin/workforce/schedules/${current.MaLich}`, { method: 'DELETE' }); overlay.remove(); await onDone(); context.showToast('Đã xóa lượt phân công.', 'success'); }
-      catch (error) { context.showToast(error.message, 'error'); }
+      if (published && !window.confirm('Xóa lượt đã công bố? Hãy xếp người thay rồi Công bố lịch lại. Không xóa được ca đã chấm công.')) return;
+      try {
+        const result = await api(context, `/admin/workforce/schedules/${current.MaLich}`, { method: 'DELETE' });
+        overlay.remove(); await onDone(); context.showToast(result.message || 'Đã xóa lượt phân công.', 'success');
+      } catch (error) { context.showToast(error.message, 'error'); }
     });
   };
 
@@ -184,15 +227,20 @@
       try {
         const data = await api(context, `/admin/workforce/schedules?from=${from}&to=${to}`);
         const byEmployeeDay = new Map(data.items.map(item => [`${item.MaNV}|${item.NgayLam}`, item]));
+        const weekHasPublished = data.items.some(item => item.TrangThai === 'Đã công bố');
+        const pendingRepublish = data.items.filter(item => item.TrangThai === 'Bản nháp').length;
+        const needsRepublish = weekHasPublished && pendingRepublish > 0;
         const cashierShifts = setup.shifts.filter(item => !isOfficeShift(item));
         const officeShifts = setup.shifts.filter(isOfficeShift);
         const coverageCard = item => `<article class="${isOfficeShift(item) ? 'office' : ''}"><span>${esc(item.TenCa)}</span><strong>${data.items.filter(row => row.MaLoaiCa === item.MaLoaiCa).length}/${expectedCoverage(item, days)}</strong><small>${esc(item.GioBatDau)}–${esc(item.GioKetThuc)}${item.GioNghiBatDau ? ` · nghỉ ${esc(item.GioNghiBatDau)}–${esc(item.GioNghiKetThuc)}` : ''} · ${shiftRoleLabel(item)}</small></article>`;
-        root.innerHTML = `<header class="warehouse-heading workforce-heading"><div><p class="warehouse-kicker">NHÂN SỰ / PHÂN CA</p><h1>Kế hoạch làm việc cửa hàng</h1><p>Thu ngân xoay ca 24/7. Mua hàng, Thủ kho và Kế toán làm cố định 7h30–17h30, nghỉ trưa 11h30–13h30, Thứ 2–Thứ 7.</p></div><div class="workforce-heading-actions"><button class="warehouse-secondary" id="autoSchedule"><svg><use href="#i-refresh"/></svg>Phân ca tự động</button><button class="warehouse-primary" id="publishSchedule"><svg><use href="#i-approve"/></svg>Công bố lịch</button></div></header>
-          <section class="workforce-weekbar"><button class="warehouse-icon-button" id="prevWeek"><svg><use href="#i-chevron"/></svg></button><div><span>TUẦN LÀM VIỆC</span><strong>${shortDate(from)} – ${shortDate(to)}</strong><small>Bản nháp có thể sửa; lịch công bố dùng để chấm công. Ca hành chính trừ 2 giờ nghỉ trưa khi tính lương.</small></div><button class="warehouse-icon-button next" id="nextWeek"><svg><use href="#i-chevron"/></svg></button></section>
+        const legend = `<span class="workforce-legend"><i class="draft"></i>Bản nháp / chờ công bố lại <i class="published"></i>Đã công bố</span>`;
+        root.innerHTML = `<header class="warehouse-heading workforce-heading"><div><p class="warehouse-kicker">NHÂN SỰ / PHÂN CA</p><h1>Kế hoạch làm việc cửa hàng</h1><p>Thu ngân: 1 ca/ngày, nghỉ 12 giờ, ≤48 giờ/tuần (T2–CN), không đêm thứ 3 liên tiếp; xoay đều loại ca trong tháng. Mua hàng, Thủ kho và Kế toán làm cố định 7h30–17h30, nghỉ trưa 11h30–13h30, Thứ 2–Thứ 7. Lịch đã công bố không khóa cứng: Quản lý sửa ngoại lệ rồi Công bố lịch lại.</p></div><div class="workforce-heading-actions"><button class="warehouse-secondary" id="autoSchedule"><svg><use href="#i-refresh"/></svg>Phân ca tự động</button><button class="warehouse-primary" id="publishSchedule"><svg><use href="#i-approve"/></svg>${needsRepublish ? 'Công bố lại' : 'Công bố lịch'}</button></div></header>
+          <section class="workforce-weekbar"><button class="warehouse-icon-button" id="prevWeek"><svg><use href="#i-chevron"/></svg></button><div><span>TUẦN LÀM VIỆC</span><strong>${shortDate(from)} – ${shortDate(to)}</strong><small>Quản lý có thể điều chỉnh ngoại lệ trên lịch đã công bố, rồi Công bố lịch lại. Ô đã chấm công hoặc đã mở POS thì khóa. Ca hành chính trừ 2 giờ nghỉ trưa khi tính lương.</small></div><button class="warehouse-icon-button next" id="nextWeek"><svg><use href="#i-chevron"/></svg></button></section>
+          ${needsRepublish ? `<div class="workforce-rule workforce-republish-banner"><svg><use href="#i-warning"/></svg><p>Có ${pendingRepublish} lượt chờ công bố lại sau điều chỉnh ngoại lệ. Chấm công và POS chỉ dùng lịch đã công bố — hãy bấm Công bố lại.</p></div>` : ''}
           <div class="workforce-coverage">${cashierShifts.map(coverageCard).join('')}</div>
           ${officeShifts.length ? `<div class="workforce-coverage office-line">${officeShifts.map(coverageCard).join('')}</div>` : ''}
-          <article class="workforce-board"><div class="workforce-board-head"><div><p>KHỐI HÀNH CHÍNH</p><h2>${officeStaff.length} người · 7h30–17h30, nghỉ 11h30–13h30</h2></div><span class="workforce-legend"><i class="draft"></i>Bản nháp <i class="published"></i>Đã công bố</span></div>${renderGrid(officeStaff, days, byEmployeeDay, 'office')}</article>
-          <article class="workforce-board"><div class="workforce-board-head"><div><p>THU NGÂN TẠI QUẦY</p><h2>${cashiers.length} nhân viên · xoay ca 24/7</h2></div><span class="workforce-legend"><i class="draft"></i>Bản nháp <i class="published"></i>Đã công bố</span></div>${renderGrid(cashiers, days, byEmployeeDay, 'cashier')}</article>
+          <article class="workforce-board"><div class="workforce-board-head"><div><p>KHỐI HÀNH CHÍNH</p><h2>${officeStaff.length} người · 7h30–17h30, nghỉ 11h30–13h30</h2></div>${legend}</div>${renderGrid(officeStaff, days, byEmployeeDay, 'office', weekHasPublished)}</article>
+          <article class="workforce-board"><div class="workforce-board-head"><div><p>THU NGÂN TẠI QUẦY</p><h2>${cashiers.length} nhân viên · xoay ca 24/7</h2></div>${legend}</div>${renderGrid(cashiers, days, byEmployeeDay, 'cashier', weekHasPublished)}</article>
           <article class="warehouse-table-card workforce-payroll"><div class="warehouse-panel-title"><div><p>CHẤM CÔNG &amp; LƯƠNG</p><h2>Tạm tính theo lượt công đã duyệt</h2></div><div class="workforce-payroll-filter">${payrollPeriodPicker(payrollMonth)}<button class="warehouse-secondary" id="loadPayroll">Xem tháng</button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NHÂN VIÊN</th><th>SỐ CA</th><th>GIỜ LỊCH</th><th>GIỜ NGÀY</th><th>GIỜ ĐÊM</th><th>LƯƠNG TẠM TÍNH</th><th>DỮ LIỆU CÔNG</th></tr></thead><tbody id="payrollBody"><tr><td colspan="7" class="warehouse-empty">Đang tổng hợp...</td></tr></tbody></table></div></article>`;
         const [attendance, salesShifts] = await Promise.all([
           api(context, `/admin/workforce/attendance?from=${from}&to=${to}`),
@@ -250,9 +298,13 @@
         root.querySelector('#prevWeek').addEventListener('click', () => { weekStart = addDays(weekStart, -7); load(); });
         root.querySelector('#nextWeek').addEventListener('click', () => { weekStart = addDays(weekStart, 7); load(); });
         root.querySelector('#autoSchedule').addEventListener('click', async () => {
+          if (weekHasPublished) {
+            context.showToast('Tuần đã có lịch công bố. Hãy sửa từng ô ngoại lệ rồi công bố lại; phân ca tự động không ghi đè lịch đã công bố.', 'error');
+            return;
+          }
           try {
             const preview = await api(context, '/admin/workforce/schedules/auto', { method: 'POST', body: JSON.stringify({ from, to, preview: true }) });
-            if (!window.confirm(`${preview.message}\nThu ngân được xoay ca; mua hàng / kho / kế toán được xếp 7h30–17h30 (T2–T7). Bản nháp hiện tại sẽ bị thay. Tiếp tục?`)) return;
+            if (!window.confirm(`${preview.message}\nThu ngân chỉ nhận người đủ điều kiện (1 ca/ngày, nghỉ 12 giờ, ≤48 giờ/tuần T2–CN, không đêm thứ 3 liên tiếp), rồi ưu tiên ít giờ tuần / ít trùng loại ca trong tháng / đổi ca. Mua hàng / kho / kế toán: 7h30–17h30 (T2–T7). Bản nháp hiện tại sẽ bị thay. Tiếp tục?`)) return;
             const result = await api(context, '/admin/workforce/schedules/auto', { method: 'POST', body: JSON.stringify({ from, to }) });
             context.showToast(result.message, 'success'); await load();
           } catch (error) { context.showToast(error.message, 'error'); }
@@ -280,6 +332,7 @@
     const load = async () => {
       try {
         const data = await api(context, '/cashier/schedule'); const today = data.today;
+        const todayScheduled = data.todayScheduled || null;
         const officeToday = today && (today.MaLoaiCa === 'HANH_CHINH' || today.NhomCa === 'HANH_CHINH');
         const lunch = today?.GioNghiBatDau && today?.GioNghiKetThuc ? ` · nghỉ trưa ${esc(today.GioNghiBatDau)}–${esc(today.GioNghiKetThuc)}` : '';
         const intro = officeToday
@@ -289,15 +342,20 @@
         const roleName = String(context.user?.TenVaiTro || context.user?.ChucVu || '').trim();
         const isCashier = roleName === 'Thu ngân';
         const clockedIn = Boolean(today?.ThoiGianVao && !today?.ThoiGianRa);
+        const openPos = duty.openShift || null;
+        const stuck = Boolean(duty.staleOpenShift || duty.status === 'stale_session');
         const canOpenSales = Boolean(duty.canOpenShift) && isCashier && !officeToday;
-        const nextAction = !clockedIn ? null
+        const nextAction = openPos || !clockedIn ? null
           : canOpenSales ? { id: 'goNext', label: 'Đi tới mở ca bán hàng', target: 'cashier-shifts' }
           : roleName === 'Kế toán' ? { id: 'goNext', label: 'Đi tới đối chiếu hóa đơn', target: 'accounting-invoices' }
           : roleName === 'Thủ kho' ? { id: 'goNext', label: 'Đi tới tổng quan kho', target: 'warehouse-home' }
           : roleName === 'Nhân viên mua hàng' ? { id: 'goNext', label: 'Đi tới đề nghị từ kho', target: 'purchasing-inbox' }
           : null;
+        const closePosBtn = openPos
+          ? `<button class="warehouse-primary" id="goCloseShift"><svg><use href="#i-clock"/></svg>Đóng ca bán hàng ${esc(openPos.MaCa)}</button>`
+          : '';
         const nextBtn = nextAction ? `<button class="warehouse-primary" id="${nextAction.id}" data-next="${esc(nextAction.target)}">${esc(nextAction.label)}</button>` : '';
-        const checkInBtn = !today
+        const checkInBtn = !today || openPos
           ? ''
           : duty.canCheckIn === false && !today.ThoiGianVao
             ? `<span class="status-pill draft">${esc(duty.message || 'Chưa tới giờ ca / đã hết ca')}</span>`
@@ -306,13 +364,27 @@
               : !today.ThoiGianRa
                 ? '<button class="warehouse-secondary" id="checkOut"><svg><use href="#i-clock"/></svg>Chấm công ra</button>'
                 : '<span class="status-pill ok">Đã hoàn thành chấm công</span>';
-        const dutyLine = duty.message && today ? `<p class="workforce-duty-note">${esc(duty.message)}</p>` : '';
+        const scheduledNote = stuck && todayScheduled && Number(todayScheduled.MaLich) !== Number(today?.MaLich)
+          ? `<p class="workforce-duty-note">Ca hôm nay: ${esc(todayScheduled.TenCa)} ${esc(todayScheduled.GioBatDau)}–${esc(todayScheduled.GioKetThuc)} — chấm công vào sau khi đóng ca cũ và chấm công ra.</p>`
+          : '';
+        const dutyLine = duty.message && today ? `<p class="workforce-duty-note">${esc(duty.message)}</p>${scheduledNote}` : scheduledNote;
         const restNote = data.publishedCount
           ? `<article class="workforce-no-shift"><svg><use href="#i-calendar"/></svg><h2>Hôm nay bạn được xếp nghỉ</h2><p>Lịch tuần đã được công bố, nhưng hôm nay không có ca của bạn nên chưa hiện nút chấm công.${data.nextShift ? ` Ca gần nhất: <strong>${esc(data.nextShift.TenCa)} · ${shortDate(data.nextShift.NgayLam)}</strong>.` : ''}${isCashier ? ' Muốn mở quầy hôm nay, hãy đăng nhập đúng thu ngân được phân <strong>ca chính 8 giờ</strong> trong ngày.' : ''}</p></article>`
           : `<article class="workforce-no-shift"><svg><use href="#i-calendar"/></svg><h2>Hôm nay chưa có lịch được công bố</h2><p>Bạn chưa thể chấm công. Hãy liên hệ Quản lý cửa hàng nếu lịch cần được điều chỉnh.</p></article>`;
-        root.innerHTML = `<header class="warehouse-heading"><div><p class="warehouse-kicker">NHÂN VIÊN / LỊCH CÁ NHÂN</p><h1>Lịch làm việc của tôi</h1><p>${intro}</p></div><span class="warehouse-chip">Supermarket Fly · Hà Nội</span></header>${today ? `<article class="workforce-today"><div><span class="cashier-live"><i></i> LỊCH HÔM NAY</span><h2>${esc(today.TenCa)} · ${esc(today.GioBatDau)}–${esc(today.GioKetThuc)}${lunch}</h2><p>${esc(today.NhiemVu)}${today.TenQuay ? ` tại ${esc(today.TenQuay)}` : ''}${officeToday ? ' · không mở quầy bán hàng' : ''}</p>${dutyLine}<div class="workforce-today-times"><span>Vào ca <strong>${fmtDateTime(today.ThoiGianVao)}</strong></span><span>Ra ca <strong>${fmtDateTime(today.ThoiGianRa)}</strong></span></div></div><div class="workforce-today-actions">${checkInBtn}${nextBtn}</div></article>` : restNote}<article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>LỊCH ĐÃ CÔNG BỐ</p><h2>Các lượt làm việc gần đây</h2></div><button class="warehouse-secondary" id="refreshPersonal"><svg><use href="#i-refresh"/></svg>Làm mới</button></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NGÀY</th><th>CA LÀM VIỆC</th><th>NHIỆM VỤ</th><th>QUẦY</th><th>CHẤM CÔNG VÀO</th><th>CHẤM CÔNG RA</th><th>TRẠNG THÁI</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><strong>${shortDate(item.NgayLam)}</strong></td><td>${esc(item.TenCa)}<small>${esc(item.GioBatDau)}–${esc(item.GioKetThuc)}${item.GioNghiBatDau ? ` · nghỉ ${esc(item.GioNghiBatDau)}–${esc(item.GioNghiKetThuc)}` : ''}</small></td><td>${esc(item.NhiemVu)}</td><td>${esc(item.TenQuay || '—')}</td><td>${fmtDateTime(item.ThoiGianVao)}</td><td>${fmtDateTime(item.ThoiGianRa)}</td><td><span class="status-pill ${item.ThoiGianRa ? 'ok' : item.ThoiGianVao ? 'sent' : 'draft'}">${esc(item.TrangThaiChamCong || 'Chưa chấm công')}</span></td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có lịch nào được công bố.</td></tr>'}</tbody></table></div></article>`;
+        const cardKicker = stuck ? 'CA CÒN MỞ' : 'LỊCH HÔM NAY';
+        root.innerHTML = `<header class="warehouse-heading"><div><p class="warehouse-kicker">NHÂN VIÊN / LỊCH CÁ NHÂN</p><h1>Lịch làm việc của tôi</h1><p>${intro}</p></div><span class="warehouse-chip">Supermarket Fly · Hà Nội</span></header>${today ? `<article class="workforce-today${stuck ? ' is-stuck' : ''}"><div><span class="cashier-live"><i></i> ${cardKicker}</span><h2>${esc(today.TenCa)} · ${esc(today.GioBatDau)}–${esc(today.GioKetThuc)}${lunch}</h2><p>${esc(today.NhiemVu)}${today.TenQuay ? ` tại ${esc(today.TenQuay)}` : ''}${officeToday ? ' · không mở quầy bán hàng' : ''}${today.NgayLam && today.NgayLam !== data.todayKey ? ` · ngày ${esc(shortDate(today.NgayLam))}` : ''}</p>${dutyLine}<div class="workforce-today-times"><span>Vào ca <strong>${fmtDateTime(today.ThoiGianVao)}</strong></span><span>Ra ca <strong>${fmtDateTime(today.ThoiGianRa)}</strong></span></div></div><div class="workforce-today-actions">${closePosBtn}${checkInBtn}${nextBtn}</div></article>` : restNote}<article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>LỊCH ĐÃ CÔNG BỐ</p><h2>Các lượt làm việc gần đây</h2></div><button class="warehouse-secondary" id="refreshPersonal"><svg><use href="#i-refresh"/></svg>Làm mới</button></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NGÀY</th><th>CA LÀM VIỆC</th><th>NHIỆM VỤ</th><th>QUẦY</th><th>CHẤM CÔNG VÀO</th><th>CHẤM CÔNG RA</th><th>TRẠNG THÁI</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><strong>${shortDate(item.NgayLam)}</strong></td><td>${esc(item.TenCa)}<small>${esc(item.GioBatDau)}–${esc(item.GioKetThuc)}${item.GioNghiBatDau ? ` · nghỉ ${esc(item.GioNghiBatDau)}–${esc(item.GioNghiKetThuc)}` : ''}</small></td><td>${esc(item.NhiemVu)}</td><td>${esc(item.TenQuay || '—')}</td><td>${fmtDateTime(item.ThoiGianVao)}</td><td>${fmtDateTime(item.ThoiGianRa)}</td><td><span class="status-pill ${item.ThoiGianRa ? 'ok' : item.ThoiGianVao ? 'sent' : 'draft'}">${esc(item.TrangThaiChamCong || 'Chưa chấm công')}</span></td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có lịch nào được công bố.</td></tr>'}</tbody></table></div></article>`;
         root.querySelector('#checkIn')?.addEventListener('click', async () => { try { const result = await api(context, '/cashier/attendance/check-in', { method: 'POST' }); context.showToast(result.message, 'success'); await load(); } catch (error) { context.showToast(error.message, 'error'); } });
-        root.querySelector('#checkOut')?.addEventListener('click', async () => { try { const result = await api(context, '/cashier/attendance/check-out', { method: 'POST' }); context.showToast(result.message, 'success'); await load(); } catch (error) { context.showToast(error.message, 'error'); } });
+        root.querySelector('#checkOut')?.addEventListener('click', async () => {
+          try {
+            const result = await api(context, '/cashier/attendance/check-out', { method: 'POST' });
+            context.showToast(result.message, 'success');
+            await load();
+          } catch (error) {
+            context.showToast(error.message, 'error');
+            if (error.recovery === 'close-shift') context.navigate('cashier-shifts');
+          }
+        });
+        root.querySelector('#goCloseShift')?.addEventListener('click', () => context.navigate('cashier-shifts'));
         root.querySelector('#goNext')?.addEventListener('click', event => {
           const target = event.currentTarget.dataset.next;
           if (target) context.navigate(target);

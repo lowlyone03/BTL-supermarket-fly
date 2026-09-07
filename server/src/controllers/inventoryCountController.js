@@ -1,6 +1,19 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
 const { scrapLinesFromRows } = require('../services/countScrap');
+const { ensureCountScrapSchema } = require('../services/countScrapSchema');
+const {
+    qty,
+    scrapConfirmed,
+    expectedAfterScrap,
+    loadChangeContext,
+    staleApproveMessage,
+    alreadyReducedMessage,
+    buildStockWarnings,
+    suggestedRejectReason
+} = require('../services/countApprove');
+const { ensureStoreProfitLossSchema } = require('../services/storeProfitLoss');
+const { notifyInboxChanged } = require('../services/notificationHub');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 const conditionValues = new Set(['Bình thường', 'Hỏng', 'Hết hạn']);
@@ -112,7 +125,27 @@ const getCountDetail = ownerOnly => async (req, res) => {
             LEFT JOIN NhanVien n ON n.MaNV=t.MaNV
             WHERE nk.BangLienQuan=N'KiemKe' AND nk.MaBanGhi=@MaBanGhi
             ORDER BY nk.ThoiGian`);
-        res.json({ count: header.recordset[0], lines: lines.recordset, audit: audit.recordset });
+        const count = header.recordset[0];
+        let stockWarnings = [];
+        try {
+            const discrepancyIds = lines.recordset.filter(line => qty(line.ChenhLech) !== 0).map(line => line.MaSP);
+            const changeContext = await loadChangeContext(sql, pool, {
+                MaKho: count.MaKho,
+                MaKK: req.params.id,
+                MaSPList: discrepancyIds,
+                since: count.NgayKiemKe
+            });
+            stockWarnings = buildStockWarnings(lines.recordset, changeContext);
+        } catch (error) {
+            console.error(error);
+        }
+        res.json({
+            count,
+            lines: lines.recordset,
+            audit: audit.recordset,
+            stockWarnings,
+            suggestedRejectReason: suggestedRejectReason(stockWarnings)
+        });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải chi tiết kiểm kê.' });
@@ -237,8 +270,10 @@ const saveCount = async (req, res) => {
 };
 
 const submitCount = async (req, res) => {
-    const transaction = new sql.Transaction(await poolPromise);
+    const pool = await poolPromise;
+    const transaction = new sql.Transaction(pool);
     try {
+        await ensureCountScrapSchema(pool);
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         const current = await new sql.Request(transaction)
             .input('MaKK', sql.VarChar, req.params.id)
@@ -311,26 +346,66 @@ const approveCount = async (req, res) => {
         const details = await new sql.Request(transaction)
             .input('MaKK', sql.VarChar, req.params.id)
             .input('MaKho', sql.VarChar, count.MaKho)
-            .query(`SELECT ct.*,tk.SLTon SLTonHienTai,tk.DonGiaBinhQuan
+            .query(`SELECT ct.*, ISNULL(tk.SLTon,0) SLTonHienTai, ISNULL(tk.DonGiaBinhQuan,0) DonGiaBinhQuan
                     FROM ChiTietKiemKe ct
-                    JOIN TonKho tk WITH(UPDLOCK,HOLDLOCK) ON tk.MaKho=@MaKho AND tk.MaSP=ct.MaSP
+                    LEFT JOIN TonKho tk WITH(UPDLOCK,HOLDLOCK) ON tk.MaKho=@MaKho AND tk.MaSP=ct.MaSP
                     WHERE ct.MaKK=@MaKK ORDER BY ct.MaSP`);
         if (!details.recordset.length) throw new Error('Đợt kiểm kê chưa có chi tiết.');
-        const changedStock = details.recordset.find(line => Number(line.SLTonHienTai) !== Number(line.SLHeThong));
-        if (changedStock) throw new Error(`Tồn của ${changedStock.MaSP} đã thay đổi sau lúc kiểm đếm. Không thể duyệt trên số liệu cũ.`);
-        const adjusted = details.recordset.filter(line => Number(line.ChenhLech) !== 0);
+        const adjusted = details.recordset.filter(line => qty(line.ChenhLech) !== 0);
         if (!adjusted.length) throw new Error('Đợt kiểm kê không có chênh lệch để điều chỉnh.');
-        // Hàng hỏng/hết hạn: chỉ đưa tồn về SLThucTe (chênh lệch số lượng). Xuất hủy trừ SLThucTe lúc xác nhận phiếu xuất — không trừ thêm ở đây.
+        const changeContext = await loadChangeContext(sql, transaction, {
+            MaKho: count.MaKho,
+            MaKK: req.params.id,
+            MaSPList: adjusted.map(line => line.MaSP),
+            since: count.NgayKiemKe
+        });
+        const written = [];
+        const skipped = [];
+        // Chỉ khóa dòng chênh lệch. Dòng khớp (như BK001 = 0/0) có thể đã bán/nhập sau lúc đếm — không chặn duyệt.
+        // Hàng hỏng/hết hạn: điều chỉnh về SLThucTe. Xuất hủy trừ SLThucTe lúc xác nhận phiếu xuất — không trừ trùng.
         for (const line of adjusted) {
-            const delta = Number(line.ChenhLech);
+            const current = qty(line.SLTonHienTai);
+            const snapshot = qty(line.SLHeThong);
+            const target = qty(line.SLThucTe);
+            const scrap = changeContext.scraps.get(line.MaSP) || null;
+            const finalTarget = expectedAfterScrap(line, scrap);
             const cost = Number(line.DonGiaBinhQuan || 0);
-            await new sql.Request(transaction)
+            const alreadyAtTarget = current === finalTarget || current === target;
+            const scrapThenGap = scrapConfirmed(scrap) && current === snapshot - qty(scrap.SoLuong);
+            let nextStock = target;
+            let delta = qty(line.ChenhLech);
+            if (current !== snapshot && !alreadyAtTarget && !scrapThenGap) {
+                throw new Error(staleApproveMessage(line, current, changeContext));
+            }
+            if (alreadyAtTarget) {
+                skipped.push(alreadyReducedMessage(line, current, changeContext));
+                continue;
+            }
+            if (scrapThenGap) {
+                nextStock = finalTarget;
+                delta = finalTarget - current;
+                if (!delta) {
+                    skipped.push(alreadyReducedMessage(line, current, changeContext));
+                    continue;
+                }
+            }
+            const stockUpdate = await new sql.Request(transaction)
                 .input('MaKho', sql.VarChar, count.MaKho)
                 .input('MaSP', sql.VarChar, line.MaSP)
-                .input('SLThucTe', sql.Int, Number(line.SLThucTe))
-                .query(`UPDATE TonKho SET SLTon=@SLThucTe,
-                            GiaTriTon=@SLThucTe*DonGiaBinhQuan,NgayCapNhat=GETDATE()
-                        WHERE MaKho=@MaKho AND MaSP=@MaSP`);
+                .input('SLMoi', sql.Int, nextStock)
+                .query(`UPDATE TonKho SET SLTon=@SLMoi,
+                            GiaTriTon=@SLMoi*DonGiaBinhQuan,NgayCapNhat=GETDATE()
+                        WHERE MaKho=@MaKho AND MaSP=@MaSP;
+                        SELECT @@ROWCOUNT affected;`);
+            if (!Number(stockUpdate.recordset[0]?.affected)) {
+                await new sql.Request(transaction)
+                    .input('MaKho', sql.VarChar, count.MaKho)
+                    .input('MaSP', sql.VarChar, line.MaSP)
+                    .input('SLMoi', sql.Int, nextStock)
+                    .input('DonGia', sql.Decimal(18, 2), cost)
+                    .query(`INSERT INTO TonKho (MaKho,MaSP,SLTon,SLDatMua,DonGiaBinhQuan,GiaTriTon,NgayCapNhat)
+                            VALUES(@MaKho,@MaSP,@SLMoi,0,@DonGia,@SLMoi*@DonGia,GETDATE())`);
+            }
             const MaGD = await generateId(transaction, 'GiaoDichKho', 'MaGD', datePrefix('GD'), 4);
             await new sql.Request(transaction)
                 .input('MaGD', sql.VarChar, MaGD)
@@ -341,18 +416,26 @@ const approveCount = async (req, res) => {
                 .input('DonGiaVon', sql.Decimal(18, 2), cost)
                 .input('ThanhTienVon', sql.Decimal(18, 2), Math.abs(delta) * cost)
                 .input('MaKK', sql.VarChar, req.params.id)
-                .input('GhiChu', sql.NVarChar, `Điều chỉnh ${line.KetQuaDoiChieu.toLowerCase()} sau kiểm kê; ${line.NguyenNhan || 'không ghi nguyên nhân'}`)
+                .input('GhiChu', sql.NVarChar, `Điều chỉnh ${String(line.KetQuaDoiChieu || '').toLowerCase()} sau kiểm kê; ${line.NguyenNhan || 'không ghi nguyên nhân'}`)
                 .query(`INSERT GiaoDichKho(MaGD,MaKho,MaSP,MaNV,LoaiGD,SoLuong,DonGiaVon,ThanhTienVon,LoaiChungTu,MaChungTu,NgayGD,GhiChu)
                         VALUES(@MaGD,@MaKho,@MaSP,@MaNV,N'Điều chỉnh',@SoLuong,@DonGiaVon,@ThanhTienVon,N'Kiểm kê',@MaKK,GETDATE(),@GhiChu)`);
+            written.push(line.MaSP);
         }
         await new sql.Request(transaction)
             .input('MaKK', sql.VarChar, req.params.id)
             .input('MaNV', sql.VarChar, req.user.MaNV)
             .query(`UPDATE KiemKe SET TrangThai=N'Đã duyệt',MaNV_Duyet=@MaNV,NgayDuyet=GETDATE(),LyDoTuChoi=NULL
                     WHERE MaKK=@MaKK`);
-        await writeAudit(transaction, req.user, 'Phê duyệt điều chỉnh tồn', req.params.id, `Đã cập nhật tồn và tạo ${adjusted.length} giao dịch kho Điều chỉnh`);
+        const auditNote = [
+            written.length ? `Điều chỉnh ${written.length} mặt hàng (${written.join(', ')})` : 'Không ghi thêm điều chỉnh tồn',
+            skipped.length ? skipped.join('; ') : ''
+        ].filter(Boolean).join('. ');
+        await writeAudit(transaction, req.user, 'Phê duyệt điều chỉnh tồn', req.params.id, auditNote);
         await transaction.commit();
-        res.json({ message: `Đã duyệt và điều chỉnh tồn cho ${adjusted.length} mặt hàng.` });
+        const message = written.length
+            ? `Đã duyệt và điều chỉnh tồn cho ${written.length} mặt hàng.${skipped.length ? ` ${skipped.join('. ')}.` : ''}`
+            : `Đã duyệt đợt kiểm kê. ${skipped.join('. ')}.`;
+        res.json({ message });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);
@@ -360,11 +443,51 @@ const approveCount = async (req, res) => {
     }
 };
 
+const notifyWarehouseRecount = async (db, { user, MaKK, MaNVKho, reason }) => {
+    await ensureStoreProfitLossSchema(db);
+    const sender = await new sql.Request(db)
+        .input('MaNV', sql.VarChar, user.MaNV)
+        .query('SELECT TenNV FROM NhanVien WHERE MaNV=@MaNV');
+    const recipients = await new sql.Request(db)
+        .input('MaNVKho', sql.VarChar, MaNVKho)
+        .query(`
+            SELECT DISTINCT nv.MaNV, nv.TenNV
+            FROM NhanVien nv
+            WHERE ISNULL(nv.TrangThai, N'Đang làm việc') = N'Đang làm việc'
+              AND (
+                    nv.MaNV=@MaNVKho
+                 OR nv.ChucVu=N'Thủ kho'
+                 OR EXISTS (
+                        SELECT 1 FROM TaiKhoan tk
+                        JOIN VaiTro vt ON vt.MaVaiTro=tk.MaVaiTro
+                        WHERE tk.MaNV=nv.MaNV AND vt.TenVaiTro=N'Thủ kho' AND tk.TrangThai=1
+                    )
+              )`);
+    const title = `Kiểm kê ${MaKK} bị từ chối — đếm lại vì nhập hàng`;
+    const detail = String(reason || 'Tồn đã đổi sau lúc đếm (thường do nhập hàng). Hãy tạo đợt kiểm kê mới.').slice(0, 1000);
+    const tenGui = user.TenNV || sender.recordset[0]?.TenNV || 'Quản lý';
+    for (const person of recipients.recordset) {
+        await new sql.Request(db)
+            .input('MaNVNhan', sql.VarChar, person.MaNV)
+            .input('TieuDe', sql.NVarChar, title)
+            .input('NoiDung', sql.NVarChar, detail)
+            .input('MaNVGui', sql.VarChar, user.MaNV)
+            .input('TenGui', sql.NVarChar, tenGui)
+            .input('DichDen', sql.NVarChar, 'warehouse-inventory-counts')
+            .query(`
+                INSERT ThongBaoCuaHang (MaNV_Nhan, TieuDe, NoiDung, MaNV_Gui, TenNV_Gui, DichDen, MucDo)
+                VALUES (@MaNVNhan, @TieuDe, @NoiDung, @MaNVGui, @TenGui, @DichDen, N'Cảnh báo')`);
+    }
+    return recipients.recordset.length;
+};
+
 const rejectCount = async (req, res) => {
-    const transaction = new sql.Transaction(await poolPromise);
+    const pool = await poolPromise;
+    const transaction = new sql.Transaction(pool);
     try {
         const reason = clean(req.body.LyDo, 500);
         if (!reason) throw new Error('Vui lòng nhập lý do từ chối.');
+        await ensureStoreProfitLossSchema(pool).catch(() => {});
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         const result = await new sql.Request(transaction)
             .input('MaKK', sql.VarChar, req.params.id)
@@ -372,12 +495,26 @@ const rejectCount = async (req, res) => {
             .input('LyDo', sql.NVarChar, reason)
             .query(`UPDATE KiemKe SET TrangThai=N'Từ chối',MaNV_Duyet=@MaNV,
                         NgayDuyet=GETDATE(),LyDoTuChoi=@LyDo
-                    WHERE MaKK=@MaKK AND TrangThai=N'Chờ duyệt điều chỉnh';
-                    SELECT @@ROWCOUNT affected;`);
-        if (!Number(result.recordset[0].affected)) throw new Error('Đợt kiểm kê không còn ở trạng thái chờ duyệt điều chỉnh.');
+                    OUTPUT inserted.MaKK, inserted.MaNV
+                    WHERE MaKK=@MaKK AND TrangThai=N'Chờ duyệt điều chỉnh'`);
+        const updated = result.recordset[0];
+        if (!updated) throw new Error('Đợt kiểm kê không còn ở trạng thái chờ duyệt điều chỉnh.');
         await writeAudit(transaction, req.user, 'Từ chối điều chỉnh tồn', req.params.id, reason);
         await transaction.commit();
-        res.json({ message: 'Đã từ chối điều chỉnh; tồn kho được giữ nguyên.' });
+        let notified = 0;
+        try {
+            notified = await notifyWarehouseRecount(pool, {
+                user: req.user, MaKK: updated.MaKK, MaNVKho: updated.MaNV, reason
+            });
+        } catch (error) {
+            console.error(error);
+        }
+        notifyInboxChanged({ action: 'Từ chối điều chỉnh tồn', table: 'KiemKe' });
+        res.json({
+            message: notified
+                ? `Đã từ chối điều chỉnh; tồn giữ nguyên. Đã báo ${notified} Thủ kho đếm lại.`
+                : 'Đã từ chối điều chỉnh; tồn kho được giữ nguyên. Thủ kho hãy tạo đợt kiểm kê mới.'
+        });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);

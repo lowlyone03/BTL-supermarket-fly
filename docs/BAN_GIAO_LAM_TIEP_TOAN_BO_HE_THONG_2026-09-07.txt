@@ -1,0 +1,917 @@
+================================================================================
+BAN GIAO LAM TIEP TOAN BO HE THONG
+SUPERMARKET FLY  —  FE + BE + CSDL + TAI LIEU
+================================================================================
+
+Ngay dong goi     : 07/09/2026 (toi)
+Muc dich          : Nguoi nhan CHI VIEC LAM TIEP, khong phai doan lai tu dau.
+Pham vi           : Backend (Node/Express), Frontend (Electron), SQL Server,
+                    5 actor / 33 UC, ke toan nghiep vu dang chay.
+Mon               : Ung dung he thong thong tin ke toan (AIS) — bai tap lon.
+
+Day la FILE CHINH de nguoi moi bat dau. Doc file nay truoc, roi moi mo
+cac file khac khi can chi tiet.
+
+GitHub (ma nguon) :
+  https://github.com/lowlyone03/BTL-supermarket-fly.git
+  Nhanh            : main
+  Ban ban giao     : commit moi nhat tren origin/main sau 07/09/2026
+                    (xem muc 4 — git log -1)
+
+Backup CSDL       :
+  File     : SupermarketFlyDB_2026-09-07_191855.bak
+  Thu muc  : TaiLieu_Du_An\05_Backup\Database_Backups\
+  SHA256   : 51E98A9151C2C2AAFF5012F3C3027F8E0F70980AC207B77A29730BD1FC73B2AC
+  Kich thuoc: 13.59 MB (14 246 400 bytes)
+  Kiem tra : BACKUP CHECKSUM + RESTORE VERIFYONLY da thanh cong
+  Thong ke luc backup:
+      NhanVien = 13
+      SanPham  = 36
+      HoaDon   = 10
+      TaiKhoan = 12
+  Luu y    : Tai khoan van dung 12 (dung 5 vai tro). Co 1 dong NhanVien
+             du so voi Word goc (12 NV). Khong xoa hang loat khi chua
+             doi chieu. Seed mac dinh van la 12 tai khoan / mat khau 123.
+
+
+================================================================================
+MUC LUC
+================================================================================
+
+  0.  30 phut dau — lam dung thu tu nay
+  1.  Goi nhan duoc (3 thanh phan)
+  2.  Du an la gi / khong phai gi
+  3.  Yeu cau may
+  4.  Lay ma nguon tu GitHub
+  5.  Khoi phuc database (.bak)
+  6.  Cai thu vien va chay app
+  7.  Tai khoan test (5 actor / 12 TK)
+  8.  Kien truc FE + BE + CSDL
+  9.  Cay thu muc va ai sua file nao
+ 10.  33 Use Case va ma tran quyen
+ 11.  Ba quy trinh + ba cot tien (CAM pha)
+ 12.  API
+ 13.  CSDL, migration, setup:next
+ 14.  Viec DA XONG (ke ca ban 07/09)
+ 15.  Viec duoc phep LAM TIEP (UC34+)
+ 16.  Cach code tiep — quy tac khong vo he thong
+ 17.  Git: nhanh, commit, khong day gi
+ 18.  Test tu dong va test tay
+ 19.  Su co thuong gap
+ 20.  Tai lieu lien quan (chi mo khi can)
+ 21.  Checklist nguoi nhan da san sang
+ 22.  Thong diep ngan cho nguoi giao / nguoi nhan
+
+
+================================================================================
+0. 30 PHUT DAU — LAM DUNG THU TU NAY
+================================================================================
+
+May Windows moi:
+
+  1. Cai Node.js 22+ , Git, SQL Server Express (instance SQLEXPRESS),
+     ODBC Driver 17 for SQL Server, SSMS.
+  2. Clone repo:
+        git clone https://github.com/lowlyone03/BTL-supermarket-fly.git supermarket-fly
+        cd supermarket-fly
+        git log -1 --oneline
+  3. Nhan file .bak (khong nam trong Git). Restore thanh SupermarketFlyDB
+     (muc 5). KHONG chay npm run setup:next sau khi restore ban nay.
+  4. Tai thu muc supermarket-fly:
+        npm install
+        cd server && npm install && cd ..
+        cd desktop && npm install && cd ..
+        copy server\.env.example server\.env     (neu chua co)
+        npm start
+  5. Mo http://localhost:3000/api/health  — phai ra status ok.
+  6. Dang nhap Electron: admin / 123. Doi vai tro: muahang, thukho,
+     ketoan, thungan.
+  7. Doc muc 11 (ba cot tien) TRUOC KHI SUA BAT KY SO NAO.
+  8. Chay: npm run test:next
+
+Xong 8 buoc tren la duoc phep bat dau code.
+
+
+================================================================================
+1. GOI NHAN DUOC (3 THANH PHAN)
+================================================================================
+
+Bat buoc du 3 thu. Chi clone GitHub thi THIEU du lieu test.
+
+  A. MA NGUON  (GitHub, thu muc supermarket-fly/)
+     - Frontend Electron: desktop/
+     - Backend Express  : server/
+     - Tai lieu van hanh: supermarket-fly/docs/   (file NAY nam day)
+     - Git CHI nam trong supermarket-fly/.
+       Thu muc cha BTL/ KHONG phai Git repo.
+
+  B. DATABASE  (file .bak, NGOAI Git)
+     D:\UDTHTKT\BTL\TaiLieu_Du_An\05_Backup\Database_Backups\
+       SupermarketFlyDB_2026-09-07_191855.bak
+     + file checksum cung thu muc:
+       CHECKSUM_DATABASE_2026-09-07_191855.txt
+
+  C. TAI LIEU MON HOC  (thu muc TaiLieu_Du_An/, NGOAI Git)
+     - 01_Yeu_Cau_Nghiep_Vu  : UC, Word, phan cong 7 thanh vien
+     - 02_Thiet_Ke_CSDL      : mo ta CSDL ban dau (35 bang — da cu)
+     - 03_Tai_Lieu_Mon_Hoc   : PDF de bai
+     - 04_Tai_Nguyen_Anh     : anh san pham nguon
+     - 05_Backup             : .bak, checksum
+     - 99_Tam_Xu_Ly          : ban nhap, KHONG dung lam tai lieu chot
+
+Anh san pham MAU nam trong ma nguon / TaiLieu_Du_An.
+Thu muc server/uploads luc ban giao TRONG (0 file runtime).
+Neu sau nay user upload anh, thu muc do bi Git bo qua — phai zip rieng.
+
+KHONG gui cong khai:
+  - server/.env
+  - mat khau that (demo mon hoc dang dung 123)
+  - cloudflared.exe (binary, tai rieng neu can duong ham)
+
+Cach gui goi B + C: Google Drive / OneDrive gioi han nguoi, hoac USB.
+Khong commit .bak len GitHub.
+
+
+================================================================================
+2. DU AN LA GI / KHONG PHAI GI
+================================================================================
+
+LA:
+  Phan mem quan ly NOI BO mot cua hang sieu thi (1 dia diem, 1 kho logic
+  "Kho cua hang"). Giao dien: "Supermarket FLY · Ha Noi".
+
+  Chuoi nghiep vu:
+    de nghi mua -> don mua -> nhap kho -> ban tai quay -> quy ca
+    -> cong no NCC -> luong -> bao cao lai/lo dieu hanh.
+
+  Ke toan TRONG CODE hien tai = ke toan NGHIEP VU:
+    doi chieu 3 chung tu mua, cong no phai tra, phieu thu ca,
+    lai GOP (DT thuan - GV thuan), bang luong theo cong,
+    P&L dieu hanh (tru chi NCC da tra + luong da khoa).
+
+KHONG PHAI:
+  - Website / app khach. Khach khong dang nhap.
+  - ERP nhieu cong ty, nhieu kho, nhieu chi nhanh.
+  - MISA / FAST / so cai No-Co. Chua co TaiKhoanKeToan, ButToan, KyKeToan.
+  - Phan mem BHXH nha nuoc. Khong tinh BHXH/BHYT/BHTN/cong doan.
+  - Ban chiu (khong TK 131), TMĐT, kho FEFO/lo, HDDT nha nuoc.
+
+Huong "ke toan mini" (so cai, VAT POS, TSCD) da CHOT la Plan A
+NHUNG CHUA CODE. Lam tiep: danh so tu UC34, khong dung UC30-UC33.
+
+
+================================================================================
+3. YEU CAU MAY
+================================================================================
+
+  - Windows 10 / 11
+  - Node.js 22+ va npm 10+  (da kiem Node 24 / npm 11)
+  - Git
+  - SQL Server Express, instance ten DUNG: SQLEXPRESS
+  - ODBC Driver 17 for SQL Server
+      (app dung driver 17 trong server/src/config/db.js)
+  - SSMS de restore .bak cho tien
+
+Ket noi runtime (Windows Authentication, KHONG dung sa trong .env):
+
+  Server   : localhost\SQLEXPRESS
+  Database : SupermarketFlyDB
+  Auth     : Trusted Connection
+  Gio      : useUTC: false  (DATETIME = gio Ha Noi)
+
+File server/.env.example co DB_USER=sa nhung db.js DANG dung trusted
+connection. Neu may dung ten instance khac, sua server trong
+  server/src/config/db.js
+roi chay lai.
+
+
+================================================================================
+4. LAY MA NGUON TU GITHUB
+================================================================================
+
+PowerShell:
+
+  git clone https://github.com/lowlyone03/BTL-supermarket-fly.git supermarket-fly
+  cd supermarket-fly
+  git checkout main
+  git pull
+  git log -1 --oneline
+  git status --short
+
+Ngay sau clone, git status --short phai TRONG
+(tru khi ban tu sua).
+
+Neu repo rieng tu: duoc them Collaborator, hoac nhan zip/bundle rieng.
+
+Thu muc cha BTL/ (TaiLieu_Du_An, README ngoai) KHONG nam trong GitHub.
+Nguoi giao phai gui rieng thu muc TaiLieu_Du_An (it nhat 05_Backup + 01).
+
+
+================================================================================
+5. KHOI PHUC DATABASE
+================================================================================
+
+5.1. SSMS (khuyen nghi)
+
+  1. Mo SSMS, ket noi localhost\SQLEXPRESS bang Windows Authentication.
+  2. Chuot phai Databases -> Restore Database...
+  3. Device -> chon file:
+       SupermarketFlyDB_2026-09-07_191855.bak
+  4. Ten database dich: SupermarketFlyDB
+  5. Neu may da co DB cung ten: backup cai cu truoc, roi ghi de khi chac.
+  6. Neu SQL bao khong doc duoc .bak: chep file vao thu muc backup mac
+     dinh cua SQL Server roi chon lai.
+
+5.2. sqlcmd (neu quen SSMS)
+
+  sqlcmd -S localhost\SQLEXPRESS -E -C -Q "RESTORE DATABASE [SupermarketFlyDB] FROM DISK = N'D:\duong-dan\SupermarketFlyDB_2026-09-07_191855.bak' WITH REPLACE"
+
+  Them -C vi ODBC Driver 18 tren mot so may bat SSL.
+
+5.3. Kiem tra sau restore
+
+  USE SupermarketFlyDB;
+  SELECT DB_NAME() AS TenDatabase;
+  SELECT
+    (SELECT COUNT(*) FROM NhanVien)  AS NhanVien,
+    (SELECT COUNT(*) FROM SanPham)   AS SanPham,
+    (SELECT COUNT(*) FROM HoaDon)    AS HoaDon,
+    (SELECT COUNT(*) FROM TaiKhoan)  AS TaiKhoan;
+
+  Ky vong ban nay: 13 / 36 / 10 / 12.
+
+5.4. CAM sau khi restore ban backup MOI NHAT
+
+  KHONG chay:  npm run setup:next
+  Lenh do danh cho may TRANG / DB cu can nang cap. No se migrate + seed
+  + don du lieu demo va CO THE DOI du lieu test trong .bak.
+
+  May trang (khong dung .bak): tao DB bang
+    server/migrations/SupermarketFly_CreateDB.sql
+  roi moi  npm run setup:next
+
+
+================================================================================
+6. CAI THU VIEN VA CHAY APP
+================================================================================
+
+Tai thu muc supermarket-fly:
+
+  1_CAI_DAT_LAN_DAU.bat
+  hoac:
+    npm install
+    cd server  && npm install && cd ..
+    cd desktop && npm install && cd ..
+
+Copy server\.env.example -> server\.env neu chua co (cong 3000).
+KHONG commit .env.
+
+Chay hang ngay (1 may):
+
+  2_CHAY_SUPERMARKET_FLY.bat
+  hoac:  npm start
+
+npm start = API :3000 + cua so Electron. Giu cua so PowerShell mo.
+
+Kiem tra:
+  GET http://localhost:3000/api/health
+  GET http://localhost:3000/api/test-db     (can JWT)
+
+Sua JS roi PHAI DONG HAN Electron, mo lai. F5 thuong khong du.
+
+Test nhom 1 database:
+  May chu     : 4_CHAY_MAY_CHU_NHOM.bat   (giu cua so, gui IP)
+  Thanh vien  : 5_CHAY_MAY_THANH_VIEN.bat (khong can SQL Server)
+  Khac Wi-Fi  : 6_MO_DUONG_HAM_CLOUDFLARE.bat
+                (TV1 tai cloudflared.exe RIENG, khong nam trong Git)
+  Chi tiet    : docs/HUONG_DAN_TEST_DB_CHUNG.md
+                docs/HUONG_DAN_CLOUDFLARE_TUNNEL.md
+
+Cong 3000 bi chiem: tat tien trinh cu, khong tu doi cong
+khi chua dong bo desktop.
+
+
+================================================================================
+7. TAI KHOAN TEST
+================================================================================
+
+Mat khau mac dinh: 123
+(seed: server/seed-accounts.js)
+
+  Dang nhap     Vai tro (actor)              Nhan vien mau
+  ------------  ---------------------------  ------------------------------
+  admin         Quan ly cua hang (QL)        Nguyen Minh Anh
+  muahang       Nhan vien mua hang (MH)      Tran Thu Ha
+  thukho        Thu kho (TK)                 Le Duc Long
+  ketoan        Ke toan (KT)                 Hoang Minh Chau
+  thungan       Thu ngan (TN)                Pham Thao Vy
+  thungan02     Thu ngan                     (7 thu ngan con lai)
+  ...
+  thungan08     Thu ngan
+
+Dung 5 ACTOR. Tam thu ngan van la MOT actor tren Use Case.
+Khach va NCC KHONG co tai khoan.
+
+Neu mot TK bi khoa / doi MK trong lan test truoc: dung admin kiem tra.
+Khong reset hang loat khi chua ghi nhan ket qua.
+
+
+================================================================================
+8. KIEN TRUC FE + BE + CSDL
+================================================================================
+
+  May nhan vien                 May cua hang              SQL Server
+  +------------------+  HTTP    +------------------+      +----------------+
+  | Electron (Forge) |  JWT --> | Node Express     | ODBC | Supermarket-   |
+  | HTML/CSS/JS thuan|          | cong 3000        |  17  | FlyDB          |
+  | Khong React/Vue  |          | REST /api/...    | Win  | gio Ha Noi     |
+  +------------------+          +------------------+ Auth +----------------+
+
+Sau login: dashboard.html + dashboard.js nap trang theo TenVaiTro
+(window.FLY_ROLE_PAGES). Sidebar doi theo vai tro.
+
+Quyen theo MA USE CASE (requirePermission('UC27')), khong chi ten vai tro.
+Middleware: verifyToken, requireRole, requirePermission, requireAnyPermission.
+
+Anh SP: Multer, server/uploads, URL tinh /uploads.
+Tao SP moi BAT BUOC co anh (JPG/PNG/WebP, toi da 5 MB).
+
+Mot chuc nang = SUA 3 CHO:
+  FE   desktop/src/pages/...
+  BE   server/src/routes + controllers + services
+  CSDL server/migrations/...   (file SQL theo ngay, idempotent)
+
+
+================================================================================
+9. CAY THU MUC VA AI SUA FILE NAO
+================================================================================
+
+supermarket-fly/
+  1_CAI_DAT_LAN_DAU.bat
+  2_CHAY_SUPERMARKET_FLY.bat
+  3_KIEM_TRA_TU_DONG.bat
+  4_CHAY_MAY_CHU_NHOM.bat
+  5_CHAY_MAY_THANH_VIEN.bat
+  6_MO_DUONG_HAM_CLOUDFLARE.bat
+  package.json                 npm start, setup:next, test:next
+  docs/                        FILE NAY + ke toan chot + huong dan test
+  desktop/src/
+    index.js, preload.js
+    pages/
+      landing, login
+      dashboard/               vo app, sidebar, chuong
+      admin/                   QL: SP, NV, TK, KM, quyen, nhat ky
+      warehouse/               TK + MH
+      cashier/                 POS, ca
+      accounting/              KT + P&L cho QL
+      workforce/               phan ca, ngay le, cham cong
+      shared/                  in, chart, anh, locale, ho so NV, validator
+  server/
+    apply-migration.js
+    seed-accounts.js, seed-permissions.js
+    migrations/
+    src/
+      app.js
+      config/db.js
+      routes/
+      controllers/
+      services/
+      middlewares/
+      constants/permissions.js
+
+MAP NHANH (phan cong 7 thanh vien CODE — dung de biet FILE NAO THUOC AI):
+
+  TV   Phan                      UI chinh                         API prefix
+  --   ------------------------  -------------------------------  -------------------
+  1    Nen tang, auth, vo app    landing, login, dashboard        /api/auth /accounts
+                                                                  /roles /employees
+  2    Quan tri QL               admin/*, shared/product-images   /api/admin
+  3    Mua hang                  supplier-pages,                  /api/suppliers
+                                 purchase-order-pages             /api/purchasing
+  4    Kho                       warehouse-pages, receipt,        /api/warehouse
+                                 stock-issue
+  5    POS                       cashier/                         /api/cashier
+  6    Ke toan nghiep vu         accounting-pages (mua, ca,       /api/accounting
+                                 lai gop)                         (tru /payroll*)
+  7    Ca, luong, quy, P&L       workforce/*, store-pnl.js,       /api/admin/workforce
+                                 khoi payroll trong accounting    /payroll-fund
+                                                                  /store-profit-loss
+                                                                  /api/accounting/payroll*
+                                                                  /api/notifications
+
+FILE XUONG — sua rat than trong (vo menu / mount route / ma UC):
+
+  desktop/src/pages/dashboard/dashboard.html
+  desktop/src/pages/dashboard/dashboard.js
+  server/src/app.js
+  server/src/constants/permissions.js
+  server/src/middlewares/authMiddleware.js
+
+FILE NOI MODULE — sua dung vung, khong xoa template nguoi khac:
+
+  warehouse/purchase-order-pages.js     TV3 chu; TV2 them ham duyet
+  accounting/accounting-pages.js        TV6 chu UC27-29; TV7 khoi luong
+  adminRoutes.js                        TV2 chu; nguoi khac CHI THEM dong
+  reportController.js                   moi nguoi 1 ham getXxxReport
+  returnsController.js                  TV5 create/submit/complete;
+                                        TV4 inspect
+  cashierController.js                  TV5 mo/dong ca; TV7 lich/check-in
+
+
+================================================================================
+10. 33 USE CASE VA MA TRAN QUYEN
+================================================================================
+
+Word goc: UC01-UC29. Code GIU 29 UC goc va THEM UC30-UC33.
+Nguon quyen: server/src/constants/permissions.js
+
+CHUC NANG CHUNG
+  UC01  Dang nhap va su dung tai khoan
+
+A. QUAN LY
+  UC02  Tai khoan va phan quyen
+  UC03  Nhat ky he thong
+  UC04  Nhan vien, san pham, khuyen mai
+  UC05  Phe duyet Don mua
+  UC06  Phe duyet Phieu xuat thu cong
+  UC07  Phe duyet dieu chinh ton (kiem ke)
+  UC08  Phe duyet doi tra / hoan tien
+  UC09  Phe duyet Phieu chi NCC
+  UC10  Bao cao tong hop
+  UC30  Phan ca va giam sat cham cong          (moi so voi Word)
+  UC32  Duyet cong, luong tam tinh             (moi so voi Word)
+
+B. MUA HANG
+  UC11  Nha cung cap
+  UC12  Tiep nhan de nghi mua
+  UC13  Lap / quan ly Don mua
+  UC14  Theo doi don va giao hang
+  UC31  Lich va cham cong ca nhan              (dung chung 4 actor)
+
+C. THU KHO
+  UC15-UC21  Ton, de nghi, nhan hang, nhap, xuat, kiem ke, kiem doi tra
+  UC31
+
+D. THU NGAN
+  UC22-UC26  Ca, khach, hoa don, thanh toan, doi tra
+  UC31
+
+E. KE TOAN
+  UC27  HD mua + doi chieu 3 chung tu
+  UC28  Cong no NCC
+  UC29  Phieu thu ca, doi soat, bao cao noi bo
+  UC31
+  UC33  Lap / khoa / thanh toan bang luong     (moi so voi Word)
+
+Ma tran DANG CHAY:
+
+  QL       UC01-UC10 + UC30 + UC32
+  MH       UC01, UC11-UC14, UC31
+  TK       UC01, UC15-UC21, UC31
+  TN       UC01, UC22-UC26, UC31
+  KT       UC01, UC27-UC29, UC31, UC33
+
+QL KHONG co UC31 (khong check-in nhu NV).
+QL KHONG co UC33 (bam "Lap / tinh lai" luong -> API 403).
+
+API nghiep vu PHAI requirePermission('UCxx'), khong chi requireRole.
+Khong tu them ma trung UC30-UC33. UC moi = UC34 tro di.
+
+
+================================================================================
+11. BA QUY TRINH + BA COT TIEN  (CAM PHA)
+================================================================================
+
+Day la luat xuong song. Sua so ma khong di dung buoc = vo do an.
+
+----- COT A — HANG VA LAI GOP -----
+  HD Hoan thanh: tru TonKho, snapshot DonGiaVon, GiaoDichKho Xuat.
+  Doi tra Hoan thanh: giam DT/GV, khong sua tay ton.
+  Lai gop = DT thuan - GV thuan.
+  PHIEU THU KHONG CONG DOANH THU LAN HAI.
+  Tien tra NCC KHONG tru vao lai gop (tru o P&L dieu hanh, muc rieng).
+
+----- COT B — KET CA / PHIEU THU -----
+  TienMatHeThong = TongTienMat - TongTienHoanMat.
+  QR / The / CK KHONG vao ket.
+  Mot ca DUNG MOT Phieu thu.
+  Chenh lech = TienThucNop - TienMatHeThong; lech bat buoc LyDoChenhLech.
+  Dong ca CHAN neu con HD Nhap hoac ThanhToan "Cho xac nhan".
+  Ban 07/09: SoTienTheoHeThong / SoTienThucNop DUOC AM
+  (ca chi hoan TM, hoan > thu). Van giu CK_PhieuThu_1 (lech phai co ly do).
+
+----- COT C — CONG NO NCC -----
+  Chi sinh CongNoPhaiTra khi doi chieu 3 ben KHOP
+    (Don mua + Phieu nhap SoLuongChapNhan + Hoa don GTGT).
+  Lap Phieu chi / QL duyet+giao quy / chi that bai: SoTienConLai KHONG DOI.
+  Chi giam no khi KT ghi thanh toan THANH CONG.
+  Khong tra truoc, khong tra tung phan, 1 cong no toi da 1 Phieu chi.
+
+QUY TRINH 1 — MUA / NHAP
+  TK dem that -> het/thieu moi de nghi (KHONG can QL duyet de nghi)
+  -> MH lap PO -> QL duyet PO (lan duy nhat)
+  -> NCC giao -> TK kiem, CHI SL chap nhan vao phieu nhap
+  -> KT nhap HD GTGT -> doi chieu 3 chung tu
+  -> Khop: sinh no 30-45 ngay. Lech: khong ghi no.
+  Cam: nut "de nghi khai truong" (da bo), cong ton hang hu,
+       giam no luc lap/duyet phieu chi.
+
+QUY TRINH 2 — BAN / QUY CA
+  QL cong bo lich -> TN dung ngay + trong gio (+ som ~10 phut)
+  -> check-in / mo ca -> ban DU (khong ban chiu)
+  -> HD hoan thanh tru ton + snapshot von
+  -> dong ca -> KT lap Phieu thu (1 ca 1 phieu).
+  Het ca / khong lich / chua check-in: API 403, khong chi khoa nut.
+
+QUY TRINH 3 — LUONG (tat toan mung 10 thang sau)
+  QL duyet cong (OT co phut) -> CHI KT bam Lap/tinh lai
+  -> con cong cho duyet thi CHAN
+  -> chi NV co phut cong duyet > 0; le 8h chi cho nguoi da di lam
+  -> KT khoa ky -> lap phieu (moi NV TM HOAC CK)
+  -> QL duyet tung nguoi hoac Duyet tat ca  (duyet CHUA tra)
+  -> QL giao 1 CUC quy cho ke toan
+  -> KT chi tung NV; CK bat buoc ma GD; fail thi lam lai cung phieu.
+  Bang luong KHONG tru vao lai gop.
+  P&L dieu hanh (man QL) moi tru luong DA KHOA + chi NCC thanh cong.
+
+Cong thuc lai gop (khong doi so voi Chuong 6):
+  DT thuan = DT HD hoan thanh - tien hoan da hoan thanh
+  GV thuan = GV HD - GV hang tra nhap lai + GV hang giao doi
+  Lai gop  = DT thuan - GV thuan
+
+
+================================================================================
+12. API
+================================================================================
+
+Prefix /api. Health: GET /api/health
+
+  /api/auth            Dang nhap, JWT
+  /api/accounts
+  /api/roles
+  /api/employees       + ho so CCCD / HoSoNhanVien (ban 07/09)
+  /api/admin           Catalog, phe duyet, bao cao, phan ca, le, P&L
+  /api/warehouse       Ton, kiem ke, nhap, xuat, de nghi
+  /api/purchasing
+  /api/suppliers
+  /api/accounting      Doi chieu, cong no, phieu thu, luong, quy
+  /api/cashier         Ca, POS, HD, doi tra
+  /api/notifications   Chuong
+
+Endpoint luong / quy / P&L can nho:
+
+  POST /api/accounting/payroll/:month/build              chi KT
+  POST /api/admin/approvals/payroll-vouchers/approve-all
+  POST /api/admin/approvals/payroll-fund/:month/handover  giao quy KT
+  GET  /api/admin/reports/store-profit-loss
+  POST /api/admin/reports/store-profit-loss/plan
+
+
+================================================================================
+13. CSDL, MIGRATION, setup:next
+================================================================================
+
+May trang: chay CreateDB roi npm run setup:next
+(setup:next = migrate:next + seed quyen/TK + don SP demo + don TN thua
+ + chuan bi kho).
+
+Chuoi migrate:next (server/package.json) den 07/09/2026:
+
+  20260825_WorkforceScheduling
+  20260825_SalesAndWorkforceV2
+  20260825_OfficeHours
+  20260830_ProductImages
+  20260901_PaymentFundHandover
+  20260902_AuditLog
+  20260903_PayrollEngine
+  20260904_PayrollCommonFund
+  20260905_StoreProfitLoss
+  20260906_BumpSellPrices
+  20260907_ReturnHandoverAndCountScrap     ban giao doi tra + huy tu kiem ke
+  20260907_EmployeeProfileCccd             CCCD, ngay sinh, gioi tinh, ngay vao
+  20260907_HoSoNhanVien                    bang 1-1 ho so chi tiet
+  20260907_PhieuThuAllowNegativeHandover   phieu thu cho phep so am
+
+Chay le:
+  cd server
+  node apply-migration.js <ten-file.sql>
+
+Mot so controller van ensure*Schema() luc goi API (may cu tu ALTER).
+May setup moi VAN nen chay migration.
+
+CSDL Word goc 35 bang. He thong da mo rong (~45+ bang):
+  LoaiCa, QuayBanHang, LichLamViec, ChamCong, DieuChinhChamCong,
+  MucLuongNhanVien, KyLuong, BangLuong, ChiTietBangLuong,
+  ThongBaoGiaoHang, HoSoNhanVien, ...
+  SanPham.DuongDanAnh, NhanVien.CCCD/NgaySinh/GioiTinh/NgayVaoLam,
+  PhieuDoiTra.MaNV_XuLy/MaQuayXuLy/NgayBanGiao/MaCaBanGiao,
+  PhieuXuat.MaKK
+
+
+================================================================================
+14. VIEC DA XONG (KE CA BAN 07/09)
+================================================================================
+
+14.1. Nghiep vu loi (UC01-UC33) — DANG CHAY
+
+  - Dang nhap JWT, 5 menu theo vai tro, phan quyen theo ma UC
+  - QL: SP (bat buoc anh), NV, TK, KM, trung tam phe duyet, nhat ky, UC10
+  - MH: NCC, hop thu de nghi, PO, chuyen giao
+  - TK: ton, de nghi (khong nut khai truong), nhan/kiem, nhap, xuat,
+        kiem ke, kiem doi tra
+  - TN: lich + check-in, POS, HD, doi tra, dong ca
+  - KT: doi chieu 3 chung tu, cong no, phieu chi NCC, phieu thu ca, lai gop
+  - UC30-33: phan ca, cham cong, luong, quy chung QL->KT, P&L dieu hanh
+  - May chu nhom + Cloudflare tunnel (huong dan + file .bat)
+
+14.2. Phan MOI so voi commit GitHub cu (e8f1219) — da gom vao ban nay
+
+  FE
+    - Ho so nhan vien (CCCD, ngay sinh, gioi tinh, ngay vao lam)
+      + form ho so chi tiet (desktop/src/pages/shared/employee-profile.js)
+    - Man NV / tai khoan / dashboard / POS / kho / luong: validator,
+      tim kiem, UI dong bo
+    - POS: tim HD, ban giao ca/hang, phuc hoi ca
+    - Kiem ke: nhanh scrap / xuat huy gan MaKK
+    - Doi tra: ban giao phieu da duyet (NV xu ly, quay, ca)
+    - Chuong thong bao (notificationHub)
+
+  BE / CSDL
+    - Migration 20260907 (4 file, xem muc 13)
+    - employeeHoSo.js, employeeProfileSchema.js
+    - returnHandover.js mo rong, countApprove.js, countScrapSchema.js
+    - cashierDuty.js: recovery sau su co ca
+    - invoiceSearch.js, phieuThuSchema.js (cho phep so am)
+    - fieldValidators.js (server + desktop)
+    - shiftScheduler.js / workforceController.js chat hon
+    - Test: test-cashier-duty-recovery, test-invoice-search,
+            test-return-handover, test-field-validators, test-shift-scheduler
+
+  Tai lieu
+    - FILE NAY
+    - docs/PLAN_12_TICH_HOP_VA_KE_TOAN.txt  (ke hoach NANG CAP, chua code)
+
+14.3. Co y CHUA LAM
+
+  - So cai, No/Co, TaiKhoanKeToan / ButToan / KyKeToan
+  - VAT tren POS (tach 511 / 33311) — Plan A uu tien so 1 khi lam ke toan
+  - TSCD, sao ke 112, LCTT, BCDKT
+  - Cuoc van chuyen 4.000 d/km + boi 20% khi hu >= 1/3 (plan da chot)
+  - BHXH / BHYT / BHTN / cong doan
+  - TK 242, kho FEFO/lo, nhieu cua hang, HDDT nha nuoc, ban chiu
+  - VNPay / barcode / e-receipt / Telegram / OCR / AI  (PLAN_12, P1-P2)
+
+
+================================================================================
+15. VIEC DUOC PHEP LAM TIEP
+================================================================================
+
+Chon 1 trong 2 huong. Khong lam song song neu chi 1 nguoi.
+
+HUONG A — GIU UC01-UC33, sua bug / test / bao cao mon
+  - Chay E2E mua + ban + luong tren 1 DB
+  - npm run test:next phai PASS
+  - Viet bao cao / slide: 33 UC, 45+ bang, khong con cau "chua co luong"
+  - File phan cong 7 TV:
+      TaiLieu_Du_An\01_Yeu_Cau_Nghiep_Vu\
+      PHAN_CONG_7_THANH_VIEN_VA_CHI_TIET_DU_AN_Supermarket_Fly.txt
+
+HUONG B — KE TOAN TONG HOP (Plan A, CHUA CODE)
+  Doc theo thu tu:
+    1) docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt     luat DANG CHAY
+    2) docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt
+    3) docs/PLAN_12_TICH_HOP_VA_KE_TOAN.txt
+  Thu tu da chot:
+    P0         Nghiep vu dang chay — GIU, khong pha 3 cot tien
+    KT loi     VAT POS + COA + but toan + NKC + So cai + CDPS + KQKD
+    P1         VNPay adapter, barcode, e-receipt, Telegram
+    P2         Replenishment, AI tro ly, OCR
+    KT mo rong TSCD, import sao ke, LCTT, khoa so, BCDKT mini
+  BAT DAU TU UC34. Khong doi nghia UC30-UC33.
+  VAT ban: gia niem yet DA GOM VAT; tach 511/33311 luc ghi so,
+  KHONG cong them thue tren quay.
+
+KHONG:
+  - Tu sinh cong no
+  - Ban chiu / TK 131
+  - Chatbot duyet PO / chi NCC / completeInvoice
+  - OCR/AI insert CongNoPhaiTra
+  - Khoa POS vao mot cong thanh toan
+  - Train mo hinh AI
+
+
+================================================================================
+16. CACH CODE TIEP — QUY TAC KHONG VO HE THONG
+================================================================================
+
+  1. Mot UC = 3 tang (UI + API + bang/cot). Khong chi ve form.
+  2. So chi doi dung buoc. Trang thai chung tu: Nhap -> Cho duyet ->
+     Da duyet / Thanh cong / That bai.
+  3. Khong UPDATE TonKho / SoTienConLai / doanh thu tay tren SSMS.
+  4. Khong noi 403 het ca "cho test cho nhanh".
+  5. GET bang luong KHONG tu tao so. Chi KT POST build.
+  6. Migration moi: file SQL idempotent, ten
+       SupermarketFly_Migration_YYYYMMDD_TenNgan.sql
+     Them vao cuoi script migrate:next trong server/package.json.
+  7. Them UC: thong nhat ma trong permissions.js, seed lai quyen.
+  8. Test kem: them node --check hoac test-*.js, gan vao npm test
+     neu lien quan tien / ton / no / ca.
+  9. Tien to du lieu test: TEST-<TEN>-<YYYYMMDD>
+ 10. Khong xoa du lieu nguoi khac tren DB chung.
+
+Chuoi E2E BAT BUOC chay chung (khong ai "xong mot minh"):
+
+  MUA : TK de nghi -> MH PO -> QL duyet -> MH chuyen -> TK nhap
+        -> KT doi chieu -> KT phieu chi -> QL duyet/giao quy NCC
+        -> KT thanh toan.
+
+  BAN : QL cong bo lich -> TN check-in + mo ca + ban -> dong ca
+        -> KT phieu thu.
+
+  DOI : TN lap -> TK kiem -> QL duyet -> TN hoan tat
+        -> phieu thu ca sau da tru hoan TM.
+
+  LUONG: QL lich+le -> NV cham -> QL duyet cong -> KT lap+khoa
+         -> KT lap phieu -> QL duyet + giao 1 quy -> KT chi.
+
+
+================================================================================
+17. GIT
+================================================================================
+
+Repo   : https://github.com/lowlyone03/BTL-supermarket-fly.git
+Nhanh  : main   (hien tai nhom dang lam tren main)
+Goi y nhanh theo TV (khi chia):
+  tv1-platform, tv2-admin, tv3-purchasing, tv4-warehouse,
+  tv5-cashier, tv6-accounting, tv7-workforce
+
+CAM commit:
+  - server/.env
+  - node_modules/
+  - server/uploads/          (anh runtime)
+  - *.bak
+  - cloudflared.exe
+  - desktop/out/ , .webpack/
+
+Sau khi sua:
+  git status
+  git diff
+  git add <file lien quan>
+  git commit -m "Mo ta VI SAO sua"
+  git pull --rebase
+  git push
+
+Khong push de main khi nguoi khac dang test cung commit.
+Khong dung --force tren main.
+
+
+================================================================================
+18. TEST
+================================================================================
+
+Tu dong (root repo):
+
+  3_KIEM_TRA_TU_DONG.bat
+  hoac:  npm run test:next
+
+Ky vong: syntax + nghiep vu + anh SP + upload + tim kiem + in + lich ca.
+
+Rieng server:
+  npm test
+  npm run test:business
+  npm run test:payroll
+  npm run test:payroll-fund
+  npm run test:store-pnl
+  npm run test:scheduler
+
+Test API anh (2 cua so):
+  cua so 1: npm run start:server
+  cua so 2: cd server && npm run test:product-image-api
+
+Test tay 5 actor — thu tu de khong di nguoc luong:
+
+  1 QL   du 12 TK, tao SP co anh, phan ca + cong bo
+  2 TK   de nghi tu hang thieu that
+  3 MH   lap PO, gui duyet
+  4 QL   duyet PO
+  5 TK   nhan + nhap; ton tang 1 lan dung SL chap nhan
+  6 KT   doi chieu 3 chung tu
+  7 TN   check-in, ban, in HD; ton giam 1 lan
+  8 TN+TK+QL  doi tra
+  9 KT   phieu thu, cong no, lai gop
+ 10 QL   P&L cua hang
+ 11 KT   lap luong (sau khi QL duyet het cong)
+
+Kich ban dai:
+  docs/HUONG_DAN_KIEM_THU_TOAN_BO_HE_THONG_SUPERMARKET_FLY.txt
+  docs/HUONG_DAN_TEST_CHUC_NANG_VA_NGOAI_LE.txt
+  docs/HUONG_DAN_KIEM_THU_UC10_UC27_UC29.md
+
+
+================================================================================
+19. SU CO THUONG GAP
+================================================================================
+
+  Khong mo trang / Failed to fetch
+    -> API chet hoac JS khong load. npm start, GET /api/health.
+       Dong/mo lai Electron.
+
+  SQL khong ket noi
+    -> Sai instance (khong phai SQLEXPRESS), thieu ODBC 17,
+       chua co SupermarketFlyDB, khong dung Windows Auth.
+    -> sqlcmd Driver 18 bao SSL: them -C.
+
+  Thu ngan khong vao POS
+    -> Chua co lich Da cong bo hom nay, ngoai gio, het ca, chua check-in.
+
+  Khong lap duoc ky luong
+    -> Con ChamCong cho duyet, hoac khong phai KT.
+
+  Bang luong 880k du chua lam
+    -> Rule cu cong le cho moi NV. Lap/tinh lai sau khi duyet het cong.
+
+  Khong thay "Giao quy cho ke toan"
+    -> 1 cuc cho KT sau khi duyet phieu luong. Khac phieu chi NCC
+       (giao TUNG phieu).
+
+  Bao cao dau thang trong
+    -> Ky VN, ngay 1-3 lui thang truoc. Bam Lap bao cao khi nut da bat.
+
+  Restore xong mat du lieu / TK doi
+    -> Da chay nham setup:next. Restore lai .bak.
+
+  Clone GitHub thieu tinh nang 07/09
+    -> Chua git pull ban sau khi push ban giao. git log -1.
+
+
+================================================================================
+20. TAI LIEU LIEN QUAN (CHI MO KHI CAN)
+================================================================================
+
+Bat dau tu FILE NAY. Cac file duoi day la ban day du hon theo chu de.
+
+  supermarket-fly/README.md
+      Boi canh, 3 quy trinh, anh demo, API, su co.
+
+  docs/README.md
+      Muc luc toan docs/.
+
+  docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt
+      Luat ke toan DANG NAM TRONG CODE.
+
+  docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt
+      Plan A: giu VAT/so cai/TSCD; cat 242 va FEFO.
+
+  docs/PLAN_12_TICH_HOP_VA_KE_TOAN.txt
+      Ke hoach nang cap (chua code).
+
+  docs/HUONG_DAN_BAN_GIAO_CHO_THANH_VIEN_TEST.md
+      Goi tester (ban 30/08). File NAY thay the cho nguoi LAM TIEP.
+
+  TaiLieu_Du_An/01_Yeu_Cau_Nghiep_Vu/
+    PHAN_CONG_7_THANH_VIEN_VA_CHI_TIET_DU_AN_Supermarket_Fly.txt
+      Ai code phan nao (UC, file, API, bang, checklist).
+    UC_va_Danh_sach_chuc_nang_Supermarket_Fly.txt
+      29 UC goc.
+    CAP_NHAT_CHI_TIET_PHAN_MOI_SO_VOI_WORD_Supermarket_Fly.txt
+      Phan moi so voi Word.
+
+  docs/DOI_CHIEU_HE_THONG_HIEN_TAI_VOI_TAI_LIEU_GOC_2026-08-31.md
+
+LOI THOI — khong dung lam buoc tiep theo:
+  docs/HUONG_DI_VA_THIET_KE_ACTOR_TIEP_THEO.md
+  TaiLieu_Du_An/99_Tam_Xu_Ly/.codex-tmp/ke-hoach-ke-toan.txt
+
+
+================================================================================
+21. CHECKLIST NGUOI NHAN DA SAN SANG
+================================================================================
+
+  [ ] Clone duoc repo, git log -1 trung ban ban giao
+  [ ] Restore .bak, SELECT ra 13 / 36 / 10 / 12 (hoac so da ghi o dau file)
+  [ ] KHONG chay setup:next sau restore
+  [ ] npm install 3 tang, npm start, /api/health = ok
+  [ ] Login 5 vai tro bang mat khau 123
+  [ ] Doc muc 11 (3 cot tien)
+  [ ] npm run test:next PASS
+  [ ] Biet file xuong (dashboard, app.js, permissions.js) khong sua lung tung
+  [ ] Biet viec tiep theo: Huong A (bug/bao cao) hay Huong B (UC34 so cai)
+  [ ] Co TaiLieu_Du_An (it nhat 01 + 05_Backup) ngoai Git
+
+
+================================================================================
+22. THONG DIEP NGAN
+================================================================================
+
+Nguoi GIAO da:
+  - Day ma nguon moi nhat len GitHub (main)
+  - Tao backup CSDL 07/09/2026 19:18:55, verify checksum
+  - Viet file huong dan nay
+  - Khong day .env, .bak, cloudflared.exe, uploads rong
+
+Nguoi NHAN chi can:
+  clone + restore .bak + npm install + npm start
+  roi lam tiep tu muc 15.
+
+Het file.
+================================================================================

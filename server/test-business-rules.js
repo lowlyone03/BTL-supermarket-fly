@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { calculateGrossProfit, evaluateThreeWayMatch, isRestockAccepted, looksUnsellable, isEqualValueExchange } = require('./src/services/financialRules');
+const { calculateGrossProfit, evaluateThreeWayMatch, isRestockAccepted, looksUnsellable, isEqualValueExchange, expectedDrawerCash, cashHandoverExcludingOpening } = require('./src/services/financialRules');
 const { resolveReportingPeriod } = require('./src/services/reportingPeriod');
 
 const test = (name, run) => {
@@ -63,6 +63,12 @@ test('Hàng giao đổi làm tăng giá vốn thuần', () => {
     });
     assert.equal(result.GiaVonHangBanThuan, 630_000);
     assert.equal(result.LoiNhuanGop, 370_000);
+});
+
+test('Két dự kiến = quỹ đầu ca + thu TM − hoàn TM; được nhỏ hơn quỹ đầu ca', () => {
+    assert.equal(expectedDrawerCash({ TienDauCa: 1_000_000, TongTienMat: 0, TongTienHoanMat: 218_000 }), 782_000);
+    assert.equal(cashHandoverExcludingOpening(782_000, 1_000_000), -218_000);
+    assert.equal(expectedDrawerCash({ TienDauCa: 1_000_000, TongTienMat: 500_000, TongTienHoanMat: 0 }), 1_500_000);
 });
 
 test('Đổi trực tiếp chỉ chấp nhận hàng giao đổi ngang giá', () => {

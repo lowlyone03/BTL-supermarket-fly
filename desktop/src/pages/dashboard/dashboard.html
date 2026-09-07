@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Điều hành - Supermarket Fly</title>
-  <link rel="stylesheet" href="dashboard.css">
-  <link rel="stylesheet" href="../admin/admin.css?v=emp-actions-3">
-  <link rel="stylesheet" href="../warehouse/warehouse.css?v=acc-drill-1">
-  <link rel="stylesheet" href="../workforce/workforce.css?v=cashier-duty-1">
-  <link rel="stylesheet" href="../cashier/cashier.css?v=pos-filter-1">
+  <link rel="stylesheet" href="dashboard.css?v=count-approve-1">
+  <link rel="stylesheet" href="../admin/admin.css?v=search-2">
+  <link rel="stylesheet" href="../warehouse/warehouse.css?v=invoice-intake-1">
+  <link rel="stylesheet" href="../workforce/workforce.css?v=att-recover-2">
+  <link rel="stylesheet" href="../cashier/cashier.css?v=return-handover-2">
   <link rel="stylesheet" href="../shared/locale-ui.css?v=vi-date-3">
   <link rel="stylesheet" href="../shared/ui-polish.css?v=report-hint-1">
   <link rel="stylesheet" href="../shared/report-charts.css?v=charts-7-wh-polish">
@@ -51,6 +51,8 @@
     <symbol id="i-cart" viewBox="0 0 24 24"><path d="M3 4h2l2.4 12h11.2L21 8H7"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></symbol>
     <symbol id="i-team" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></symbol>
+    <symbol id="i-sound-on" viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16 9.2a3.6 3.6 0 0 1 0 5.6M18.6 7a7 7 0 0 1 0 10"/></symbol>
+    <symbol id="i-sound-off" viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="m16.2 9.8 5 5M21.2 9.8l-5 5"/></symbol>
   </svg>
 
   <div class="app-shell">
@@ -149,18 +151,15 @@
     <div class="main-column">
       <header class="topbar">
         <form class="global-search" id="globalSearchForm">
-          <svg><use href="#i-search"/></svg>
+          <button type="submit" class="global-search-submit" aria-label="Tìm kiếm" title="Tìm kiếm">
+            <svg><use href="#i-search"/></svg>
+          </button>
           <input id="globalSearch" type="search" placeholder="Tìm nhân viên, tài khoản, chức năng..." autocomplete="off">
         </form>
         <div class="topbar-actions">
-          <button class="notification-button" id="notificationButton" type="button" title="Thông báo" aria-haspopup="true" aria-expanded="false"><svg><use href="#i-bell"/></svg><b id="notificationCount" hidden>0</b><i id="notificationDot"></i></button>
-          <div class="notification-panel" id="notificationPanel" hidden>
-            <header>
-              <div><p>THÔNG BÁO CỦA BẠN</p><h2 id="notificationHeading">Việc cần xử lý</h2></div>
-              <button class="warehouse-icon-button" id="notificationClose" type="button" aria-label="Đóng">×</button>
-            </header>
-            <p class="notification-hint" id="notificationHint"></p>
-            <ul id="notificationList"></ul>
+          <div class="notification-cluster">
+            <button class="notification-sound" id="notificationSoundToggle" type="button" title="Tắt tiếng thông báo" aria-pressed="false" aria-label="Tắt tiếng thông báo"><svg><use href="#i-sound-on"/></svg></button>
+            <button class="notification-button" id="notificationButton" type="button" title="Thông báo" aria-haspopup="true" aria-expanded="false"><svg><use href="#i-bell"/></svg><b id="notificationCount">0</b><i id="notificationDot"></i></button>
           </div>
           <span class="topbar-divider"></span>
           <button class="profile-button" id="profileButton">
@@ -180,7 +179,21 @@
     </div>
   </div>
 
+  <div class="inbox-backdrop" id="inboxBackdrop" hidden data-escape-overlay="true"></div>
+  <div class="notification-panel" id="notificationPanel" hidden role="dialog" aria-labelledby="notificationHeading">
+    <header>
+      <div><p>THÔNG BÁO CỦA BẠN</p><h2 id="notificationHeading">Việc cần xử lý</h2></div>
+      <button class="warehouse-icon-button" id="notificationClose" type="button" aria-label="Đóng">×</button>
+    </header>
+    <p class="notification-hint" id="notificationHint"></p>
+    <ul id="notificationList"></ul>
+  </div>
   <div class="toast" id="appToast" role="status" aria-live="polite"></div>
+  <button type="button" class="inbox-toast" id="inboxToast" hidden>
+    <span class="inbox-toast-kicker">VIỆC MỚI</span>
+    <strong id="inboxToastTitle"></strong>
+    <span id="inboxToastDetail"></span>
+  </button>
 
   <div class="modal-backdrop" id="pwdModal" style="display:none">
     <div class="modal">
@@ -196,24 +209,25 @@
 
   <script src="../shared/escape-key.js"></script>
   <script src="../shared/api-config.js"></script>
-  <script src="../shared/field-validators.js?v=fields-2"></script>
+  <script src="../shared/field-validators.js?v=fields-7"></script>
+  <script src="../shared/employee-profile.js?v=emp-syll-1"></script>
   <script src="../shared/locale-ui.js?v=store-pnl-1"></script>
-  <script src="../shared/search-tools.js?v=search-1"></script>
+  <script src="../shared/search-tools.js?v=search-2"></script>
   <script src="../shared/product-images.js?v=products-1"></script>
   <script src="../shared/report-charts.js?v=charts-7-wh-polish"></script>
   <script src="../shared/report-layout.js?v=report-hint-1"></script>
   <script src="../shared/print-documents.js?v=print-pdf-1"></script>
-  <script src="../admin/admin-page-templates.js?v=emp-validate-1"></script>
-  <script src="../warehouse/warehouse-pages.js?v=fields-qty-1"></script>
-  <script src="../warehouse/supplier-pages.js?v=fields-qty-1"></script>
-  <script src="../warehouse/purchase-order-pages.js?v=fields-qty-1"></script>
-  <script src="../warehouse/receipt-pages.js?v=fields-qty-1"></script>
-  <script src="../warehouse/stock-issue-pages.js?v=fields-qty-1"></script>
+  <script src="../admin/admin-page-templates.js?v=search-2"></script>
+  <script src="../warehouse/warehouse-pages.js?v=search-2"></script>
+  <script src="../warehouse/supplier-pages.js?v=search-2"></script>
+  <script src="../warehouse/purchase-order-pages.js?v=count-approve-1"></script>
+  <script src="../warehouse/receipt-pages.js?v=search-2"></script>
+  <script src="../warehouse/stock-issue-pages.js?v=search-2"></script>
   <script src="../accounting/store-pnl.js?v=store-pnl-1"></script>
-  <script src="../accounting/accounting-pages.js?v=fields-qty-1"></script>
-  <script src="../workforce/workforce-pages.js?v=fields-qty-1"></script>
-  <script src="../cashier/cashier-pages.js?v=fields-qty-1"></script>
+  <script src="../accounting/accounting-pages.js?v=invoice-intake-1"></script>
+  <script src="../workforce/workforce-pages.js?v=att-recover-2"></script>
+  <script src="../cashier/cashier-pages.js?v=return-heal-1"></script>
   <script src="../shared/role-reports.js?v=charts-7-wh-polish"></script>
-  <script src="dashboard.js?v=pwd-validate-1"></script>
+  <script src="dashboard.js?v=count-approve-1"></script>
 </body>
 </html>

@@ -274,7 +274,7 @@ const ACTION_META = {
     },
     'Từ chối điều chỉnh tồn': {
         viecLam: 'Từ chối điều chỉnh tồn',
-        giaiThich: 'Không đổi tồn. Thủ kho có thể kiểm lại.',
+        giaiThich: 'Không đổi tồn. Hệ thống báo Thủ kho tạo đợt kiểm kê mới và đếm lại (thường vì đã nhập/xuất hàng sau lúc đếm).',
         mucDo: 'Cảnh báo', nhom: 'duyet'
     },
     'Lập phiếu đổi trả': {
@@ -316,6 +316,16 @@ const ACTION_META = {
         viecLam: 'Hoàn thành đổi/trả hàng',
         giaiThich: 'Đã xử lý với khách. Tiền hoàn và tồn kho (nếu nhập lại) đã được ghi nhận.',
         mucDo: 'Quan trọng', nhom: 'tien-ton'
+    },
+    'Tiếp nhận đổi trả': {
+        viecLam: 'Tiếp nhận phiếu đổi trả sót từ ca trước',
+        giaiThich: 'Thu ngân ca mới nhận việc còn treo. Nhật ký giữ cả người lập và người tiếp nhận.',
+        mucDo: 'Cảnh báo', nhom: 'tien-ton'
+    },
+    'Bàn giao đổi trả': {
+        viecLam: 'Treo phiếu đổi trả cho ca sau',
+        giaiThich: 'Đóng ca không xóa phiếu dở. Ca sau cùng quầy mở ca mới rồi vào Đổi trả để tiếp nhận.',
+        mucDo: 'Cảnh báo', nhom: 'tien-ton'
     },
     'Tiếp nhận hóa đơn Nhà cung cấp': {
         viecLam: 'Tiếp nhận hóa đơn Nhà cung cấp',
@@ -431,6 +441,26 @@ const ACTION_META = {
         viecLam: 'Phân ca tự động',
         giaiThich: 'Quản lý tạo lịch làm việc bản nháp cho cửa hàng.',
         mucDo: 'Thông tin', nhom: 'ca'
+    },
+    'Phân ca thủ công': {
+        viecLam: 'Phân ca thủ công',
+        giaiThich: 'Quản lý xếp hoặc sửa một lượt làm việc bản nháp.',
+        mucDo: 'Thông tin', nhom: 'ca', target: 'manager-workforce'
+    },
+    'Sửa lịch đã công bố': {
+        viecLam: 'Sửa lịch đã công bố',
+        giaiThich: 'Điều chỉnh ngoại lệ (ốm, hoán đổi, bất khả kháng) trên lịch đã công bố. Bản mới chỉ có hiệu lực sau khi Công bố lịch lại.',
+        mucDo: 'Cảnh báo', nhom: 'ca', target: 'manager-workforce'
+    },
+    'Công bố lịch': {
+        viecLam: 'Công bố lịch',
+        giaiThich: 'Xác nhận lịch tuần sau khi kiểm tra đủ người, quầy, 48 giờ, 12 giờ nghỉ và không 3 đêm liên tiếp.',
+        mucDo: 'Quan trọng', nhom: 'ca', target: 'manager-workforce'
+    },
+    'Xóa lượt phân công': {
+        viecLam: 'Xóa lượt phân công',
+        giaiThich: 'Xóa một lượt bản nháp. Không xóa được ca đã chấm công hoặc đã mở POS.',
+        mucDo: 'Thông tin', nhom: 'ca', target: 'manager-workforce'
     },
     'Duyệt chấm công': {
         viecLam: 'Duyệt chấm công',
@@ -662,6 +692,9 @@ const logAudit = async (source, opts = {}) => {
     const colSql = ['MaTK', 'HanhDong', 'BangLienQuan', 'MaBanGhi', 'NoiDung', 'ThoiGian', ...extraCols].join(',');
     const valSql = ['@LogMaTK', '@LogHanhDong', '@LogBang', '@LogMaBanGhi', '@LogNoiDung', 'GETDATE()', ...extraVals].join(',');
     await request.query(`INSERT INTO NhatKy (${colSql}) VALUES (${valSql})`);
+    try {
+        require('./notificationHub').notifyInboxChanged({ action: hanhDong, table });
+    } catch { /* chuông trực tiếp không được thì client tự tải lại */ }
 };
 
 const logAuditSafe = async (...args) => {

@@ -1,11 +1,13 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
+const { ensurePhieuThuSchema } = require('../services/phieuThuSchema');
 
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
 
 const listShifts = async (req, res) => {
     try {
         const pool = await poolPromise;
+        await ensurePhieuThuSchema(pool).catch(() => {});
         const status = clean(req.query.status, 30);
         const result = await pool.request().input('Status', sql.NVarChar, status).query(`
             SELECT ca.MaCa,ca.MaNV,nv.TenNV,ca.MaQuay,q.TenQuay,ca.ThoiGianBatDau,ca.ThoiGianKetThuc,
@@ -65,17 +67,42 @@ const getShift = async (req, res) => {
                 FROM ThanhToan tt JOIN HoaDon hd ON hd.MaHD=tt.MaHD
                 WHERE hd.MaCa=@MaCa ORDER BY tt.NgayTT`)
         ]);
-        res.json({ shift: header.recordset[0], invoices: invoices.recordset, payments: payments.recordset });
+        let refunds = [];
+        try {
+            const refundResult = await pool.request().input('MaCa', sql.VarChar, maCa).query(`
+                SELECT dt.MaDT,dt.MaHD,dt.SoTienHoan,dt.PhuongThucHoan,dt.NgayHoan,dt.HinhThucXuLy,
+                       hd.MaCa MaCaBan,nv.TenNV NguoiHoan
+                FROM PhieuDoiTra dt
+                LEFT JOIN HoaDon hd ON hd.MaHD=dt.MaHD
+                LEFT JOIN NhanVien nv ON nv.MaNV=COALESCE(dt.MaNV_XuLy,dt.MaNV_Lap)
+                WHERE dt.TrangThai=N'Hoàn thành'
+                  AND (dt.MaCaHoan=@MaCa OR (dt.MaCaHoan IS NULL AND dt.NgayHoan BETWEEN
+                      (SELECT ThoiGianBatDau FROM CaLamViec WHERE MaCa=@MaCa)
+                      AND COALESCE((SELECT ThoiGianKetThuc FROM CaLamViec WHERE MaCa=@MaCa),GETDATE())))
+                ORDER BY dt.NgayHoan`);
+            refunds = refundResult.recordset;
+        } catch (error) {
+            if (!/Invalid column name|MaNV_XuLy|MaCaHoan/i.test(error.message || '')) throw error;
+        }
+        res.json({
+            shift: header.recordset[0],
+            invoices: invoices.recordset,
+            payments: payments.recordset,
+            refunds
+        });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ message: 'Không thể tải hồ sơ đối soát ca.' });
     }
 };
 
 const createReceipt = async (req, res) => {
-    const transaction = new sql.Transaction(await poolPromise);
+    const pool = await poolPromise;
+    const transaction = new sql.Transaction(pool);
     try {
         const maCa = clean(req.params.id, 20);
         const reason = clean(req.body.LyDoChenhLech, 500) || null;
+        await ensurePhieuThuSchema(pool).catch((error) => console.error(error));
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         const shift = await new sql.Request(transaction).input('MaCa', sql.VarChar, maCa).query(`
             SELECT * FROM CaLamViec WITH(UPDLOCK,HOLDLOCK)
@@ -93,25 +120,40 @@ const createReceipt = async (req, res) => {
             .query(`SELECT TOP 1 MaPT FROM PhieuThu WITH(UPDLOCK,HOLDLOCK) WHERE MaPT LIKE @Prefix ORDER BY MaPT DESC`);
         const lastId = last.recordset[0]?.MaPT;
         const maPT = `${prefix}${String(lastId ? Number(lastId.slice(prefix.length)) + 1 : 1).padStart(4, '0')}`;
+        const systemCash = Number(row.TienMatHeThong);
+        const refundCash = Number(row.TongTienHoanMat || 0);
+        const content = systemCash < 0
+            ? `Bàn giao tiền mặt cuối ca; số âm do hoàn TM ${refundCash.toLocaleString('vi-VN')}đ (đổi trả, có thể từ hóa đơn ca trước).`
+            : 'Bàn giao tiền mặt cuối ca';
         await new sql.Request(transaction).input('MaPT', sql.VarChar, maPT)
             .input('MaCa', sql.VarChar, maCa).input('MaNV', sql.VarChar, req.user.MaNV)
             .input('HeThong', sql.Decimal(18, 2), row.TienMatHeThong)
             .input('ThucNop', sql.Decimal(18, 2), row.TienThucNop)
             .input('LyDo', sql.NVarChar, reason)
+            .input('NoiDung', sql.NVarChar, content)
             .query(`INSERT PhieuThu(MaPT,MaCa,MaNV_Lap,NgayLap,SoTienTheoHeThong,SoTienThucNop,
                         LyDoChenhLech,NoiDung,TrangThai)
-                    VALUES(@MaPT,@MaCa,@MaNV,GETDATE(),@HeThong,@ThucNop,@LyDo,
-                        N'Bàn giao tiền mặt cuối ca',N'Nháp')`);
+                    VALUES(@MaPT,@MaCa,@MaNV,GETDATE(),@HeThong,@ThucNop,@LyDo,@NoiDung,N'Nháp')`);
         await logAudit(transaction, {
             user: req.user, req, action: 'Lập Phiếu thu cuối ca', table: 'PhieuThu', recordId: maPT, uc: 'UC29',
             severity: 'Quan trọng',
-            content: `Ca ${maCa}; hệ thống ${Number(row.TienMatHeThong).toLocaleString('vi-VN')}đ; thực nộp ${Number(row.TienThucNop).toLocaleString('vi-VN')}đ`
+            content: `Ca ${maCa}; hệ thống ${systemCash.toLocaleString('vi-VN')}đ; thực nộp ${Number(row.TienThucNop).toLocaleString('vi-VN')}đ`
         });
         await transaction.commit();
-        res.status(201).json({ message: `Đã lập Phiếu thu ${maPT}.`, MaPT: maPT });
+        res.status(201).json({
+            message: systemCash < 0
+                ? `Đã lập Phiếu thu ${maPT}. Số âm là do hoàn tiền mặt đổi trả, không phải lỗi quỹ.`
+                : `Đã lập Phiếu thu ${maPT}.`,
+            MaPT: maPT
+        });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
-        res.status(400).json({ message: error.message });
+        const constraint = /CHECK constraint|SoTienTheoHeThong|SoTienThucNop/i.test(error.message || '');
+        res.status(400).json({
+            message: constraint
+                ? 'Phiếu thu cho phép số âm khi hoàn tiền mặt lớn hơn tiền mặt thu trong ca (thường là đổi trả hóa đơn ca trước). Hãy mở lại màn đối soát rồi lập lại phiếu.'
+                : error.message
+        });
     }
 };
 

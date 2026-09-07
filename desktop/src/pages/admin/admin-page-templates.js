@@ -25,7 +25,7 @@
         <div class="form-group"><label>Tồn tối thiểu *</label><input id="productMinimum" type="number" min="0" step="1" required placeholder="0"><small class="field-help">Dùng để cảnh báo và lập đề nghị mua hàng.</small><small class="field-error" id="productMinimumError"></small></div><div class="form-group"><label>Trạng thái</label><select id="productStatusInput"><option>Đang bán</option><option>Ngừng bán</option></select></div>
       </div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeProductModal()">Hủy</button><button type="button" class="btn btn-secondary" onclick="previewProduct()">Xem trước</button><button class="btn btn-primary" id="productSubmitButton" type="submit">Lưu sản phẩm</button></div></form></div></div></div>
       <div class="modal-backdrop" id="categoryModal" style="display:none"><div class="modal category-manager-modal"><div class="modal-header"><div><p class="module-kicker">DANH MỤC HÀNG HÓA</p><h3>Quản lý danh mục sản phẩm</h3><p class="modal-description">Thêm mới, tra cứu, chỉnh sửa hoặc ngừng sử dụng danh mục.</p></div><button class="close-btn" onclick="closeCategoryModal()" aria-label="Đóng">×</button></div><div class="modal-body category-manager-layout"><section class="category-editor-panel"><div class="category-section-heading"><div><small>THÔNG TIN DANH MỤC</small><h4 id="categoryFormTitle">Thêm danh mục mới</h4></div><button type="button" class="text-action" id="categoryResetButton" onclick="resetCategoryForm()">Làm mới</button></div><form id="categoryForm"><div class="form-group"><label>Mã danh mục *</label><div class="input-with-action"><input id="categoryCode" maxlength="20" required placeholder="Ví dụ: DM007"><button type="button" class="field-action" id="categoryCodeSuggestionButton" onclick="suggestCategoryCode()">Gợi ý</button></div><small class="field-help">Mã duy nhất, không thể đổi sau khi tạo.</small><small class="field-error" id="categoryCodeError"></small></div><div class="form-group"><label>Tên danh mục *</label><input id="categoryName" maxlength="100" required placeholder="Ví dụ: Đồ uống"><small class="field-error" id="categoryNameError"></small></div><div class="form-group"><label>Mô tả</label><textarea id="categoryDescription" maxlength="255" rows="4" placeholder="Mô tả ngắn nhóm sản phẩm"></textarea></div><div class="category-form-actions"><button type="button" class="btn btn-secondary" id="categoryCancelEdit" onclick="resetCategoryForm()" hidden>Hủy chỉnh sửa</button><button type="button" class="btn btn-secondary" onclick="previewCategory()">Xem trước</button><button class="btn btn-primary" id="categorySubmitButton" type="submit">Thêm danh mục</button></div></form><div class="category-rule-note"><strong>Quy tắc ngừng sử dụng</strong><span>Danh mục chỉ được ngừng sau khi toàn bộ sản phẩm thuộc danh mục đã ngừng bán.</span></div></section><section class="category-browser-panel"><div class="category-browser-heading"><div><small>DANH SÁCH DANH MỤC</small><h4><span id="categoryTotalCount">0</span> danh mục</h4></div><span class="category-active-count"><span id="categoryActiveCount">0</span> đang sử dụng</span></div><label class="category-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="categorySearch" placeholder="Tìm mã hoặc tên danh mục..."></label><div class="category-list" id="categoryList"></div></section></div></div></div>
-      <script src="../admin/products.js?v=product-validate-1"></script>`,
+      <script src="../admin/products.js?v=search-2"></script>`,
 
     'promotions.html': `
       <section class="admin-module">
@@ -59,7 +59,7 @@
         </div></div>
 
       <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closePromoModal()">Hủy</button><button type="button" class="btn btn-secondary" onclick="previewPromotion()">Xem trước</button><button class="btn btn-primary" id="promoSubmitBtn" type="submit">Lưu khuyến mãi</button></div></form></div></div></div>
-      <script src="../admin/promotions.js"></script>`,
+      <script src="../admin/promotions.js?v=search-2"></script>`,
 
     'employees.html': `
       <section class="admin-module emp-module">
@@ -81,7 +81,7 @@
         </div>
         <article class="surface-card data-surface">
           <div class="table-toolbar">
-            <label class="filter-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input type="text" id="empSearch" placeholder="Tìm theo mã, tên, số điện thoại..."></label>
+            <label class="filter-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input type="text" id="empSearch" placeholder="Tìm theo mã, tên, CCCD, số điện thoại..."></label>
             <div class="filter-actions">
               <select id="empRoleFilter"><option value="">Tất cả chức vụ</option><option value="Quản lý">Quản lý</option><option value="Nhân viên mua hàng">Nhân viên mua hàng</option><option value="Thủ kho">Thủ kho</option><option value="Thu ngân">Thu ngân</option><option value="Kế toán">Kế toán</option></select>
               <select id="empStatusFilter"><option value="">Tất cả trạng thái</option><option value="Đang làm việc">Đang làm việc</option><option value="Nghỉ việc">Nghỉ việc</option></select>
@@ -107,17 +107,53 @@
           <div class="modal-header"><div><p class="module-kicker">HỒ SƠ NHÂN SỰ</p><h3 id="empModalTitle">Thêm nhân viên</h3></div><button type="button" class="close-btn" onclick="closeEmpModal()">×</button></div>
           <div class="modal-body">
             <form id="empForm" novalidate>
+              <div class="emp-official-banner"><p class="emp-official-state">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p><p class="emp-official-motto">Độc lập - Tự do - Hạnh phúc</p><span class="emp-official-rule"></span><p class="emp-official-title">Sơ yếu lý lịch nhân viên</p></div>
               <div class="emp-avatar-section"><div class="emp-avatar-large" id="empAvatarPreview"><span id="empAvatarInitials">?</span></div><div class="emp-avatar-info"><strong id="empAvatarName">Nhân viên mới</strong><small>Ảnh đại diện sẽ hiển thị bằng chữ cái đầu</small></div></div>
               <div class="emp-form-section"><div class="emp-section-heading"><small>THÔNG TIN CÁ NHÂN</small><h4>Hồ sơ nhân viên</h4></div><div class="form-grid">
                 <div class="form-group"><label>Mã nhân viên *</label><input type="text" id="maNV" required placeholder="VD: NV_TN02" maxlength="20"><small class="emp-field-error" id="maNV_err"></small></div>
                 <div class="form-group"><label>Họ và tên *</label><input type="text" id="tenNV" required placeholder="Nhập họ tên nhân viên" maxlength="150"><small class="emp-field-error" id="tenNV_err"></small></div>
-                <div class="form-group"><label>Số điện thoại</label><input type="text" id="sdt" placeholder="09xxxxxxxx hoặc +84..." maxlength="20"><small class="emp-field-error" id="sdt_err"></small></div>
+                <div class="form-group"><label>Số CCCD <span class="req-create">*</span></label><input type="text" id="cccd" inputmode="numeric" placeholder="12 số (hoặc CMND 9 số)" maxlength="12"><small class="emp-field-error" id="cccd_err"></small></div>
+                <div class="form-group"><label>Ngày sinh <span class="req-create">*</span></label><input type="date" id="ngaySinh"><small class="emp-field-error" id="ngaySinh_err"></small></div>
+                <div class="form-group"><label>Giới tính <span class="req-create">*</span></label><select id="gioiTinh"><option value="">Chưa chọn</option><option value="Nam">Nam</option><option value="Nữ">Nữ</option></select><small class="emp-field-error" id="gioiTinh_err"></small></div>
+                <div class="form-group"><label>Số điện thoại <span class="req-create">*</span></label><input type="text" id="sdt" placeholder="09xxxxxxxx hoặc +84..." maxlength="20"><small class="emp-field-error" id="sdt_err"></small></div>
                 <div class="form-group"><label>Email</label><input type="email" id="email" placeholder="ten@supermarket.fly"><small class="emp-field-error" id="email_err"></small></div>
-                <div class="form-group form-span-2"><label>Địa chỉ</label><input type="text" id="diaChi" placeholder="Nhập địa chỉ liên hệ" maxlength="300"><small class="emp-field-error" id="diaChi_err"></small></div>
+                <div class="form-group form-span-2"><label>Địa chỉ liên hệ</label><input type="text" id="diaChi" placeholder="Nhập địa chỉ liên hệ" maxlength="300"><small class="emp-field-error" id="diaChi_err"></small></div>
+              </div></div>
+              <div class="emp-form-section"><div class="emp-section-heading"><small>NHÂN THÂN &amp; QUÊ QUÁN</small><h4>Lý lịch cá nhân</h4></div><div class="form-grid">
+                <div class="form-group"><label>Quốc tịch <span class="req-create">*</span></label><select id="quocTich"><option value="Việt Nam">Việt Nam</option><option value="Khác">Khác</option></select><small class="emp-field-error" id="quocTich_err"></small></div>
+                <div class="form-group"><label>Dân tộc <span class="req-create">*</span></label><select id="danToc"><option value="Kinh">Kinh</option><option value="Tày">Tày</option><option value="Thái">Thái</option><option value="Mường">Mường</option><option value="Khmer">Khmer</option><option value="Hoa">Hoa</option><option value="Nùng">Nùng</option><option value="HMông">HMông</option><option value="Dao">Dao</option><option value="Gia Rai">Gia Rai</option><option value="Ê Đê">Ê Đê</option><option value="Ba Na">Ba Na</option><option value="Khác">Khác</option></select><small class="emp-field-error" id="danToc_err"></small></div>
+                <div class="form-group"><label>Tôn giáo <span class="req-create">*</span></label><select id="tonGiao"><option value="Không">Không</option><option value="Phật giáo">Phật giáo</option><option value="Công giáo">Công giáo</option><option value="Cao Đài">Cao Đài</option><option value="Hòa Hảo">Hòa Hảo</option><option value="Khác">Khác</option></select><small class="emp-field-error" id="tonGiao_err"></small></div>
+                <div class="form-group"><label>Tình trạng hôn nhân</label><select id="tinhTrangHonNhan"><option value="">Chưa chọn</option><option>Độc thân</option><option>Đã kết hôn</option><option>Ly hôn</option><option>Góa</option><option>Khác</option></select><small class="emp-field-error" id="tinhTrangHonNhan_err"></small></div>
+                <div class="form-group"><label>Nơi sinh</label><input type="text" id="noiSinh" placeholder="Tỉnh / thành phố" maxlength="200"><small class="emp-field-error" id="noiSinh_err"></small></div>
+                <div class="form-group"><label>Nguyên quán</label><input type="text" id="nguyenQuan" placeholder="Nguyên quán" maxlength="200"><small class="emp-field-error" id="nguyenQuan_err"></small></div>
+              </div></div>
+              <div class="emp-form-section"><div class="emp-section-heading"><small>GIẤY TỜ &amp; CƯ TRÚ</small><h4>CCCD và địa chỉ</h4></div><div class="form-grid">
+                <div class="form-group"><label>Ngày cấp CCCD</label><input type="date" id="ngayCapCCCD"><small class="emp-field-error" id="ngayCapCCCD_err"></small></div>
+                <div class="form-group"><label>Nơi cấp CCCD</label><input type="text" id="noiCapCCCD" placeholder="Cục Cảnh sát QLHC về TTXH" maxlength="200"><small class="emp-field-error" id="noiCapCCCD_err"></small></div>
+                <div class="form-group form-span-2"><label>Hộ khẩu thường trú</label><input type="text" id="hoKhauThuongTru" placeholder="Số nhà, phường/xã, quận/huyện, tỉnh/thành" maxlength="300"><small class="emp-field-error" id="hoKhauThuongTru_err"></small></div>
+                <div class="form-group form-span-2"><label>Chỗ ở hiện nay</label><input type="text" id="choOHienNay" placeholder="Mặc định theo địa chỉ liên hệ nếu để trống" maxlength="300"><small class="emp-field-error" id="choOHienNay_err"></small></div>
               </div></div>
               <div class="emp-form-section"><div class="emp-section-heading"><small>THÔNG TIN CÔNG VIỆC</small><h4>Vị trí &amp; trạng thái</h4></div><div class="form-grid">
                 <div class="form-group"><label>Chức vụ *</label><select id="chucVu" required><option value="Quản lý">Quản lý</option><option value="Nhân viên mua hàng">Nhân viên mua hàng</option><option value="Thủ kho">Thủ kho</option><option value="Thu ngân" selected>Thu ngân</option><option value="Kế toán">Kế toán</option></select><small class="emp-field-error" id="chucVu_err"></small></div>
+                <div class="form-group"><label>Ngày vào làm <span class="req-create">*</span></label><input type="date" id="ngayVaoLam"><small class="emp-field-error" id="ngayVaoLam_err"></small></div>
                 <div class="form-group"><label>Trạng thái</label><select id="trangThai"><option value="Đang làm việc">Đang làm việc</option><option value="Nghỉ việc">Nghỉ việc</option></select></div>
+              </div></div>
+              <div class="emp-form-section"><div class="emp-section-heading"><small>HỌC VẤN</small><h4>Trình độ &amp; chuyên môn</h4></div><div class="form-grid">
+                <div class="form-group"><label>Trình độ học vấn</label><select id="trinhDoHocVan"><option value="">Chưa chọn</option><option>THPT</option><option>Trung học phổ thông</option><option>Trung học cơ sở</option><option>Trung cấp</option><option>Cao đẳng</option><option>Đại học</option><option>Sau đại học</option><option>Thạc sĩ</option><option>Tiến sĩ</option><option>Khác</option></select><small class="emp-field-error" id="trinhDoHocVan_err"></small></div>
+                <div class="form-group"><label>Chuyên môn / bằng cấp</label><input type="text" id="chuyenMon" placeholder="Ví dụ: Quản trị kinh doanh" maxlength="200"><small class="emp-field-error" id="chuyenMon_err"></small></div>
+              </div></div>
+              <div class="emp-form-section"><div class="emp-section-heading"><small>MÃ SỐ / BHXH / TÀI KHOẢN</small><h4>Định danh thanh toán (không nhập mức lương)</h4></div><div class="form-grid">
+                <div class="form-group"><label>MST cá nhân</label><input type="text" id="mstCaNhan" inputmode="numeric" placeholder="10 hoặc 13 chữ số" maxlength="13"><small class="emp-field-error" id="mstCaNhan_err"></small></div>
+                <div class="form-group"><label>Số BHXH</label><input type="text" id="soBHXH" inputmode="numeric" placeholder="10 chữ số" maxlength="15"><small class="emp-field-error" id="soBHXH_err"></small></div>
+                <div class="form-group"><label>Số tài khoản</label><input type="text" id="soTaiKhoanNH" inputmode="numeric" placeholder="6–20 chữ số" maxlength="30"><small class="emp-field-error" id="soTaiKhoanNH_err"></small></div>
+                <div class="form-group"><label>Ngân hàng</label><input type="text" id="tenNganHang" placeholder="Vietcombank, BIDV..." maxlength="100"><small class="emp-field-error" id="tenNganHang_err"></small></div>
+                <div class="form-group form-span-2"><label>Chi nhánh</label><input type="text" id="chiNhanhNH" placeholder="Chi nhánh ngân hàng" maxlength="150"><small class="emp-field-error" id="chiNhanhNH_err"></small></div>
+              </div></div>
+              <div class="emp-form-section"><div class="emp-section-heading"><small>LIÊN HỆ KHẨN CẤP</small><h4>Người thân khi cần liên hệ</h4></div><div class="form-grid">
+                <div class="form-group"><label>Họ tên người liên hệ</label><input type="text" id="nguoiLienHe" placeholder="Họ tên" maxlength="150"><small class="emp-field-error" id="nguoiLienHe_err"></small></div>
+                <div class="form-group"><label>Quan hệ</label><select id="quanHeLienHe"><option value="">Chưa chọn</option><option>Bố</option><option>Mẹ</option><option>Vợ</option><option>Chồng</option><option>Con</option><option>Anh/Chị</option><option>Em</option><option>Người thân</option></select><small class="emp-field-error" id="quanHeLienHe_err"></small></div>
+                <div class="form-group"><label>SĐT người liên hệ</label><input type="text" id="sdtLienHe" placeholder="09xxxxxxxx" maxlength="20"><small class="emp-field-error" id="sdtLienHe_err"></small></div>
+                <div class="form-group form-span-2"><label>Ghi chú hồ sơ</label><textarea id="ghiChuHoSo" rows="2" maxlength="500" placeholder="Ghi chú ngắn (không bắt buộc)"></textarea><small class="emp-field-error" id="ghiChuHoSo_err"></small></div>
               </div></div>
               <div class="emp-form-section" id="empAccountSection" style="display:none"><div class="emp-section-heading"><small>TÀI KHOẢN HỆ THỐNG</small><h4>Truy cập &amp; phân quyền</h4></div><div class="emp-account-info" id="empAccountInfo"></div></div>
               <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeEmpModal()">Hủy</button><button type="submit" class="btn btn-primary" id="empSubmitBtn">Lưu hồ sơ</button></div>
@@ -125,8 +161,9 @@
           </div>
         </div>
       </div>
-      <script src="../shared/field-validators.js?v=fields-2"></script>
-      <script src="../admin/employees.js?v=emp-validate-1"></script>`,
+      <script src="../shared/field-validators.js?v=fields-7"></script>
+      <script src="../shared/employee-profile.js?v=emp-syll-1"></script>
+      <script src="../admin/employees.js?v=emp-syll-1"></script>`,
 
     'accounts.html': `
       <section class="admin-module">
@@ -143,7 +180,7 @@
 
         <article class="surface-card data-surface">
           <div class="table-toolbar">
-            <label class="filter-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input type="text" id="accSearch" placeholder="Tìm tên đăng nhập hoặc nhân viên..."></label>
+            <label class="filter-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input type="text" id="accSearch" placeholder="Tìm tên đăng nhập, nhân viên hoặc CCCD..."></label>
             <div class="filter-actions">
               <select id="accRoleFilter" aria-label="Lọc vai trò"><option value="">Tất cả vai trò</option></select>
               <select id="accStatusFilter" aria-label="Lọc trạng thái"><option value="">Tất cả trạng thái</option><option value="1">Hoạt động</option><option value="0">Bị khóa</option></select>
@@ -155,10 +192,11 @@
       </section>
 
       <div class="modal-backdrop" id="accModal" style="display:none">
-        <div class="modal">
+        <div class="modal emp-modal-wide">
           <div class="modal-header"><div><p class="module-kicker">CẤP QUYỀN TRUY CẬP</p><h3>Tạo tài khoản</h3></div><button type="button" class="close-btn" onclick="closeAccModal()">×</button></div>
           <div class="modal-body"><form id="accForm" novalidate>
             <div class="form-group"><label>Nhân viên chưa có tài khoản *</label><select id="maNV_Acc" required></select><small class="emp-field-error" id="maNV_Acc_err"></small></div>
+            <div class="acc-emp-profile" id="accEmpProfile" hidden></div>
             <div class="form-group"><label>Tên đăng nhập *</label><input type="text" id="tenDangNhap" required placeholder="Chữ thường không dấu" maxlength="50" autocomplete="off"><small class="field-help">3–50 ký tự, chữ thường không dấu, số, dấu . _ -</small><small class="emp-field-error" id="tenDangNhap_err"></small></div>
             <div class="form-group"><label>Vai trò *</label><select id="maVaiTro" required></select><small class="field-hint">Vai trò tự động khớp với chức vụ nhân viên.</small></div>
             <div class="notice-box"><strong>Mật khẩu khởi tạo: 123</strong><span>Nhân viên nên đổi mật khẩu ngay sau lần đăng nhập đầu tiên.</span></div>
@@ -166,8 +204,15 @@
           </form></div>
         </div>
       </div>
-      <script src="../shared/field-validators.js?v=fields-2"></script>
-      <script src="../admin/accounts.js?v=acc-validate-1"></script>`,
+      <div class="emp-detail-backdrop" id="accDetailBackdrop" style="display:none">
+        <div class="emp-detail-panel" id="accDetailPanel">
+          <button type="button" class="emp-detail-close" onclick="closeAccDetail()">×</button>
+          <div id="accDetailContent"></div>
+        </div>
+      </div>
+      <script src="../shared/field-validators.js?v=fields-7"></script>
+      <script src="../shared/employee-profile.js?v=emp-syll-1"></script>
+      <script src="../admin/accounts.js?v=acc-syll-1"></script>`,
 
     'permissions.html': `
       <section class="admin-module">
@@ -284,7 +329,7 @@
           4. Hoặc lập lịch backup tự động bằng SQL Server Agent Job</span>
         </div>
       </section>
-      <script src="../admin/backup.js"></script>`,
+      <script src="../admin/backup.js?v=search-2"></script>`,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = templates;

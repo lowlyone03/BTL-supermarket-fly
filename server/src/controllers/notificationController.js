@@ -2,8 +2,22 @@ const { sql, poolPromise } = require('../config/db');
 const { ensurePayrollSchema } = require('../services/payrollSchema');
 const { vietnamCalendar } = require('../services/reportingPeriod');
 const { listInboxForEmployee } = require('../services/storeProfitLoss');
+const { subscribe } = require('../services/notificationHub');
+const { ensureReturnHandoverSchema } = require('../services/returnHandover');
 
 const roleOf = user => String(user?.TenVaiTro || '').trim();
+const roleKey = user => roleOf(user).toLocaleLowerCase('vi-VN');
+const isRole = (user, name) => roleKey(user) === String(name || '').trim().toLocaleLowerCase('vi-VN');
+
+const safeRows = async (fn, fallback = []) => {
+    try {
+        const result = await fn();
+        return result?.recordset || fallback;
+    } catch (error) {
+        console.error(error);
+        return fallback;
+    }
+};
 
 const row = (id, target, title, detail, at, tone = 'info') => ({
     id, target, title, detail: detail || '', at: at || null, tone
@@ -12,11 +26,11 @@ const row = (id, target, title, detail, at, tone = 'info') => ({
 const many = (recordset, map) => (recordset || []).map(map).filter(item => item?.id);
 
 const inboxHint = {
-    'Quản lý': 'Việc nhân viên vừa gửi sẽ hiện ở đây. Không cần F5: chuông và trang phê duyệt tự cập nhật.',
-    'Thủ kho': 'Khi thu ngân gửi đổi trả, mua hàng báo hàng đến, hoặc Quản lý duyệt phiếu xuất — việc mới hiện ngay.',
-    'Nhân viên mua hàng': 'Đề nghị từ kho và đơn mua đã duyệt cần gửi Nhà cung cấp được đẩy sang đây.',
-    'Kế toán': 'Ca thu ngân đã chốt, hóa đơn chờ đối chiếu và phiếu chi sẵn sàng thanh toán.',
-    'Thu ngân': 'Lịch hôm nay, đổi trả đang chờ kho/quản lý, và phiếu đã duyệt cần bạn xác nhận hoàn/đổi.'
+    'Quản lý': 'Việc nhân viên vừa gửi hiện ngay. Chuông kêu một tiếng khi có việc mới — không cần F5.',
+    'Thủ kho': 'Đổi trả, xe đến kho, phiếu xuất đã duyệt hoặc kiểm kê bị từ chối cần đếm lại hiện ngay. Chuông kêu một tiếng khi có việc mới.',
+    'Nhân viên mua hàng': 'Đề nghị từ kho và đơn mua đã duyệt được đẩy sang đây ngay. Chuông kêu một tiếng khi có việc mới.',
+    'Kế toán': 'Ca đã chốt, hóa đơn chờ đối chiếu và phiếu chi sẵn sàng thanh toán hiện ngay.',
+    'Thu ngân': 'Lịch hôm nay, đổi trả chờ kho/quản lý, và phiếu đã duyệt cần xác nhận — hiện ngay khi có việc mới.'
 };
 
 const listForRole = async (pool, user) => {
@@ -27,14 +41,17 @@ const listForRole = async (pool, user) => {
 
     try {
         const notices = await listInboxForEmployee(pool, maNV);
-        items.push(...many(notices, r => row(
-            `pnl:${r.MaTB}`,
-            r.DichDen || (role === 'Quản lý' ? 'manager-reports' : ''),
-            r.TieuDe,
-            r.NoiDung,
-            r.NgayGui,
-            'urgent'
-        )));
+        items.push(...many(notices, r => {
+            if (/kiểm kê/i.test(r.TieuDe || '') && /từ chối|đếm lại/i.test(r.TieuDe || '')) return null;
+            return row(
+                `pnl:${r.MaTB}`,
+                r.DichDen || (isRole(user, 'Quản lý') ? 'manager-reports' : ''),
+                r.TieuDe,
+                r.NoiDung,
+                r.NgayGui,
+                'urgent'
+            );
+        }));
     } catch { /* bảng thông báo chưa có thì bỏ qua */ }
 
     const schedule = await q().input('MaNV', sql.VarChar, maNV).query(`
@@ -51,7 +68,7 @@ const listForRole = async (pool, user) => {
             `${s.TenCa} · hãy chấm công vào trước khi làm việc`, s.BatDauDuKien, 'info'));
     }
 
-    if (role === 'Quản lý') {
+    if (isRole(user, 'Quản lý')) {
         const poolSafe = pool;
         await ensurePayrollSchema(poolSafe).catch(() => {});
         const [po, px, kk, dt, pc, cc, pcl, latePay] = await Promise.all([
@@ -112,43 +129,68 @@ const listForRole = async (pool, user) => {
         );
     }
 
-    if (role === 'Thủ kho') {
-        const [returns, arrive, issues, feedback, low] = await Promise.all([
-            q().query(`SELECT TOP 8 dt.MaDT, dt.NgayLap, dt.HinhThucXuLy, nv.TenNV
+    if (isRole(user, 'Thủ kho')) {
+        const [returns, arrive, issues, feedback, recount, drifted, low] = await Promise.all([
+            safeRows(() => q().query(`SELECT TOP 8 dt.MaDT, dt.NgayLap, dt.HinhThucXuLy, nv.TenNV
                        FROM PhieuDoiTra dt JOIN NhanVien nv ON nv.MaNV=dt.MaNV_Lap
-                       WHERE dt.TrangThai=N'Chờ kiểm tra' ORDER BY dt.NgayLap DESC`),
-            q().query(`SELECT TOP 8 gh.MaTBGH, gh.MaPO, gh.NgayDen, ncc.TenNCC
+                       WHERE dt.TrangThai=N'Chờ kiểm tra' ORDER BY dt.NgayLap DESC`)),
+            safeRows(() => q().query(`SELECT TOP 8 gh.MaTBGH, gh.MaPO, gh.NgayDen, ncc.TenNCC
                        FROM ThongBaoGiaoHang gh JOIN DonMuaHang po ON po.MaPO=gh.MaPO
                        JOIN NhaCungCap ncc ON ncc.MaNCC=po.MaNCC
-                       WHERE gh.TrangThai=N'Đã đến kho' ORDER BY gh.NgayDen DESC`),
-            q().input('MaNV', sql.VarChar, maNV).query(`
+                       WHERE gh.TrangThai=N'Đã đến kho' ORDER BY gh.NgayDen DESC`)),
+            safeRows(() => q().input('MaNV', sql.VarChar, maNV).query(`
                        SELECT TOP 8 MaPX, NgayXuat, LoaiXuat FROM PhieuXuat
-                       WHERE MaNV=@MaNV AND TrangThai=N'Đã duyệt' ORDER BY NgayDuyet DESC`),
-            q().input('MaNV', sql.VarChar, maNV).query(`
+                       WHERE MaNV=@MaNV AND TrangThai=N'Đã duyệt' ORDER BY NgayDuyet DESC`)),
+            safeRows(() => q().input('MaNV', sql.VarChar, maNV).query(`
                        SELECT TOP 8 MaDN, NgayLap, LyDo FROM DeNghiMuaHang
-                       WHERE MaNV_Lap=@MaNV AND TrangThai=N'Yêu cầu bổ sung' ORDER BY NgayLap DESC`),
-            q().query(`SELECT COUNT(*) SoLuong FROM SanPham sp
+                       WHERE MaNV_Lap=@MaNV AND TrangThai=N'Yêu cầu bổ sung' ORDER BY NgayLap DESC`)),
+            safeRows(() => q().query(`SELECT TOP 8 kk.MaKK, COALESCE(kk.NgayDuyet, kk.NgayKiemKe) NgayDuyet,
+                              kk.LyDoTuChoi, nv.TenNV
+                       FROM KiemKe kk
+                       LEFT JOIN NhanVien nv ON nv.MaNV=kk.MaNV_Duyet
+                       WHERE kk.TrangThai=N'Từ chối'
+                         AND COALESCE(kk.NgayDuyet, kk.NgayKiemKe)>=DATEADD(day,-14,GETDATE())
+                       ORDER BY COALESCE(kk.NgayDuyet, kk.NgayKiemKe) DESC`)),
+            safeRows(() => q().query(`SELECT TOP 8 kk.MaKK, kk.NgayKiemKe
+                       FROM KiemKe kk
+                       WHERE kk.TrangThai=N'Chờ duyệt điều chỉnh'
+                         AND EXISTS (
+                            SELECT 1 FROM ChiTietKiemKe ct
+                            LEFT JOIN TonKho tk ON tk.MaKho=kk.MaKho AND tk.MaSP=ct.MaSP
+                            WHERE ct.MaKK=kk.MaKK AND ct.ChenhLech<>0
+                              AND ISNULL(tk.SLTon,0)<>ct.SLHeThong
+                         )
+                       ORDER BY kk.NgayKiemKe DESC`)),
+            safeRows(() => q().query(`SELECT COUNT(*) SoLuong FROM SanPham sp
                        LEFT JOIN TonKho tk ON tk.MaSP=sp.MaSP
-                       WHERE sp.TrangThai=N'Đang bán' AND ISNULL(tk.SLTon,0)<=sp.TonKhoToiThieu`)
+                       WHERE sp.TrangThai=N'Đang bán' AND ISNULL(tk.SLTon,0)<=sp.TonKhoToiThieu`))
         ]);
         items.push(
-            ...many(returns.recordset, r => row(`dt:${r.MaDT}`, 'warehouse-returns', 'Hàng khách trả chờ kiểm',
+            ...many(returns, r => row(`dt:${r.MaDT}`, 'warehouse-returns', 'Hàng khách trả chờ kiểm',
                 `${r.MaDT} · ${r.HinhThucXuLy} · ${r.TenNV}`, r.NgayLap, 'urgent')),
-            ...many(arrive.recordset, r => row(`gh:${r.MaTBGH}`, 'warehouse-receiving', 'Xe giao đã đến kho',
+            ...many(arrive, r => row(`gh:${r.MaTBGH}`, 'warehouse-receiving', 'Xe giao đã đến kho',
                 `${r.MaPO} · ${r.TenNCC} · nhận và kiểm hàng`, r.NgayDen, 'urgent')),
-            ...many(issues.recordset, r => row(`px:${r.MaPX}`, 'warehouse-stock-issues', 'Phiếu xuất đã duyệt, cần xác nhận xuất',
+            ...many(issues, r => row(`px:${r.MaPX}`, 'warehouse-stock-issues', 'Phiếu xuất đã duyệt, cần xác nhận xuất',
                 `${r.MaPX} · ${r.LoaiXuat} · trừ tồn khi bạn xác nhận`, r.NgayXuat, 'urgent')),
-            ...many(feedback.recordset, r => row(`dn:${r.MaDN}`, 'warehouse-requests', 'Đề nghị cần bổ sung',
-                `${r.MaDN} · ${r.LyDo || 'Mua hàng yêu cầu chỉnh'}`, r.NgayLap, 'info'))
+            ...many(feedback, r => row(`dn:${r.MaDN}`, 'warehouse-requests', 'Đề nghị cần bổ sung',
+                `${r.MaDN} · ${r.LyDo || 'Mua hàng yêu cầu chỉnh'}`, r.NgayLap, 'info')),
+            ...many(recount, r => row(`kk-reject:${r.MaKK}`, 'warehouse-inventory-counts',
+                `Kiểm kê ${r.MaKK} bị từ chối — đếm lại vì nhập hàng`,
+                `${r.LyDoTuChoi || `Quản lý ${r.TenNV || ''} từ chối vì tồn đã đổi (thường do nhập hàng)`}`.trim(),
+                r.NgayDuyet, 'urgent')),
+            ...many(drifted, r => row(`kk-drift:${r.MaKK}`, 'warehouse-inventory-counts',
+                `Tồn đã đổi sau kiểm kê ${r.MaKK} — chờ QL từ chối / đếm lại`,
+                'Tồn hiện tại khác số lúc đếm (thường do nhập hàng). Quản lý từ chối thì tạo đợt mới.',
+                r.NgayKiemKe, 'urgent'))
         );
-        const lowCount = Number(low.recordset[0]?.SoLuong || 0);
+        const lowCount = Number(low[0]?.SoLuong || 0);
         if (lowCount) {
             items.push(row(`low:${lowCount}`, 'warehouse-inventory', 'Cảnh báo tồn kho',
                 `${lowCount} mặt hàng dưới hoặc bằng mức tối thiểu`, new Date(), 'info'));
         }
     }
 
-    if (role === 'Nhân viên mua hàng') {
+    if (isRole(user, 'Nhân viên mua hàng')) {
         const [requests, approved, revise] = await Promise.all([
             q().query(`SELECT TOP 8 dn.MaDN, dn.NgayGui, dn.LyDo, nv.TenNV
                        FROM DeNghiMuaHang dn JOIN NhanVien nv ON nv.MaNV=dn.MaNV_Lap
@@ -172,7 +214,7 @@ const listForRole = async (pool, user) => {
         );
     }
 
-    if (role === 'Kế toán') {
+    if (isRole(user, 'Kế toán')) {
         await ensurePayrollSchema(pool).catch(() => {});
         const [shifts, invoices, pay, overdue, payrollPay] = await Promise.all([
             q().query(`SELECT TOP 8 ca.MaCa, ca.ThoiGianKetThuc, nv.TenNV
@@ -224,28 +266,47 @@ const listForRole = async (pool, user) => {
         }
     }
 
-    if (role === 'Thu ngân') {
-        const [ready, waiting, rejected] = await Promise.all([
-            q().input('MaNV', sql.VarChar, maNV).query(`
+    if (isRole(user, 'Thu ngân')) {
+        await ensureReturnHandoverSchema(pool).catch(() => {});
+        const [ready, leftover, waiting, rejected] = await Promise.all([
+            safeRows(() => q().input('MaNV', sql.VarChar, maNV).query(`
                 SELECT TOP 8 MaDT, NgayDuyet, HinhThucXuLy FROM PhieuDoiTra
-                WHERE MaNV_Lap=@MaNV AND TrangThai=N'Đã duyệt' ORDER BY NgayDuyet DESC`),
-            q().input('MaNV', sql.VarChar, maNV).query(`
+                WHERE TrangThai=N'Đã duyệt'
+                  AND (MaNV_XuLy=@MaNV OR (ISNULL(MaNV_XuLy, MaNV_Lap)=@MaNV AND NgayBanGiao IS NULL))
+                ORDER BY NgayDuyet DESC`)),
+            safeRows(() => q().input('MaNV', sql.VarChar, maNV).query(`
+                SELECT TOP 8 dt.MaDT, dt.NgayBanGiao, dt.HinhThucXuLy
+                FROM PhieuDoiTra dt
+                WHERE dt.TrangThai NOT IN (N'Hoàn thành', N'Từ chối', N'Đã hủy')
+                  AND dt.NgayHoan IS NULL
+                  AND dt.NgayBanGiao IS NOT NULL
+                  AND dt.MaNV_XuLy IS NULL
+                  AND EXISTS (
+                        SELECT 1 FROM CaLamViec ca
+                        WHERE ca.MaNV=@MaNV AND ca.TrangThai=N'Đang mở' AND ca.ThoiGianKetThuc IS NULL
+                          AND (dt.MaQuayXuLy IS NULL OR ca.MaQuay=dt.MaQuayXuLy)
+                  )
+                ORDER BY dt.NgayBanGiao DESC`)),
+            safeRows(() => q().input('MaNV', sql.VarChar, maNV).query(`
                 SELECT TOP 8 MaDT, NgayLap, TrangThai, HinhThucXuLy FROM PhieuDoiTra
-                WHERE MaNV_Lap=@MaNV AND TrangThai IN (N'Chờ kiểm tra', N'Chờ duyệt')
-                ORDER BY NgayLap DESC`),
-            q().input('MaNV', sql.VarChar, maNV).query(`
+                WHERE (MaNV_Lap=@MaNV OR MaNV_XuLy=@MaNV) AND TrangThai IN (N'Chờ kiểm tra', N'Chờ duyệt')
+                ORDER BY NgayLap DESC`)),
+            safeRows(() => q().input('MaNV', sql.VarChar, maNV).query(`
                 SELECT TOP 8 MaDT, NgayDuyet, HinhThucXuLy, GhiChu FROM PhieuDoiTra
                 WHERE MaNV_Lap=@MaNV AND TrangThai=N'Từ chối' AND NgayDuyet>=DATEADD(day,-3,GETDATE())
-                ORDER BY NgayDuyet DESC`)
+                ORDER BY NgayDuyet DESC`))
         ]);
         items.push(
-            ...many(ready.recordset, r => row(`dt-ok:${r.MaDT}`, 'cashier-returns',
+            ...many(leftover, r => row(`dt-left:${r.MaDT}`, 'cashier-returns',
+                'Phiếu đổi trả sót ca trước tại quầy — tự tiếp nhận và làm tiếp',
+                `${r.MaDT} · ${r.HinhThucXuLy} · không chờ người cũ`, r.NgayBanGiao, 'urgent')),
+            ...many(ready, r => row(`dt-ok:${r.MaDT}`, 'cashier-returns',
                 r.HinhThucXuLy === 'Đổi hàng' ? 'Quản lý đã duyệt — xác nhận đổi hàng' : 'Quản lý đã duyệt — xác nhận hoàn tiền',
-                `${r.MaDT} · mở ca rồi bấm xác nhận`, r.NgayDuyet, 'urgent')),
-            ...many(waiting.recordset, r => row(`dt-wait:${r.MaDT}`, 'cashier-returns',
+                `${r.MaDT} · xác nhận trên ca đang mở`, r.NgayDuyet, 'urgent')),
+            ...many(waiting, r => row(`dt-wait:${r.MaDT}`, 'cashier-returns',
                 r.TrangThai === 'Chờ kiểm tra' ? 'Đổi trả đang chờ Thủ kho kiểm' : 'Đổi trả đang chờ Quản lý duyệt',
                 `${r.MaDT} · ${r.HinhThucXuLy}`, r.NgayLap, 'wait')),
-            ...many(rejected.recordset, r => row(`dt-no:${r.MaDT}`, 'cashier-returns', 'Phiếu đổi trả bị từ chối',
+            ...many(rejected, r => row(`dt-no:${r.MaDT}`, 'cashier-returns', 'Phiếu đổi trả bị từ chối',
                 `${r.MaDT} · ${r.GhiChu || r.HinhThucXuLy}`, r.NgayDuyet, 'info'))
         );
     }
@@ -278,4 +339,18 @@ const list = async (req, res) => {
     }
 };
 
-module.exports = { list };
+const stream = (req, res) => {
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    if (!res.getHeader('Access-Control-Allow-Origin')) {
+        res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    }
+    if (typeof res.flushHeaders === 'function') res.flushHeaders();
+    res.write('retry: 2000\n\n');
+    subscribe(res);
+};
+
+module.exports = { list, stream };

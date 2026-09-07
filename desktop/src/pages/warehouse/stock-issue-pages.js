@@ -265,7 +265,7 @@
           const mode = item.TrangThai === 'Nháp' ? 'edit' : 'view';
           const action = item.TrangThai === 'Nháp' ? 'Sửa / gửi duyệt' : item.TrangThai === 'Đã duyệt' ? 'Xác nhận xuất' : 'Xem chi tiết';
           return `<tr><td><strong>${esc(item.MaPX)}</strong><small>${fmtDate(item.NgayXuat)} · ${esc(item.TenKho)}</small></td><td><strong>${esc(item.LoaiXuat)}</strong><small>${item.MaPN ? `${esc(item.MaPN)} · ${esc(item.TenNCC || '')}` : 'Không dùng Phiếu nhập nguồn'}</small></td><td><strong>${item.SoMatHang || 0} mặt hàng</strong><small>${item.TongSoLuong || 0} đơn vị xuất</small></td><td class="num"><strong>${money(item.TongGiaTriThamChieu)}</strong></td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span>${item.LyDoTuChoi ? `<small>${esc(item.LyDoTuChoi)}</small>` : ''}</td><td><button class="${item.TrangThai === 'Đã duyệt' ? 'warehouse-primary' : 'warehouse-secondary'}" data-stock-issue="${esc(item.MaPX)}" data-mode="${mode}">${action}</button></td></tr>`;
-        }).join('') : '<tr><td colspan="6" class="warehouse-empty">Chưa có Phiếu xuất kho phù hợp.</td></tr>';
+        }).join('') : `<tr><td colspan="6" class="warehouse-empty">${esc(window.FLY_SEARCH?.emptyMessage?.(search, 'phiếu xuất', 'Chưa có Phiếu xuất kho phù hợp.') || 'Chưa có Phiếu xuất kho phù hợp.')}</td></tr>`;
       } catch (error) { context.showToast(error.message, 'error'); }
     };
     await load();

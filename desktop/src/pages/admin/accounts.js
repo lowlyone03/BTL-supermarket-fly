@@ -14,13 +14,43 @@
         .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
 
+    const toDateInput = value => {
+        if (window.FLY_EMP_PROFILE?.toDateInput) return window.FLY_EMP_PROFILE.toDateInput(value);
+        if (!value) return '';
+        const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+        return match ? match[1] : '';
+    };
+
+    const formatDate = dateStr => {
+        if (window.FLY_EMP_PROFILE?.formatDate) {
+            return window.FLY_EMP_PROFILE.formatDate(dateStr) || 'Chưa cập nhật';
+        }
+        const iso = toDateInput(dateStr);
+        if (!iso) return 'Chưa cập nhật';
+        try { return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(`${iso}T00:00:00`)); }
+        catch { return 'Chưa cập nhật'; }
+    };
+
+    const profileLine = (label, value) => `<div><small>${label}</small><p>${escapeHtml(value || 'Chưa cập nhật')}</p></div>`;
+
+    const renderEmployeeProfileHtml = person => window.FLY_EMP_PROFILE?.renderCompactGrid?.(person) || `
+        <div class="acc-emp-profile-grid">
+            ${profileLine('Mã NV', person.MaNV)}
+            ${profileLine('Số CCCD', person.CCCD)}
+            ${profileLine('Ngày sinh', person.NgaySinh ? formatDate(person.NgaySinh) : '')}
+            ${profileLine('Giới tính', person.GioiTinh)}
+            ${profileLine('Số điện thoại', person.SDT)}
+            ${profileLine('Email', person.Email)}
+            <div class="emp-detail-full">${profileLine('Địa chỉ', person.DiaChi)}</div>
+        </div>`;
+
     const renderAccounts = () => {
         const normalizeSearch = window.FLY_SEARCH?.normalize || (value => String(value ?? '').trim().toLocaleLowerCase('vi-VN'));
         const search = normalizeSearch(searchInput.value);
         const selectedRole = roleFilter.value;
         const selectedStatus = statusFilter.value;
         const filtered = accounts.filter(account =>
-            [account.TenDangNhap, account.TenNV, account.ChucVu, account.TenVaiTro]
+            [account.TenDangNhap, account.TenNV, account.ChucVu, account.TenVaiTro, account.CCCD, account.SDT, account.Email, account.MaNV, account.MSTCaNhan, account.SoBHXH]
                 .some(value => normalizeSearch(value).includes(search))
             && (!selectedRole || String(account.MaVaiTro) === selectedRole)
             && (selectedStatus === '' || String(account.TrangThai) === selectedStatus)
@@ -31,15 +61,16 @@
         document.getElementById('accUsedCount').textContent = accounts.filter(account => Boolean(account.LanDangNhapCuoi)).length;
         document.getElementById('accTableBody').innerHTML = filtered.length ? filtered.map(account => {
             const isCurrent = account.MaNV === currentUser.MaNV;
-            return `<tr>
+            return `<tr class="acc-row" data-acc-action="detail" data-ma-tk="${account.MaTK}">
                 <td><strong>${escapeHtml(account.TenDangNhap)}</strong><small>${isCurrent ? 'Tài khoản đang sử dụng' : `Mã TK: ${escapeHtml(account.MaTK)}`}</small></td>
-                <td><div class="person-cell"><span class="person-avatar">${escapeHtml(account.TenNV.split(/\s+/).slice(-2).map(part => part[0]).join('').toUpperCase())}</span><span><strong>${escapeHtml(account.TenNV)}</strong><small>${escapeHtml(account.ChucVu)}</small></span></div></td>
+                <td><div class="person-cell"><span class="person-avatar">${escapeHtml(account.TenNV.split(/\s+/).slice(-2).map(part => part[0]).join('').toUpperCase())}</span><span><strong>${escapeHtml(account.TenNV)}</strong><small>${escapeHtml(account.ChucVu)}${account.CCCD ? ` · CCCD ${escapeHtml(account.CCCD)}` : ''}</small></span></div></td>
                 <td><select class="role-select" onchange="updateRole(${account.MaTK}, this.value)" ${isCurrent ? 'disabled title="Không thể tự đổi vai trò"' : ''}>
                     ${roles.map(role => `<option value="${role.MaVaiTro}" ${Number(role.MaVaiTro) === Number(account.MaVaiTro) ? 'selected' : ''}>${escapeHtml(role.TenVaiTro)}</option>`).join('')}
                 </select></td>
                 <td><span class="badge ${Number(account.TrangThai) === 1 ? 'badge-success' : 'badge-danger'}">${Number(account.TrangThai) === 1 ? 'Hoạt động' : 'Bị khóa'}</span></td>
                 <td>${account.LanDangNhapCuoi ? new Date(account.LanDangNhapCuoi).toLocaleString('vi-VN', { timeZone: HANOI_TIME_ZONE }) : 'Chưa đăng nhập'}</td>
                 <td class="align-right"><div class="action-btns">
+                    <button type="button" class="btn btn-outline" data-acc-action="detail" data-ma-tk="${account.MaTK}">Hồ sơ</button>
                     <button class="btn ${Number(account.TrangThai) === 1 ? 'btn-danger' : 'btn-outline'}" onclick="toggleStatus(${account.MaTK}, '${escapeHtml(account.TenDangNhap)}')" ${isCurrent ? 'disabled title="Không thể tự khóa"' : ''}>${Number(account.TrangThai) === 1 ? 'Khóa' : 'Mở khóa'}</button>
                     <button class="btn btn-warning" onclick="resetPwd(${account.MaTK}, '${escapeHtml(account.TenDangNhap)}')">Đặt lại MK</button>
                 </div></td>
@@ -69,11 +100,31 @@
         roleFilter.innerHTML = '<option value="">Tất cả vai trò</option>' + roles.map(role => `<option value="${role.MaVaiTro}">${escapeHtml(role.TenVaiTro)}</option>`).join('');
     };
 
+    const renderSelectedEmployeeProfile = () => {
+        const box = document.getElementById('accEmpProfile');
+        if (!box) return;
+        const maNV = document.getElementById('maNV_Acc').value;
+        const employee = availableEmployees.find(item => item.MaNV === maNV);
+        if (!employee) {
+            box.hidden = true;
+            box.innerHTML = '';
+            return;
+        }
+        box.hidden = false;
+        if (window.FLY_EMP_PROFILE?.renderAccountEditor) {
+            box.innerHTML = window.FLY_EMP_PROFILE.renderAccountEditor(employee);
+            window.FLY_EMP_PROFILE.fillForm?.(employee, 'acc_');
+        } else {
+            box.innerHTML = `<strong>${escapeHtml(employee.TenNV)}</strong><small>Hồ sơ nhân viên sẽ gắn với tài khoản này</small>${renderEmployeeProfileHtml(employee)}`;
+        }
+    };
+
     const syncRoleFromEmployee = () => {
         const maNV = document.getElementById('maNV_Acc').value;
         const employee = availableEmployees.find(item => item.MaNV === maNV);
         const role = employee && roles.find(item => item.TenVaiTro === employee.ChucVu);
         if (role) document.getElementById('maVaiTro').value = String(role.MaVaiTro);
+        renderSelectedEmployeeProfile();
     };
 
     window.loadAvailableEmployees = async () => {
@@ -84,8 +135,46 @@
         const select = document.getElementById('maNV_Acc');
         select.innerHTML = data.length === 0
             ? '<option value="">Không có nhân viên nào</option>'
-            : data.map(employee => `<option value="${escapeHtml(employee.MaNV)}">${escapeHtml(employee.TenNV)} (${escapeHtml(employee.ChucVu)})</option>`).join('');
+            : data.map(employee => `<option value="${escapeHtml(employee.MaNV)}">${escapeHtml(employee.TenNV)} (${escapeHtml(employee.ChucVu)}${employee.CCCD ? ` · ${escapeHtml(employee.CCCD)}` : ''})</option>`).join('');
         syncRoleFromEmployee();
+    };
+
+    window.openAccDetail = maTK => {
+        const account = accounts.find(item => Number(item.MaTK) === Number(maTK));
+        if (!account) return;
+        const isActive = Number(account.TrangThai) === 1;
+        const syll = window.FLY_EMP_PROFILE?.renderSyllViews?.(account, {
+            workStatus: account.TrangThaiNV || 'Đang làm việc',
+            username: account.TenDangNhap
+        }) || '';
+        document.getElementById('accDetailContent').innerHTML = `
+            <div class="emp-detail-header">
+                <div class="emp-detail-name">
+                    <p class="module-kicker">HỒ SƠ TÀI KHOẢN</p>
+                    <h2>${escapeHtml(account.TenNV)}</h2>
+                    <span class="emp-role-chip">${escapeHtml(account.TenVaiTro || account.ChucVu)}</span>
+                </div>
+                <span class="badge ${isActive ? 'badge-success' : 'badge-danger'}" style="margin-left:auto">${isActive ? 'Hoạt động' : 'Bị khóa'}</span>
+            </div>
+            <div class="emp-detail-sections">
+                <div class="emp-detail-section">
+                    <h4>Tài khoản hệ thống</h4>
+                    <div class="emp-detail-grid">
+                        ${profileLine('Tên đăng nhập', account.TenDangNhap)}
+                        ${profileLine('Mã tài khoản', account.MaTK)}
+                        ${profileLine('Vai trò', account.TenVaiTro)}
+                        ${profileLine('Đăng nhập cuối', account.LanDangNhapCuoi ? new Date(account.LanDangNhapCuoi).toLocaleString('vi-VN', { timeZone: HANOI_TIME_ZONE }) : 'Chưa đăng nhập')}
+                    </div>
+                </div>
+            </div>
+            ${syll}`;
+        const backdrop = document.getElementById('accDetailBackdrop');
+        if (backdrop) backdrop.style.display = 'flex';
+    };
+
+    window.closeAccDetail = () => {
+        const backdrop = document.getElementById('accDetailBackdrop');
+        if (backdrop) backdrop.style.display = 'none';
     };
 
     const showAccError = (id, ok, message) => {
@@ -109,6 +198,14 @@
         if (!showAccError('maNV_Acc', Boolean(maNV), 'Vui lòng chọn nhân viên chưa có tài khoản.')) ok = false;
         const userResult = fields ? fields.validateUsername(username) : { ok: Boolean(username.trim()), message: 'Vui lòng nhập tên đăng nhập.' };
         if (!showAccError('tenDangNhap', userResult.ok, userResult.message || 'Tên đăng nhập không hợp lệ.')) ok = false;
+        if (maNV && window.FLY_EMP_PROFILE?.validateProfileForm) {
+            const profileOk = window.FLY_EMP_PROFILE.validateProfileForm(showAccError, {
+                prefix: 'acc_',
+                strictCreate: false,
+                includeCore: true
+            });
+            if (!profileOk) ok = false;
+        }
         return ok;
     };
 
@@ -124,7 +221,19 @@
     };
     window.closeAccModal = () => { document.getElementById('accModal').style.display = 'none'; };
 
+    const handleAccAction = event => {
+        if (event.target.closest('select, button:not([data-acc-action])')) return;
+        const trigger = event.target.closest('[data-acc-action="detail"]');
+        if (!trigger) return;
+        event.preventDefault();
+        openAccDetail(trigger.dataset.maTk);
+    };
+
     document.getElementById('maNV_Acc').addEventListener('change', syncRoleFromEmployee);
+    document.getElementById('accTableBody')?.addEventListener('click', handleAccAction);
+    document.getElementById('accDetailBackdrop')?.addEventListener('click', event => {
+        if (event.target === event.currentTarget) closeAccDetail();
+    });
     searchInput.addEventListener('input', renderAccounts);
     roleFilter.addEventListener('change', renderAccounts);
     statusFilter.addEventListener('change', renderAccounts);
@@ -142,7 +251,9 @@
             MaNV: document.getElementById('maNV_Acc').value,
             TenDangNhap: fields?.validateUsername(document.getElementById('tenDangNhap').value).value
                 ?? document.getElementById('tenDangNhap').value.trim().toLowerCase(),
-            MaVaiTro: Number(document.getElementById('maVaiTro').value)
+            MaVaiTro: Number(document.getElementById('maVaiTro').value),
+            ...(window.FLY_EMP_PROFILE?.collectCoreFromForm?.('acc_') || {}),
+            ...(window.FLY_EMP_PROFILE?.collectFromForm?.('acc_') || {})
         };
         if (!payload.MaNV) return window.showToast('Không có nhân viên để tạo tài khoản.', 'error');
 

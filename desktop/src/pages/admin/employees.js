@@ -18,9 +18,21 @@
 
     const getInitials = name => String(name || '').trim().split(/\s+/).slice(-2).map(p => p[0]).join('').toUpperCase();
 
+    const toDateInput = value => {
+        if (window.FLY_EMP_PROFILE?.toDateInput) return window.FLY_EMP_PROFILE.toDateInput(value);
+        if (!value) return '';
+        const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+        return match ? match[1] : '';
+    };
+
     const formatDate = dateStr => {
+        if (window.FLY_EMP_PROFILE?.formatDate) {
+            return window.FLY_EMP_PROFILE.formatDate(dateStr) || '—';
+        }
         if (!dateStr) return '—';
-        try { return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(dateStr)); }
+        const iso = toDateInput(dateStr);
+        if (!iso) return '—';
+        try { return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(`${iso}T00:00:00`)); }
         catch { return '—'; }
     };
 
@@ -46,14 +58,18 @@
         MaNV: raw?.MaNV ?? raw?.maNV ?? raw?.employeeId ?? '',
         TenNV: raw?.TenNV ?? raw?.tenNV ?? raw?.name ?? '',
         ChucVu: raw?.ChucVu ?? raw?.chucVu ?? raw?.roleName ?? '',
+        CCCD: raw?.CCCD ?? raw?.cccd ?? raw?.soCCCD ?? '',
+        NgaySinh: raw?.NgaySinh ?? raw?.ngaySinh ?? null,
+        GioiTinh: raw?.GioiTinh ?? raw?.gioiTinh ?? '',
         SDT: raw?.SDT ?? raw?.sdt ?? raw?.phone ?? '',
         Email: raw?.Email ?? raw?.email ?? '',
         DiaChi: raw?.DiaChi ?? raw?.diaChi ?? raw?.address ?? '',
         TrangThai: raw?.TrangThai ?? raw?.trangThai ?? raw?.status ?? '',
-        NgayVaoLam: raw?.NgayVaoLam ?? raw?.ngayVaoLam ?? raw?.createdAt ?? null,
+        NgayVaoLam: raw?.NgayVaoLam ?? raw?.ngayVaoLam ?? null,
         HasAccount: raw?.HasAccount ?? raw?.hasAccount ?? raw?.coTaiKhoan ?? 0,
         TenDangNhap: raw?.TenDangNhap ?? raw?.tenDangNhap ?? raw?.username ?? '',
-        CaLamGanNhat: raw?.CaLamGanNhat ?? raw?.caLamGanNhat ?? ''
+        CaLamGanNhat: raw?.CaLamGanNhat ?? raw?.caLamGanNhat ?? '',
+        ...(window.FLY_EMP_PROFILE?.pick?.(raw) || {})
     });
 
     const validateField = (id, condition, msg) => {
@@ -69,25 +85,76 @@
     const validateForm = () => {
         const maNV = document.getElementById('maNV').value.trim();
         const tenNV = document.getElementById('tenNV').value.trim();
+        const cccd = document.getElementById('cccd').value.trim();
+        const ngaySinh = document.getElementById('ngaySinh').value;
+        const gioiTinh = document.getElementById('gioiTinh').value;
         const sdt = document.getElementById('sdt').value.trim();
         const email = document.getElementById('email').value.trim();
         const diaChi = document.getElementById('diaChi').value.trim();
+        const ngayVaoLam = document.getElementById('ngayVaoLam').value;
         const chucVu = document.getElementById('chucVu').value;
         let ok = true;
         const fields = window.FLY_FIELDS;
         const codeResult = fields ? fields.validateEmployeeCode(maNV) : { ok: maNV.length >= 2, message: 'Mã nhân viên phải có ít nhất 2 ký tự' };
         const nameResult = fields ? fields.validateRequiredName(tenNV, 'Họ tên nhân viên') : { ok: tenNV.length >= 2, message: 'Vui lòng nhập họ tên nhân viên' };
-        const phoneResult = fields ? fields.validateOptionalVnPhone(sdt) : { ok: !sdt || /^0\d{9,10}$/.test(sdt), message: 'Số điện thoại không hợp lệ' };
+        const strictCreate = !isEditMode;
+        const cccdResult = fields
+            ? (strictCreate ? fields.validateRequiredCccd?.(cccd) : fields.validateOptionalCccd(cccd))
+            : { ok: !cccd || /^\d{9}(\d{3})?$/.test(cccd), message: 'CCCD phải gồm 12 chữ số (hoặc CMND 9 số).' };
+        const birthResult = fields
+            ? (strictCreate ? fields.validateRequiredPastDate?.(ngaySinh, 'Ngày sinh') : fields.validateOptionalPastDate(ngaySinh, 'Ngày sinh'))
+            : { ok: !strictCreate || Boolean(ngaySinh), message: 'Ngày sinh là bắt buộc.' };
+        const genderResult = fields
+            ? (strictCreate ? fields.validateRequiredGender?.(gioiTinh) : fields.validateOptionalGender(gioiTinh))
+            : { ok: !strictCreate || Boolean(gioiTinh), message: 'Giới tính là bắt buộc.' };
+        const phoneResult = fields
+            ? (strictCreate ? fields.validateRequiredVnPhone?.(sdt, 'Số điện thoại') : fields.validateOptionalVnPhone(sdt))
+            : { ok: !sdt || /^0\d{9,10}$/.test(sdt), message: 'Số điện thoại không hợp lệ' };
         const emailResult = fields ? fields.validateOptionalEmail(email) : { ok: !email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), message: 'Email không hợp lệ' };
         const addressResult = fields ? fields.validateOptionalNote(diaChi, 300) : { ok: true };
+        const hireResult = fields
+            ? (strictCreate ? fields.validateRequiredPastDate?.(ngayVaoLam, 'Ngày vào làm') : fields.validateOptionalPastDate(ngayVaoLam, 'Ngày vào làm'))
+            : { ok: !strictCreate || Boolean(ngayVaoLam), message: 'Ngày vào làm là bắt buộc.' };
         if (addressResult.message) addressResult.message = addressResult.message.replace('Ghi chú', 'Địa chỉ');
         if (!validateField('maNV', codeResult.ok, codeResult.message || 'Mã nhân viên không hợp lệ')) ok = false;
         if (!validateField('tenNV', nameResult.ok, nameResult.message || 'Vui lòng nhập họ tên nhân viên')) ok = false;
+        if (!validateField('cccd', cccdResult.ok, cccdResult.message || 'Số CCCD không hợp lệ')) ok = false;
+        if (!validateField('ngaySinh', birthResult.ok, birthResult.message || 'Ngày sinh không hợp lệ')) ok = false;
+        if (!validateField('gioiTinh', genderResult.ok, genderResult.message || 'Giới tính không hợp lệ')) ok = false;
         if (!validateField('sdt', phoneResult.ok, phoneResult.message || 'Số điện thoại không hợp lệ')) ok = false;
         if (!validateField('email', emailResult.ok, emailResult.message || 'Email không hợp lệ')) ok = false;
         if (!validateField('diaChi', addressResult.ok, addressResult.message || 'Địa chỉ không hợp lệ')) ok = false;
+        if (!validateField('ngayVaoLam', hireResult.ok, hireResult.message || 'Ngày vào làm không hợp lệ')) ok = false;
+        if (ngaySinh && ngayVaoLam && ngayVaoLam < ngaySinh) {
+            if (!validateField('ngayVaoLam', false, 'Ngày vào làm không được trước ngày sinh.')) ok = false;
+        }
         if (!validateField('chucVu', Boolean(chucVu), 'Vui lòng chọn chức vụ.')) ok = false;
+        if (window.FLY_EMP_PROFILE?.validateProfileForm
+            && !window.FLY_EMP_PROFILE.validateProfileForm(validateField, { strictCreate, includeCore: true })) ok = false;
         return ok;
+    };
+
+    const buildEmployeePayload = (emp, overrides = {}) => {
+        const fields = window.FLY_FIELDS;
+        const source = { ...emp, ...overrides };
+        return {
+            MaNV: fields?.validateEmployeeCode(source.MaNV).value ?? String(source.MaNV || '').trim().toUpperCase(),
+            TenNV: fields?.validateRequiredName(source.TenNV, 'Họ tên nhân viên').value ?? String(source.TenNV || '').trim(),
+            ChucVu: source.ChucVu,
+            CCCD: fields?.validateOptionalCccd(source.CCCD).value ?? String(source.CCCD || '').trim(),
+            NgaySinh: toDateInput(source.NgaySinh) || null,
+            GioiTinh: fields?.validateOptionalGender(source.GioiTinh).value ?? String(source.GioiTinh || '').trim(),
+            SDT: fields?.validateOptionalVnPhone(source.SDT).value ?? String(source.SDT || '').trim(),
+            Email: fields?.validateOptionalEmail(source.Email).value ?? String(source.Email || '').trim(),
+            DiaChi: fields?.validateOptionalNote(source.DiaChi, 300).value ?? String(source.DiaChi || '').trim(),
+            NgayVaoLam: toDateInput(source.NgayVaoLam) || null,
+            TrangThai: source.TrangThai,
+            ...(() => {
+                const profile = window.FLY_EMP_PROFILE?.pick?.(source) || {};
+                if (profile.NgayCapCCCD) profile.NgayCapCCCD = toDateInput(profile.NgayCapCCCD);
+                return profile;
+            })()
+        };
     };
 
     const updateAvatarPreview = () => {
@@ -105,7 +172,7 @@
         const selectedRole = roleFilter.value;
         const selectedStatus = statusFilter.value;
         const filtered = employees.filter(emp =>
-            [emp.TenNV, emp.MaNV, emp.ChucVu, emp.SDT, emp.Email]
+            [emp.TenNV, emp.MaNV, emp.ChucVu, emp.CCCD, emp.SDT, emp.Email, emp.MSTCaNhan, emp.SoBHXH]
                 .some(value => normalizeSearch(value).includes(search))
             && (!selectedRole || emp.ChucVu === selectedRole)
             && (!selectedStatus || emp.TrangThai === selectedStatus)
@@ -127,7 +194,7 @@
             const hasAccount = Number(emp.HasAccount) === 1;
             return `
             <tr class="emp-row" data-emp-action="detail" data-ma-nv="${escapeHtml(emp.MaNV)}">
-                <td><div class="person-cell"><span class="person-avatar emp-avatar-lg" style="background:${roleColor}15;color:${roleColor}">${escapeHtml(initials)}</span><span><strong>${escapeHtml(emp.TenNV)}</strong><small>${escapeHtml(emp.MaNV)}</small></span></div></td>
+                <td><div class="person-cell"><span class="person-avatar emp-avatar-lg" style="background:${roleColor}15;color:${roleColor}">${escapeHtml(initials)}</span><span><strong>${escapeHtml(emp.TenNV)}</strong><small>${escapeHtml(emp.MaNV)}${emp.CCCD ? ` · CCCD ${escapeHtml(emp.CCCD)}` : ''}</small></span></div></td>
                 <td><span class="emp-role-chip" style="background:${roleColor}12;color:${roleColor};border-color:${roleColor}30">${escapeHtml(emp.ChucVu)}</span></td>
                 <td class="contact-cell"><span>${escapeHtml(emp.SDT || 'Chưa có SĐT')}</span><small>${escapeHtml(emp.Email || '')}</small></td>
                 <td><span class="badge ${isActive ? 'badge-success' : 'badge-secondary'}">${escapeHtml(emp.TrangThai || 'Đang làm việc')}</span></td>
@@ -180,6 +247,8 @@
         document.querySelectorAll('.emp-field-error').forEach(el => { el.textContent = ''; el.style.display = 'none'; });
         document.querySelectorAll('#empForm .input-error').forEach(el => el.classList.remove('input-error'));
         empForm.reset();
+        window.FLY_EMP_PROFILE?.resetFormDefaults?.();
+        document.querySelectorAll('.req-create').forEach(el => { el.hidden = false; });
         updateAvatarPreview();
         empModal.style.display = 'flex';
         document.getElementById('maNV').focus();
@@ -195,11 +264,17 @@
         document.getElementById('maNV').value = emp.MaNV;
         document.getElementById('maNV').readOnly = true;
         document.getElementById('tenNV').value = emp.TenNV;
+        document.getElementById('cccd').value = emp.CCCD || '';
+        document.getElementById('ngaySinh').value = toDateInput(emp.NgaySinh);
+        document.getElementById('gioiTinh').value = emp.GioiTinh || '';
         document.getElementById('chucVu').value = emp.ChucVu;
         document.getElementById('sdt').value = emp.SDT || '';
         document.getElementById('email').value = emp.Email || '';
         document.getElementById('diaChi').value = emp.DiaChi || '';
+        document.getElementById('ngayVaoLam').value = toDateInput(emp.NgayVaoLam);
         document.getElementById('trangThai').value = emp.TrangThai;
+        window.FLY_EMP_PROFILE?.fillForm?.(emp);
+        document.querySelectorAll('.req-create').forEach(el => { el.hidden = true; });
         document.querySelectorAll('.emp-field-error').forEach(el => { el.textContent = ''; el.style.display = 'none'; });
         document.querySelectorAll('#empForm .input-error').forEach(el => el.classList.remove('input-error'));
 
@@ -225,35 +300,20 @@
         const roleColors = { 'Quản lý': '#2d6a4f', 'Nhân viên mua hàng': '#1b7fa3', 'Thủ kho': '#7c5cbf', 'Thu ngân': '#c97a0a', 'Kế toán': '#c4553d' };
         const rc = roleColors[emp.ChucVu] || '#40916c';
 
+        const syll = window.FLY_EMP_PROFILE?.renderSyllViews?.(emp, {
+            initials, roleColor: rc, workStatus: emp.TrangThai, shiftLine: emp.CaLamGanNhat || 'Không có dữ liệu'
+        }) || '';
         document.getElementById('empDetailContent').innerHTML = `
             <div class="emp-detail-header">
-                <div class="emp-detail-avatar" style="background:${rc}15;color:${rc}">${escapeHtml(initials)}</div>
                 <div class="emp-detail-name">
+                    <p class="module-kicker">HỒ SƠ NHÂN SỰ</p>
                     <h2>${escapeHtml(emp.TenNV)}</h2>
                     <span class="emp-role-chip" style="background:${rc}12;color:${rc};border-color:${rc}30">${escapeHtml(emp.ChucVu)}</span>
                 </div>
                 <span class="badge ${isActive ? 'badge-success' : 'badge-secondary'}" style="margin-left:auto">${escapeHtml(emp.TrangThai)}</span>
             </div>
+            ${syll}
             <div class="emp-detail-sections">
-                <div class="emp-detail-section">
-                    <h4>Thông tin cá nhân</h4>
-                    <div class="emp-detail-grid">
-                        <div><small>Mã NV</small><p>${escapeHtml(emp.MaNV)}</p></div>
-                        <div><small>Họ tên</small><p>${escapeHtml(emp.TenNV)}</p></div>
-                        <div><small>Số điện thoại</small><p>${escapeHtml(emp.SDT || 'Chưa cập nhật')}</p></div>
-                        <div><small>Email</small><p>${escapeHtml(emp.Email || 'Chưa cập nhật')}</p></div>
-                        <div class="emp-detail-full"><small>Địa chỉ</small><p>${escapeHtml(emp.DiaChi || 'Chưa cập nhật')}</p></div>
-                    </div>
-                </div>
-                <div class="emp-detail-section">
-                    <h4>Thông tin công việc</h4>
-                    <div class="emp-detail-grid">
-                        <div><small>Chức vụ</small><p>${escapeHtml(emp.ChucVu)}</p></div>
-                        <div><small>Ngày vào làm</small><p>${formatDate(emp.NgayVaoLam)}</p></div>
-                        <div><small>Trạng thái</small><p>${escapeHtml(emp.TrangThai)}</p></div>
-                        <div><small>Ca làm gần nhất</small><p>${escapeHtml(emp.CaLamGanNhat || 'Không có dữ liệu')}</p></div>
-                    </div>
-                </div>
                 <div class="emp-detail-section">
                     <h4>Tài khoản hệ thống</h4>
                     ${hasAccount
@@ -288,15 +348,7 @@
             const res = await fetch(`${API}/employees/${encodeURIComponent(maNV)}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({
-                    MaNV: emp.MaNV,
-                    TenNV: emp.TenNV,
-                    ChucVu: emp.ChucVu,
-                    SDT: emp.SDT,
-                    Email: emp.Email,
-                    DiaChi: emp.DiaChi,
-                    TrangThai: newStatus
-                })
+                body: JSON.stringify(buildEmployeePayload(emp, { TrangThai: newStatus }))
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Không thể cập nhật trạng thái.');
@@ -328,20 +380,20 @@
     empForm.onsubmit = async event => {
         event.preventDefault();
         if (!validateForm()) return;
-        const payload = {
-            MaNV: window.FLY_FIELDS?.validateEmployeeCode(document.getElementById('maNV').value).value
-                ?? document.getElementById('maNV').value.trim().toUpperCase(),
-            TenNV: window.FLY_FIELDS?.validateRequiredName(document.getElementById('tenNV').value, 'Họ tên nhân viên').value
-                ?? document.getElementById('tenNV').value.trim(),
+        const payload = buildEmployeePayload({
+            MaNV: document.getElementById('maNV').value,
+            TenNV: document.getElementById('tenNV').value,
             ChucVu: document.getElementById('chucVu').value,
-            SDT: window.FLY_FIELDS?.validateOptionalVnPhone(document.getElementById('sdt').value).value
-                ?? document.getElementById('sdt').value.trim(),
-            Email: window.FLY_FIELDS?.validateOptionalEmail(document.getElementById('email').value).value
-                ?? document.getElementById('email').value.trim(),
-            DiaChi: window.FLY_FIELDS?.validateOptionalNote(document.getElementById('diaChi').value, 300).value
-                ?? document.getElementById('diaChi').value.trim(),
-            TrangThai: document.getElementById('trangThai').value
-        };
+            CCCD: document.getElementById('cccd').value,
+            NgaySinh: document.getElementById('ngaySinh').value,
+            GioiTinh: document.getElementById('gioiTinh').value,
+            SDT: document.getElementById('sdt').value,
+            Email: document.getElementById('email').value,
+            DiaChi: document.getElementById('diaChi').value,
+            NgayVaoLam: document.getElementById('ngayVaoLam').value,
+            TrangThai: document.getElementById('trangThai').value,
+            ...(window.FLY_EMP_PROFILE?.collectFromForm?.() || {})
+        });
 
         const url = isEditMode ? `${API}/employees/${encodeURIComponent(payload.MaNV)}` : `${API}/employees`;
         try {
@@ -373,7 +425,13 @@
 
     // Real-time validation & avatar preview
     document.getElementById('tenNV')?.addEventListener('input', updateAvatarPreview);
-    ['maNV', 'tenNV', 'sdt', 'email', 'diaChi'].forEach(id => {
+    document.getElementById('diaChi')?.addEventListener('blur', () => {
+        const choO = document.getElementById('choOHienNay');
+        const diaChi = document.getElementById('diaChi')?.value?.trim();
+        if (choO && !choO.value.trim() && diaChi) choO.value = diaChi;
+    });
+    const profileBlurIds = window.FLY_EMP_PROFILE?.blurFieldIds || [];
+    ['maNV', 'tenNV', 'cccd', 'ngaySinh', 'gioiTinh', 'sdt', 'email', 'diaChi', 'ngayVaoLam', ...profileBlurIds].forEach(id => {
         document.getElementById(id)?.addEventListener('blur', () => {
             const v = document.getElementById(id).value.trim();
             const fields = window.FLY_FIELDS;
@@ -384,6 +442,18 @@
             if (id === 'tenNV') {
                 const result = fields ? fields.validateRequiredName(v, 'Họ tên nhân viên') : { ok: v.length >= 2, message: 'Vui lòng nhập họ tên nhân viên' };
                 validateField('tenNV', result.ok, result.message);
+            }
+            if (id === 'cccd') {
+                const result = fields ? fields.validateOptionalCccd(v) : { ok: !v || /^\d{9}(\d{3})?$/.test(v), message: 'CCCD phải gồm 12 chữ số (hoặc CMND 9 số).' };
+                validateField('cccd', result.ok, result.message);
+            }
+            if (id === 'ngaySinh') {
+                const result = fields ? fields.validateOptionalPastDate(v, 'Ngày sinh') : { ok: true };
+                validateField('ngaySinh', result.ok, result.message);
+            }
+            if (id === 'gioiTinh') {
+                const result = fields ? fields.validateOptionalGender(v) : { ok: true };
+                validateField('gioiTinh', result.ok, result.message);
             }
             if (id === 'sdt') {
                 const result = fields ? fields.validateOptionalVnPhone(v) : { ok: !v || /^0\d{9,10}$/.test(v), message: 'Số điện thoại không hợp lệ' };
@@ -396,6 +466,16 @@
             if (id === 'diaChi') {
                 const result = fields ? fields.validateOptionalNote(v, 300) : { ok: true };
                 validateField('diaChi', result.ok, result.message?.replace('Ghi chú', 'Địa chỉ'));
+            }
+            if (id === 'ngayVaoLam') {
+                const ngaySinh = document.getElementById('ngaySinh').value;
+                const result = fields ? fields.validateOptionalPastDate(v, 'Ngày vào làm') : { ok: true };
+                if (!result.ok) validateField('ngayVaoLam', false, result.message);
+                else if (ngaySinh && v && v < ngaySinh) validateField('ngayVaoLam', false, 'Ngày vào làm không được trước ngày sinh.');
+                else validateField('ngayVaoLam', true, '');
+            }
+            if (profileBlurIds.includes(id)) {
+                window.FLY_EMP_PROFILE?.validateProfileForm?.(validateField);
             }
         });
     });

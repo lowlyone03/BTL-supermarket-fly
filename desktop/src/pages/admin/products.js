@@ -126,7 +126,7 @@
         <td>${esc(item.TenDM)}<small>${esc(item.MaDM)}</small></td><td><strong>${money(item.GiaNhap)}</strong><small>Giá bán ${money(item.GiaBan)}</small></td><td>${item.TonKhoToiThieu}</td>
         <td><strong>${item.SLTon}</strong><small>${Number(item.ChuaNhapLanDau) === 1 ? 'Chưa nhập lần đầu' : `Đang đặt ${item.SLDatMua}`}</small></td>
         <td><span class="status-badge ${item.TrangThai === 'Đang bán' ? 'active' : 'locked'}"><i></i>${esc(item.TrangThai)}</span></td>
-        <td class="align-right"><div class="action-group"><button class="btn-outline" data-edit-product="${esc(item.MaSP)}">Chỉnh sửa</button><button class="btn-outline ${item.TrangThai === 'Đang bán' ? 'danger-text' : ''}" data-toggle-product="${esc(item.MaSP)}">${item.TrangThai === 'Đang bán' ? 'Ngừng bán' : 'Kích hoạt'}</button></div></td></tr>`).join('') : '<tr><td colspan="7" class="empty-state">Không có sản phẩm phù hợp.</td></tr>';
+        <td class="align-right"><div class="action-group"><button class="btn-outline" data-edit-product="${esc(item.MaSP)}">Chỉnh sửa</button><button class="btn-outline ${item.TrangThai === 'Đang bán' ? 'danger-text' : ''}" data-toggle-product="${esc(item.MaSP)}">${item.TrangThai === 'Đang bán' ? 'Ngừng bán' : 'Kích hoạt'}</button></div></td></tr>`).join('') : `<tr><td colspan="7" class="empty-state">${esc(window.FLY_SEARCH?.emptyMessage?.(search, 'sản phẩm', 'Không có sản phẩm phù hợp.') || 'Không có sản phẩm phù hợp.')}</td></tr>`;
     } catch (error) { window.showToast(error.message, 'error'); }
   };
 

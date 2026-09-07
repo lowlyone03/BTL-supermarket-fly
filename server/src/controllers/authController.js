@@ -46,7 +46,7 @@ const login = async (req, res) => {
         // 4. Đăng nhập thành công -> Tạo Token
         const secretKey = process.env.JWT_SECRET || 'supermarket_fly_secret_123';
         const token = jwt.sign(
-            { MaTK: user.MaTK, MaNV: user.MaNV, MaVaiTro: user.MaVaiTro, TenVaiTro: user.TenVaiTro },
+            { MaTK: user.MaTK, MaNV: user.MaNV, MaVaiTro: user.MaVaiTro, TenVaiTro: user.TenVaiTro, TenNV: user.TenNV },
             secretKey,
             { expiresIn: '8h' } // Token có hạn 8 tiếng (theo ca làm việc)
         );
