@@ -275,21 +275,7 @@ const lineAmount = (row) => {
     return qty * price;
 };
 
-const collectPhotos = (rows = []) => {
-    const seen = new Set();
-    const photos = [];
-    for (const row of rows) {
-        const raw = String(row.DuongDanAnh || row.AnhChungTu || '').trim();
-        if (!raw || seen.has(raw)) continue;
-        seen.add(raw);
-        photos.push({
-            path: raw,
-            name: path.basename(raw.replace(/\\/g, '/'))
-        });
-        if (photos.length >= 3) break;
-    }
-    return photos;
-};
+const collectPhotos = () => [];
 
 const loadLinesSafe = async (pool, sqlText, inputs) => {
     const rows = await runQuery(pool, sqlText, inputs).catch(() => []);
@@ -307,7 +293,7 @@ const loadPo = async (pool, id) => {
         WHERE po.MaPO=@Id`, { Id: { type: sql?.VarChar, value: id } });
     if (!header) return null;
     const lines = await loadLinesSafe(pool, `
-        SELECT ct.MaSP, sp.TenSP, ct.SoLuong, ct.DonGia, ct.ThanhTien, sp.DuongDanAnh
+        SELECT ct.MaSP, sp.TenSP, ct.SoLuong, ct.DonGia, ct.ThanhTien
         FROM ChiTietDonMua ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
         WHERE ct.MaPO=@Id ORDER BY sp.TenSP`, { Id: { type: sql?.VarChar, value: id } });
     const related = await oneRow(pool, `
@@ -345,7 +331,7 @@ const loadPx = async (pool, id) => {
         WHERE px.MaPX=@Id`, { Id: { type: sql?.VarChar, value: id } });
     if (!header) return null;
     const lines = await loadLinesSafe(pool, `
-        SELECT ct.MaSP, sp.TenSP, ct.SoLuong, ct.DonGia, (ct.SoLuong*ISNULL(ct.DonGia,0)) ThanhTien, sp.DuongDanAnh
+        SELECT ct.MaSP, sp.TenSP, ct.SoLuong, ct.DonGia, (ct.SoLuong*ISNULL(ct.DonGia,0)) ThanhTien
         FROM ChiTietPhieuXuat ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
         WHERE ct.MaPX=@Id ORDER BY sp.TenSP`, { Id: { type: sql?.VarChar, value: id } });
     const tong = lines.reduce((sum, row) => sum + Number(row.ThanhTien || 0), 0);
@@ -375,7 +361,7 @@ const loadKk = async (pool, id) => {
     const lines = await loadLinesSafe(pool, `
         SELECT ct.MaSP, sp.TenSP, ct.SLHeThong, ct.SLThucTe, ct.ChenhLech, ct.NguyenNhan,
                ct.SLThucTe SoLuong, ISNULL(tk.DonGiaBinhQuan,0) DonGia,
-               (ct.ChenhLech*ISNULL(tk.DonGiaBinhQuan,0)) ThanhTien, sp.DuongDanAnh
+               (ct.ChenhLech*ISNULL(tk.DonGiaBinhQuan,0)) ThanhTien
         FROM ChiTietKiemKe ct
         JOIN SanPham sp ON sp.MaSP=ct.MaSP
         JOIN KiemKe kk ON kk.MaKK=ct.MaKK
@@ -407,7 +393,7 @@ const loadDt = async (pool, id) => {
         WHERE dt.MaDT=@Id`, { Id: { type: sql?.VarChar, value: id } });
     if (!header) return null;
     const lines = await loadLinesSafe(pool, `
-        SELECT ct.MaSP, sp.TenSP, ct.SoLuong, ct.DonGia, ct.ThanhTien, ct.LoaiDong, sp.DuongDanAnh
+        SELECT ct.MaSP, sp.TenSP, ct.SoLuong, ct.DonGia, ct.ThanhTien, ct.LoaiDong
         FROM ChiTietDoiTra ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
         WHERE ct.MaDT=@Id ORDER BY ct.LoaiDong, sp.TenSP`, { Id: { type: sql?.VarChar, value: id } });
     return {
@@ -440,7 +426,7 @@ const loadPc = async (pool, id) => {
     if (!header) return null;
     const lines = header.MaHDMH
         ? await loadLinesSafe(pool, `
-            SELECT ct.MaSP, sp.TenSP, ct.SoLuong, ct.DonGia, ct.ThanhTien, ct.ThueSuat, sp.DuongDanAnh
+            SELECT ct.MaSP, sp.TenSP, ct.SoLuong, ct.DonGia, ct.ThanhTien, ct.ThueSuat
             FROM ChiTietHoaDonMuaHang ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
             WHERE ct.MaHDMH=@Hd ORDER BY sp.TenSP`, { Hd: { type: sql?.VarChar, value: header.MaHDMH } })
         : [];
@@ -579,12 +565,6 @@ const buildApprovalCard = (dossier = {}, lang = 'vi') => {
             rows.push(kv(doc.label, textCode(doc.value || '—')));
         }
     }
-    if (dossier.photos?.length) {
-        rows.push('', '<b>Ảnh / file</b>');
-        for (const photo of dossier.photos) {
-            rows.push(`• ${textCode(photo.name || photo.path)} — xem ảnh trên Fly nếu máy LAN`);
-        }
-    }
     if (dossier.note) rows.push('', `<i>${escapeHtml(String(dossier.note).slice(0, 400))}</i>`);
     rows.push('', `<i>${escapeHtml(t(lang, 'flyHint'))}</i>`);
     return rows.filter(line => line !== '').join('\n');
@@ -660,6 +640,17 @@ const listPendingDecisions = (inbox = []) => inbox
     })
     .filter(Boolean);
 
+const pendingListKeyboard = (items = []) => {
+    const cards = listPendingDecisions(items).slice(0, 8);
+    if (!cards.length) return null;
+    return {
+        inline_keyboard: cards.map(item => ([{
+            text: `📄 ${item.id}`,
+            callback_data: decisionCallbackData('docs', item.kind, item.id)
+        }]))
+    };
+};
+
 module.exports = {
     KIND_META,
     DENY_403,
@@ -690,5 +681,6 @@ module.exports = {
     publicFileUrl,
     describeLocalPhoto,
     listPendingDecisions,
+    pendingListKeyboard,
     splitTelegramText
 };

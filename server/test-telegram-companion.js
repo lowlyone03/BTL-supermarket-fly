@@ -11,11 +11,13 @@ const {
     buildFlyDashboard, escapeHtml, buildInboxPushMessage, buildAttendancePendingMessage,
     buildPendingMessage, ATTENDANCE_NOTE_VI, prettyShiftName,
     buildReportsMessage, buildReportsMessages, splitTelegramText,
+    buildStartWelcomeBound,
     DENY_GROUP, DENY_VIEW, DENY_STRANGER, DENY_NOT_MANAGER, DENY_NOT_MANAGER_CMD,
     maskOtp, maskChatId, isManagerRole, t
 } = require('./src/services/telegramMessages');
 const teleDecision = require('./src/services/telegramApprove');
 const teleDocs = require('./src/services/telegramDocuments');
+const voucherImage = require('./src/services/telegramVoucherImage');
 const notify = require('./src/services/telegramNotify');
 const bot = require('./src/controllers/telegramBotController');
 
@@ -142,6 +144,7 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         assert.ok(ql.includes('💰 Doanh thu'));
         assert.ok(ql.includes('🧾 Công nợ'));
         assert.ok(ql.includes('📄 Chứng từ'));
+        assert.ok(ql.includes('📚 Tài liệu'));
         assert.ok(ql.includes('⏳ Việc chờ'));
         assert.ok(ql.includes('📊 Báo cáo'));
         assert.ok(ql.includes('🕐 Ca'));
@@ -166,6 +169,7 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         assert.match(ql, /\/payroll — Lương tóm tắt kỳ/);
         assert.match(ql, /Không \/pay \/complete/);
         assert.match(ql, /\/reports — Báo cáo cửa hàng/);
+        assert.match(ql, /\/guide — Tài liệu \/ quy tắc/);
         assert.match(ql, /\/docs — Chứng từ/);
         assert.doesNotMatch(ql, /\/lowstock/);
         assert.doesNotMatch(ql, /\/payroll NV008/);
@@ -188,6 +192,7 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         const vi = bot.replyKeyboard('vi', { bound: true });
         assert.equal(vi.resize_keyboard, true);
         assert.equal(vi.is_persistent, true);
+        assert.equal(vi.one_time_keyboard, false);
         assert.equal(vi.keyboard.length, 6);
         assert.ok(vi.keyboard.every(row => row.length === 2));
         const viText = vi.keyboard.flat().map(btn => btn.text);
@@ -195,18 +200,26 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
             '📄 Chứng từ', '⏳ Cần duyệt',
             '📊 Báo cáo', '💰 Doanh thu hôm nay'
         ]);
+        assert.ok(viText.includes('📚 Tài liệu / Quy tắc'));
+        assert.ok(viText.includes('⬆️ Ẩn menu'));
         assert.ok(!viText.some(text => /Game|Voucher|VietQR|Nạp|Mở shop|approve/i.test(text)));
         const guest = bot.replyKeyboard('vi', { bound: false });
         assert.equal(guest.keyboard[1].length, 1);
         assert.match(guest.keyboard[1][0].text, /🔗 Liên kết/);
+        assert.ok(guest.keyboard.flat().some(btn => /Ẩn menu/.test(btn.text)));
         const en = bot.replyKeyboard('en', { bound: true }).keyboard.flat().map(btn => btn.text);
         assert.ok(en.includes('💰 Today revenue'));
         assert.ok(en.includes('📋 Summary /fly'));
+        assert.ok(en.includes('⬆️ Hide menu'));
         const zh = bot.replyKeyboard('zh', { bound: true }).keyboard.flat().map(btn => btn.text);
         assert.ok(zh.includes('🛍️ 商品 / 低库存'));
         assert.ok(zh.includes('📋 摘要 /fly'));
+        assert.ok(zh.includes('⬆️ 隐藏菜单'));
         assert.equal(bot.matchReplyCommand('Game'), null);
         assert.equal(bot.matchReplyCommand('Nạp VietQR'), null);
+        assert.equal(bot.matchReplyCommand('⬆️ Ẩn menu').name, 'hidekb');
+        assert.equal(bot.matchReplyCommand('⬇️ Hiện menu').name, 'showkb');
+        assert.equal(bot.matchReplyCommand('📚 Tài liệu / Quy tắc').name, 'guide');
     });
 
     await test('Không export hàm approve / pay / complete', () => {
@@ -528,10 +541,24 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         assert.equal(bot.parseCommand('📦 Việc chờ duyệt').name, 'pending');
         assert.equal(bot.parseCommand('⏳ Cần duyệt').name, 'pending');
         assert.equal(bot.parseCommand('📊 Báo cáo').name, 'reports');
+        assert.equal(bot.parseCommand('Báo cáo').name, 'reports');
         assert.equal(bot.parseCommand('📄 Chứng từ').name, 'docs');
+        assert.equal(bot.parseCommand('Chứng từ').name, 'docs');
+        assert.equal(bot.parseCommand('⬆️ Ẩn menu').name, 'hidekb');
+        assert.equal(bot.parseCommand('Ẩn menu').name, 'hidekb');
+        assert.equal(bot.parseCommand('⬇️ Hiện menu').name, 'showkb');
+        assert.equal(bot.parseCommand('📚 Tài liệu / Quy tắc').name, 'guide');
+        assert.deepEqual(bot.parseCommand('/guide'), { name: 'guide', arg: '' });
+        assert.deepEqual(bot.parseCommand('/rules'), { name: 'guide', arg: '' });
+        assert.deepEqual(bot.parseCommand('/guide gross'), { name: 'guide', arg: 'gross' });
+        assert.equal(bot.parseGuideArg('gross'), 'gross');
+        assert.equal(bot.parseCommand('🧾 Chứng từ').name, 'docs');
         assert.deepEqual(bot.parseCommand('/docs po:PO00001'), { name: 'docs', arg: 'po:PO00001' });
         assert.deepEqual(bot.parseDocsArg('po:PO00001'), { kind: 'po', id: 'PO00001' });
         assert.equal(bot.parseCommand('🧾 Công nợ NCC').name, 'debt');
+        assert.equal(bot.parseCommand('Công nợ').name, 'debt');
+        assert.equal(bot.parseCommand('📋 Công nợ').name, 'debt');
+        assert.equal(bot.parseCommand('Việc chờ').name, 'pending');
         assert.equal(bot.parseCommand('📋 Summary /fly').name, 'fly');
         assert.equal(bot.parseCommand('💰 今日销售').name, 'revenue');
         assert.equal(DENY_VIEW.includes('không xem'), true);
@@ -568,11 +595,38 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         }
     });
 
+    const parseTelegramBody = (url, opts) => {
+        const method = String(url || '').split('/').pop() || '';
+        const raw = opts?.body;
+        const base = { _method: method, _url: String(url || '') };
+        if (raw == null) return base;
+        if (typeof raw === 'string') {
+            try { return { ...JSON.parse(raw), ...base }; } catch { return { raw, ...base }; }
+        }
+        if (typeof raw === 'object' && typeof raw.entries === 'function') {
+            const body = { _form: true, ...base };
+            for (const [key, value] of raw.entries()) {
+                if (value && typeof value === 'object') {
+                    const name = value.name || '';
+                    body[key] = name || '[blob]';
+                    if (key === 'photo') {
+                        body.photoName = name;
+                        body.photoSize = typeof value.size === 'number' ? value.size : undefined;
+                    }
+                } else {
+                    body[key] = value;
+                }
+            }
+            return body;
+        }
+        return base;
+    };
+
     const collectSent = (row) => {
         const sent = [];
         notify.setTelegramRuntime({
-            fetchFn: async (_url, opts) => {
-                sent.push(opts?.body ? JSON.parse(opts.body) : {});
+            fetchFn: async (url, opts) => {
+                sent.push(parseTelegramBody(url, opts));
                 return { json: async () => ({ ok: true, result: [] }) };
             },
             getPool: async () => mockPool(row),
@@ -756,13 +810,17 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         const welcomes = sent.filter(item => item.text);
         assert.equal(welcomes.length, 1);
         assert.equal(welcomes[0].disable_notification, true);
-        assert.match(welcomes[0].text, /Chào Quản lý/);
+        assert.match(welcomes[0].text, /Kính chào Quản lý|[Cc]hào Quản lý/);
         assert.match(welcomes[0].text, /Nguyễn Minh Anh/);
         assert.match(welcomes[0].text, /Hà Nội/);
-        assert.match(welcomes[0].text, /\/fly/);
-        assert.match(welcomes[0].text, /DT ngày|Today revenue|今日销售/);
+        assert.match(welcomes[0].text, /Ngày vận hành|Operating day|经营日/);
+        assert.match(welcomes[0].text, /\/reports/);
         assert.match(welcomes[0].text, /Việc chờ|Công chờ duyệt/);
-        assert.match(welcomes[0].text, /UC32|Duyệt|nhật ký|Không chi lương/);
+        assert.match(welcomes[0].text, /Nhật ký|NhatKy/);
+        assert.match(welcomes[0].text, /📄|Chứng từ/);
+        assert.match(welcomes[0].text, /PO|phiếu xuất|chấm công/);
+        assert.doesNotMatch(welcomes[0].text, /Không duyệt trên Telegram/);
+        assert.doesNotMatch(welcomes[0].text, /Bot chỉ đọc số/);
         assert.doesNotMatch(welcomes[0].text, /GMT|Mon Sep|Indochina/);
         const boundKb = sent[0].reply_markup?.keyboard || [];
         const boundLabels = boundKb.flat().map(btn => btn.text);
@@ -779,9 +837,58 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         assert.ok(boundLabels.includes('💳 Thanh toán'));
         assert.ok(boundLabels.includes('🛍️ Sản phẩm / tồn thấp'));
         assert.ok(boundLabels.includes('📋 Tóm tắt /fly'));
-        assert.ok(boundLabels.includes('🌐 Ngôn ngữ'));
+        assert.ok(boundLabels.includes('📚 Tài liệu / Quy tắc'));
+        assert.ok(boundLabels.includes('⬆️ Ẩn menu'));
         assert.ok(boundLabels.includes('❓ Trợ giúp'));
         assert.ok(!boundLabels.some(text => /Game|Voucher|VietQR|Nạp|Mở shop/i.test(text)));
+    });
+
+    await test('template chào QL: tên + DT/GV/lãi gộp, không cấm duyệt Tele', () => {
+        const text = buildStartWelcomeBound(
+            { TenNV: 'Nguyễn Minh Anh', TenVaiTro: 'Quản lý' },
+            'vi',
+            {
+                summary: {
+                    operatingDay: '2026-09-07',
+                    DoanhThuThuan: 12500000,
+                    GiaVonHangBanThuan: 8200000,
+                    LoiNhuanGop: 4300000,
+                    caLech: ['CA12']
+                },
+                inbox: [
+                    { id: 'po:PO00001', title: 'Đơn mua chờ duyệt' },
+                    { id: 'cc:NV008', title: 'Chấm công chờ duyệt' }
+                ]
+            }
+        );
+        assert.match(text, /Kính chào Quản lý/);
+        assert.match(text, /<b>Nguyễn Minh Anh<\/b>/);
+        assert.match(text, /Hà Nội/);
+        assert.match(text, /Ngày vận hành 07\/09\/2026/);
+        assert.match(text, /Doanh thu/);
+        assert.match(text, /12[.\s,]500[.\s,]000đ/);
+        assert.match(text, /Giá vốn/);
+        assert.match(text, /8[.\s,]200[.\s,]000đ/);
+        assert.match(text, /Lãi gộp/);
+        assert.match(text, /4[.\s,]300[.\s,]000đ/);
+        assert.match(text, /Không trừ tiền trả NCC/);
+        assert.match(text, /Việc chờ/);
+        assert.match(text, /CA12/);
+        assert.match(text, /Công chờ duyệt/);
+        assert.match(text, /\/reports/);
+        assert.match(text, /📄 Chứng từ/);
+        assert.match(text, /Fly → Nhật ký/);
+        assert.doesNotMatch(text, /Không duyệt trên Telegram/);
+        assert.doesNotMatch(text, /Bot chỉ đọc số/);
+        assert.doesNotMatch(text, /GMT|Mon Sep|Indochina/);
+        const en = buildStartWelcomeBound({ TenNV: 'Nguyễn Minh Anh' }, 'en', { summary: { operatingDay: '2026-09-07', DoanhThuThuan: 1 } });
+        const zh = buildStartWelcomeBound({ TenNV: 'Nguyễn Minh Anh' }, 'zh', { summary: { operatingDay: '2026-09-07', DoanhThuThuan: 1 } });
+        assert.match(en, /Store Manager/);
+        assert.match(en, /\/reports/);
+        assert.doesNotMatch(en, /Không duyệt trên Telegram|cannot approve on Telegram/i);
+        assert.match(zh, /店长/);
+        assert.match(zh, /\/reports/);
+        assert.doesNotMatch(zh, /Không duyệt trên Telegram/);
     });
 
     await test('chọn zh → help tiếng Trung; OTP trim vẫn bind', async () => {
@@ -1054,6 +1161,10 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         assert.match(sheet, /Sữa tươi/);
         assert.match(sheet, /120\.000đ/);
         assert.match(sheet, /07\/09\/2026/);
+        assert.match(sheet, /<b>Nhà cung cấp<\/b>/);
+        assert.match(sheet, /📦 Dòng hàng/);
+        assert.match(sheet, /💰 Tổng hợp/);
+        assert.doesNotMatch(sheet, /<code>/);
         assert.doesNotMatch(sheet, /GMT|Mon Sep|Indochina|toString/);
         const pages = splitTelegramText(`${'a\n'.repeat(2000)}dòng hàng SP001`, 200);
         assert.ok(pages.length >= 2);
@@ -1072,14 +1183,18 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
 
     await test('callback docs sinh tin có dòng hàng', async () => {
         bot.resetChatLangCache();
+        const sheetPo = {
+            kind: 'po',
+            title: 'ĐƠN MUA HÀNG',
+            number: 'PO00001',
+            lines: [{ MaSP: 'SP001', TenSP: 'Sữa tươi', SoLuong: 2, DonGia: 15000, ThanhTien: 30000 }]
+        };
         bot.setDocumentPackOverride(async () => ({
             messages: [{
                 title: 'ĐƠN MUA HÀNG',
-                text: teleDocs.buildDocumentSheet({
-                    title: 'ĐƠN MUA HÀNG',
-                    number: 'PO00001',
-                    lines: [{ MaSP: 'SP001', TenSP: 'Sữa tươi', SoLuong: 2, DonGia: 15000, ThanhTien: 30000 }]
-                }),
+                number: 'PO00001',
+                text: teleDocs.buildDocumentSheet(sheetPo),
+                sheet: sheetPo,
                 photos: []
             }]
         }));
@@ -1101,8 +1216,322 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         assert.ok(paper, 'phải gửi ít nhất 1 tin chứng từ');
         assert.match(paper.text, /SP001/);
         assert.match(paper.text, /Sữa tươi/);
+        assert.doesNotMatch(paper.text, /<code>/);
         assert.doesNotMatch(paper.text, /GMT|Mon Sep|Indochina|toString/);
+        const photo = sent.find(item => item._method === 'sendPhoto');
+        assert.ok(photo, 'phải gửi ảnh giấy chứng từ');
+        assert.match(String(photo.photoName || photo.photo || ''), /chung-tu/);
+        assert.doesNotMatch(JSON.stringify(sent), /san-pham-/);
         bot.setDocumentPackOverride(null);
+    });
+
+    await test('Giấy chứng từ SVG A5 trắng, không ảnh sản phẩm', async () => {
+        const sheet = teleDocs.sheetPo({
+            MaPO: 'PO00001',
+            NgayLap: new Date('2026-09-07T00:00:00+07:00'),
+            TrangThai: 'Đã duyệt',
+            TenNCC: 'NCC ABC',
+            TongTien: 120000,
+            NguoiLap: 'Lan'
+        }, [{
+            MaSP: 'SP001', TenSP: 'Sữa tươi', SoLuong: 10, DonGia: 12000, ThanhTien: 120000,
+            DuongDanAnh: '/uploads/products/san-pham-banh.jpg'
+        }]);
+        assert.equal((sheet.photos || []).length, 0);
+        const svg = voucherImage.buildVoucherSvg(sheet);
+        assert.match(svg, /SUPERMARKET FLY/);
+        assert.match(svg, /Hà Nội/);
+        assert.match(svg, /ĐƠN MUA HÀNG/);
+        assert.match(svg, /PO00001/);
+        assert.match(svg, /Sữa tươi/);
+        assert.match(svg, /width="1000"/);
+        assert.match(svg, /height="1414"/);
+        assert.doesNotMatch(svg, /san-pham-/);
+        const paper = await voucherImage.renderVoucherPng(sheet);
+        assert.equal(paper.buffer[0], 0x89);
+        assert.equal(paper.buffer[1], 0x50);
+        assert.equal(paper.buffer[2], 0x4E);
+        assert.equal(paper.buffer[3], 0x47);
+        assert.match(paper.filename, /chung-tu-po-PO00001/);
+        assert.doesNotMatch(paper.filename, /san-pham-/);
+        assert.equal(paper.isPaper, true);
+        assert.equal(voucherImage.isProductImagePath('/uploads/products/san-pham-banh.jpg'), true);
+        assert.equal(voucherImage.isProductImagePath(paper), false);
+        const kinds = [
+            teleDocs.sheetPn({ MaPN: 'PN1', TrangThai: 'Đã xác nhận', TongTien: 1, TenNCC: 'A' }, [{ MaSP: 'SP1', TenSP: 'X', SoLuongChapNhan: 1, DonGiaNhap: 1, ThanhTien: 1 }]),
+            teleDocs.sheetHdm({ MaHDMH: 'HDM1', SoHoaDon: 'HDN1', TongTienHang: 1, TienThue: 0, TongCong: 1 }, [{ MaSP: 'SP1', TenSP: 'X', SoLuong: 1, DonGia: 1, ThanhTien: 1 }]),
+            teleDocs.sheetHd({ MaHD: 'HD1', TongTienHang: 1, TienGiamGia: 0, TongThanhToan: 1 }, [{ MaSP: 'SP1', TenSP: 'X', SoLuong: 1, DonGia: 1, ThanhTien: 1 }]),
+            teleDocs.sheetPx({ MaPX: 'PX1', TrangThai: 'Chờ duyệt' }, [{ MaSP: 'SP1', TenSP: 'X', SoLuong: 1, DonGia: 1, ThanhTien: 1 }]),
+            teleDocs.sheetKk({ MaKK: 'KK1', TrangThai: 'Chờ duyệt' }, [{ MaSP: 'SP1', TenSP: 'X', SLHeThong: 1, SLThucTe: 1, ChenhLech: 0 }]),
+            teleDocs.sheetDt({ MaDT: 'DT1', HinhThucXuLy: 'Hoàn tiền', SoTienHoan: 1 }, [{ MaSP: 'SP1', TenSP: 'X', SoLuong: 1, DonGia: 1, ThanhTien: 1, LoaiDong: 'Trả' }]),
+            teleDocs.sheetPc({ MaPhieu: 'PC1', SoTien: 1, TenNCC: 'A' }, [{ MaSP: 'SP1', TenSP: 'X', SoLuong: 1, DonGia: 1, ThanhTien: 1 }]),
+            teleDocs.sheetCc({ MaChamCong: 9, TenNV: 'Lan', TenCa: 'hành chính', SoPhutOT: 0 })
+        ];
+        for (const kindSheet of kinds) {
+            const kindSvg = voucherImage.buildVoucherSvg(kindSheet);
+            assert.match(kindSvg, /SUPERMARKET FLY/);
+            assert.doesNotMatch(kindSvg, /san-pham-/);
+        }
+    });
+
+    await test('Chứng từ PO không sendPhoto san-pham; có giấy trắng', async () => {
+        bot.resetChatLangCache();
+        voucherImage.resetVoucherRenderPeek();
+        const sheet = teleDocs.sheetPo({
+            MaPO: 'PO00001',
+            NgayLap: new Date('2026-09-07T00:00:00+07:00'),
+            TrangThai: 'Chờ duyệt',
+            TenNCC: 'NCC ABC',
+            TongTien: 30000
+        }, [{
+            MaSP: 'SP001', TenSP: 'Sữa tươi', SoLuong: 2, DonGia: 15000, ThanhTien: 30000,
+            DuongDanAnh: '/uploads/products/san-pham-banh.jpg'
+        }]);
+        bot.setDocumentPackOverride(async () => ({
+            messages: [{
+                title: 'ĐƠN MUA HÀNG',
+                number: 'PO00001',
+                text: teleDocs.buildDocumentSheet(sheet),
+                sheet,
+                photos: [{ path: '/uploads/products/san-pham-banh.jpg', name: 'san-pham-banh.jpg' }]
+            }]
+        }));
+        const qlRow = {
+            MaNV: 'NV001', ChatId: '42', MaTK: 1, Bat: 1, TenNV: 'Nguyễn Minh Anh',
+            MaTKLive: 1, MaVaiTro: 1, TrangThaiTK: 1, TenVaiTro: 'Quản lý'
+        };
+        const sent = collectSent(qlRow);
+        await bot.handleUpdate({
+            callback_query: {
+                id: 'docs-paper',
+                data: 'docs:po:PO00001',
+                message: { chat: { id: 42, type: 'private' } }
+            }
+        });
+        const dumped = JSON.stringify(sent);
+        assert.doesNotMatch(dumped, /san-pham-/);
+        const photo = sent.find(item => item._method === 'sendPhoto');
+        assert.ok(photo, 'phải gọi sendPhoto giấy trắng');
+        assert.match(String(photo.photoName || photo.photo || ''), /chung-tu/);
+        assert.doesNotMatch(String(photo.photoName || ''), /san-pham-/);
+        assert.match(String(photo.caption || ''), /ĐƠN MUA/);
+        const peek = voucherImage.peekLastVoucherRender();
+        assert.ok(peek, 'phải gọi generator giấy trắng');
+        assert.equal(String(peek.number), 'PO00001');
+        assert.match(String(peek.filenames?.[0] || ''), /chung-tu/);
+        bot.setDocumentPackOverride(null);
+    });
+
+    await test('sendPhoto chặn đường dẫn sản phẩm', async () => {
+        const sent = [];
+        notify.setTelegramRuntime({
+            fetchFn: async (url, opts) => {
+                sent.push({ url, body: opts?.body });
+                return { json: async () => ({ ok: true }) };
+            }
+        });
+        const blocked = await notify.sendPhoto('42', '/uploads/products/san-pham-banh.jpg');
+        assert.equal(blocked.reason, 'product-image-blocked');
+        assert.equal(sent.length, 0);
+        const paper = await voucherImage.renderVoucherPng({
+            kind: 'po', title: 'ĐƠN MUA HÀNG', number: 'PO00001',
+            lines: [{ MaSP: 'SP001', TenSP: 'Sữa', SoLuong: 1, DonGia: 1, ThanhTien: 1 }]
+        });
+        const ok = await notify.sendPhoto('42', paper, { caption: paper.caption });
+        assert.ok(ok);
+        assert.equal(sent.length, 1);
+        assert.match(String(sent[0].url), /sendPhoto/);
+    });
+
+    await test('Nút Chứng từ /docs ra MENU loại, không fallback câu tự do', async () => {
+        bot.resetChatLangCache();
+        const qlRow = {
+            MaNV: 'NV001', ChatId: '42', MaTK: 1, Bat: 1, TenNV: 'Nguyễn Minh Anh',
+            MaTKLive: 1, MaVaiTro: 1, TrangThaiTK: 1, TenVaiTro: 'Quản lý'
+        };
+        const sent = collectSent(qlRow);
+        const labels = teleDocs.docsTypeKeyboard('vi').inline_keyboard.flat().map(btn => btn.text);
+        assert.ok(labels.includes('Đơn mua'));
+        assert.ok(labels.includes('Phiếu nhập'));
+        assert.ok(labels.includes('Hóa đơn mua'));
+        assert.ok(labels.includes('Hóa đơn bán'));
+        assert.ok(labels.includes('Phiếu xuất'));
+        assert.ok(labels.includes('Kiểm kê'));
+        assert.ok(labels.includes('Đổi trả'));
+        assert.ok(labels.includes('Phiếu chi'));
+        assert.ok(labels.includes('Chấm công / phiếu công'));
+        let uid = 8100;
+        for (const text of ['Chứng từ', '🧾 Chứng từ', '📄 Chứng từ', '/docs']) {
+            sent.length = 0;
+            uid += 1;
+            const result = await bot.handleUpdate({
+                update_id: uid,
+                message: { chat: { id: 42, type: 'private' }, text }
+            });
+            assert.equal(result.command, 'docs', text);
+            const msg = sent.find(item => item.text);
+            assert.ok(msg, text);
+            assert.match(msg.text, /CHỌN LOẠI CHỨNG TỪ|CHỨNG TỪ/);
+            const kb = (msg.reply_markup?.inline_keyboard || []).flat().map(btn => btn.text);
+            assert.ok(kb.includes('Đơn mua'), text);
+            assert.doesNotMatch(msg.text, /câu hỏi tự do|câu tự do|không trả lời/i);
+        }
+        sent.length = 0;
+        await bot.handleUpdate({
+            update_id: 8201,
+            message: { chat: { id: 42, type: 'private' }, text: 'Báo cáo' }
+        });
+        const report = sent.find(item => item.text);
+        assert.match(report.text, /CHỌN BÁO CÁO/);
+        const rpt = (report.reply_markup?.inline_keyboard || []).flat().map(btn => btn.text);
+        assert.ok(rpt.some(label => /Tóm tắt hôm nay/.test(label)));
+        assert.ok(rpt.includes('Công nợ'));
+        assert.ok(rpt.includes('Việc chờ'));
+        assert.ok(rpt.some(label => /P&L/.test(label)));
+        assert.doesNotMatch(report.text, /câu hỏi tự do|câu tự do/i);
+    });
+
+    await test('Cần duyệt / pending chỉ 1 sendMessage', async () => {
+        bot.resetChatLangCache();
+        const qlRow = {
+            MaNV: 'NV001', ChatId: '42', MaTK: 1, Bat: 1, TenNV: 'Nguyễn Minh Anh',
+            MaTKLive: 1, MaVaiTro: 1, TrangThaiTK: 1, TenVaiTro: 'Quản lý'
+        };
+        const sent = collectSent(qlRow);
+        await bot.handleUpdate({
+            update_id: 8301,
+            message: { chat: { id: 42, type: 'private' }, text: '⏳ Cần duyệt' }
+        });
+        const first = sent.filter(item => item.text);
+        assert.equal(first.length, 1);
+        assert.match(first[0].text, /VIỆC CHỜ|Không có việc chờ/);
+        sent.length = 0;
+        await bot.handleUpdate({
+            update_id: 8302,
+            callback_query: {
+                id: 'pend1',
+                data: 'cmd:pending',
+                message: { chat: { id: 42, type: 'private' } }
+            }
+        });
+        const again = sent.filter(item => item.text);
+        assert.equal(again.length, 1);
+        await bot.handleUpdate({
+            update_id: 8302,
+            callback_query: {
+                id: 'pend1b',
+                data: 'cmd:pending',
+                message: { chat: { id: 42, type: 'private' } }
+            }
+        });
+        assert.equal(sent.filter(item => item.text).length, 1);
+    });
+
+    await test('startTelegramBot lần 2 không mở poll thứ hai; 409 nói process cũ', async () => {
+        const calls = [];
+        const fetchFn = async (url) => {
+            calls.push(String(url).split('/').pop());
+            return { json: async () => ({ ok: true, result: [] }) };
+        };
+        const prevUrl = process.env.TELEGRAM_WEBHOOK_URL;
+        process.env.TELEGRAM_WEBHOOK_URL = '';
+        const first = await bot.startTelegramBot({
+            fetchFn, skipCron: true, webhookUrl: '', skipSchema: true
+        });
+        const second = await bot.startTelegramBot({
+            fetchFn, skipCron: true, webhookUrl: '', skipSchema: true
+        });
+        process.env.TELEGRAM_WEBHOOK_URL = prevUrl;
+        bot.stopTelegramBot();
+        assert.equal(first.mode, 'polling');
+        assert.equal(second.already, true);
+        notify.setTelegramRuntime({
+            fetchFn: async () => ({
+                json: async () => ({ ok: false, error_code: 409, description: 'Conflict: terminated by other getUpdates request' })
+            })
+        });
+        await assert.rejects(
+            () => notify.telegramApi('getUpdates', { timeout: 0 }),
+            /409 Conflict|process bot khác/
+        );
+    });
+
+    await test('Ẩn menu gửi ReplyKeyboardRemove; Hiện menu /fly hiện lại', async () => {
+        bot.resetChatLangCache();
+        const qlRow = {
+            MaNV: 'NV001', ChatId: '42', MaTK: 1, Bat: 1, TenNV: 'Nguyễn Minh Anh',
+            MaTKLive: 1, MaVaiTro: 1, TrangThaiTK: 1, TenVaiTro: 'Quản lý'
+        };
+        const sent = collectSent(qlRow);
+        const hidden = await bot.handleUpdate({
+            update_id: 9101,
+            message: { chat: { id: 42, type: 'private' }, text: '⬆️ Ẩn menu' }
+        });
+        assert.equal(hidden.command, 'hidekb');
+        assert.equal(hidden.removed, true);
+        const removed = sent.find(item => item.reply_markup && item.reply_markup.remove_keyboard === true);
+        assert.ok(removed, 'phải gửi ReplyKeyboardRemove');
+        assert.equal(removed.reply_markup.remove_keyboard, true);
+        assert.match(removed.text, /ẩn|hidden|隐藏/i);
+        const showBtn = sent.find(item => (item.reply_markup?.inline_keyboard || []).flat().some(btn => /Hiện menu|Show menu|显示菜单/.test(btn.text)));
+        assert.ok(showBtn, 'phải có nút Hiện menu');
+        sent.length = 0;
+        const shown = await bot.handleUpdate({
+            update_id: 9102,
+            callback_query: {
+                id: 'show1',
+                data: 'cmd:showkb',
+                message: { chat: { id: 42, type: 'private' } }
+            }
+        });
+        assert.equal(shown.command, 'showkb');
+        const restored = sent.find(item => item.reply_markup?.keyboard);
+        assert.ok(restored, '/Hiện menu phải gắn lại Reply Keyboard');
+        assert.equal(restored.reply_markup.remove_keyboard, undefined);
+        assert.ok(restored.reply_markup.keyboard.flat().some(btn => /Ẩn menu/.test(btn.text)));
+    });
+
+    await test('/guide có mục lãi gộp và không trừ NCC', async () => {
+        const pages = bot.buildGuideTopic('gross', 'vi');
+        const gross = Array.isArray(pages) ? pages.join('\n') : String(pages);
+        assert.match(gross, /lãi gộp/i);
+        assert.match(gross, /không trừ/i);
+        assert.match(gross, /NCC/i);
+        assert.match(gross, /DT thuần/);
+        assert.match(gross, /GV thuần/);
+        const menu = bot.buildGuideResult('', 'vi');
+        assert.match(menu.text, /TÀI LIỆU|QUY TẮC/);
+        const labels = (menu.extra?.reply_markup?.inline_keyboard || []).flat().map(btn => btn.text);
+        assert.ok(labels.some(text => /lãi gộp/i.test(text)));
+        assert.ok(labels.some(text => /Doanh thu/i.test(text)));
+        assert.ok(labels.some(text => /VAT/i.test(text)));
+
+        bot.resetChatLangCache();
+        const qlRow = {
+            MaNV: 'NV001', ChatId: '42', MaTK: 1, Bat: 1, TenNV: 'Nguyễn Minh Anh',
+            MaTKLive: 1, MaVaiTro: 1, TrangThaiTK: 1, TenVaiTro: 'Quản lý'
+        };
+        const sent = collectSent(qlRow);
+        const result = await bot.handleUpdate({
+            update_id: 9201,
+            message: { chat: { id: 42, type: 'private' }, text: '/guide' }
+        });
+        assert.equal(result.command, 'guide');
+        const intro = sent.find(item => item.text);
+        assert.match(intro.text, /TÀI LIỆU|QUY TẮC/);
+        sent.length = 0;
+        await bot.handleUpdate({
+            update_id: 9202,
+            callback_query: {
+                id: 'g1',
+                data: 'guide:gross',
+                message: { chat: { id: 42, type: 'private' } }
+            }
+        });
+        const topic = sent.find(item => item.text);
+        assert.match(topic.text, /lãi gộp/i);
+        assert.match(topic.text, /không trừ/i);
+        assert.match(topic.text, /NCC/i);
     });
 
     notify.resetTelegramRuntime();

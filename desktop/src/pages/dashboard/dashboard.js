@@ -878,6 +878,15 @@ document.addEventListener('DOMContentLoaded', () => {
     countEl.textContent = count > 99 ? '99+' : String(count);
     countEl.classList.toggle('visible', count > 0);
   };
+  document.getElementById('uiReloadButton')?.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (window.flyDesktop?.reloadIgnoringCache) {
+      window.flyDesktop.reloadIgnoringCache();
+      return;
+    }
+    location.reload();
+  });
   document.getElementById('profileButton').addEventListener('click', event => {
     event.stopPropagation();
     closeInboxPanel();

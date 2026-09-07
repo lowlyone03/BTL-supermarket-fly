@@ -10,11 +10,14 @@ const {
     buildStartWelcomeGuest, buildHelpMessage, buildTodayMessage,
     buildRevenueMessage, buildFlyDashboard, buildDebtMessage, buildLowstockMessage,
     buildShiftsMessage, buildPaymentsMessage, buildPendingMessage, buildAlertsMessage,
-    buildPayrollSummaryMessage, buildPayrollOneMessage, buildReportsMessage,
-    buildReportsMessages, replyKeyboard, matchReplyCommand
+    buildPayrollSummaryMessage, buildPayrollOneMessage,
+    buildReportsMenu, reportsMenuKeyboard, buildPnlOnlyMessage,
+    replyKeyboard, matchReplyCommand, removeKeyboardMarkup, showMenuInlineKeyboard
 } = require('../services/telegramMessages');
+const teleGuide = require('../services/telegramGuide');
 const teleDecision = require('../services/telegramApprove');
 const teleDocs = require('../services/telegramDocuments');
+const voucherImage = require('../services/telegramVoucherImage');
 const notify = require('../services/telegramNotify');
 const {
     ensureTelegramSchema,
@@ -31,7 +34,7 @@ const PUBLIC_CALLBACKS = new Set(['linkguide', 'help']);
 const pendingLangByChat = new Map();
 const kbBoundByChat = new Map();
 const seenUpdateIds = new Map();
-const SEEN_UPDATE_TTL_MS = 10 * 60 * 1000;
+const SEEN_UPDATE_TTL_MS = 2 * 60 * 1000;
 
 const rememberUpdateId = (updateId) => {
     if (updateId == null || updateId === '') return false;
@@ -47,18 +50,19 @@ const rememberUpdateId = (updateId) => {
 
 const resetUpdateDedup = () => seenUpdateIds.clear();
 
-const QUIET_COMMANDS = new Set(['start', 'help', 'fly', 'reports', 'docs']);
+const QUIET_COMMANDS = new Set(['start', 'help', 'fly', 'reports', 'docs', 'guide', 'rules', 'hidekb', 'showkb']);
 
 const withQuiet = (name, extra = {}) => (
     QUIET_COMMANDS.has(name) ? { ...extra, disable_notification: true } : extra
 );
 
-const rememberReplyKb = (chatId, { bound, lang } = {}) => {
+const rememberReplyKb = (chatId, { bound, lang, hidden } = {}) => {
     const id = String(chatId);
     const prev = kbBoundByChat.get(id) || {};
     kbBoundByChat.set(id, {
         bound: bound == null ? Boolean(prev.bound) : Boolean(bound),
-        lang: lang ? normalizeLang(lang) : (prev.lang || langOf(chatId))
+        lang: lang ? normalizeLang(lang) : (prev.lang || langOf(chatId)),
+        hidden: hidden == null ? Boolean(prev.hidden) : Boolean(hidden)
     });
 };
 
@@ -76,6 +80,8 @@ const BOT_NATIVE_COMMANDS = [
     { command: 'pending', description: 'Việc chờ duyệt' },
     { command: 'docs', description: 'Chứng từ / giấy tờ' },
     { command: 'reports', description: 'Báo cáo cửa hàng' },
+    { command: 'guide', description: 'Tài liệu / quy tắc kế toán' },
+    { command: 'rules', description: 'Quy tắc hệ thống (alias /guide)' },
     { command: 'payroll', description: 'Lương (tóm tắt)' },
     { command: 'unlink', description: 'Hủy liên kết' }
 ];
@@ -85,6 +91,7 @@ const FLY_BUTTONS = [
     { id: 'revenue', key: 'flyRevenue', uc: ['UC10'] },
     { id: 'debt', key: 'flyDebt', uc: ['UC10', 'UC28'] },
     { id: 'docs', key: 'flyDocs', uc: [] },
+    { id: 'guide', key: 'flyGuide', uc: [] },
     { id: 'pending', key: 'flyPending', uc: [] },
     { id: 'reports', key: 'flyReports', uc: ['UC10'] },
     { id: 'shifts', key: 'flyShifts', uc: ['UC10', 'UC22', 'UC29'] },
@@ -239,12 +246,45 @@ const touchActive = async (pool, maNV) => {
 };
 
 const reply = (chatId, text, extra = {}) => {
-    const state = kbBoundByChat.get(String(chatId)) || { bound: false, lang: langOf(chatId) };
+    const state = kbBoundByChat.get(String(chatId)) || { bound: false, lang: langOf(chatId), hidden: false };
     const next = { ...extra };
-    if (!next.reply_markup) {
+    if (next.show_reply_keyboard) {
+        rememberReplyKb(chatId, { hidden: false, bound: state.bound, lang: state.lang });
+        delete next.show_reply_keyboard;
         next.reply_markup = replyKeyboard(state.lang, { bound: state.bound });
     }
+    const live = kbBoundByChat.get(String(chatId)) || state;
+    if (!next.reply_markup && !live.hidden) {
+        next.reply_markup = replyKeyboard(live.lang, { bound: live.bound });
+    }
     return notify.sendMessage(chatId, text, next);
+};
+
+const sendHideKeyboard = async (chatId) => {
+    const lang = langOf(chatId);
+    rememberReplyKb(chatId, { hidden: true });
+    await notify.sendMessage(chatId, t(lang, 'hideOk'), {
+        ...withQuiet('hidekb'),
+        reply_markup: removeKeyboardMarkup()
+    });
+    await notify.sendMessage(chatId, t(lang, 'showHint'), {
+        ...withQuiet('hidekb'),
+        reply_markup: showMenuInlineKeyboard(lang)
+    });
+    return { ok: true, command: 'hidekb', removed: true };
+};
+
+const sendShowKeyboard = async (chatId) => {
+    const lang = langOf(chatId);
+    const prev = kbBoundByChat.get(String(chatId)) || {};
+    let bound = Boolean(prev.bound);
+    try {
+        const live = await requireBound(chatId);
+        if (!live.error && isManagerRole(live.user?.TenVaiTro)) bound = true;
+    } catch { /* giữ bound đã nhớ */ }
+    rememberReplyKb(chatId, { hidden: false, bound, lang: prev.lang || lang });
+    await reply(chatId, t(lang, 'showOk'), withQuiet('showkb'));
+    return { ok: true, command: 'showkb' };
 };
 
 const bindSuccess = async (pool, row, chatId, lang = 'vi') => {
@@ -435,18 +475,23 @@ const loadTodayBundle = async (pool, user) => {
     return { day, summary: { ...summary, ...details }, inbox };
 };
 
-const cmdFly = async (pool, user, lang = 'vi') => {
+const cmdFly = async (pool, user, lang = 'vi', chatId) => {
+    const wasHidden = Boolean(kbBoundByChat.get(String(chatId))?.hidden);
+    rememberReplyKb(chatId, { bound: true, lang, hidden: false });
+    const restoreKb = { reply_markup: replyKeyboard(lang, { bound: true }) };
     try {
         const { summary, inbox } = await loadTodayBundle(pool, user);
         return {
             text: buildFlyDashboard({ summary, inbox }, lang),
-            extra: { reply_markup: flyKeyboard(user, lang) }
+            extra: wasHidden ? restoreKb : { reply_markup: flyKeyboard(user, lang) }
         };
     } catch (error) {
         console.error('Telegram /fly:', error.message);
-        return { text: t(lang, 'flyMenu'), extra: { reply_markup: flyKeyboard(user, lang) } };
+        return { text: t(lang, 'flyMenu'), extra: wasHidden ? restoreKb : { reply_markup: flyKeyboard(user, lang) } };
     }
 };
+
+const cmdGuide = (arg, lang = 'vi') => teleGuide.buildGuideResult(arg, lang);
 
 const cmdToday = async (pool, user, lang = 'vi') => {
     const denied = denyIfNoUc(user, ['UC10'], lang);
@@ -551,52 +596,43 @@ const cmdPayments = async (pool, user, lang = 'vi') => {
 const cmdPending = async (pool, user, lang = 'vi') => {
     const { listForRole } = require('../services/inboxService');
     const items = await listForRole(pool, user);
+    const kb = teleDecision.pendingListKeyboard(items);
     return {
         text: buildPendingMessage(items, lang),
-        extra: {},
-        cards: teleDecision.listPendingDecisions(items).slice(0, 5)
+        extra: kb ? { reply_markup: kb } : {}
     };
 };
 
-const cmdReports = async (pool, user, lang = 'vi') => {
-    const denied = denyIfNoUc(user, ['UC10'], lang);
-    if (denied) return denied;
-    const { summary } = await loadTodayBundle(pool, user);
-    const debt = await sqlReq(pool).query(`
-        SELECT COUNT(*) TongKhoan,
-               COALESCE(SUM(SoTienConLai),0) TongConLai,
-               SUM(CASE WHEN SoTienConLai>0 AND HanThanhToan<CONVERT(date,GETDATE()) THEN 1 ELSE 0 END) QuaHan,
-               SUM(CASE WHEN SoTienConLai>0 AND HanThanhToan BETWEEN CONVERT(date,GETDATE()) AND DATEADD(day,7,CONVERT(date,GETDATE())) THEN 1 ELSE 0 END) SapHan
-        FROM CongNoPhaiTra WHERE SoTienConLai>0`).catch(() => ({ recordset: [{}] }));
-    let pnl = null;
+const loadPnlDay = async (pool) => {
     try {
         const { resolveReportingPeriod } = require('../services/reportingPeriod');
         const { buildReport } = require('../services/storeProfitLoss');
         const period = resolveReportingPeriod({ periodType: 'day' });
         const report = await buildReport(pool, { period, latestActivity: null, fallbackFrom: null });
-        pnl = report?.hoatDong || null;
-    } catch { /* P&L tùy chọn — lãi gộp vẫn gửi */ }
-    const { listForRole } = require('../services/inboxService');
-    const inbox = await listForRole(pool, user).catch(() => []);
-    const shifts = await sqlReq(pool).query(`
-        SELECT TOP 8 ca.MaCa, ca.TrangThai, ca.MaQuay,
-               ISNULL(ca.TienThucNop,0)-ISNULL(ca.TienMatHeThong,0) ChenhLech, nv.TenNV
-        FROM CaLamViec ca JOIN NhanVien nv ON nv.MaNV=ca.MaNV
-        WHERE CONVERT(date, ca.ThoiGianBatDau)=CONVERT(date, GETDATE())
-           OR ca.TrangThai=N'Đang mở'
-        ORDER BY ca.ThoiGianBatDau DESC`).catch(() => ({ recordset: [] }));
-    const payload = {
-        summary,
-        debt: debt.recordset?.[0] || {},
-        inbox,
-        pnl,
-        shifts: shifts.recordset || [],
-        restock: summary.restock || []
-    };
+        return report?.hoatDong || null;
+    } catch {
+        return null;
+    }
+};
+
+const cmdReports = async (pool, user, lang = 'vi') => {
+    const denied = denyIfNoUc(user, ['UC10'], lang);
+    if (denied) return denied;
     return {
-        text: buildReportsMessage(payload, lang),
-        texts: buildReportsMessages(payload, lang)
+        text: buildReportsMenu(lang),
+        extra: { reply_markup: reportsMenuKeyboard(lang) }
     };
+};
+
+const cmdReportPick = async (pool, user, which, lang = 'vi') => {
+    const key = String(which || '').toLowerCase();
+    if (key === 'today') return cmdToday(pool, user, lang);
+    if (key === 'debt') return cmdDebt(pool, user, lang);
+    if (key === 'pending') return cmdPending(pool, user, lang);
+    if (key === 'shifts') return cmdShifts(pool, user, lang);
+    if (key === 'lowstock') return cmdLowstock(pool, user, lang);
+    if (key === 'pnl') return buildPnlOnlyMessage(await loadPnlDay(pool), lang);
+    return cmdReports(pool, user, lang);
 };
 
 const cmdDocs = async (pool, user, arg, lang = 'vi') => {
@@ -609,12 +645,9 @@ const cmdDocs = async (pool, user, arg, lang = 'vi') => {
         };
     }
     if (String(arg || '').trim()) return t(lang, 'docsUnknown');
-    const { listForRole } = require('../services/inboxService');
-    const items = await listForRole(pool, user).catch(() => []);
-    const cards = teleDecision.listPendingDecisions(items).slice(0, 8);
     return {
-        text: teleDocs.buildDocsIndex(cards, lang),
-        extra: { reply_markup: teleDocs.docsIndexKeyboard(cards) }
+        text: teleDocs.buildDocsTypeMenu(lang),
+        extra: { reply_markup: teleDocs.docsTypeKeyboard(lang) }
     };
 };
 
@@ -664,7 +697,9 @@ const cmdUnlink = async (pool, user, chatId, lang = 'vi') => {
 const runCommand = async (name, user, pool, chatId, arg, lang = 'vi') => {
     switch (name) {
         case 'help': return cmdHelp(user, lang);
-        case 'fly': return cmdFly(pool, user, lang);
+        case 'fly': return cmdFly(pool, user, lang, chatId);
+        case 'guide':
+        case 'rules': return cmdGuide(arg, lang);
         case 'revenue': return cmdRevenue(pool, user, lang);
         case 'today': return cmdToday(pool, user, lang);
         case 'langmenu': return {
@@ -694,6 +729,8 @@ const parseCommand = (text) => {
     if (payroll) return { name: 'payroll', arg: payroll[1] ? payroll[1].toUpperCase() : '' };
     const docs = raw.match(/^\/docs(?:\s+(.+))?$/i);
     if (docs) return { name: 'docs', arg: String(docs[1] || '').trim() };
+    const guide = raw.match(/^\/(?:guide|rules)(?:\s+(.+))?$/i);
+    if (guide) return { name: 'guide', arg: String(guide[1] || '').trim() };
     const simple = raw.match(/^\/(help|fly|today|debt|lowstock|shifts|payments|pending|reports|alerts|unlink|revenue)\s*$/i);
     if (simple) return { name: simple[1].toLowerCase() };
     const fromReply = matchReplyCommand(raw);
@@ -714,7 +751,7 @@ const handleStartCommand = async (chatId) => {
     }
     const lang = bound.lang || langOf(chatId, bound.user);
     if (!bound.error && isManagerRole(bound.user.TenVaiTro)) {
-        rememberReplyKb(chatId, { bound: true, lang });
+        rememberReplyKb(chatId, { bound: true, lang, hidden: false });
         let dash = { summary: {}, inbox: [] };
         try {
             dash = await loadTodayBundle(bound.pool, bound.user);
@@ -745,7 +782,7 @@ const handleLangCallback = async (chatId, lang) => {
     const liveLang = normalized;
     if (!bound.error && bound.user && isManagerRole(bound.user.TenVaiTro)) {
         await persistLang(chatId, liveLang, bound.user.MaNV);
-        rememberReplyKb(chatId, { bound: true, lang: liveLang });
+        rememberReplyKb(chatId, { bound: true, lang: liveLang, hidden: false });
         let dash = { summary: {}, inbox: [] };
         try {
             dash = await loadTodayBundle(bound.pool, bound.user);
@@ -765,7 +802,7 @@ const handleLangCallback = async (chatId, lang) => {
 };
 
 const sendRelatedPhotos = async (chatId, dossier, extra = {}) => {
-    const photos = dossier?.photos || [];
+    const photos = (dossier?.photos || []).filter(photo => !voucherImage.isProductImagePath(photo));
     for (const photo of photos) {
         await notify.sendPhoto(chatId, photo.path || photo, {
             caption: `Chứng từ ${dossier.id || dossier.title || ''} · ${photo.name || ''}`.trim(),
@@ -774,14 +811,36 @@ const sendRelatedPhotos = async (chatId, dossier, extra = {}) => {
     }
 };
 
+const sendPaperVoucher = async (chatId, doc, extra = {}) => {
+    const sheet = doc?.sheet || (doc?.title || doc?.number || doc?.lines ? doc : null);
+    if (!sheet || !(sheet.title || sheet.number || (sheet.lines && sheet.lines.length) || (sheet.fields && sheet.fields.length))) {
+        return 0;
+    }
+    try {
+        const pages = await voucherImage.renderVoucherPages(sheet, { lang: extra.lang });
+        let count = 0;
+        for (const paper of pages) {
+            await notify.sendPhoto(chatId, paper, {
+                caption: paper.caption,
+                disable_notification: extra.disable_notification === true
+            });
+            count += 1;
+        }
+        return count;
+    } catch (error) {
+        console.error('Telegram giấy chứng từ:', error.message);
+        return 0;
+    }
+};
+
 const sendDocumentPack = async (chatId, documents = [], extra = {}) => {
     if (!documents.length) return 0;
     let sent = 0;
     for (const doc of documents) {
+        await sendPaperVoucher(chatId, doc, extra);
         if (!doc?.text) continue;
         await reply(chatId, doc.text, extra);
         sent += 1;
-        await sendRelatedPhotos(chatId, { id: doc.title, photos: doc.photos || [] }, extra);
     }
     return sent;
 };
@@ -802,15 +861,6 @@ const deliverCommandResult = async (chatId, result, extra = {}) => {
         return;
     }
     await reply(chatId, result.text, { ...extra, ...(result.extra || {}) });
-    if (result.cards?.length) {
-        const bound = await requireBound(chatId).catch(() => null);
-        for (const card of result.cards) {
-            try {
-                const packed = await teleDecision.composePendingPush(bound?.pool, card.kind, card.id, bound?.lang || extra.lang || 'vi');
-                await reply(chatId, packed.text, { disable_notification: extra.disable_notification, ...packed.extra });
-            } catch { /* danh sách vẫn đã gửi */ }
-        }
-    }
 };
 
 const handleDecisionCallback = async (chatId, parsed, user, pool, lang) => {
@@ -897,6 +947,12 @@ const handlePrivateMessage = async (message) => {
         return { forbidden: true };
     }
     const parsed = parseCommand(text);
+    if (parsed.name === 'hidekb') {
+        return sendHideKeyboard(chatId);
+    }
+    if (parsed.name === 'showkb') {
+        return sendShowKeyboard(chatId);
+    }
     if (parsed.name === 'linkguide') {
         rememberReplyKb(chatId, { bound: false, lang });
         await reply(chatId, t(lang, 'startLinkGuide'));
@@ -909,7 +965,7 @@ const handlePrivateMessage = async (message) => {
     if (parsed.name === 'bind') {
         try {
             const body = await handleBindOtp(chatId, parsed.otp);
-            if (/Đã liên kết|Linked |已关联/.test(body)) rememberReplyKb(chatId, { bound: true, lang: langOf(chatId) });
+            if (/Đã liên kết|Linked |已关联/.test(body)) rememberReplyKb(chatId, { bound: true, lang: langOf(chatId), hidden: false });
             await reply(chatId, body);
             return { bind: true };
         } catch (error) {
@@ -959,11 +1015,14 @@ const handleCallback = async (query) => {
     }
     const lang = langOf(chatId);
     const decision = teleDecision.parseDecisionCallback(data);
+    const dkindMatch = data.match(/^dkind:(po|px|kk|dt|pc|cc|hd|pn|hdm)$/i);
+    const rptMatch = data.match(/^rpt:(today|debt|pending|shifts|lowstock|pnl)$/i);
+    const guideMatch = data.match(/^guide:(revenue|gross|pnl|vat|debt|cash|payroll)$/i);
     if (/\/(pay|complete)\b/i.test(data)) {
         await reply(chatId, t(lang, 'denyWrite'));
         return { forbidden: true };
     }
-    if (!/^cmd:/.test(data) && !decision) {
+    if (!/^cmd:/.test(data) && !decision && !dkindMatch && !rptMatch && !guideMatch) {
         await reply(chatId, t(lang, 'denyWrite'));
         return { forbidden: true };
     }
@@ -990,6 +1049,12 @@ const handleCallback = async (query) => {
         await reply(chatId, t(live, 'langMenuTitle'), { reply_markup: { inline_keyboard: [langKeyboardRow()] } });
         return { ok: true, command: 'langmenu' };
     }
+    if (name === 'showkb') {
+        return sendShowKeyboard(chatId);
+    }
+    if (name === 'hidekb') {
+        return sendHideKeyboard(chatId);
+    }
     if (bound.error) {
         await reply(chatId, t(live, 'denyStranger'));
         return { unbound: true };
@@ -1002,6 +1067,27 @@ const handleCallback = async (query) => {
     if (!isManagerRole(bound.user.TenVaiTro)) {
         await reply(chatId, t(live, 'denyNotManagerCmd'));
         return { forbidden: true, notManager: true, status: 403 };
+    }
+    if (dkindMatch) {
+        const kind = dkindMatch[1].toLowerCase();
+        const rows = await teleDocs.listRecentDocuments(bound.pool, kind);
+        await reply(chatId, teleDocs.buildDocsTypeList(kind, rows, live), {
+            ...withQuiet('docs'),
+            reply_markup: teleDocs.docsTypeListKeyboard(kind, rows, live)
+        });
+        return { ok: true, command: 'docs', kind };
+    }
+    if (rptMatch) {
+        const which = rptMatch[1].toLowerCase();
+        const picked = await cmdReportPick(bound.pool, bound.user, which, live);
+        await deliverCommandResult(chatId, picked, withQuiet(which === 'pending' ? 'pending' : 'reports'));
+        return { ok: true, command: 'reports', report: which };
+    }
+    if (guideMatch) {
+        const topic = guideMatch[1].toLowerCase();
+        const picked = cmdGuide(topic, live);
+        await deliverCommandResult(chatId, picked, withQuiet('guide'));
+        return { ok: true, command: 'guide', topic };
     }
     if (decision) {
         return handleDecisionCallback(chatId, decision, bound.user, bound.pool, live);
@@ -1179,6 +1265,7 @@ const setChannel = async (req, res) => {
 
 const startTelegramBot = async (options = {}) => {
     const token = notify.botToken();
+    console.log(`Telegram: PID ${process.pid} khởi động bot`);
     if (!token) {
         notify.setTelegramStatus('off');
         console.log('Telegram: off (chưa có TELEGRAM_BOT_TOKEN)');
@@ -1211,10 +1298,14 @@ const startTelegramBot = async (options = {}) => {
             if (!options.skipCron) notify.startCompanionJobs();
             return { mode: 'webhook', polling: false };
         }
+        if (pollState.running && options.startPolling !== false && !options.pollOnce) {
+            console.log(`Telegram: polling đã chạy (PID ${process.pid}) — không start lần 2`);
+            return { mode: 'polling', already: true, deleteWebhookFirst: true };
+        }
         await notify.telegramApi('deleteWebhook', { drop_pending_updates: false }, { fetchFn });
         await registerMenuSafe(fetchFn);
         notify.setTelegramStatus('polling');
-        console.log('Telegram: polling (đã deleteWebhook trước getUpdates)');
+        console.log(`Telegram: polling PID ${process.pid} (đã deleteWebhook trước getUpdates)`);
         if (!options.skipCron) notify.startCompanionJobs();
         if (options.pollOnce) {
             await notify.telegramApi('getUpdates', { offset: pollState.offset, timeout: 0 }, { fetchFn });
@@ -1235,7 +1326,12 @@ const startTelegramBot = async (options = {}) => {
                             await handleUpdate(update).catch(err => console.error('Telegram update:', err.message));
                         }
                     } catch (error) {
-                        console.error('Telegram polling:', unauthorizedHint(error));
+                        const hint = unauthorizedHint(error);
+                        if (/409|Conflict|process bot khác/i.test(String(error?.message || hint))) {
+                            console.error(`Telegram getUpdates 409 Conflict (PID ${process.pid}) — còn process bot khác, tắt npm start cũ.`);
+                        } else {
+                            console.error('Telegram polling:', hint);
+                        }
                         await new Promise(resolve => setTimeout(resolve, 2500));
                     }
                 }
@@ -1282,12 +1378,18 @@ module.exports = {
         seenUpdateIds.clear();
         teleDecision.resetDecisionState();
         teleDocs.setDocumentPackOverride(null);
+        teleDocs.setRecentDocsOverride(null);
+        voucherImage.resetVoucherRenderPeek();
     },
     setDocumentPackOverride: teleDocs.setDocumentPackOverride,
     parseDocsArg: teleDocs.parseDocsArg,
     resetUpdateDedup,
     replyKeyboard,
     matchReplyCommand,
+    removeKeyboardMarkup,
+    parseGuideArg: teleGuide.parseGuideArg,
+    buildGuideTopic: teleGuide.buildGuideTopic,
+    buildGuideResult: teleGuide.buildGuideResult,
     resetTelegramSchemaCache,
     webhook,
     verifyWebhookSecret,

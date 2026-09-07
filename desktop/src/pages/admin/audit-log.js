@@ -96,11 +96,12 @@
     };
     const docCell = row => {
         if (!row.doiTuongMa) return `<span class="audit-muted">${escapeHtml(row.doiTuong || 'Không gắn chứng từ')}</span>`;
-        const label = `${row.doiTuong} ${row.doiTuongMa}`;
+        const kind = escapeHtml(row.doiTuong);
+        const code = escapeHtml(row.doiTuongMa);
         if (row.target) {
-            return `<button type="button" class="audit-doc-link" data-open-target="${escapeHtml(row.target)}" title="Mở màn liên quan">${escapeHtml(label)}</button>`;
+            return `<div class="audit-stack audit-doc-cell"><button type="button" class="audit-doc-link" data-open-target="${escapeHtml(row.target)}" title="Mở màn liên quan">${code}</button><small>${kind}</small></div>`;
         }
-        return `<strong>${escapeHtml(row.doiTuongMa)}</strong><small>${escapeHtml(row.doiTuong)}</small>`;
+        return `<div class="audit-stack audit-doc-cell"><strong>${code}</strong><small>${kind}</small></div>`;
     };
 
     const closeDetail = () => {
@@ -168,8 +169,8 @@
         body.innerHTML = state.items.map(row => `
             <tr class="${toneClass(row)}${state.selected && String(state.selected.MaNK) === String(row.MaNK) ? ' is-active' : ''}" data-id="${escapeHtml(row.MaNK)}" tabindex="0">
                 <td>${escapeHtml(fmtTime(row.ThoiGian))}</td>
-                <td><div class="person-cell"><span class="person-avatar">${escapeHtml(initials(row.TenNV))}</span><span><strong>${escapeHtml(row.TenNV || 'Hệ thống')}</strong><small>${escapeHtml(row.TenVaiTro || row.TenDangNhap || '')}</small></span></div></td>
-                <td><div class="audit-action-cell" title="${escapeHtml(row.tieuDe)}"><strong>${escapeHtml(row.tieuDe)}</strong><small>${escapeHtml(row.viecLam)}</small></div></td>
+                <td><div class="person-cell"><span class="person-avatar">${escapeHtml(initials(row.TenNV))}</span><span class="audit-stack"><strong>${escapeHtml(row.TenNV || 'Hệ thống')}</strong><small>${escapeHtml(row.TenVaiTro || row.TenDangNhap || '')}</small></span></div></td>
+                <td><div class="audit-stack audit-action-cell" title="${escapeHtml(row.tieuDe)}"><strong>${escapeHtml(row.tieuDe)}</strong><small>${escapeHtml(row.viecLam)}</small></div></td>
                 <td>${docCell(row)}</td>
                 <td>${resultBadge(row)}</td>
             </tr>`).join('');

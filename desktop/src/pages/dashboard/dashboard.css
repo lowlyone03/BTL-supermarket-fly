@@ -131,6 +131,21 @@ button { color: inherit; }
 .global-search input { flex: 1; min-width: 0; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 12px; }
 .global-search input::placeholder { color: #9ca69f; }
 .topbar-actions { position: relative; display: flex; align-items: center; gap: 14px; }
+.ui-reload-button {
+  min-width: 40px;
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid #c5d0c8;
+  border-radius: 10px;
+  background: #fff;
+  color: #1c4a3d;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, color .18s ease;
+}
+.ui-reload-button:hover { background: #eef2ee; border-color: #75a38e; }
 .notification-cluster { position: relative; display: flex; align-items: center; gap: 2px; }
 .notification-sound { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 50%; background: transparent; cursor: pointer; transition: background .18s ease, border-color .18s ease, color .18s ease; }
 .notification-sound:hover { background: #eef2ee; }

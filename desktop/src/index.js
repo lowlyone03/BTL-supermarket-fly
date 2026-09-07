@@ -111,6 +111,37 @@ const registerSavePrintPdfHandler = () => {
 registerSaveBackupFileHandler();
 registerSavePrintPdfHandler();
 
+const hardReloadContents = async webContents => {
+  if (!webContents || webContents.isDestroyed()) return;
+  try {
+    await webContents.session.clearCache();
+  } catch (_) {
+    // Vẫn reloadIgnoringCache nếu clearCache lỗi.
+  }
+  if (!webContents.isDestroyed()) webContents.reloadIgnoringCache();
+};
+
+const registerHardReloadHandler = () => {
+  ipcMain.removeHandler('reload-ignoring-cache');
+  ipcMain.handle('reload-ignoring-cache', async event => {
+    await hardReloadContents(event.sender);
+  });
+};
+
+const attachHardReloadShortcuts = win => {
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    const key = String(input.key || '');
+    const isF5 = key === 'F5';
+    const isCtrlR = (input.control || input.meta) && key.toLowerCase() === 'r';
+    if (!isF5 && !isCtrlR) return;
+    event.preventDefault();
+    hardReloadContents(win.webContents);
+  });
+};
+
+registerHardReloadHandler();
+
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 1600,
@@ -128,6 +159,7 @@ const createWindow = () => {
     },
   });
 
+  attachHardReloadShortcuts(mainWindow);
   mainWindow.loadFile(path.join(__dirname, 'pages', 'landing', 'landing.html'));
   mainWindow.webContents.setZoomFactor(1);
   mainWindow.webContents.setVisualZoomLevelLimits(1, 1);
@@ -141,6 +173,7 @@ const createWindow = () => {
 app.whenReady().then(() => {
   registerSaveBackupFileHandler();
   registerSavePrintPdfHandler();
+  registerHardReloadHandler();
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

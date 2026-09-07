@@ -10,6 +10,7 @@ const {
     buildA3Message, buildInboxPushMessage, buildAttendancePendingMessage, buildPushCard,
     formatTelegramValue, FLY_HINT, isManagerRole, normalizeLang, splitTelegramText
 } = require('./telegramMessages');
+const { isProductImagePath } = require('./telegramVoucherImage');
 
 const eventCard = (title, fields, lang = 'vi') => buildPushCard({
     title,
@@ -112,6 +113,9 @@ const telegramApi = async (method, payload = {}, options = {}) => {
         if (code === 401 || /unauthorized/i.test(desc)) {
             throw new Error('Token Telegram không hợp lệ — kiểm tra TELEGRAM_BOT_TOKEN trong server/.env');
         }
+        if (code === 409 || /conflict/i.test(desc)) {
+            throw new Error('Telegram 409 Conflict — còn process bot khác, tắt npm start cũ');
+        }
         throw new Error(data.description || `Telegram ${method} thất bại`);
     }
     return data;
@@ -138,14 +142,51 @@ const sendMessage = async (chatId, text, extra = {}) => {
     return last;
 };
 
+const sendPhotoMultipart = async (chatId, buffer, filename, extra = {}) => {
+    const caption = String(extra.caption || '').slice(0, 1000);
+    const quiet = extra.disable_notification === true;
+    const form = new FormData();
+    form.append('chat_id', String(chatId));
+    const file = typeof File === 'function'
+        ? new File([buffer], filename, { type: extra.mime || 'image/png' })
+        : new Blob([buffer], { type: extra.mime || 'image/png' });
+    form.append('photo', file, filename);
+    if (caption) form.append('caption', caption);
+    form.append('parse_mode', extra.parse_mode || 'HTML');
+    form.append('disable_notification', quiet ? 'true' : 'false');
+    const token = extra.token || botToken();
+    const fetchFn = extra.fetchFn || runtime.fetchFn;
+    const response = await fetchFn(`https://api.telegram.org/bot${token}/sendPhoto`, {
+        method: 'POST',
+        body: form
+    });
+    const data = typeof response.json === 'function' ? await response.json() : response;
+    if (data && data.ok === false) throw new Error(data.description || 'sendPhoto thất bại');
+    return data;
+};
+
 const sendPhoto = async (chatId, photo, extra = {}) => {
     if (!chatId || !photo) return { skipped: true };
+    if (isProductImagePath(photo) && extra.allowProductImage !== true) {
+        return { skipped: true, reason: 'product-image-blocked' };
+    }
     try {
         const {
             isPublicHttpUrl, localUploadPath, publicFileUrl, describeLocalPhoto
         } = require('./telegramApprove');
         const caption = String(extra.caption || '').slice(0, 1000);
         const quiet = extra.disable_notification === true;
+        const buffer = Buffer.isBuffer(photo)
+            ? photo
+            : (photo && Buffer.isBuffer(photo.buffer) ? photo.buffer : null);
+        if (buffer && buffer.length) {
+            const filename = (typeof photo === 'object' && photo.filename)
+                || extra.filename
+                || 'chung-tu.png';
+            return sendPhotoMultipart(chatId, buffer, filename, {
+                ...extra, caption, disable_notification: quiet, mime: photo.mime
+            });
+        }
         const publicUrl = typeof photo === 'string' ? (publicFileUrl(photo) || (isPublicHttpUrl(photo) ? photo : '')) : '';
         if (publicUrl) {
             return telegramApi('sendPhoto', {
@@ -157,27 +198,18 @@ const sendPhoto = async (chatId, photo, extra = {}) => {
             });
         }
         const stored = typeof photo === 'string' ? photo : photo.path;
+        if (isProductImagePath(stored) && extra.allowProductImage !== true) {
+            return { skipped: true, reason: 'product-image-blocked' };
+        }
         const abs = localUploadPath(stored);
         if (abs) {
             const fs = require('node:fs');
             const path = require('node:path');
             if (fs.existsSync(abs)) {
                 const buf = fs.readFileSync(abs);
-                const form = new FormData();
-                form.append('chat_id', String(chatId));
-                form.append('photo', new Blob([buf]), path.basename(abs));
-                if (caption) form.append('caption', caption);
-                form.append('parse_mode', extra.parse_mode || 'HTML');
-                form.append('disable_notification', quiet ? 'true' : 'false');
-                const token = extra.token || botToken();
-                const fetchFn = extra.fetchFn || runtime.fetchFn;
-                const response = await fetchFn(`https://api.telegram.org/bot${token}/sendPhoto`, {
-                    method: 'POST',
-                    body: form
+                return sendPhotoMultipart(chatId, buf, path.basename(abs), {
+                    ...extra, caption, disable_notification: quiet, mime: 'image/jpeg'
                 });
-                const data = typeof response.json === 'function' ? await response.json() : response;
-                if (data && data.ok === false) throw new Error(data.description || 'sendPhoto thất bại');
-                return data;
             }
         }
         await sendMessage(chatId, describeLocalPhoto({ path: stored, name: String(stored || '').split(/[/\\]/).pop() }), {

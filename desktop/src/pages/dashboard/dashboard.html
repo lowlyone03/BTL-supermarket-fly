@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Điều hành - Supermarket Fly</title>
-  <link rel="stylesheet" href="dashboard.css?v=telegram-p1">
-  <link rel="stylesheet" href="../admin/admin.css?v=search-2">
+  <link rel="stylesheet" href="dashboard.css?v=ui-rs-1">
+  <link rel="stylesheet" href="../admin/admin.css?v=audit-rs-1">
   <link rel="stylesheet" href="../warehouse/warehouse.css?v=invoice-intake-1">
   <link rel="stylesheet" href="../workforce/workforce.css?v=approve-fix-2">
   <link rel="stylesheet" href="../cashier/cashier.css?v=return-handover-2">
@@ -158,6 +158,7 @@
           <input id="globalSearch" type="search" placeholder="Tìm nhân viên, tài khoản, chức năng..." autocomplete="off">
         </form>
         <div class="topbar-actions">
+          <button class="ui-reload-button" id="uiReloadButton" type="button" title="Tải lại giao diện (không cần npm start). Sửa API/Telegram thì vẫn restart npm start." aria-label="Tải lại giao diện (không cần npm start)">RS</button>
           <div class="notification-cluster">
             <button class="notification-sound" id="notificationSoundToggle" type="button" title="Tắt tiếng thông báo" aria-pressed="false" aria-label="Tắt tiếng thông báo"><svg><use href="#i-sound-on"/></svg></button>
             <button class="notification-button" id="notificationButton" type="button" title="Thông báo" aria-haspopup="true" aria-expanded="false"><svg><use href="#i-bell"/></svg><b id="notificationCount">0</b><i id="notificationDot"></i></button>
@@ -246,7 +247,7 @@
   <script src="../shared/report-charts.js?v=charts-7-wh-polish"></script>
   <script src="../shared/report-layout.js?v=report-hint-1"></script>
   <script src="../shared/print-documents.js?v=print-pdf-1"></script>
-  <script src="../admin/admin-page-templates.js?v=search-2"></script>
+  <script src="../admin/admin-page-templates.js?v=audit-rs-1"></script>
   <script src="../warehouse/warehouse-pages.js?v=search-2"></script>
   <script src="../warehouse/supplier-pages.js?v=search-2"></script>
   <script src="../warehouse/purchase-order-pages.js?v=count-approve-1"></script>
@@ -257,6 +258,6 @@
   <script src="../workforce/workforce-pages.js?v=approve-fix-2"></script>
   <script src="../cashier/cashier-pages.js?v=return-heal-1"></script>
   <script src="../shared/role-reports.js?v=charts-7-wh-polish"></script>
-  <script src="dashboard.js?v=approve-fix-2"></script>
+  <script src="dashboard.js?v=ui-rs-1"></script>
 </body>
 </html>

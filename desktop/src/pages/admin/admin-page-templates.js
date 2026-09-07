@@ -298,7 +298,7 @@
           </div>
         </article>
       </section>
-      <script src="../admin/audit-log.js?v=audit-ql-ui-3"></script>`,
+      <script src="../admin/audit-log.js?v=audit-rs-1"></script>`,
 
     'backup.html': `
       <section class="admin-module">

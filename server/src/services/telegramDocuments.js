@@ -1,6 +1,6 @@
 const {
-    escapeHtml, textCode, moneyCode, formatMoney, formatVnDateTime, formatTelegramDate,
-    formatTelegramValue, prettyShiftName, headerBlock, kv, splitTelegramText, t, RULE
+    escapeHtml, formatMoney, formatVnDateTime, formatTelegramDate,
+    formatTelegramValue, prettyShiftName, headerBlock, splitTelegramText, t, RULE
 } = require('./telegramMessages');
 
 const MAX_RELATED = 8;
@@ -72,19 +72,6 @@ const parseDocsArg = (raw) => {
     return kind ? { kind, id: text } : null;
 };
 
-const collectPhotos = (rows = []) => {
-    const seen = new Set();
-    const photos = [];
-    for (const row of rows) {
-        const raw = String(row.DuongDanAnh || row.AnhChungTu || '').trim();
-        if (!raw || seen.has(raw)) continue;
-        seen.add(raw);
-        photos.push({ path: raw, name: raw.replace(/\\/g, '/').split('/').pop() });
-        if (photos.length >= 3) break;
-    }
-    return photos;
-};
-
 const qtyOf = (row) => row.SoLuong ?? row.SL ?? row.SoLuongChapNhan ?? row.SLThucTe;
 const priceOf = (row) => row.DonGia ?? row.DonGiaNhap ?? row.DonGiaVon ?? 0;
 const amountOf = (row) => {
@@ -98,21 +85,21 @@ const formatLine = (row, index, mode = 'sale') => {
     const name = String(row.TenSP || row.TenHang || '').slice(0, 36);
     const unit = row.DonViTinh ? ` ${escapeHtml(row.DonViTinh)}` : '';
     if (mode === 'count') {
-        return `${index + 1}. ${textCode(code)} ${escapeHtml(name)}\n    HT ${textCode(String(row.SLHeThong ?? '—'))} / TT ${textCode(String(row.SLThucTe ?? '—'))} · lệch ${textCode(String(row.ChenhLech ?? '—'))}${row.NguyenNhan ? ` · ${escapeHtml(row.NguyenNhan)}` : ''}`;
+        return `${index + 1}. <b>${escapeHtml(String(code))}</b> ${escapeHtml(name)}\n    HT ${escapeHtml(String(row.SLHeThong ?? '—'))} / TT ${escapeHtml(String(row.SLThucTe ?? '—'))} · lệch ${escapeHtml(String(row.ChenhLech ?? '—'))}${row.NguyenNhan ? ` · ${escapeHtml(row.NguyenNhan)}` : ''}`;
     }
     if (mode === 'receipt') {
-        return `${index + 1}. ${textCode(code)} ${escapeHtml(name)}${unit}\n    giao ${textCode(String(row.SoLuongGiao ?? '—'))} · nhập ${textCode(String(row.SoLuongChapNhan ?? '—'))} · từ chối ${textCode(String(row.SoLuongTuChoi ?? 0))} × ${moneyCode(row.DonGiaNhap ?? row.DonGia)} = ${moneyCode(amountOf(row))}`;
+        return `${index + 1}. <b>${escapeHtml(String(code))}</b> ${escapeHtml(name)}${unit}\n    giao ${escapeHtml(String(row.SoLuongGiao ?? '—'))} · nhập ${escapeHtml(String(row.SoLuongChapNhan ?? '—'))} · từ chối ${escapeHtml(String(row.SoLuongTuChoi ?? 0))} × ${escapeHtml(formatMoney(row.DonGiaNhap ?? row.DonGia))} = ${escapeHtml(formatMoney(amountOf(row)))}`;
     }
     if (mode === 'return') {
         const loai = row.LoaiDong ? `${escapeHtml(row.LoaiDong)} · ` : '';
-        return `${index + 1}. ${loai}${textCode(code)} ${escapeHtml(name)}\n    SL ${textCode(String(qtyOf(row) ?? '—'))} × ${moneyCode(priceOf(row))} = ${moneyCode(amountOf(row))}`;
+        return `${index + 1}. ${loai}<b>${escapeHtml(String(code))}</b> ${escapeHtml(name)}\n    SL ${escapeHtml(String(qtyOf(row) ?? '—'))} × ${escapeHtml(formatMoney(priceOf(row)))} = ${escapeHtml(formatMoney(amountOf(row)))}`;
     }
-    return `${index + 1}. ${textCode(code)} ${escapeHtml(name)}${unit}\n    SL ${textCode(String(qtyOf(row) ?? '—'))} × ${moneyCode(priceOf(row))} = ${moneyCode(amountOf(row))}`;
+    return `${index + 1}. <b>${escapeHtml(String(code))}</b> ${escapeHtml(name)}${unit}\n    SL ${escapeHtml(String(qtyOf(row) ?? '—'))} × ${escapeHtml(formatMoney(priceOf(row)))} = ${escapeHtml(formatMoney(amountOf(row)))}`;
 };
 
 const fieldLine = (label, value, lang = 'vi') => {
     if (value == null || value === '') return '';
-    return kv(label, textCode(formatTelegramValue(value, lang)));
+    return `<b>${escapeHtml(label)}</b>: ${escapeHtml(formatTelegramValue(value, lang))}`;
 };
 
 const buildDocumentSheet = (doc = {}, lang = 'vi') => {
@@ -120,12 +107,13 @@ const buildDocumentSheet = (doc = {}, lang = 'vi') => {
     const number = doc.number || doc.id || '—';
     const when = formatTelegramDate(doc.date, lang) || formatVnDateTime(doc.date, lang) || '';
     const status = doc.status ? String(doc.status) : '';
+    const approved = /đã duyệt|đã xác nhận|đã thanh toán|thành công|đã đối chiếu/i.test(status);
     const lines = Array.isArray(doc.lines) ? doc.lines.slice(0, MAX_LINES) : [];
     const fields = Array.isArray(doc.fields) ? doc.fields : [];
     const totals = Array.isArray(doc.totals) ? doc.totals : [];
     const header = [
         headerBlock(`📄 <b>${escapeHtml(title)}</b>`),
-        `Số ${textCode(number)}${when ? ` · ${textCode(when)}` : ''}${status ? ` · ${textCode(status)}` : ''}`
+        `Số <b>${escapeHtml(String(number))}</b>${when ? ` · ${escapeHtml(when)}` : ''}${status ? ` · ${escapeHtml(status)}` : ''}${approved ? ' · ✓' : ''}`
     ];
     const body = [];
     for (const field of fields) {
@@ -133,21 +121,22 @@ const buildDocumentSheet = (doc = {}, lang = 'vi') => {
         if (line) body.push(line);
     }
     if (lines.length) {
-        body.push('', `<b>Dòng hàng (${lines.length}${(doc.lines || []).length > MAX_LINES ? '+' : ''})</b>`, RULE);
+        body.push('', `<b>📦 Dòng hàng (${lines.length}${(doc.lines || []).length > MAX_LINES ? '+' : ''})</b>`, RULE);
         body.push(...lines.map((row, index) => formatLine(row, index, doc.lineMode || 'sale')));
         if ((doc.lines || []).length > MAX_LINES) {
             body.push(`<i>… còn ${(doc.lines.length - MAX_LINES)} dòng — xem tiếp trang sau hoặc trên Fly.</i>`);
         }
     }
     if (totals.length) {
-        body.push('', `<b>Tổng hợp</b>`);
+        body.push('', `<b>💰 Tổng hợp</b>`);
         for (const item of totals) {
             const money = item.money !== false && (typeof item.value === 'number' || item.format === 'money');
-            body.push(kv(item.label, money ? moneyCode(item.value) : textCode(formatTelegramValue(item.value, lang))));
+            const shown = money ? formatMoney(item.value) : formatTelegramValue(item.value, lang);
+            body.push(`<b>${escapeHtml(item.label)}</b>: ${escapeHtml(String(shown))}`);
         }
     }
     if (doc.note) body.push('', `<i>${escapeHtml(String(doc.note).slice(0, 500))}</i>`);
-    body.push('', `<i>SUPERMARKET FLY · bản chữ đủ giấy tờ (ảnh gửi kèm nếu có)</i>`);
+    body.push('', `<i>🏪 SUPERMARKET FLY · ${escapeHtml(t(lang, 'hideAfterRead'))}</i>`);
     return [...header, '', ...body].filter(line => line !== undefined).join('\n');
 };
 
@@ -165,7 +154,10 @@ const toMessages = (doc, lang) => {
     return [{
         text: buildDocumentSheet(doc, lang),
         title: doc.title,
-        photos: doc.photos || []
+        number: doc.number || doc.id,
+        kind: doc.kind,
+        sheet: { ...doc, photos: [] },
+        photos: []
     }];
 };
 
@@ -183,7 +175,7 @@ const loadPoCore = async (pool, id) => {
     if (!header) return null;
     const lines = await manyRows(pool, `
         SELECT ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SoLuong, ct.DonGia, ct.ThanhTien,
-               ct.ChietKhau, ct.SLDaGiao, ct.SLConThieu, sp.DuongDanAnh
+               ct.ChietKhau, ct.SLDaGiao, ct.SLConThieu
         FROM ChiTietDonMua ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
         WHERE ct.MaPO=@Id ORDER BY sp.TenSP`, idInput(id));
     return { header, lines };
@@ -191,7 +183,7 @@ const loadPoCore = async (pool, id) => {
 
 const sheetPo = (header, lines, lang) => ({
     kind: 'po', title: 'ĐƠN MUA HÀNG', number: header.MaPO, date: header.NgayLap,
-    status: header.TrangThai, lineMode: 'sale', lines, photos: collectPhotos(lines),
+    status: header.TrangThai, lineMode: 'sale', lines, photos: [],
     fields: [
         { label: 'Nhà cung cấp', value: header.TenNCC },
         { label: 'Phiếu đề nghị', value: header.MaDN },
@@ -240,7 +232,7 @@ const loadPnById = async (pool, id) => {
     if (!header) return null;
     const lines = await manyRows(pool, `
         SELECT ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SoLuongGiao, ct.SoLuongChapNhan, ct.SoLuongTuChoi,
-               ct.DonGiaNhap, ct.ThanhTien, ct.TinhTrangHang, ct.SoLo, ct.HanSD, sp.DuongDanAnh
+               ct.DonGiaNhap, ct.ThanhTien, ct.TinhTrangHang, ct.SoLo, ct.HanSD
         FROM ChiTietPhieuNhap ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
         WHERE ct.MaPN=@Id ORDER BY sp.TenSP`, idInput(id));
     return { header, lines };
@@ -250,7 +242,7 @@ const sheetPn = (header, lines) => ({
     kind: 'pn',
     title: header.TrangThai === 'Đã xác nhận' ? 'PHIẾU NHẬP KHO' : 'BIÊN BẢN KIỂM NHẬN HÀNG',
     number: header.MaPN, date: header.NgayXacNhan || header.NgayNhap, status: header.TrangThai,
-    lineMode: 'receipt', lines, photos: collectPhotos(lines),
+    lineMode: 'receipt', lines, photos: [],
     fields: [
         { label: 'Đơn mua', value: header.MaPO },
         { label: 'Chuyến giao', value: header.MaTBGH },
@@ -276,7 +268,7 @@ const loadHdmById = async (pool, id) => {
         WHERE hd.MaHDMH=@Id OR hd.SoHoaDon=@Id`, idInput(id));
     if (!header) return null;
     const lines = await manyRows(pool, `
-        SELECT ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SoLuong, ct.DonGia, ct.ThueSuat, ct.TienThue, ct.ThanhTien, sp.DuongDanAnh
+        SELECT ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SoLuong, ct.DonGia, ct.ThueSuat, ct.TienThue, ct.ThanhTien
         FROM ChiTietHoaDonMuaHang ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
         WHERE ct.MaHDMH=@Hd ORDER BY sp.TenSP`, {
         Hd: { type: sqlTypes()?.VarChar, value: header.MaHDMH }
@@ -287,7 +279,7 @@ const loadHdmById = async (pool, id) => {
 const sheetHdm = (header, lines) => ({
     kind: 'hdm', title: 'HÓA ĐƠN MUA', number: header.SoHoaDon || header.MaHDMH,
     date: header.NgayHoaDon || header.NgayTiepNhan, status: header.TrangThaiDoiChieu || header.TrangThai,
-    lineMode: 'sale', lines, photos: collectPhotos(lines),
+    lineMode: 'sale', lines, photos: [],
     fields: [
         { label: 'Mã hồ sơ', value: header.MaHDMH },
         { label: 'Số HĐ NCC', value: header.SoHoaDon },
@@ -315,7 +307,7 @@ const loadHdById = async (pool, id) => {
         WHERE hd.MaHD=@Id`, idInput(id));
     if (!header) return null;
     const lines = await manyRows(pool, `
-        SELECT ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SoLuong, ct.DonGia, ct.ThanhTien, sp.DuongDanAnh
+        SELECT ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SoLuong, ct.DonGia, ct.ThanhTien
         FROM ChiTietHoaDon ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
         WHERE ct.MaHD=@Id ORDER BY sp.TenSP`, idInput(id));
     const payments = await manyRows(pool, `
@@ -331,7 +323,7 @@ const sheetHd = (header, lines, payments = [], lang = 'vi') => {
         : '';
     return {
         kind: 'hd', title: 'HÓA ĐƠN BÁN HÀNG', number: header.MaHD, date: header.NgayLap,
-        status: header.TrangThai, lineMode: 'sale', lines, photos: collectPhotos(lines),
+        status: header.TrangThai, lineMode: 'sale', lines, photos: [],
         fields: [
             { label: 'Thu ngân', value: header.TenNV },
             { label: 'Quầy', value: header.MaQuay },
@@ -362,7 +354,7 @@ const loadPxCore = async (pool, id) => {
     if (!header) return null;
     const lines = await manyRows(pool, `
         SELECT ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SoLuong, ct.DonGia,
-               (ct.SoLuong*ISNULL(ct.DonGia,0)) ThanhTien, ct.GhiChu, sp.DuongDanAnh
+               (ct.SoLuong*ISNULL(ct.DonGia,0)) ThanhTien, ct.GhiChu
         FROM ChiTietPhieuXuat ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
         WHERE ct.MaPX=@Id ORDER BY sp.TenSP`, idInput(id));
     return { header, lines };
@@ -370,7 +362,7 @@ const loadPxCore = async (pool, id) => {
 
 const sheetPx = (header, lines) => ({
     kind: 'px', title: 'PHIẾU XUẤT KHO', number: header.MaPX, date: header.NgayXuat,
-    status: header.TrangThai, lineMode: 'sale', lines, photos: collectPhotos(lines),
+    status: header.TrangThai, lineMode: 'sale', lines, photos: [],
     fields: [
         { label: 'Loại xuất', value: header.LoaiXuat },
         { label: 'Kho', value: header.TenKho },
@@ -399,7 +391,7 @@ const loadKkCore = async (pool, id) => {
     if (!header) return null;
     const lines = await manyRows(pool, `
         SELECT ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SLHeThong, ct.SLThucTe, ct.ChenhLech,
-               ct.NguyenNhan, ct.TinhTrangHang, sp.DuongDanAnh
+               ct.NguyenNhan, ct.TinhTrangHang
         FROM ChiTietKiemKe ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
         WHERE ct.MaKK=@Id ORDER BY ABS(ct.ChenhLech) DESC, sp.TenSP`, idInput(id));
     return { header, lines };
@@ -407,7 +399,7 @@ const loadKkCore = async (pool, id) => {
 
 const sheetKk = (header, lines) => ({
     kind: 'kk', title: 'PHIẾU KIỂM KÊ', number: header.MaKK, date: header.NgayKiemKe,
-    status: header.TrangThai, lineMode: 'count', lines, photos: collectPhotos(lines),
+    status: header.TrangThai, lineMode: 'count', lines, photos: [],
     fields: [
         { label: 'Kho', value: header.TenKho },
         { label: 'Người lập', value: header.NguoiLap },
@@ -436,7 +428,7 @@ const loadDtCore = async (pool, id) => {
         WHERE dt.MaDT=@Id`, idInput(id));
     if (!header) return null;
     const lines = await manyRows(pool, `
-        SELECT ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SoLuong, ct.DonGia, ct.ThanhTien, ct.LoaiDong, sp.DuongDanAnh
+        SELECT ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SoLuong, ct.DonGia, ct.ThanhTien, ct.LoaiDong
         FROM ChiTietDoiTra ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
         WHERE ct.MaDT=@Id ORDER BY ct.LoaiDong, sp.TenSP`, idInput(id));
     return { header, lines };
@@ -446,7 +438,7 @@ const sheetDt = (header, lines) => ({
     kind: 'dt',
     title: header.HinhThucXuLy === 'Hoàn tiền' ? 'PHIẾU HOÀN TIỀN' : 'PHIẾU ĐỔI HÀNG',
     number: header.MaDT, date: header.NgayHoan || header.NgayLap, status: header.TrangThai,
-    lineMode: 'return', lines, photos: collectPhotos(lines),
+    lineMode: 'return', lines, photos: [],
     fields: [
         { label: 'Hóa đơn gốc', value: header.MaHD },
         { label: 'Ngày bán gốc', value: header.NgayHoaDon },
@@ -479,7 +471,7 @@ const loadPcCore = async (pool, id) => {
     if (!header) return null;
     const lines = header.MaHDMH || header.MaHoaDonMua
         ? await manyRows(pool, `
-            SELECT ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SoLuong, ct.DonGia, ct.ThueSuat, ct.ThanhTien, sp.DuongDanAnh
+            SELECT ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SoLuong, ct.DonGia, ct.ThueSuat, ct.ThanhTien
             FROM ChiTietHoaDonMuaHang ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
             WHERE ct.MaHDMH=@Hd ORDER BY sp.TenSP`, {
             Hd: { type: sqlTypes()?.VarChar, value: header.MaHDMH || header.MaHoaDonMua }
@@ -491,7 +483,7 @@ const loadPcCore = async (pool, id) => {
 const sheetPc = (header, lines) => ({
     kind: 'pc', title: 'PHIẾU CHI NHÀ CUNG CẤP', number: header.MaPhieu,
     date: header.NgayChungTu, status: header.TrangThai, lineMode: 'sale', lines,
-    photos: collectPhotos(lines),
+    photos: [],
     fields: [
         { label: 'NCC', value: header.TenNCC },
         { label: 'Người lập', value: header.NguoiLap },
@@ -692,7 +684,7 @@ const buildDocsIndex = (items = [], lang = 'vi') => {
         return rows.join('\n');
     }
     for (const item of items.slice(0, 8)) {
-        rows.push(`• ${textCode(item.id)} · ${escapeHtml(item.title || item.kind || '')}${item.detail ? ` — ${escapeHtml(String(item.detail).slice(0, 80))}` : ''}`);
+        rows.push(`• <b>${escapeHtml(item.id)}</b> · ${escapeHtml(item.title || item.kind || '')}${item.detail ? ` — ${escapeHtml(String(item.detail).slice(0, 80))}` : ''}`);
     }
     rows.push('', `<i>${escapeHtml(t(lang, 'docsIndexFooter'))}</i>`);
     return rows.filter(Boolean).join('\n');
@@ -707,6 +699,120 @@ const docsIndexKeyboard = (items = []) => {
     return { inline_keyboard: rows };
 };
 
+const DOC_TYPE_KEYS = [
+    { kind: 'po', key: 'docsTypePo' },
+    { kind: 'pn', key: 'docsTypePn' },
+    { kind: 'hdm', key: 'docsTypeHdm' },
+    { kind: 'hd', key: 'docsTypeHd' },
+    { kind: 'px', key: 'docsTypePx' },
+    { kind: 'kk', key: 'docsTypeKk' },
+    { kind: 'dt', key: 'docsTypeDt' },
+    { kind: 'pc', key: 'docsTypePc' },
+    { kind: 'cc', key: 'docsTypeCc' }
+];
+
+const DOC_LIST_LIMIT = 12;
+
+const DOC_LIST_SQL = {
+    po: `SELECT TOP ${DOC_LIST_LIMIT} po.MaPO AS id, po.NgayLap AS ngay, po.TrangThai AS trangThai, ncc.TenNCC AS doiTuong
+         FROM DonMuaHang po JOIN NhaCungCap ncc ON ncc.MaNCC=po.MaNCC
+         ORDER BY po.NgayLap DESC, po.MaPO DESC`,
+    pn: `SELECT TOP ${DOC_LIST_LIMIT} pn.MaPN AS id, ISNULL(pn.NgayXacNhan, pn.NgayNhap) AS ngay, pn.TrangThai AS trangThai, ncc.TenNCC AS doiTuong
+         FROM PhieuNhap pn JOIN NhaCungCap ncc ON ncc.MaNCC=pn.MaNCC
+         ORDER BY ISNULL(pn.NgayXacNhan, pn.NgayNhap) DESC, pn.MaPN DESC`,
+    hdm: `SELECT TOP ${DOC_LIST_LIMIT} hd.MaHDMH AS id, ISNULL(hd.NgayHoaDon, hd.NgayTiepNhan) AS ngay,
+                ISNULL(hd.TrangThaiDoiChieu, hd.TrangThai) AS trangThai, ncc.TenNCC AS doiTuong
+         FROM HoaDonMuaHang hd JOIN NhaCungCap ncc ON ncc.MaNCC=hd.MaNCC
+         ORDER BY ISNULL(hd.NgayHoaDon, hd.NgayTiepNhan) DESC, hd.MaHDMH DESC`,
+    hd: `SELECT TOP ${DOC_LIST_LIMIT} hd.MaHD AS id, hd.NgayLap AS ngay, hd.TrangThai AS trangThai,
+                ISNULL(kh.TenKH, N'Khách vãng lai') AS doiTuong
+         FROM HoaDon hd LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
+         ORDER BY hd.NgayLap DESC, hd.MaHD DESC`,
+    px: `SELECT TOP ${DOC_LIST_LIMIT} px.MaPX AS id, px.NgayXuat AS ngay, px.TrangThai AS trangThai,
+                ISNULL(ncc.TenNCC, px.LoaiXuat) AS doiTuong
+         FROM PhieuXuat px LEFT JOIN NhaCungCap ncc ON ncc.MaNCC=px.MaNCC
+         ORDER BY px.NgayXuat DESC, px.MaPX DESC`,
+    kk: `SELECT TOP ${DOC_LIST_LIMIT} kk.MaKK AS id, kk.NgayKiemKe AS ngay, kk.TrangThai AS trangThai,
+                ISNULL(k.TenKho, N'Kho') AS doiTuong
+         FROM KiemKe kk LEFT JOIN Kho k ON k.MaKho=kk.MaKho
+         ORDER BY kk.NgayKiemKe DESC, kk.MaKK DESC`,
+    dt: `SELECT TOP ${DOC_LIST_LIMIT} dt.MaDT AS id, dt.NgayLap AS ngay, dt.TrangThai AS trangThai,
+                ISNULL(kh.TenKH, N'Khách vãng lai') AS doiTuong
+         FROM PhieuDoiTra dt JOIN HoaDon hd ON hd.MaHD=dt.MaHD
+         LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
+         ORDER BY dt.NgayLap DESC, dt.MaDT DESC`,
+    pc: `SELECT TOP ${DOC_LIST_LIMIT} pc.MaPhieu AS id, pc.NgayChungTu AS ngay, pc.TrangThai AS trangThai,
+                ISNULL(ncc.TenNCC, pc.NoiDung) AS doiTuong
+         FROM PhieuChi pc LEFT JOIN NhaCungCap ncc ON ncc.MaNCC=pc.MaNCC
+         ORDER BY pc.NgayChungTu DESC, pc.MaPhieu DESC`,
+    cc: `SELECT TOP ${DOC_LIST_LIMIT} CAST(cc.MaChamCong AS varchar(20)) AS id, l.NgayLam AS ngay,
+                cc.TrangThai AS trangThai, nv.TenNV AS doiTuong
+         FROM ChamCong cc
+         JOIN LichLamViec l ON l.MaLich=cc.MaLich
+         JOIN NhanVien nv ON nv.MaNV=l.MaNV
+         ORDER BY l.NgayLam DESC, cc.MaChamCong DESC`
+};
+
+let recentDocsOverride = null;
+const setRecentDocsOverride = (fn) => {
+    recentDocsOverride = typeof fn === 'function' ? fn : null;
+};
+
+const buildDocsTypeMenu = (lang = 'vi') => [
+    headerBlock(`📄 <b>${escapeHtml(t(lang, 'docsPickTitle'))}</b>`),
+    `<i>${escapeHtml(t(lang, 'docsPickHint'))}</i>`,
+    '',
+    `<i>${escapeHtml(t(lang, 'hideAfterRead'))}</i>`
+].join('\n');
+
+const docsTypeKeyboard = (lang = 'vi') => {
+    const buttons = DOC_TYPE_KEYS.map(item => ({
+        text: t(lang, item.key),
+        callback_data: `dkind:${item.kind}`
+    }));
+    const rows = [];
+    for (let i = 0; i < buttons.length; i += 2) {
+        rows.push(buttons.slice(i, i + 2));
+    }
+    return { inline_keyboard: rows };
+};
+
+const listRecentDocuments = async (pool, kind) => {
+    const key = String(kind || '').toLowerCase();
+    if (recentDocsOverride) return recentDocsOverride({ pool, kind: key });
+    const sqlText = DOC_LIST_SQL[key];
+    if (!sqlText || !pool) return [];
+    return manyRows(pool, sqlText, {});
+};
+
+const buildDocsTypeList = (kind, rows = [], lang = 'vi') => {
+    const meta = DOC_TYPE_KEYS.find(item => item.kind === kind);
+    const typeName = meta ? t(lang, meta.key) : String(kind || '');
+    const lines = [
+        headerBlock(`📄 <b>${escapeHtml(t(lang, 'docsListTitle', { type: typeName }))}</b>`),
+        `<i>${escapeHtml(t(lang, 'docsListHint'))}</i>`,
+        ''
+    ];
+    if (!rows.length) {
+        lines.push(escapeHtml(t(lang, 'docsListEmpty')));
+        return lines.join('\n');
+    }
+    for (const row of rows.slice(0, 15)) {
+        const ngay = formatTelegramDate(row.ngay, lang) || '';
+        lines.push(`• <b>${escapeHtml(row.id)}</b> · ${escapeHtml(ngay || '—')} · ${escapeHtml(row.trangThai || '—')} · ${escapeHtml(row.doiTuong || '—')}`);
+    }
+    return lines.filter(Boolean).join('\n');
+};
+
+const docsTypeListKeyboard = (kind, rows = [], lang = 'vi') => {
+    const buttons = rows.slice(0, 15).map(row => ([{
+        text: `📄 ${row.id}`,
+        callback_data: String(`docs:${kind}:${row.id}`).slice(0, 64)
+    }]));
+    buttons.push([{ text: t(lang, 'docsBackTypes'), callback_data: 'cmd:docs' }]);
+    return { inline_keyboard: buttons };
+};
+
 module.exports = {
     DOC_KIND_RE,
     inferKindFromId,
@@ -719,11 +825,21 @@ module.exports = {
     setDocumentPackOverride,
     buildDocsIndex,
     docsIndexKeyboard,
+    DOC_TYPE_KEYS,
+    buildDocsTypeMenu,
+    docsTypeKeyboard,
+    listRecentDocuments,
+    setRecentDocsOverride,
+    buildDocsTypeList,
+    docsTypeListKeyboard,
     sheetPo,
+    sheetPn,
+    sheetHdm,
     sheetHd,
     sheetPx,
     sheetKk,
     sheetDt,
     sheetPc,
-    sheetCc
+    sheetCc,
+    sheetShipment
 };
