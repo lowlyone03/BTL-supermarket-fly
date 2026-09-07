@@ -50,10 +50,10 @@ const TARGET_BY_TABLE = {
     CongNoNCC: 'manager-payables',
     PhieuThu: 'manager-payables',
     LichLamViec: 'manager-workforce',
-    ChamCong: 'manager-workforce',
+    ChamCong: 'manager-workforce-approve',
     CaLamViec: 'manager-workforce',
-    KyLuong: 'manager-workforce',
-    BangLuong: 'manager-workforce',
+    KyLuong: 'manager-workforce-approve',
+    BangLuong: 'manager-workforce-approve',
     NgayLeNam: 'manager-holidays',
     HeSoLuongNgay: 'manager-holidays',
     KeHoachDieuChinhLaiLo: 'manager-reports',
@@ -465,7 +465,7 @@ const ACTION_META = {
     'Duyệt chấm công': {
         viecLam: 'Duyệt chấm công',
         giaiThich: 'Số phút được duyệt sẽ đưa vào bảng lương. Có/không tính tăng ca theo quyết định Quản lý.',
-        mucDo: 'Quan trọng', nhom: 'luong'
+        mucDo: 'Quan trọng', nhom: 'luong', target: 'manager-workforce-approve'
     },
     'Thanh toán Phiếu chi thành công': {
         viecLam: 'Trả tiền Nhà cung cấp thành công',
@@ -511,6 +511,26 @@ const ACTION_META = {
         viecLam: 'Sửa phân quyền chức năng',
         giaiThich: 'Thay đổi menu/API mà từng vai trò được dùng. Ảnh hưởng toàn cửa hàng.',
         mucDo: 'Quan trọng', nhom: 'he-thong'
+    },
+    'Telegram liên kết': {
+        viecLam: 'Liên kết Telegram',
+        giaiThich: 'Gắn ChatId điện thoại với tài khoản cửa hàng sau khi nhập OTP. Không đổi chứng từ nghiệp vụ.',
+        mucDo: 'Thông tin', nhom: 'he-thong'
+    },
+    'Telegram hủy liên kết': {
+        viecLam: 'Hủy liên kết Telegram',
+        giaiThich: 'Gỡ ChatId khỏi tài khoản. Bot không còn gửi tin hay nhận lệnh từ chat đó.',
+        mucDo: 'Cảnh báo', nhom: 'he-thong'
+    },
+    'Telegram hủy liên kết cưỡng chế': {
+        viecLam: 'Quản lý hủy liên kết Telegram',
+        giaiThich: 'Hủy cưỡng chế liên kết của nhân viên. Không đổi chứng từ nghiệp vụ.',
+        mucDo: 'Cảnh báo', nhom: 'he-thong', target: '../admin/accounts.html'
+    },
+    'Telegram tạo mã OTP': {
+        viecLam: 'Tạo mã liên kết Telegram',
+        giaiThich: 'Nhân viên tạo OTP 6 số trên Fly. Nhật ký không lưu đủ 6 số.',
+        mucDo: 'Thông tin', nhom: 'he-thong'
     }
 };
 
@@ -693,8 +713,16 @@ const logAudit = async (source, opts = {}) => {
     const valSql = ['@LogMaTK', '@LogHanhDong', '@LogBang', '@LogMaBanGhi', '@LogNoiDung', 'GETDATE()', ...extraVals].join(',');
     await request.query(`INSERT INTO NhatKy (${colSql}) VALUES (${valSql})`);
     try {
-        require('./notificationHub').notifyInboxChanged({ action: hanhDong, table });
+        require('./notificationHub').notifyInboxChanged({ action: hanhDong, table, recordId: record });
     } catch { /* chuông trực tiếp không được thì client tự tải lại */ }
+    try {
+        const telegramNotify = require('./telegramNotify');
+        setImmediate(() => {
+            Promise.resolve(telegramNotify.onAudit({
+                action: hanhDong, table, recordId: record, user, content: noiDung, result
+            })).catch(error => console.error('Telegram:', error.message));
+        });
+    } catch { /* bot lỗi không được làm hỏng nghiệp vụ */ }
 };
 
 const logAuditSafe = async (...args) => {

@@ -82,4 +82,9 @@ router.get('/backups', requirePermission('UC03'), backupController.listBackups);
 router.get('/backups/:fileName', requirePermission('UC03'), backupController.downloadBackup);
 router.get('/security-logs', requirePermission('UC03'), backupController.getSecurityLogs);
 
+const telegramBotController = require('../controllers/telegramBotController');
+router.get('/telegram/bindings', requirePermission('UC02'), telegramBotController.listBindings);
+router.post('/telegram/bindings/:maNV/revoke', requirePermission('UC02'), telegramBotController.revokeBinding);
+router.post('/telegram/bindings/:maNV/channel', requirePermission('UC02'), telegramBotController.setChannel);
+
 module.exports = router;

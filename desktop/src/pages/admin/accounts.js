@@ -315,5 +315,64 @@
         }
     };
 
-    loadRoles().then(loadAccounts).catch(error => window.showToast(error.message, 'error'));
+    window.loadTelegramBindings = async () => {
+        const body = document.getElementById('telegramBindBody');
+        if (!body) return;
+        body.innerHTML = '<tr><td colspan="7" class="empty-state">Đang tải liên kết Telegram...</td></tr>';
+        try {
+            const res = await fetch(`${API}/admin/telegram/bindings`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || 'Không tải được liên kết Telegram.');
+            const items = data.items || [];
+            body.innerHTML = items.length ? items.map(row => `
+                <tr>
+                    <td><strong>${escapeHtml(row.TenNV)}</strong><small>${escapeHtml(row.MaNV)}</small></td>
+                    <td>${escapeHtml(row.TenDangNhap || '')}</td>
+                    <td>${escapeHtml(row.TenVaiTro || '')}</td>
+                    <td>${escapeHtml(row.ChatIdMasked || '****')}</td>
+                    <td>${Number(row.Bat) === 1 ? 'Bật' : 'Tắt'}</td>
+                    <td>${row.NgayXacThuc ? new Date(row.NgayXacThuc).toLocaleString('vi-VN', { timeZone: HANOI_TIME_ZONE }) : '—'}</td>
+                    <td class="align-right"><div class="action-btns">
+                        <button type="button" class="btn btn-outline" onclick="toggleTelegramChannel('${escapeHtml(row.MaNV)}', ${Number(row.Bat) === 1 ? 0 : 1})">${Number(row.Bat) === 1 ? 'Tắt kênh' : 'Bật kênh'}</button>
+                        <button type="button" class="btn btn-danger" onclick="revokeTelegramBind('${escapeHtml(row.MaNV)}', '${escapeHtml(row.TenNV)}')">Hủy liên kết</button>
+                    </div></td>
+                </tr>`).join('') : '<tr><td colspan="7" class="empty-state">Chưa có nhân viên liên kết Telegram.</td></tr>';
+        } catch (err) {
+            body.innerHTML = `<tr><td colspan="7" class="empty-state">${escapeHtml(err.message || 'Lỗi tải Telegram')}</td></tr>`;
+        }
+    };
+
+    window.revokeTelegramBind = async (maNV, tenNV) => {
+        if (!confirm(`Hủy liên kết Telegram của ${tenNV}?`)) return;
+        try {
+            const res = await fetch(`${API}/admin/telegram/bindings/${encodeURIComponent(maNV)}/revoke`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || 'Không hủy được liên kết.');
+            window.showToast(data.message, 'success');
+            loadTelegramBindings();
+        } catch (err) {
+            window.showToast(err.message, 'error');
+        }
+    };
+
+    window.toggleTelegramChannel = async (maNV, bat) => {
+        try {
+            const res = await fetch(`${API}/admin/telegram/bindings/${encodeURIComponent(maNV)}/channel`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ Bat: bat })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || 'Không đổi được kênh.');
+            window.showToast(data.message, 'success');
+            loadTelegramBindings();
+        } catch (err) {
+            window.showToast(err.message, 'error');
+        }
+    };
+
+    loadRoles().then(loadAccounts).then(loadTelegramBindings).catch(error => window.showToast(error.message, 'error'));
 }

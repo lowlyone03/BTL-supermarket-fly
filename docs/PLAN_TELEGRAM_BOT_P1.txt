@@ -1,0 +1,1428 @@
+KẾ HOẠCH TRIỂN KHAI TELEGRAM BOT
+SUPERMARKET FLY (AIS) — companion P1, chưa code
+================================================================================
+
+Ngày soạn (bản draft chat): 07/09/2026
+Ngày sửa: 07/09/2026
+Bản này: chỉnh theo review 07/09/2026 — 5 điểm + CSDL tối giản
+
+Trạng thái: kế hoạch triển khai — CHƯA viết mã bot
+Đối tượng nhận: thành viên làm tiếp FE + BE + CSDL
+Repo: supermarket-fly/ (Git) — GitHub https://github.com/lowlyone03/BTL-supermarket-fly.git
+
+Đây là file plan Telegram DUY NHẤT để giao người khác code.
+PLAN_12 mục A3 vẫn là master plan tầng P1; chỗ mâu thuẫn (câu read-only, mốc 22:00)
+đã được chú thích trỏ về file này. Không viết lại toàn bộ PLAN_12.
+
+
+================================================================================
+MỤC LỤC
+================================================================================
+
+  0.  Thay đổi so với bản draft chat
+  1.  Nguồn đã đọc và đối chiếu
+  2.  Telegram bot là gì — và không phải gì
+  3.  Mục tiêu / ngoài phạm vi
+  4.  Luật bất biến (bot không được phá)
+  5.  Use case, actor, ma trận quyền
+  6.  Kiến trúc kỹ thuật
+  7.  CSDL và migration (tối giản — đã chốt)
+  8.  Bảo mật
+  9.  Danh sách sự kiện đẩy
+  10. Lệnh bot (pull; chỉ đọc nghiệp vụ)
+  11. Luồng bind tài khoản (từng bước, 5 actor)
+  12. File sẽ sửa / thêm (3 tầng)
+  13. Thứ tự sprint
+  14. Rủi ro và việc cấm làm
+  15. Kế hoạch kiểm thử
+  16. Ước lượng effort và phụ thuộc
+  17. Chỗ tài liệu chưa chốt + mặc định an toàn
+  18. Mâu thuẫn tài liệu
+  Phụ lục — API đề xuất (chưa code)
+
+
+================================================================================
+0. THAY ĐỔI SO VỚI BẢN DRAFT CHAT (07/09/2026)
+================================================================================
+
+Bản draft đã soạn trong chat cùng ngày, dựa trên PLAN_12 A3, bàn giao 07/09,
+notificationHub. Chưa từng nằm thành file riêng. File này = bản draft + 5 điểm
+review + quyết định CSDL. KHÔNG thêm module / tính năng mới.
+
+  (1) Câu “Telegram read-only”
+      CHỐT: “Telegram read-only đối với dữ liệu nghiệp vụ; chỉ được ghi dữ liệu
+      cấu hình liên kết Telegram như bind/unbind/audit.”
+      Lý do: /start OTP, /unlink, QL revoke vẫn ghi TelegramDangKy (và NhatKy).
+      Không gọi là “chỉ đọc tuyệt đối” — thầy hỏi không bị bắt lỗi câu chữ.
+      Mọi chỗ trong file này đã đổi theo câu chốt đó.
+
+  (2) Mốc 22:00 SAI với cửa hàng 24/7
+      Fly có ca đêm DEM 22:00–06:00. 22:00 là lúc ca đêm BẮT ĐẦU, không phải
+      hết ngày vận hành.
+      SỬA: gửi báo cáo sau khi ca đêm kết thúc, khoảng 06:05–06:15
+      (mặc định 06:10, múi giờ Asia/Ho_Chi_Minh).
+      Ngày vận hành = ngày ca đêm BẮT ĐẦU (khớp code NgayLam). Không thêm chức năng,
+      chỉ sửa mốc giờ. Chi tiết mục 9 A3 và mục 2.4.
+
+  (3) Polling fallback — một dòng kỹ thuật
+      Khi trước đó đã setWebhook rồi chuyển sang long polling: backend PHẢI
+      gọi deleteWebhook TRƯỚC KHI getUpdates.
+      Webhook và polling không chạy cùng lúc (giữ nguyên). Bổ sung bước này
+      để demo không bị “polling bật mà bot không nhận tin”.
+
+  (4) Bảo mật tài liệu
+      File này có URL GitHub, sẽ commit. KHÔNG ghi mật khẩu test thật.
+      Viết admin / <mật khẩu test> hoặc chỉ tên đăng nhập. Không liệt kê
+      credential demo đầy đủ.
+
+  (5) /today
+      TRÁNH cụm “báo cáo tài chính ngày”.
+      Tên hiển thị: “Tóm tắt hoạt động hôm nay” (menu /fly có thể ghi
+      “Báo cáo vận hành hôm nay”).
+      Nội dung: Doanh thu – Giá vốn – Lãi gộp – 4 kênh thanh toán – cảnh báo.
+      Dùng lãi gộp (cột A). KHÔNG lấy bug P&L trừ tiền trả NCC.
+
+  Quyết định bảng (review CSDL, không thêm bảng lung tung)
+      - TelegramDangKy: CẦN THIẾT (bind ChatId ↔ tài khoản).
+      - TelegramNhatKy: KHÔNG tạo. Tái sử dụng NhatKy + logAudit cho audit
+        bind/unbind/lệnh.
+      - TelegramPushLog: CÓ, tối thiểu 3 cột — chỉ vì chống spam 10 phút.
+        NhatKy không đủ (thiếu LoaiSuKien, LanGuiCuoi; MaTK NOT NULL + FK
+        không hợp cron hệ thống). Giải thích mục 7.2–7.3.
+      - Bot không ALTER CongNoPhaiTra, HoaDon, CaLamViec, TonKho.
+
+
+GIỮ NGUYÊN (review xác nhận không đụng):
+
+  - OTP + ChatId theo tài khoản; không hard-code ChatId
+  - Private chat only
+  - Quyền dựa UC thật (VaiTro_ChucNang)
+  - QL chỉ payroll summary; KT UC33 mới xem chi tiết 1 NV
+  - Push: Phiếu chi / lệch két / công nợ / tồn + các sự kiện inbox đã liệt kê
+  - Lệnh: /fly, /today, /debt, /lowstock, /shifts, /payments, /pending, /payroll
+  - Telegram hỏng không ảnh hưởng POS
+  - Không nút Duyệt / Từ chối
+  - Kiến trúc: Telegram ↔ Express ↔ SQL Server; Electron JWT chỉ tạo OTP;
+    Telegram xác thực ChatId → TelegramDangKy → TaiKhoan → VaiTro → UC
+  - Không OAuth, Firebase, app mobile, AI trên Telegram
+  - Không thêm module
+
+
+================================================================================
+1. NGUỒN ĐÃ ĐỌC VÀ ĐỐI CHIẾU
+================================================================================
+
+Đã đọc (không bịa; path dưới workspace D:\UDTHTKT\BTL):
+
+  supermarket-fly/docs/BAN_GIAO_LAM_TIEP_TOAN_BO_HE_THONG_2026-09-07.txt
+      File bàn giao chính: 5 actor / 33 UC đã chạy; Telegram chưa code;
+      UC mới từ UC34; không đụng nghĩa UC30–UC33.
+
+  supermarket-fly/docs/PLAN_12_TICH_HOP_VA_KE_TOAN.txt
+      Toàn bộ mục Telegram / P1 / P2 / A2 / A3 / A11 / B2.5 / B4 / C / D / E / F.
+      Chỗ mâu thuẫn với bản này (read-only tuyệt đối, cron 22:00) lấy file này.
+
+  supermarket-fly/docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt
+      3 cột tiền đang chạy; chuông GET /api/notifications.
+
+  supermarket-fly/docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt
+      Plan A sổ cái; UC34+ dành kế toán tổng hợp; không bán chịu.
+
+  supermarket-fly/docs/HUONG_DAN_CLOUDFLARE_TUNNEL.md
+      Đường hầm HTTPS cho máy LAN (webhook).
+
+  supermarket-fly/docs/HUONG_DAN_TEST_PHAN_CA_POS_LUONG.md
+      Ca đêm 22:00–06:00; giờ đêm tách khi duyệt công.
+
+  supermarket-fly/docs/README.md
+      PLAN_12 = kế hoạch nâng cấp, chưa code.
+
+  supermarket-fly/server/src/services/notificationHub.js
+      SSE ping chuông desktop (không chứa nội dung việc).
+
+  supermarket-fly/server/src/controllers/notificationController.js
+      Inbox theo 5 vai trò.
+
+  supermarket-fly/server/src/routes/notificationRoutes.js
+      GET /, GET /stream, JWT.
+
+  supermarket-fly/server/src/services/auditLog.js
+      logAudit → INSERT NhatKy; gọi notifyInboxChanged.
+      Cột extra (nếu có): MaUC, KetQua, MucDo, DuLieuJSON, DiaChiIP.
+
+  supermarket-fly/server/migrations/SupermarketFly_CreateDB.sql
+      NhatKy: MaNK, MaTK NOT NULL FK→TaiKhoan, HanhDong, BangLienQuan,
+      MaBanGhi, NoiDung, ThoiGian, DiaChiIP.
+
+  supermarket-fly/server/migrations/SupermarketFly_Migration_20260902_AuditLog.sql
+      NhatKy: MaBanGhi VARCHAR(50), HanhDong NVARCHAR(250), NoiDung NVARCHAR(1000),
+      thêm MaUC, KetQua, MucDo, DuLieuJSON; index IX_NhatKy_ThoiGian.
+
+  supermarket-fly/server/src/services/shiftScheduler.js
+      Ca DEM: GioKetThuc <= GioBatDau → kéo sang ngày lịch tiếp theo.
+      NgayLam = ngày xếp ca = ngày ca đêm BẮT ĐẦU.
+
+  supermarket-fly/server/src/controllers/workforceController.js
+      BatDauDuKien = NgayLam + GioBatDau;
+      KetThucDuKien = NgayLam + GioKetThuc, +1 ngày nếu GioKetThuc <= GioBatDau.
+
+  supermarket-fly/server/test-shift-scheduler.js
+      LoaiCa DEM: 22:00–06:00, SoGio 8.
+
+  supermarket-fly/server/src/constants/permissions.js
+      UC01–UC33 + ma trận 5 vai trò.
+
+  supermarket-fly/server/src/app.js
+      Express :3000, chưa mount Telegram.
+
+  supermarket-fly/server/src/middlewares/authMiddleware.js
+      JWT + requirePermission.
+
+  supermarket-fly/server/src/services/financialRules.js
+      Lãi gộp = DoanhThuThuan − GiaVonHangBanThuan (không trừ trả NCC).
+
+  supermarket-fly/server/src/services/storeProfitLossMath.js
+      Bug B1.5: laiLoSauChiPhi trừ chiNhaCungCap — bot KHÔNG copy số này.
+
+  supermarket-fly/server/src/services/reportingPeriod.js
+      Múi giờ lịch: Asia/Ho_Chi_Minh.
+
+  TaiLieu_Du_An/
+      Không có mô tả Telegram riêng (chỉ bản copy bàn giao).
+
+Hiện trạng code: không có telegramNotify.js, telegramBotController.js, bảng
+TelegramDangKy. server/package.json không có thư viện Telegram.
+server/.env.example không có TELEGRAM_BOT_TOKEN.
+Firebase / n8n / email-SMS thật đã cắt.
+
+
+================================================================================
+2. TELEGRAM BOT LÀ GÌ — VÀ KHÔNG PHẢI GÌ
+================================================================================
+
+2.1. Định vị đã chốt (PLAN_12 A3 + câu chữ review 07/09)
+
+  Telegram bot = Mobile Monitoring Companion (tầng P1, ưu tiên 3).
+
+  Một câu: điện thoại Quản lý / nhân viên đã liên kết = mini dashboard;
+  không cần app mobile; không mang laptop vẫn biết cửa hàng đang thế nào.
+
+  Câu chốt khi thầy hỏi “bot chỉ đọc hay có ghi?”:
+
+      Telegram read-only đối với dữ liệu nghiệp vụ; chỉ được ghi dữ liệu
+      cấu hình liên kết Telegram như bind/unbind/audit.
+
+  Nghĩa concrète:
+      KHÔNG ghi: HoaDon, CaLamViec, CongNoPhaiTra, TonKho, PhieuChi, PO, lương,
+                 chấm công, két, phiếu thu.
+      ĐƯỢC ghi:  TelegramDangKy (OTP, ChatId, Bat, NgayXacThuc…),
+                 NhatKy (audit lệnh / bind),
+                 TelegramPushLog (mốc chống spam — không phải chứng từ nghiệp vụ).
+
+  Telegram lỗi / tắt bot: nghiệp vụ Electron vẫn chạy bình thường (fallback).
+
+  Ba việc bot ĐƯỢC làm:
+
+  1. Push (cảnh báo): đẩy tin khi có sự kiện quan trọng (phiếu chi chờ duyệt,
+     lệch két, tóm tắt sau ca đêm, map inbox).
+  2. Pull (đối soát đọc): nhân viên đã bind gõ /fly, /today, /debt… để xem
+     số liệu live từ SQL qua API chỉ đọc nghiệp vụ.
+  3. Kênh ra ngoài thay Firebase: PLAN_12 A11 cắt Firebase vì
+     “Telegram đã là push điện thoại”.
+
+2.2. Phân biệt với AI chatbot (P2 — A2)
+
+  Telegram companion (P1, A3)
+      Pha: P1 — tuần 6
+      Kênh: Telegram (điện thoại)
+      Cơ chế: mẫu tin cố định + lệnh cố định
+      Hỏi tự do: không. Chỉ lệnh / nút menu
+      Ghi chứng từ nghiệp vụ: cấm
+      Duyệt PO / chi NCC / completeInvoice: cấm
+      File: telegramNotify.js, telegramBotController.js
+      Demo bảo vệ: bonus / video dự phòng
+
+  AI trợ lý (P2, A2)
+      Pha: P2 — tuần 7, người khác OCR
+      Kênh: nút “Trợ lý” trên dashboard Electron
+      Cơ chế: 1 LLM (Gemini/OpenAI), context tài liệu + API đọc
+      Hỏi tự do: có, bắt buộc ghi Nguồn
+      Ghi chứng từ / duyệt: cấm
+      File: assistantController.js, assistantTools.js
+      Demo: bước 8 “Hôm nay cần chú ý gì?”
+
+  KHÔNG gộp hai thứ thành một bot. Telegram P1 không gọi LLM.
+  Câu “giải thích vì sao lệch két” thuộc AI P2 trên Electron.
+
+2.3. Không phải “duyệt từ chat”
+
+  PLAN_12 A3, ranh giới không đổi:
+
+      Xem qua Telegram: được (nếu vai trò đó xem được trong Fly).
+      Duyệt / ghi sổ / thanh toán / sửa dữ liệu nghiệp vụ: KHÔNG.
+
+  Lý do ghi trong tài liệu: xác thực 2 lớp, replay, transaction, audit,
+  tài khoản Telegram bị chiếm — quá tầm đồ án.
+
+  Câu demo: “Xem được; duyệt vẫn trong Fly để giữ phân quyền, transaction, audit.”
+
+  Bàn giao 07/09 cũng cấm: “Chatbot duyệt đơn mua / chi NCC / hoàn thành hóa đơn”.
+
+2.4. Ngày vận hành và ca đêm (đối chiếu code — chỉ sửa mốc, không thêm chức năng)
+
+  Cửa hàng 24/7. Loại ca thu ngân (test-shift-scheduler.js, LoaiCa):
+
+      SANG     06:00–14:00   NgayLam = D
+      TRUA_TC  10:00–14:00   NgayLam = D
+      CHIEU    14:00–22:00   NgayLam = D
+      TOI_TC   18:00–22:00   NgayLam = D
+      DEM      22:00–06:00   NgayLam = D   ← bắt đầu 22:00 ngày D,
+                                             kết thúc 06:00 ngày lịch D+1
+
+  Code shiftScheduler.interval: nếu GioKetThuc <= GioBatDau thì mốc kết thúc
+  +1 ngày. workforceController ghi BatDauDuKien / KetThucDuKien đúng như vậy.
+  LichLamViec.NgayLam của ca DEM = ngày ca đêm BẮT ĐẦU, không phải ngày kết thúc.
+
+  Quy ước ngày vận hành (khớp code, trùng mặc định review):
+
+      Ngày vận hành D = ngày NgayLam của ca đêm DEM.
+      Ca đêm 22:00 ngày D → 06:00 ngày D+1 thuộc ngày vận hành D.
+      Cửa sổ số liệu ngày vận hành D:
+          từ 06:00 ngày D (ca đêm D−1 vừa xong)
+          đến 06:00 ngày D+1 (ca đêm D vừa xong).
+      Múi giờ: Asia/Ho_Chi_Minh (reportingPeriod.js).
+
+  Báo cáo đẩy 1 tin / một ngày vận hành:
+      Gửi khoảng 06:05–06:15 ngày lịch D+1 (mặc định 06:10),
+      tiêu đề thuộc ngày vận hành D (ví dụ “05/09/2026”),
+      KHÔNG gửi lúc 22:00 ngày D — đó là lúc ca đêm D bắt đầu.
+
+  /today (kéo live): cùng cửa sổ ngày vận hành đang chạy.
+      Ví dụ 23:00 ngày D hoặc 03:00 ngày D+1 → vẫn ngày vận hành D.
+      Sau 06:10 ngày D+1 → ngày vận hành D+1 (SANG đã bắt đầu).
+
+  reportingPeriod.js hiện cắt “ngày báo cáo” theo nửa đêm lịch (00:00–00:00).
+  Đó là kỳ kế toán / UC10 trên Electron — KHÔNG bắt bot copy cắt 00:00.
+  Bot theo cửa sổ ca 06:00–06:00 ở trên. Không thêm báo cáo mới trên desktop.
+
+
+================================================================================
+3. MỤC TIÊU / NGOÀI PHẠM VI
+================================================================================
+
+In scope (làm)
+
+  - Liên kết OTP 6 số: tài khoản cửa hàng (MaNV / TaiKhoan) ↔ ChatId Telegram.
+    Không hard-code ChatId.
+  - Push tin tiếng Việt, đủ chi tiết (không chỉ một dòng), theo vai trò,
+    rate-limit 1 sự kiện / chứng từ / 10 phút.
+  - Pull lệnh chỉ đọc nghiệp vụ, lọc theo UC thật trong VaiTro_ChucNang.
+  - Tắt / lỗi bot: POS, két, công nợ, lương vẫn chạy (fallback).
+  - Nhật ký lệnh quan trọng và bind/unbind (MaNV, ChatId, lệnh, lúc) qua NhatKy.
+  - Màn Electron “Liên kết Telegram” trên menu tài khoản.
+  - QL (UC02) xem danh sách liên kết, hủy bind cưỡng chế, bật/tắt kênh.
+  - Chỉ chat riêng (private). Không gửi số tiền vào group.
+  - Ghi cấu hình liên kết: bind / unbind / audit (không phải ghi sổ nghiệp vụ).
+
+Out of scope (không làm trong P1 Telegram)
+
+  Nút Duyệt / Từ chối trên Telegram          PLAN_12 A3 “KHONG LAM”
+  Chatbot / LLM trên Telegram                Đó là P2 A2
+  OCR hóa đơn, replenishment                 P2
+  VNPay / barcode / e-receipt                P1 khác, tuần 4–5; bot chỉ đọc kết quả khi đã có
+  Đối soát thanh toán điện tử theo ca (màn KT)
+                                             P1 tuần 6 cùng lịch nhưng module khác (B2.1, UC29)
+  Firebase, n8n, email/SMS thật              Đã cắt
+  App native iOS/Android                     Không
+  Cho người chưa /start OTP hỏi bot          PLAN_12 A3
+  Push chi tiết lương từng NV                PLAN_12 A3
+  Sửa TienMatHeThong, lập Phiếu chi, giảm 331 từ bot
+                                             Luật cột B/C
+  completeInvoice, bán chịu, INSERT CongNoPhaiTra
+                                             Luật cột A/C
+  OAuth, Firebase Auth, đăng nhập Telegram thay JWT Fly
+                                             Không
+  Bảng TelegramNhatKy                        Tái sử dụng NhatKy (mục 7)
+
+
+================================================================================
+4. LUẬT BẤT BIẾN (BOT KHÔNG ĐƯỢC PHÁ)
+================================================================================
+
+Nguồn: PLAN_12 mục 0; PHUONG_AN_KE_TOAN_DA_CHOT.txt mục 3; bàn giao mục 11.
+
+Cột A — Doanh thu / giá vốn
+
+  - Doanh thu chỉ khi HoaDon.TrangThai = Hoàn thành (completeInvoice).
+  - Bot KHÔNG gọi POST /api/cashier/invoices/:id/complete.
+  - /today và tin sau ca đêm: DT / GV / lãi GỘP từ hóa đơn hoàn thành
+    trong cửa sổ ngày vận hành; KHÔNG trừ tiền trả NCC.
+  - E-receipt không sinh hóa đơn mới — bot không liên quan.
+
+Cột B — Két ca / phiếu thu
+
+  - TienMatHeThong = TongTienMat − TongTienHoanMat. QR/Thẻ/CK không vào két.
+  - Alert lệch két KHÔNG sửa TienMatHeThong.
+  - Một ca một Phiếu thu. Bot không lập / xác nhận phiếu thu.
+
+Cột C — Công nợ NCC
+
+  - Chỉ sinh CongNoPhaiTra khi đối chiếu 3 bên khớp.
+  - Alert hạn nợ / xem phiếu chi KHÔNG lập Phiếu chi, KHÔNG giảm SoTienConLai.
+  - OCR/AI/replenishment/Telegram đều KHÔNG INSERT CongNoPhaiTra.
+
+Cấm khác (bàn giao + PLAN_12 0.1)
+
+  - Không duyệt PO, không chi NCC, không completeInvoice từ chat.
+  - Không bán chịu / TK 131.
+  - Không huấn luyện mô hình.
+  - Lương: bot chỉ đọc; không duyệt công, không chi lương.
+
+Bug P&L hiện tại (phải tránh trên bot)
+
+  storeProfitLossMath.calculateOperatingResult đang trừ chi NCC vào
+  “lãi/lỗ sau chi phí” — PLAN_12 B1.5 gọi là sai.
+  /today và tin sau ca đêm: lãi gộp = DT thuần − GV thuần
+  (financialRules.calculateGrossProfit).
+  Tiền trả NCC không nhét vào lãi gộp, không đưa vào tin /today.
+
+
+================================================================================
+5. USE CASE, ACTOR, MA TRẬN QUYỀN
+================================================================================
+
+5.1. Có cần UC34 cho Telegram không?
+
+  Mặc định an toàn: không. PLAN_12 B4:
+
+      P1–P2: không cần UC mới nếu gắn được UC cũ.
+      Telegram: liên kết OTP UC01; cấu hình bot QL UC02;
+      lệnh đọc theo đúng UC (QL UC10 /today /payroll tóm tắt;
+      KT UC33 /payroll MaNV; UC15 /lowstock…).
+
+  UC34–UC43 đã đặt chỗ cho kế toán tổng hợp. Gán Telegram = UC34 sẽ đụng
+  PLAN_12 / file 31/08.
+
+  Nếu hội đồng bắt “mỗi tích hợp một UC” trên báo cáo môn: đặt
+  UC44 — Kênh Telegram (chỉ đọc nghiệp vụ) SAU khối UC34–UC43,
+  không chiếm UC30–UC33, không chiếm UC34. Khi đó mới seed permissions.js
+  + seed-permissions.js (đúng quy tắc 3 tầng). P1 không làm UC44 trừ khi môn bắt.
+
+5.2. Gắn quyền (không thêm UC)
+
+  Việc                                          UC          Ai
+  --------------------------------------------  ----------  -------------------------
+  Đăng nhập Fly, tạo OTP, /start bind,          UC01        Cả 5 actor
+  /help, /fly (menu đã lọc), /unlink
+  QL xem/hủy liên kết, bật/tắt bot              UC02        Chỉ Quản lý
+  /today, /pending (hàng chờ duyệt),            UC10        QL
+  /payroll tóm tắt kỳ
+  /lowstock                                     UC15        Thủ kho
+                                                (QL không có UC15 trong ma trận
+                                                 hiện tại → QL xem tồn thấp qua
+                                                 UC10 / tin sau ca đêm, không
+                                                 qua lệnh UC15)
+  /shifts                                       UC10 QL / UC22 TN (ca của mình)
+                                                / UC29 KT (ca chờ đối soát)
+  /payments                                     UC10 QL / UC29 KT
+                                                / UC25 TN (chỉ ca mình, không
+                                                 mã GD đầy đủ)
+  /debt                                         UC10 QL / UC28 KT
+  /pending phiếu chờ                            UC duyệt: UC05 PO, UC06 PX,
+                                                UC07 KK, UC08 đổi trả, UC09 PC,
+                                                UC32 công/lương — chủ yếu QL
+  /payroll MaNV chi tiết 1 người                Chỉ UC33     Chỉ Kế toán
+  Lịch hôm nay (kéo từ inbox)                   UC31        MH, TK, TN, KT
+                                                (QL không có UC31)
+
+  Ma trận UC hiện tại (permissions.js) — chỉ TÊN đăng nhập, không mật khẩu:
+
+  Actor                         Tên đăng nhập demo (*)     UC
+  ----------------------------  -------------------------  ----------------------
+  Quản lý (QL)                  admin                      UC01–UC10, UC30, UC32
+  Nhân viên mua hàng (MH)       muahang                    UC01, UC11–UC14, UC31
+  Thủ kho (TK)                  thukho                     UC01, UC15–UC21, UC31
+  Thu ngân (TN)                 thungan                    UC01, UC22–UC26, UC31
+  Kế toán (KT)                  ketoan                     UC01, UC27–UC29, UC31, UC33
+
+  (*) Mật khẩu test: xem hướng dẫn test local (không commit vào file này).
+      Viết tắt khi cần: admin / <mật khẩu test>.
+
+  QL không có UC31, UC33. KT không có UC09 (duyệt phiếu chi — đó là QL).
+  Bot lặp đúng: KT không nhận lệnh “duyệt”; QL không /payroll NV008.
+
+5.3. Ai nhận tin push
+
+  Chỉ TelegramDangKy có Bat = 1 VÀ đúng vai trò inbox
+  (cùng logic notificationController.listForRole).
+  Không broadcast cả cửa hàng trừ sự kiện kế hoạch lãi/lỗ
+  (đã gửi ThongBaoCuaHang cho mọi NV đang làm — Telegram chỉ đẩy tới
+  người đã bind).
+
+
+================================================================================
+6. KIẾN TRÚC KỸ THUẬT
+================================================================================
+
+  Điện thoại Telegram                 Express :3000                    SQL Server
+  +------------------+   HTTPS     +---------------------------+      +------------------+
+  | BotFather bot    | <---------> | telegramBotController     |      | TelegramDangKy   |
+  | Chat riêng       |  webhook    |  (lệnh / OTP, KHÔNG JWT)  | ODBC | TelegramPushLog  |
+  |                  |  hoặc poll  | telegramNotify.js (push)  |      | NhatKy (audit)   |
+  +------------------+             | notificationController    |      | nghiệp vụ cũ     |
+                                   |  (inbox, tái dùng SELECT) |      +------------------+
+  Electron desktop                 | app.js mount /api/telegram|
+  [Tạo mã OTP] --JWT-->            +---------------------------+
+
+  Xác thực lệnh bot (không OAuth, không Firebase, không JWT trên Telegram):
+
+      ChatId → TelegramDangKy (Bat=1) → TaiKhoan → VaiTro → VaiTro_ChucNang (UC)
+      → API / SELECT chỉ đọc.
+
+  Electron chỉ dùng JWT để tạo OTP / xem trạng thái / tự unlink / QL revoke.
+
+6.1. Webhook hay long polling?
+
+  PLAN_12 ghi telegramBotController.js webhook + env TELEGRAM_WEBHOOK_URL.
+
+  Thực tế máy đồ án: Express HOST 0.0.0.0 cổng 3000, LAN, Windows Auth.
+  Telegram không gọi được http://192.168.x.x:3000. Webhook bắt buộc HTTPS công khai.
+
+  Nhóm đã có docs/HUONG_DAN_CLOUDFLARE_TUNNEL.md + 6_MO_DUONG_HAM_CLOUDFLARE.bat
+  (link https://….trycloudflare.com đổi mỗi lần mở).
+
+  Mặc định:
+
+      TELEGRAM_WEBHOOK_URL có giá trị HTTPS
+          → setWebhook lúc start; POST /api/telegram/webhook
+
+      TELEGRAM_WEBHOOK_URL trống
+          → Long polling trong process Node (dev / demo máy đơn, không cần tunnel)
+
+      Telegram down / token trống
+          → Log cảnh báo, KHÔNG crash POS
+
+  Không chạy đồng thời webhook + polling.
+
+  BẮT BUỘC khi chuyển sang long polling (kể cả lần đầu process start mà
+  env không có webhook URL):
+
+      Nếu trước đó bot đã setWebhook (máy khác, buổi test Cloudflare trước,
+      hoặc restart đổi env): gọi deleteWebhook TRƯỚC KHI getUpdates.
+
+      Lý do Bot API: khi webhook còn gắn, getUpdates trả về conflict /
+      không nhận tin — triệu chứng “polling bật mà bot không nhận tin”.
+
+      Thứ tự an toàn lúc start:
+          1. Đọc env token; token trống → bỏ qua, POS chạy.
+          2. Nếu có TELEGRAM_WEBHOOK_URL → setWebhook (kèm secret_token).
+          3. Nếu KHÔNG có URL → deleteWebhook rồi mới vòng getUpdates.
+          4. Không bật cả hai nhánh.
+
+  Webhook Cloudflare tạm: mỗi buổi test phải setWebhook lại URL mới.
+  Ghi vào checklist sprint.
+
+  Thư viện: không bắt buộc node-telegram-bot-api. Khớp style hiện tại:
+  fetch tới https://api.telegram.org/bot<token>/…
+  Nếu thêm package, chỉ dùng lúc code, không nhét framework chat vào POS.
+
+6.2. JWT vs ChatId
+
+  Hai lớp khác nhau:
+
+  1. Electron → API OTP: JWT như mọi API (verifyToken).
+     Payload hiện có: MaTK, MaNV, MaVaiTro, TenVaiTro, TenNV (authController.js).
+  2. Telegram → bot: KHÔNG dùng JWT Fly.
+     ChatId → TelegramDangKy (Bat=1) → NhanVien/TaiKhoan → VaiTro_ChucNang.
+     Sai / chưa bind → từ chối.
+
+  Không nhét JWT vào tin Telegram. Không tin from.username.
+
+  Xác thực webhook: header X-Telegram-Bot-Api-Secret-Token =
+  TELEGRAM_WEBHOOK_SECRET (Telegram hỗ trợ secret_token khi setWebhook).
+
+6.3. Token lưu ở đâu
+
+  Biến                         File                    Commit?
+  ---------------------------  ----------------------  ---------
+  TELEGRAM_BOT_TOKEN           server/.env             CẤM
+  TELEGRAM_WEBHOOK_URL         .env                    Không commit giá trị thật
+  TELEGRAM_WEBHOOK_SECRET      .env                    CẤM
+  Placeholder rỗng             server/.env.example     Được
+
+  Token lấy từ BotFather (@BotFather → /newbot).
+  Không dán token lên group Zalo/Telegram nhóm, không ghi vào docs/.
+
+  QL không nhập token trên UI (tránh lộ qua máy thu ngân).
+  UC02 chỉ: danh sách bind, hủy, bật/tắt kênh.
+
+6.4. Tái sử dụng inbox hiện có
+
+  Chuông desktop:
+      GET /api/notifications — danh sách việc theo vai trò.
+      GET /api/notifications/stream — SSE; notificationHub debounce 320ms,
+      heartbeat 20s, không gửi nội dung việc (chỉ seq + action + table).
+      Client tải lại inbox. logAudit gọi notifyInboxChanged
+      (trừ đăng nhập/đăng xuất/đổi mật khẩu).
+
+  Push Telegram không được chỉ “ping rồi thôi”.
+  Cần telegramNotify.js map sự kiện nghiệp vụ → mẫu tin (PLAN_12 A3).
+  Sau logAudit (hoặc gọi tường minh từ controller), lọc action whitelist →
+  soạn payload → sendMessage tới ChatId đúng vai trò.
+
+  Tái dùng SELECT của listForRole (nên tách service inboxService.js từ
+  notificationController.js để bot và chuông dùng chung — không copy SQL).
+  Đây là tách file, không phải module nghiệp vụ mới.
+
+  Lệnh /pending = cùng nguồn inbox, không query lệch.
+
+6.5. Đối soát điện tử (cùng tuần 6, không nhầm module)
+
+  PLAN_12 tuần 6 = Telegram VÀ màn đối soát thanh toán điện tử theo ca
+  (B2.1, UC29). Bot lệnh /payments đọc số QR/Thẻ/CK / chờ xác nhận.
+  Màn KT trên Electron là việc khác (settlementController.js /
+  accounting-pages.js). Người làm bot không bắt buộc xong VNPay mới bind;
+  /payments lúc chưa có gateway vẫn đếm 4 phương thức POS hiện tại
+  (Tiền mặt | QR | Thẻ | Chuyển khoản).
+
+
+================================================================================
+7. CSDL VÀ MIGRATION (TỐI GIẢN — ĐÃ CHỐT)
+================================================================================
+
+Quy tắc bàn giao: SupermarketFly_Migration_YYYYMMDD_TenNgan.sql, idempotent,
+thêm cuối migrate:next trong server/package.json.
+Máy đã restore .bak 07/09: không chạy setup:next; chỉ
+node apply-migration.js <file mới>.
+
+Tên đề xuất: server/migrations/SupermarketFly_Migration_20260908_TelegramCompanion.sql
+(đổi ngày đúng ngày code; không lùi trước 20260907).
+
+Nguyên tắc: không thêm bảng lung tung. Bot không ALTER CongNoPhaiTra,
+HoaDon, CaLamViec, TonKho. Không bảng “duyệt từ Telegram”.
+
+7.1. TelegramDangKy — CẦN THIẾT
+
+  Không có bảng này thì không map ChatId ↔ tài khoản (cấm hard-code ChatId).
+
+  Cột                         Kiểu (đề xuất)       Ghi chú
+  --------------------------  -------------------  --------------------------------
+  MaNV                        VARCHAR, PK/UNIQUE   1 nhân viên ≤ 1 liên kết active
+  ChatId                      VARCHAR(32), UNIQUE  1 ChatId ≤ 1 NV
+  MaTK                        INT NULL             tiện join TaiKhoan
+  Bat                         BIT DEFAULT 1        Tắt nhận tin / lệnh
+  NgayDangKy                  DATETIME             Lúc tạo OTP
+  NgayXacThuc                 DATETIME NULL        Lúc /start OTP đúng
+  LanHoatDongCuoi             DATETIME NULL        Mỗi lệnh (không dùng làm
+                                                   rate-limit push)
+  MaOTP                       CHAR(6) NULL         Xóa sau xác thực
+  HetHanOTP                   DATETIME NULL        Mặc định 5 phút
+  SoLanSai                    INT DEFAULT 0        Khóa OTP sau 5 lần
+
+  Không lưu username Telegram làm khóa. Username đổi được; ChatId thì không.
+
+7.2. Audit bind / unbind / lệnh — TÁI SỬ DỤNG NhatKy, KHÔNG tạo TelegramNhatKy
+
+  Đã đọc schema + auditLog.js.
+
+  NhatKy hiện có:
+      MaNK, MaTK (NOT NULL, FK_NhatKy_MaTK → TaiKhoan),
+      HanhDong, BangLienQuan, MaBanGhi (tới 50 ký tự),
+      NoiDung (tới 1000), ThoiGian, DiaChiIP,
+      MaUC, KetQua, MucDo, DuLieuJSON.
+
+  logAudit đã INSERT đúng các cột trên; QL xem qua UC03.
+
+  Đủ cho audit Telegram vì:
+      - Bind / unlink / lệnh pull luôn có TaiKhoan đã bind → có MaTK hợp lệ.
+      - HanhDong ví dụ: "Telegram liên kết", "Telegram /debt", "Telegram hủy liên kết".
+      - MaBanGhi: MaNV hoặc mã chứng từ liên quan (nếu có).
+      - DuLieuJSON: { ChatId, Lenh } — NhatKy không có cột ChatId riêng;
+        JSON đã có sẵn, không cần cột mới.
+      - MaUC / KetQua: 403 vs Thành công.
+
+  Vì vậy KHÔNG tạo TelegramNhatKy. PLAN_12 A3 từng ghi
+  “TelegramNhatKy hoặc logAudit” — bản này chốt: chỉ logAudit / NhatKy.
+
+  Không nhét mật khẩu, OTP đầy đủ, JWT vào NoiDung / DuLieuJSON
+  (auditLog.scrub đã lọc key otp/token; vẫn che OTP 482*** nếu ghi).
+
+7.3. Chống spam 10 phút — TelegramPushLog TỐI THIỂU (NhatKy không đủ)
+
+  Luật PLAN_12: 1 sự kiện / chứng từ / 10 phút. Tồn thấp: gộp, không spam từng SP.
+
+  Có thể “cố” nhét vào NhatKy không? Không nên. Thiếu / lệch:
+
+      LoaiSuKien
+          Không có cột. HanhDong là nhãn việc làm tiếng Việt cho màn UC03
+          (ACTION_META trong auditLog.js). Nhồi “Telegram push|PC_CHO_DUYET”
+          làm bẩn nhật ký QL, không có index (LoaiSuKien, MaChungTu).
+
+      MaChungTu
+          Gần với MaBanGhi — phần này NhatKy có. Không đủ một mình.
+
+      LanGuiCuoi
+          Không có cột cập nhật tại chỗ. Phải INSERT thêm một dòng NhatKy
+          mỗi lần push rồi SELECT MAX(ThoiGian). Đó là nhật ký người-làm,
+          không phải bộ đếm chống spam.
+
+      MaTK NOT NULL + FK
+          Cron 06:10 (tin sau ca đêm) và một số push hệ thống không có
+          “người thao tác”. logAudit(user=null) ghi MaTK null → vỡ FK.
+          Không bịa một tài khoản hệ thống chỉ để lách NOT NULL.
+
+      Tác dụng phụ
+          Mỗi push thành công thành một dòng nhật ký UC03 → màn nhật ký
+          bị spam tin kỹ thuật, lẫn với phê duyệt / đóng ca thật.
+
+  Kết luận: một bảng nhỏ TelegramPushLog, đúng 3 cột nghiệp vụ chống spam
+  (đúng bộ tên review nêu khi NhatKy thiếu):
+
+      LoaiSuKien     NVARCHAR(50)     PK ghép
+      MaChungTu      VARCHAR(50)      PK ghép  (mã phiếu, mã ca, hoặc
+                                               ngày vận hành YYYY-MM-DD
+                                               với tin sau ca đêm)
+      LanGuiCuoi     DATETIME         lần gửi thành công gần nhất
+
+  Trước khi sendMessage: nếu GETDATE() − LanGuiCuoi < 10 phút → bỏ qua.
+  Sau khi gửi OK: UPSERT LanGuiCuoi.
+  Không lưu nội dung tin, không lưu ChatId, không lưu số tiền.
+
+  Tin sau ca đêm: LoaiSuKien = BAO_CAO_VAN_HANH, MaChungTu = ngày vận hành
+  (một lần / ngày vận hành, không theo cửa sổ 10 phút — vẫn dùng cùng bảng
+  để biết “đã gửi ngày D chưa”).
+
+7.4. Không đụng
+
+  Không ALTER CongNoPhaiTra, HoaDon, CaLamViec, TonKho.
+  Không bảng duyệt từ Telegram.
+  Không TelegramNhatKy.
+
+
+================================================================================
+8. BẢO MẬT
+================================================================================
+
+  1. Token BotFather chỉ trong .env. Không commit. Không dán vào docs /
+     slide / group.
+  2. Webhook: HTTPS + secret_token. Body update không tin nếu secret sai.
+  3. Chỉ message.chat.type = private. Group/supergroup/channel: trả 1 câu
+     “Bot chỉ dùng chat riêng với tài khoản cửa hàng” rồi dừng.
+     CẤM số tiền, công nợ, lương trên group.
+  4. Số tiền trên chat riêng: được với người đã bind VÀ UC cho phép xem
+     số đó trong Fly (đúng mẫu phiếu chi / lệch két).
+  5. Không gửi: CCCD, MST cá nhân, số TK ngân hàng NV, mật khẩu, JWT,
+     MaGiaoDich đầy đủ (cùng tinh thần e-receipt). CK phiếu chi: chỉ
+     “Chuyển khoản”, không dump ủy nhiệm chi.
+  6. /payroll: QL = tóm tắt kỳ (tổng, số NV đã/chưa chi) — không kèm MaNV.
+     Chi tiết 1 NV = chỉ KT + chủ động gõ. Không push lương từng người.
+  7. OTP: 6 số, hết hạn, xóa sau bind, giới hạn sai. Không in OTP đầy đủ
+     trên nhật ký (che 482***).
+  8. Rebind: OTP mới vô hiệu OTP cũ; ChatId mới thay ChatId cũ của cùng MaNV.
+  9. Tài khoản Fly bị khóa (TaiKhoan.TrangThai = 0): bot từ chối lệnh, không push.
+  10. Không endpoint Telegram nào gọi approve / pay / complete.
+      Review PR: grep approve, completeInvoice, payVoucher trong thư mục
+      telegram phải trống.
+  11. File plan / docs commit GitHub: không ghi mật khẩu test
+      (admin / <mật khẩu test>). Tên đăng nhập demo được; mật khẩu không.
+
+
+================================================================================
+9. DANH SÁCH SỰ KIỆN ĐẨY
+================================================================================
+
+Nguồn: PLAN_12 A3 (mẫu PC, lệch két, tóm tắt sau ca đêm + “map inbox”)
+kết hợp whitelist logAudit hiện có.
+
+Cột Trigger = action trong logAudit (file controller). Hub SSE không đủ
+để soạn tin.
+
+Rate-limit: 1 lần / (LoaiSuKien, MaChungTu) / 10 phút, trừ tin sau ca đêm
+(1 lần / ngày vận hành — mục 7.3).
+
+--------------------------------------------------------------------------------
+Nhóm A — bắt buộc P1 (checklist F PLAN_12)
+--------------------------------------------------------------------------------
+
+A1. Phiếu chi chờ duyệt
+
+  Trigger: “Lập và gửi duyệt Phiếu chi” hoặc “Chỉnh sửa và gửi lại Phiếu chi”
+           — paymentVoucherController.js.
+  Người nhận: QL đã bind (UC09 xem được hàng này trên Fly).
+  Không nhận: KT (KT lập phiếu, không duyệt).
+
+  Mẫu:
+
+      PHIẾU CHI CHỜ DUYỆT
+      Mã: PC00028
+      NCC: Công ty ABC
+      Công nợ: CN00125
+      Số tiền: 12.500.000đ
+      Phương thức: Chuyển khoản
+      Hạn thanh toán: 08/09/2026
+      Người lập: Kế toán
+      Trạng thái: Chờ duyệt
+      Mở Supermarket Fly → Trung tâm phê duyệt
+      (Không duyệt trên Telegram.)
+
+A2. Ca lệch két
+
+  Trigger: “Đóng ca bán hàng” — cashierController.closeShift,
+           khi TienThucNop − TienMatHeThong ≠ 0.
+  Người nhận: QL (UC10) và KT (UC29).
+  Không: không sửa két. Lý do trên phiếu thu có thể còn “Chưa nhập”
+  lúc vừa đóng ca.
+
+      CHÊNH LỆCH KẾT CA
+      Ca: CA20260905-02
+      Quầy: Q02
+      Thu ngân: NV008
+      Tiền hệ thống: 4.820.000đ
+      Thực nộp: 4.700.000đ
+      Chênh lệch: -120.000đ
+      Lý do: Chưa nhập trên phiếu thu
+      Trạng thái: Cần xử lý
+      Mở Fly → Đối soát / Phiếu thu
+
+  Đóng ca khớp (lệch = 0): không push A2 (tránh spam).
+  KT vẫn thấy ca “Chờ Kế toán đối soát” trên chuông / /shifts.
+
+A3. Tóm tắt sau ca đêm (1 tin / ngày vận hành) — ĐÃ SỬA MỐC GIỜ
+
+  SAI (bản draft / PLAN_12 A3): “sau đóng ca cuối hoặc cron 22:00”.
+  22:00 là GioBatDau ca DEM, không phải hết ngày vận hành.
+
+  ĐÚNG:
+      Trigger: process Node còn chạy; setInterval ~1 phút;
+               khi đồng hồ Asia/Ho_Chi_Minh vào khoảng 06:05–06:15
+               (mặc định mốc 06:10) VÀ chưa gửi TelegramPushLog
+               (LoaiSuKien=BAO_CAO_VAN_HANH, MaChungTu=ngày vận hành D).
+      Ngày vận hành D = ngày ca đêm vừa kết thúc đã BẮT ĐẦU
+      (NgayLam DEM = D; kết thúc 06:00 ngày lịch D+1).
+      Tin gửi ~06:10 ngày D+1, tiêu đề thuộc ngày vận hành D.
+      Người nhận: chỉ QL đã bind (UC10).
+      Công thức: DT / GV / lãi GỘP (cột A, financialRules.calculateGrossProfit)
+      trên cửa sổ 06:00 D → 06:00 D+1.
+      Dòng riêng TM / QR / Thẻ / CK. Cảnh báo: công nợ đến hạn,
+      GD chưa đối soát, SP cần bổ sung (số mã), ca lệch quỹ.
+      KHÔNG trừ trả NCC vào lãi gộp.
+      KHÔNG gọi đây là “báo cáo tài chính ngày” / KQKD / P&L điều hành.
+
+  Nếu tới 06:10 mà ca POS đêm vẫn “Đang mở”: vẫn gửi (không thêm chức năng
+  chờ đóng ca); dòng cảnh báo ghi số ca đang mở — cùng tinh thần mẫu dưới.
+
+  node-cron chưa có trong package.json. Mặc định: setInterval trong process.
+  Process phải sống (npm start / 4_CHAY_MAY_CHU_NHOM.bat).
+  Không hứa Windows Task Scheduler trong P1.
+
+  Mẫu (số liệu ví dụ, không phải số máy thật):
+
+      SUPERMARKET FLY — Ngày vận hành 05/09/2026
+      (gửi 06/09/2026 ~06:10, sau ca đêm 22:00–06:00)
+      TÓM TẮT HOẠT ĐỘNG
+
+      Doanh thu (HĐ hoàn thành): …
+      Giá vốn: …
+      Lãi gộp: …          ← không trừ tiền trả NCC
+      Tiền mặt / QR / Thẻ / Chuyển khoản: …
+
+      Công nợ đến hạn: … khoản
+      GD chưa đối soát / chờ xác nhận: …
+      SP cần bổ sung: … (số lượng mã, không liệt kê 50 dòng)
+      Ca lệch quỹ: … (mã ca)
+
+--------------------------------------------------------------------------------
+Nhóm B — map inbox (PLAN_12: “sự kiện khác”)
+--------------------------------------------------------------------------------
+
+Chỉ push việc mới cần người đó làm, cùng tiêu đề tinh thần chuông
+(notificationController.js).
+
+  Mã    Trigger (logAudit action)                         File                         Người nhận     Gợi ý mẫu
+  ----  ------------------------------------------------  ---------------------------  -------------  ------------------------------------------
+  B1    Gửi duyệt Đơn mua hàng                            purchaseOrderController.js   QL             Đơn mua chờ duyệt · MaPO · NCC · người lập
+  B2    Gửi duyệt Phiếu xuất kho /                        stockIssueController.js      QL             Phiếu xuất chờ duyệt · MaPX · loại xuất
+        Lập và gửi duyệt Phiếu xuất kho
+  B3    Gửi duyệt điều chỉnh tồn                          inventoryCountController.js  QL             Kiểm kê chờ duyệt điều chỉnh · MaKK
+  B4    Kiểm tra hàng đổi trả (TT → Chờ duyệt)            returnsController.js         QL             Đổi trả chờ duyệt · MaDT · hình thức
+  B5    Gửi đề nghị mua hàng                              warehouseController.js       MH             Đề nghị mua từ kho · MaDN · người lập
+  B6    Phê duyệt Đơn mua hàng                            purchaseOrderController.js   MH lập đơn     Đơn đã duyệt, gửi NCC · MaPO
+  B7    Yêu cầu chỉnh sửa Đơn mua hàng                    cùng file                    MH lập đơn     Đơn cần chỉnh · MaPO · lý do
+  B8    Yêu cầu bổ sung đề nghị mua hàng                  warehouseController.js       TK lập đề nghị Đề nghị cần bổ sung · MaDN
+  B9    Ghi nhận xe hàng đến kho                          receiptController.js         TK             Xe giao đã đến kho · MaPO · NCC;
+                                                                                                      tồn chưa tăng
+  B10   Phê duyệt Phiếu xuất kho                          stockIssueController.js      TK lập PX      Phiếu xuất đã duyệt, cần xác nhận xuất
+  B11   Từ chối điều chỉnh tồn                            inventoryCountController.js  TK             Kiểm kê bị từ chối — đếm lại
+  B12   Đóng ca bán hàng (mọi ca, kể cả khớp)             cashierController.js         KT             Ca đã chốt, cần lập/xác nhận Phiếu thu
+                                                                                                      · MaCa · thu ngân — không trùng A2 nếu
+                                                                                                      đã gửi lệch (gộp 1 tin nếu lệch)
+  B13   Tiếp nhận hóa đơn Nhà cung cấp                    accountingController.js      KT             Hóa đơn NCC cần đối chiếu · số HĐ · NCC
+  B14   Đối chiếu hóa đơn ba bên khi Chênh lệch           accountingController.js      KT             Hóa đơn lệch, không sinh công nợ
+  B15   Phê duyệt Phiếu chi (QL đã giao quỹ)              paymentVoucherController.js  KT             QL đã giao tiền, cần thanh toán NCC
+                                                                                                      · MaPhieu — cấm nút Chi
+  B16   Thanh toán Phiếu chi thành công / thất bại        cùng file                    QL + KT        Thành công: đã tất toán (chỉ thông tin).
+                                                                                                      Thất bại: nợ không đổi, làm lại trên Fly
+  B17   Công nợ quá hạn                                   không có audit từng phút     KT (+ QL UC10) Gộp: “N khoản còn phải trả quá hạn”
+                                                                                                      — tối đa 1 tin/ngày vận hành
+                                                                                                      (cùng mốc 06:10 với A3) hoặc khi
+                                                                                                      đối chiếu vừa khớp tạo hạn
+  B18   Tồn Cần bổ sung                                   sau xác nhận nhập /          TK (+ QL       Gộp số mã dưới định mức, không từng SP
+                                                          hoàn thành HĐ / xuất         tóm tắt A3)    warehouseController đã có cờ CanBoSung
+  B19   Gửi kế hoạch điều chỉnh lãi lỗ                    storeProfitLoss.js           Mọi NV đã bind Tiêu đề + nội dung kế hoạch;
+                                                                                       (ThongBaoCua   không chi tiền, không sửa lãi gộp
+                                                                                        Hang)
+  B20   Lập Phiếu chi lương / gửi lại                     payrollVoucherController.js  QL             Phiếu chi lương chờ duyệt và giao quỹ
+                                                                                                      · tóm tắt số phiếu + kỳ;
+                                                                                                      tránh số tiền từng NV
+  B21   Duyệt Phiếu chi lương / Giao quỹ lương chung      cùng file                    KT             Chờ chi lương trên Fly — cấm chi từ bot
+  B22   Chấm công chờ duyệt                               checkOut / đóng ca →         QL (UC32)      Nhân viên · ca · ngày — duyệt trên Fly
+                                                          ChamCong.TrangThai =
+                                                          Chờ duyệt
+  B23   Phê duyệt đổi trả                                 returnsController.js         TN liên quan   Đã duyệt — xác nhận đổi/hoàn trên ca
+                                                                                                      đang mở
+  B24   Lịch hôm nay chưa vào                             không audit                  MH/TK/TN/KT    1 tin buổi sáng (mốc 7:30 hoặc lúc
+                                                                                       đã bind, có    process start nếu trong ngày) —
+                                                                                       lịch công bố,  QL không có UC31 thì không gửi
+                                                                                       chưa           “hãy chấm công”
+                                                                                       ThoiGianVao    (giữ mốc 7:30; không nhầm với A3 06:10)
+
+Không push: đăng nhập, đổi mật khẩu, lập HĐ nháp, mỗi lần thu tiền,
+mỗi HĐ hoàn thành (tránh hàng trăm tin/ca). Doanh thu nằm ở A3 và /today.
+
+
+================================================================================
+10. LỆNH BOT (PULL; CHỈ ĐỌC NGHIỆP VỤ)
+================================================================================
+
+PLAN_12: /fly menu inline; không cần nhớ lệnh.
+Mọi lệnh: tra ChatId → quyền UC → SELECT. Không quyền →
+“Tài khoản của bạn không xem mục này trong Fly.”
+
+Ghi cấu hình (không phải nghiệp vụ): /start OTP, /bind, /unlink — được phép
+UPDATE TelegramDangKy + INSERT NhatKy.
+
+/start không OTP (chưa bind): hướng dẫn mở Fly → tạo mã. Không trả số liệu.
+
+10.1. Lệnh được
+
+  Lệnh              Ai (sau bind)     Nguồn dữ liệu gợi ý              Ghi chú
+  ----------------  ----------------  -------------------------------  --------------------------------
+  /start <OTP>      Người có OTP      TelegramDangKy                   Bind. Alias /bind <OTP>
+                    còn hạn                                            (PLAN chỉ /start; /bind cho quen tay)
+  /help             Đã bind           Menu lệnh đã lọc vai trò
+  /fly              Đã bind           Inline keyboard                  Ẩn nút không có UC
+  /today            QL (UC10)         SELECT HĐ hoàn thành +           Tên: “Tóm tắt hoạt động hôm nay”
+                                      4 kênh TT + cảnh báo             (hoặc “Báo cáo vận hành hôm nay”).
+                                      trong cửa sổ ngày vận hành       TRÁNH “báo cáo tài chính ngày”.
+                                      đang chạy. Lãi gộp =             DT, GV, lãi gộp, 4 kênh TT, cảnh báo.
+                                      financialRules.calculateGross    KHÔNG copy laiLoSauChiPhi
+                                      Profit. KHÔNG getFinancialReport (bug trừ NCC).
+                                      kiểu P&L điều hành.
+  /debt             QL UC10 /         GET /api/accounting/payables     Tổng, đến hạn 7 ngày, quá hạn, top dòng
+                    KT UC28           (logic hiện có)
+  /lowstock         TK UC15           warehouseController.getInventory Tên SP + SLTon; không tự đề nghị
+                                      CanBoSung
+  /shifts           QL / KT / TN      CaLamViec                        QL/KT: ca hôm nay, đang mở, lệch.
+                    (lọc)                                              TN: ca của mình
+  /payments         QL / KT / TN      ThanhToan trong ngày vận hành    Số lượng, tổng QR/Thẻ/CK, chờ xác nhận.
+                    (lọc)                                              Không dump mã GD
+  /pending          Theo UC duyệt /   listForRole                      PO, PC, PX, KK, đổi trả, công…
+                    inbox
+  /payroll          QL UC10           Kỳ lương                         Tóm tắt: tổng, số NV đã/chưa thanh toán.
+                                                                       Không MaNV
+  /payroll NV008    Chỉ KT UC33       GET /api/accounting/payroll/     Giờ ngày/đêm + tổng 1 NV
+                                      :month/:employee/details
+  /unlink           Chủ ChatId        TelegramDangKy Bat=0 + xóa       PLAN_12 chưa ghi; cần có
+                    (+ nút Fly)       ChatId                           (ghi cấu hình, không ghi sổ)
+
+  Menu /fly (nút không quyền: ẩn hoặc báo 403 tiếng Việt):
+
+      Tóm tắt hoạt động hôm nay | Doanh thu | Công nợ | Tồn kho
+      Phiếu chờ duyệt | Nhân sự hôm nay | Thanh toán điện tử | Cảnh báo
+
+  Nút “Tóm tắt hoạt động hôm nay” = lệnh /today (không mở P&L).
+  Nút “Doanh thu” có thể là cùng số DT của /today (không thêm báo cáo mới).
+
+10.2. Lệnh / hành vi CẤM
+
+  - /approve, /reject, /pay, /complete, callback approve_PC00028.
+  - Inline button “Duyệt” / “Từ chối”.
+  - Lệnh sửa chấm công, mở/đóng ca, lập PO, lập phiếu chi.
+  - /payroll chi tiết khi không phải KT.
+  - Forward tin có số tiền vào group (không chặn được hết phía Telegram —
+    ghi trong hướng dẫn: không forward).
+  - Trả lời người lạ chưa OTP.
+
+  Callback inline chỉ điều hướng lệnh đọc (callback_data = cmd:today),
+  không ghi DB nghiệp vụ.
+
+
+================================================================================
+11. LUỒNG BIND TÀI KHOẢN (TỪNG BƯỚC, 5 ACTOR)
+================================================================================
+
+PLAN_12:
+
+  Nhân viên mở Fly → [Tạo mã liên kết Telegram] → OTP 6 số (vd 482913)
+  → Telegram: /start 482913 → backend lưu ChatId ↔ MaNV.
+
+11.1. Chuẩn bị (một lần, TV1 / admin kỹ thuật)
+
+  1. BotFather tạo bot, copy token vào server/.env (TELEGRAM_BOT_TOKEN=...).
+  2. Không commit .env.
+  3. Restart npm start. Log: “Telegram: polling” hoặc “Telegram: webhook …”.
+     Nếu polling: log phải cho thấy đã deleteWebhook trước getUpdates.
+  4. QL đăng nhập tài khoản admin / <mật khẩu test> (mật khẩu xem hướng dẫn
+     test local). Kiểm tra màn UC02 “Liên kết Telegram” (danh sách trống).
+
+11.2. Bind — giống nhau 5 actor (khác menu Fly)
+
+  Áp dụng: admin (QL), muahang, thukho, ketoan, thungan.
+
+  1. Đăng nhập Electron đúng TK (JWT 8 giờ).
+  2. Góc phải: menu avatar (hiện chỉ “Đổi mật khẩu” / “Đăng xuất”)
+     → Liên kết Telegram.
+        PLAN_12: “màn hồ sơ / admin”. Hồ sơ CCCD hiện chỉ QL
+        (employeeRoutes = requireRole('Quản lý') + UC04).
+        Mặc định: nút trên profile menu mọi vai trò (UC01),
+        không nhét OTP vào employees.html.
+  3. Bấm Tạo mã. API POST /api/telegram/link-otp (JWT).
+     Server random 6 số, HetHanOTP = now+5 phút, SoLanSai = 0.
+  4. Fly hiện OTP + hạn + username bot (env TELEGRAM_BOT_USERNAME,
+     ví dụ @supermarket_fly_bot).
+  5. Mở Telegram, chat riêng với bot, gửi /start 482913 (hoặc /bind 482913).
+  6. Server: OTP đúng, chưa hết hạn, ChatId chưa gắn NV khác →
+     ghi ChatId, NgayXacThuc, xóa MaOTP. Ghi NhatKy “Telegram liên kết”.
+  7. Bot trả: “Đã liên kết Nguyễn Minh Anh (Quản lý). Gõ /fly”.
+  8. Fly F5 / tự tải: trạng thái “Đã liên kết · lúc …”.
+
+  Khói sau bind:
+
+  TK          Việc tối thiểu
+  ----------  ------------------------------------------------------------------
+  admin       /fly thấy Tóm tắt hoạt động, Phiếu chờ, Công nợ, /payroll tóm tắt;
+              không /payroll NV008
+  muahang     /pending đề nghị/đơn của mình; không /debt (không UC28/UC10)
+  thukho      /lowstock; không /today cửa hàng
+  ketoan      /debt, /shifts ca chờ đối soát, /payroll NV…;
+              không /pending kiểu duyệt PO
+  thungan     /shifts ca mình; không /debt, không danh sách PC chờ duyệt
+
+11.3. Ngoại lệ bind
+
+  - OTP sai: tăng SoLanSai; 5 lần → hủy OTP, tạo lại trên Fly.
+  - OTP hết hạn: “Mã đã hết hạn, tạo mã mới trong Fly.”
+  - ChatId đã gắn NV khác: “Chat này đang gắn nhân viên khác.
+    Hủy liên kết trên Fly hoặc nhờ QL.”
+  - NV đã gắn ChatId khác: ChatId mới thay thế; ChatId cũ nhận
+    “Đã hủy liên kết vì đăng ký máy mới.”
+  - Group: từ chối.
+  - QL hủy cưỡng chế (UC02): Bat=0, xóa ChatId. Ghi NhatKy.
+
+  Không có bước “duyệt bind” thứ hai (tránh đụng ranh giới duyệt).
+  Liên kết = chứng minh đang cầm session Fly + điện thoại.
+
+
+================================================================================
+12. FILE SẼ SỬA / THÊM (3 TẦNG)
+================================================================================
+
+PLAN_12 phần C + quy tắc bàn giao “một chức năng = FE + API + CSDL”.
+Vì không thêm UC34, không bắt buộc dòng mới trong FUNCTION_CATALOG
+trừ khi chọn UC44.
+
+12.1. CSDL
+
+  Thêm: server/migrations/SupermarketFly_Migration_YYYYMMDD_TelegramCompanion.sql
+        (TelegramDangKy + TelegramPushLog 3 cột. Không TelegramNhatKy.)
+  Sửa:  server/package.json → migrate:next (thêm 1 lệnh apply-migration.js)
+  Không: SupermarketFly_CreateDB.sql (máy cũ restore .bak; CreateDB chỉ máy trắng
+         — chú thích cuối file CreateDB tùy chọn, không bắt buộc P1)
+  Không ALTER: CongNoPhaiTra, HoaDon, CaLamViec, TonKho, NhatKy
+         (NhatKy dùng nguyên cột hiện có qua logAudit).
+
+12.2. Backend
+
+  File                                            Việc
+  ----------------------------------------------  ------------------------------------------
+  Thêm server/src/services/telegramNotify.js      Push, rate-limit TelegramPushLog, mẫu tin,
+                                                  sendMessage
+  Thêm server/src/controllers/
+       telegramBotController.js                   Webhook/polling, deleteWebhook trước poll,
+                                                  lệnh, OTP /start
+  Thêm server/src/routes/telegramRoutes.js        POST /webhook không JWT;
+                                                  POST /link-otp, GET /link-status,
+                                                  POST /unlink có JWT
+  Thêm server/src/services/inboxService.js        Tách SQL inbox từ notificationController.js
+       (tách, không module mới)
+  Sửa  server/src/controllers/
+       notificationController.js                  Gọi inboxService
+  Sửa  server/src/app.js                          app.use('/api/telegram', …);
+                                                  start polling/webhook SAU listen;
+                                                  token trống thì bỏ qua
+  Sửa  server/src/services/auditLog.js            Sau notifyInboxChanged, gọi
+                                                  telegramNotify.onAudit(action, …)
+                                                  (whitelist, không chặn POS nếu Telegram lỗi)
+  Sửa  server/src/controllers/cashierController.js
+                                                  Sau đóng ca: hook lệch két
+                                                  (nếu không muốn chỉ dựa audit)
+  Sửa  server/.env.example                        TELEGRAM_BOT_TOKEN=,
+                                                  TELEGRAM_BOT_USERNAME=,
+                                                  TELEGRAM_WEBHOOK_URL=,
+                                                  TELEGRAM_WEBHOOK_SECRET=
+  Sửa  server/package.json test                   node --check file telegram mới +
+                                                  test-telegram-companion.js
+                                                  (OTP, quyền lệnh, cấm approve,
+                                                   deleteWebhook-before-poll)
+  Không sửa                                       salesController.completeInvoice,
+                                                  paymentVoucherController.payVoucher,
+                                                  purchaseOrderController.approve
+                                                  — trừ gọi notify SAU nghiệp vụ cũ
+
+  QL UC02: GET /api/admin/telegram/bindings,
+  POST /api/admin/telegram/bindings/:maNV/revoke
+  — gắn requireRole('Quản lý') + UC02 trên adminRoutes.js.
+
+12.3. Frontend
+
+  desktop/src/pages/dashboard/dashboard.html      Mục menu “Liên kết Telegram”
+  desktop/src/pages/dashboard/dashboard.js        Dialog OTP, trạng thái bind, copy mã
+  desktop/src/pages/dashboard/dashboard.css       Style dialog (nhẹ, theo chuông hiện có)
+  desktop/src/pages/admin/accounts.html + JS      Khối QL: danh sách ChatId ẩn một phần,
+                                                  nút Hủy liên kết
+  Không                                           Nút Duyệt trên POS/kho
+
+  Chuông 12s/SSE: giữ nguyên. Telegram song song, không thay inbox desktop.
+
+12.4. Docs (khi code xong, không làm trong plan này)
+
+  - Checklist F PLAN_12 đánh dấu.
+  - Bàn giao mục 14.3 bỏ “Telegram chưa làm”.
+  - Hướng dẫn BotFather + webhook Cloudflare (đoạn ngắn).
+  - Không dán token. Không dán mật khẩu test.
+
+12.5. Nếu (và chỉ nếu) thêm UC44
+
+  Ba tầng: permissions.js + seed/sync quyền;
+  API requirePermission('UC44') cho cấu hình kênh;
+  dòng Use Case trên báo cáo môn.
+  Vẫn không đổi nghĩa UC30–UC33, không lấy UC34.
+
+
+================================================================================
+13. THỨ TỰ SPRINT
+================================================================================
+
+PLAN_12: KT lõi trước P1; Telegram tuần 6 sau VNPay + barcode.
+Phụ thuộc cứng của bot: không cần sổ cái, không cần VNPay để bind + push
+PC/lệch két. /payments “chờ xác nhận” dày hơn khi có gateway.
+
+Làm bot song song barcode nếu thiếu người KT — miễn không phá 3 cột tiền.
+
+P0 — Chuẩn bị (nửa ngày)
+
+  1. BotFather, .env local, không commit.
+  2. Quyết định polling (máy đơn) hay Cloudflare webhook.
+     Nhớ: chuyển poll thì deleteWebhook trước getUpdates.
+  3. Chốt mặc định mục 17 (OTP 5 phút, private only, không UC34,
+     ngày vận hành = NgayLam ca đêm, mốc 06:10).
+  4. Nhánh gợi ý: tv1-telegram (bàn giao: tv1-platform…) — không --force main.
+  5. Smoke P0: npm run test:next đang PASS trước khi đụng code.
+
+  Xong khi: token thử getMe thành công; nhóm biết username bot.
+
+P1a — Bind (1–2 ngày)
+
+  Migration TelegramDangKy + TelegramPushLog + OTP API + /start + UI menu
+  avatar + audit NhatKy + cấm group.
+  Xong khi: 5 TK test bind/unbind; ChatId không hard-code.
+
+P1b — Push sự kiện (2–3 ngày)
+
+  telegramNotify + whitelist A1–A3 + B chính (PO, PC, lệch két, đề nghị,
+  xe đến, ca chốt, kế hoạch lỗ). Rate-limit 10 phút (TelegramPushLog).
+  A3 mốc 06:10 sau ca đêm, không 22:00.
+  Xong khi: POS bán + đóng ca lệch → điện thoại QL có tin chi tiết
+  (đúng demo A3).
+
+P1c — Lệnh đọc (2 ngày)
+
+  /fly /today /debt /lowstock /shifts /payments /pending /payroll
+  (+ /payroll MaNV KT). Lọc UC.
+  /today = Tóm tắt hoạt động hôm nay (lãi gộp, không P&L trừ NCC).
+  Xong khi: cùng số liệu Fly; 403 đúng vai trò; không nút duyệt.
+
+P1d — Test + cứng hóa (1–1,5 ngày)
+
+  Test tự động quyền; test tay 5 actor; video dự phòng mất mạng Telegram.
+  Xong khi: checklist F bốn dòng Telegram; POS vẫn chạy khi tắt bot.
+
+Không nhét OCR/AI vào sprint này.
+
+
+================================================================================
+14. RỦI RO VÀ VIỆC CẤM LÀM
+================================================================================
+
+  Rủi ro                              Hậu quả                         Chống
+  ----------------------------------  ------------------------------  ------------------------------
+  Duyệt PO / PC từ Telegram           Phá audit, chiếm TK Telegram    Không API ghi; review grep
+                                      = duyệt chi
+  Chi NCC / chi lương từ chat         Cột C / quỹ lương               Cấm lệnh pay
+  completeInvoice từ bot              Cột A                           Cấm
+  INSERT CongNoPhaiTra                Cột C                           Cấm
+  Hard-code ChatId                    Sai người nhận                  Chỉ bảng TelegramDangKy
+  Push vào group lớp                  Lộ doanh thu / nợ / lương       Chỉ private
+  /today trừ chi NCC                  Lặp bug P&L                     Lãi gộp thuần; không gọi
+                                                                      “báo cáo tài chính”
+  Cron 22:00 cắt ca đêm               Báo cáo thiếu cả ca DEM         Mốc 06:10; ngày vận hành
+                                                                      = NgayLam DEM
+  Webhook cũ còn khi bật poll         getUpdates conflict,            deleteWebhook trước
+                                      “bot không nhận tin”            getUpdates
+  Telegram timeout làm rollback POS   Hỏng ca                         try/catch, fire-and-forget
+                                                                      sau commit
+  OTP / mật khẩu test trên nhật ký    Lộ liên kết / credential        Che số; không commit mật khẩu
+  hay file GitHub
+  Gộp AI vào bot P1                   Phạm vi nổ                      Tách A2
+  UC34 cho Telegram                   Đụng sổ cái                     UC01/UC02 hoặc UC44
+  TelegramNhatKy + PushLog + NhatKy   3 chỗ ghi trùng, phình CSDL     Chỉ NhatKy audit + PushLog
+                                      3 cột chống spam
+
+Không làm (nhắc lại): nút Duyệt/Từ chối; cho khách/NCC dùng bot; Firebase;
+scanner điện thoại (A5 kiểu 2, để sau); refund VNPay; n8n; OAuth;
+app mobile; LLM trên Telegram.
+
+
+================================================================================
+15. KẾ HOẠCH KIỂM THỬ
+================================================================================
+
+15.1. Tự động
+
+  Thêm server/test-telegram-companion.js, gắn npm test / test:next nếu đụng
+  thông báo (bàn giao mục 16.8).
+
+  Case                                      Kỳ vọng
+  ----------------------------------------  --------------------------------
+  Syntax node --check file mới              Pass
+  OTP sai / hết hạn / 5 lần sai             Không bind
+  ChatId trùng NV khác                      409 tiếng Việt
+  Lệnh chưa bind                            Không số liệu
+  QL /today                                 200 logic (mock); payload có
+                                            Doanh thu / Giá vốn / Lãi gộp /
+                                            4 kênh; không có “tài chính ngày”;
+                                            lãi gộp không trừ chi NCC
+  TN /debt                                  403
+  QL /payroll NV008                         403
+  KT /payroll NV008                         Cho phép đọc (mock)
+  Callback/approve                          Không tồn tại hàm
+  telegramNotify lỗi                        closeShift vẫn 200
+  Rate-limit cùng MaPhieu                   Lần 2 trong 10 phút không gửi
+  Group update                              Bỏ qua, không ghi tiền
+  Start polling sau khi từng setWebhook     Có gọi deleteWebhook trước
+                                            getUpdates (mock fetch)
+  Mốc A3                                    Hàm “đã đến giờ gửi” đúng 06:10,
+                                            sai 22:00; ngày vận hành = D khi
+                                            clock là 06:10 D+1
+
+  Không gọi BotFather trên CI (không token). Mock fetch.
+
+15.2. Tay — 5 actor (thứ tự không đi ngược luồng)
+
+  Môi trường: DB chung, 4_CHAY_MAY_CHU_NHOM.bat, bot polling hoặc tunnel.
+
+  Chuẩn bị: 5 điện thoại (hoặc 5 user Telegram) bind 5 TK.
+  QL mở UC02 thấy 5 dòng.
+  Đăng nhập: admin, muahang, thukho, ketoan, thungan + <mật khẩu test>
+  (xem hướng dẫn test local).
+
+  Bước  Actor     Việc trên Fly                         Việc trên Telegram
+  ----  --------  ------------------------------------  --------------------------------
+  1     QL        Bind                                  /help /fly /today
+                                                        (nhãn Tóm tắt hoạt động hôm nay)
+  2     TK        Bind; đề nghị từ hàng thiếu thật      MH nhận tin B5; TK /lowstock
+  3     MH        Lập PO, gửi duyệt                     QL nhận B1; không bấm duyệt trên bot
+  4     QL        Duyệt PO trên Fly                     MH nhận B6
+  5     MH        Tạo chuyến; TK ghi nhận đến kho       TK nhận B9
+  6     TK        Nhập; tồn tăng 1 lần                  (không spam tồn từng SP)
+  7     KT        Đối chiếu khớp                        Không tin “đã tạo nợ” kiểu insert tay;
+                                                        /debt có khoản mới
+  8     KT        Lập phiếu chi                         QL nhận A1
+  9     QL        Duyệt + giao quỹ trên Fly             KT nhận B15; bot không có Chi
+  10    KT        Thanh toán thành công trên Fly        Tin tất toán; /debt giảm — chỉ vì Fly
+  11    TN        Check-in, bán, HĐ hoàn thành          Không 1 tin mỗi HĐ
+  12    TN        Đóng ca cố ý lệch                     QL + KT nhận A2; số khớp Fly; két không đổi
+  13    KT        Phiếu thu + lý do lệch trên Fly       Bot im hoặc tin xác nhận — không sửa số
+  14    QL        Đợi ~06:10 sau ca đêm                 A3: tiêu đề ngày vận hành D;
+                  (không đợi 22:00)                     lãi gộp không trừ trả NCC
+  15    QL        Gửi kế hoạch lỗ (nếu kỳ lỗ)           5 actor đã bind nhận B19
+  16    KT        /payroll tóm tắt vs /payroll MaNV     QL thử chi tiết → bị từ chối
+  17    —         Tắt token / stop bot; bán tiếp 1 HĐ   POS OK
+  18    —         Thêm bot vào group, gõ /today         Từ chối, không số
+  19    —         Tắt webhook (xóa URL env), restart    Vẫn nhận /start — vì deleteWebhook
+                  polling                                               rồi getUpdates
+
+  Hồi quy: npm run test:next + chuỗi mua-bán-lương bàn giao mục 16.
+
+
+================================================================================
+16. ƯỚC LƯỢNG EFFORT VÀ PHỤ THUỘC
+================================================================================
+
+  Hạng mục                                              Effort
+  ----------------------------------------------------  ------------
+  P0 BotFather + env + quyết định webhook/poll          0,5 ngày
+  P1a Bind + migration + UI                             1,5–2 ngày
+  P1b Push + mẫu + rate-limit + mốc 06:10               2–3 ngày
+  P1c Lệnh đọc + lọc UC                                 2 ngày
+  P1d Test 5 actor + video                              1–1,5 ngày
+  Tổng                                                  ~7–9 ngày người
+                                                        ≈ tuần 6 PLAN_12
+
+Phụ thuộc bên ngoài
+
+  - Tài khoản Telegram + BotFather (token).
+  - Máy chạy Express suốt lúc cần push/poll (kể cả ~06:10).
+  - Webhook: Cloudflare tunnel hoặc URL HTTPS ổn định; mỗi lần đổi link
+    phải setWebhook. Chuyển lại poll: deleteWebhook trước.
+  - Không phụ thuộc Google Vision / LLM / VNPay Sandbox cho MVP bind +
+    PC + lệch két.
+  - /payments “Chờ xác nhận” đầy đủ hơn sau adapter VNPay (tuần 4) —
+    không chặn P1a/P1b.
+
+Phụ thuộc nội bộ: không phá chuông SSE; logAudit đã là móc tốt.
+Tách inboxService để khỏi lệch SQL.
+
+Demo bảo vệ: PLAN_12 phần D — Telegram là bonus / video, không nhét
+8 bước chính. Video: đóng ca lệch → điện thoại QL.
+
+
+================================================================================
+17. CHỖ TÀI LIỆU CHƯA CHỐT + MẶC ĐỊNH AN TOÀN
+================================================================================
+
+  Chỗ mơ hồ                              Mặc định an toàn (ĐÃ CHỐT nơi review yêu cầu)
+  -------------------------------------  ------------------------------------------------
+  Chỉ webhook, máy LAN không HTTPS       Polling nếu TELEGRAM_WEBHOOK_URL trống;
+                                         deleteWebhook trước getUpdates
+  Hết hạn OTP, số lần sai                5 phút; 5 lần sai
+  /bind vs /start OTP                    /start OTP chuẩn PLAN; /bind alias
+  Nút liên kết để đâu                    Profile menu mọi actor (UC01)
+  “Cấu hình bot UC02” gồm gì             Danh sách bind, hủy, bật/tắt kênh;
+                                         không form token
+  Unlink                                 Có /unlink + nút Fly + QL revoke
+  Group                                  Cấm hoàn toàn
+  1 NV 2 máy                             Bind mới thay bind cũ
+  Mốc tin sau ngày vận hành              06:10 (cửa sổ 06:05–06:15), không 22:00;
+                                         ngày vận hành = NgayLam ca đêm
+  TelegramNhatKy hay chỉ NhatKy          Chỉ NhatKy (logAudit). Không TelegramNhatKy.
+  TelegramPushLog                        Có, 3 cột, chỉ chống spam / cờ đã gửi A3
+  Có UC mới?                             Không (UC01/UC02 + UC lệnh). UC44 chỉ nếu
+                                         môn bắt buộc
+  Hiện số tiền chat riêng                Có, đúng UC; group không
+  Push HĐ bán từng cái                   Không
+  Đóng ca khớp có push KT không          Một tin “cần phiếu thu”, không tin lệch
+  Đối soát điện tử vs bot                Hai việc tuần 6; bot chỉ /payments đọc
+  Thư viện npm                           fetch Bot API; không Telegraf bắt buộc
+  Chuông “12 giây” vs code SSE           Không đổi chuông desktop trong sprint bot
+  Câu “read-only”                        Chỉ đọc nghiệp vụ; ghi bind/unbind/audit
+  Tên /today                             Tóm tắt hoạt động hôm nay /
+                                         Báo cáo vận hành hôm nay
+  Mật khẩu trong docs                    Không. admin / <mật khẩu test>
+
+
+================================================================================
+18. MÂU THUẪN TÀI LIỆU
+================================================================================
+
+  1. Chuông làm mới
+     PHUONG_AN_KE_TOAN_DA_CHOT.txt mục 7: “khoảng 12 giây”.
+     PLAN_12 mục 1.7: poll 30 giây.
+     Code dashboard.js: SSE /api/notifications/stream + poll 3 giây khi mất luồng.
+     → Lấy code làm sự thật vận hành. Sprint Telegram không sửa interval chuông.
+
+  2. UC mới cho Telegram
+     PLAN_12 B4: không cần UC mới.
+     Bàn giao mục 15: việc mới Hướng B bắt đầu UC34 (ngữ cảnh sổ cái).
+     → Không lấy UC34 cho bot.
+
+  3. Thứ tự pha
+     PLAN_12: KT lõi trước P1.
+     Bot không cần sổ cái.
+     → Được làm P1 Telegram trước KT lõi nếu thiếu người kế toán;
+       slide môn vẫn nói Plan A ưu tiên VAT/sổ cái.
+
+  4. Inbox vs push chi tiết
+     Hub chỉ ping action/table.
+     A3 đòi tin đủ trường PC/lệch két.
+     → Phải có telegramNotify soạn tin, không forward nguyên JSON SSE.
+
+  5. admin vs Quản lý
+     Đăng nhập admin = vai trò Quản lý. Không có actor “Admin” thứ 6. UC02 = QL.
+
+  6. P&L điều hành vs /today
+     Code P&L trừ chi NCC (bug B1.5).
+     PLAN_12 cấm trừ NCC vào lãi gộp trên tin cuối ngày.
+     → Bot theo cột A / financialRules.calculateGrossProfit, không copy
+       laiLoSauChiPhi. Không gọi “báo cáo tài chính ngày”.
+
+  7. Demo 8 bước vs “phải có Telegram”
+     Phần D: Telegram bonus.
+     Phần E DIGITAL: “phải có” companion.
+     → Làm đủ OTP + 1 push PC/lệch + /fly; video nếu demo 7 phút không kịp.
+
+  8. Mốc 22:00 vs ca đêm 24/7  (mới, review 07/09)
+     PLAN_12 A3: “sau đóng ca cuối hoặc cron 22:00”.
+     Code LoaiCa DEM: 22:00–06:00, NgayLam = ngày bắt đầu.
+     → File này thắng. PLAN_12 A3 đã chú thích trỏ về đây.
+
+  9. “Read-only” vs bind/unbind
+     PLAN_12: “Read-only: KHONG doi chung tu” dễ hiểu thành không ghi gì cả.
+     → Câu chốt mục 0.(1) / 2.1. Chỉ đọc nghiệp vụ; ghi cấu hình liên kết + audit.
+
+  10. TelegramNhatKy
+      PLAN_12 A3: “bang TelegramNhatKy hoac logAudit”.
+      → Chốt logAudit / NhatKy. Không tạo TelegramNhatKy.
+
+
+================================================================================
+PHỤ LỤC — API ĐỀ XUẤT (CHƯA CODE)
+================================================================================
+
+  Method  Path                                           Auth                 Việc
+  ------  ---------------------------------------------  -------------------  --------------------
+  POST    /api/telegram/webhook                          Secret Telegram,     Update bot
+                                                         không JWT
+  POST    /api/telegram/link-otp                         JWT UC01             Tạo OTP
+  GET     /api/telegram/link-status                      JWT                  Đã bind?
+  POST    /api/telegram/unlink                           JWT                  Tự hủy
+  GET     /api/admin/telegram/bindings                   JWT QL UC02          Danh sách
+  POST    /api/admin/telegram/bindings/:maNV/revoke      JWT QL UC02          Hủy cưỡng chế
+
+  Health hiện có: GET /api/health — có thể thêm
+  "telegram": "polling"|"webhook"|"off" (không lộ token).
+
+  Bot API phía Telegram (gọi ra, không phải REST Fly):
+      setWebhook, deleteWebhook, getUpdates, sendMessage, getMe.
+      Khi TELEGRAM_WEBHOOK_URL trống: deleteWebhook rồi getUpdates.
+
+
+================================================================================
+KẾT
+================================================================================
+
+Telegram P1 là kênh cảnh báo + đối soát đọc theo đúng quyền Fly,
+không phải trợ lý AI, không phải quy trình duyệt.
+
+Read-only đối với dữ liệu nghiệp vụ; chỉ ghi cấu hình liên kết
+(bind/unbind) và audit.
+
+Người nhận plan bắt đầu P0 (BotFather + .env) rồi P1a bind;
+mọi ghi sổ nghiệp vụ vẫn chỉ trên Electron.
+
+Tin tóm tắt sau ngày vận hành gửi ~06:10 (sau ca đêm), không phải 22:00.
+
+KHÔNG implement code bot trong lần ghi file plan này.
+================================================================================
+HẾT FILE
+================================================================================

@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const os = require('node:os');
 const path = require('node:path');
-require('dotenv').config();
+require('./config/loadEnv').loadEnv();
 const { poolPromise } = require('./config/db'); // Đảm bảo gọi file db.js để khởi tạo kết nối
 
 const app = express();
@@ -41,6 +41,7 @@ const supplierRoutes = require('./routes/supplierRoutes');
 const accountingRoutes = require('./routes/accountingRoutes');
 const cashierRoutes = require('./routes/cashierRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const telegramRoutes = require('./routes/telegramRoutes');
 
 // Định tuyến API
 app.use('/api/auth', authRoutes);
@@ -54,10 +55,13 @@ app.use('/api/purchasing', purchasingRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/accounting', accountingRoutes);
 app.use('/api/cashier', cashierRoutes);
+app.use('/api/telegram', telegramRoutes);
 
 // API Kiểm tra trạng thái Server
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', message: 'Backend Supermarket Fly đang chạy!' });
+    let telegram = 'off';
+    try { telegram = require('./services/telegramNotify').getTelegramStatus(); } catch { telegram = 'off'; }
+    res.json({ status: 'ok', message: 'Backend Supermarket Fly đang chạy!', telegram });
 });
 
 // API Kiểm tra kết nối Database
@@ -75,8 +79,27 @@ app.use('/api', (req, res) => {
     res.status(404).json({ message: `Không tìm thấy ${req.method} ${req.originalUrl}. Hãy đóng ứng dụng và chạy lại npm start.` });
 });
 
-// Start Server — 0.0.0.0 để máy khác trong cùng Wi-Fi gọi được API (DB vẫn nằm trên máy này).
-app.listen(PORT, HOST, () => {
+process.on('unhandledRejection', (reason) => {
+    console.error('Lỗi không bắt (API vẫn chạy):', reason && reason.message ? reason.message : reason);
+});
+process.on('uncaughtException', (error) => {
+    console.error('Ngoại lệ không bắt (API vẫn chạy):', error.message);
+});
+
+const startHttp = (host, onListening) => {
+    const server = app.listen(PORT, host, onListening);
+    server.on('error', (error) => {
+        if (error.code === 'EADDRINUSE') {
+            console.error(`Cổng ${PORT} (${host}) đang bị chiếm. Đóng process cũ rồi chạy lại npm start.`);
+            return;
+        }
+        console.error(`Không listen ${host}:${PORT}:`, error.message);
+    });
+    return server;
+};
+
+// 0.0.0.0 = IPv4 (LAN + 127.0.0.1). ::1 = Electron/Chromium gọi localhost.
+startHttp(HOST, () => {
     console.log(`🚀 Server đang chạy tại http://localhost:${PORT}`);
     const lan = listLanIPv4();
     if (lan.length) {
@@ -89,11 +112,26 @@ app.listen(PORT, HOST, () => {
         try {
             const { ensureStoreProfitLossSchema } = require('./services/storeProfitLoss');
             const { ensureReturnHandoverSchema, healParkedReturns } = require('./services/returnHandover');
+            const { ensureTelegramSchema } = require('./services/telegramSchema');
             await ensureStoreProfitLossSchema(pool);
             await ensureReturnHandoverSchema(pool);
             await healParkedReturns(pool);
+            await ensureTelegramSchema(pool);
         } catch (error) {
-            console.error('Không thể bổ sung schema thông báo / bàn giao đổi trả:', error.message);
+            console.error('Không thể bổ sung schema thông báo / bàn giao / Telegram:', error.message);
         }
-    }).catch(() => {});
+    }).catch((error) => {
+        console.error('SQL chưa sẵn sàng (API vẫn listen):', error.message);
+    });
+    try {
+        require('./controllers/telegramBotController').startTelegramBot()
+            .catch(error => console.error('Telegram:', error.message));
+    } catch (error) {
+        console.error('Telegram:', error.message);
+    }
 });
+if (HOST !== '::1' && HOST !== '::') {
+    startHttp('::1', () => {
+        console.log(`Cũng lắng nghe http://[::1]:${PORT} (localhost IPv6)`);
+    });
+}

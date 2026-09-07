@@ -511,7 +511,7 @@ const savePlan = async (pool, user, req, resolved, body = {}) => {
             content: `${period.label}: ${lossText}. Đã gửi thông báo cho ${recipients.length} nhân viên đang làm việc.`
         });
         await transaction.commit();
-        notifyInboxChanged({ action: 'Gửi kế hoạch điều chỉnh lãi lỗ', table: 'ThongBaoCuaHang' });
+        notifyInboxChanged({ action: 'Gửi kế hoạch điều chỉnh lãi lỗ', table: 'ThongBaoCuaHang', recordId: String(maKeHoach) });
         const roles = [...new Set(recipients.map(item => item.ChucVu))];
         return {
             message: `Đã lưu kế hoạch và gửi thông báo tới ${recipients.length} nhân viên đang làm việc.`,

@@ -39,22 +39,31 @@ const subscribe = res => {
 
 const flush = () => {
     flushTimer = null;
+    const meta = pendingMeta || {};
+    pendingMeta = null;
     const payload = {
         seq: ++seq,
         at: new Date().toISOString(),
-        action: pendingMeta?.action || '',
-        table: pendingMeta?.table || ''
+        action: meta.action || '',
+        table: meta.table || ''
     };
-    pendingMeta = null;
     for (const res of [...clients]) {
         if (!writeEvent(res, 'inbox', payload)) drop(res);
     }
+    try {
+        const telegramNotify = require('./telegramNotify');
+        telegramNotify.notifySafely(() => telegramNotify.onInboxChanged({
+            action: meta.action,
+            table: meta.table,
+            recordId: meta.recordId
+        }));
+    } catch { /* bot lỗi không ảnh hưởng chuông desktop */ }
 };
 
 const notifyInboxChanged = (meta = {}) => {
     const action = String(meta.action || '');
     if (action && QUIET.test(action)) return;
-    pendingMeta = { action, table: meta.table || '' };
+    pendingMeta = { action: meta.action || '', table: meta.table || '', recordId: meta.recordId || '' };
     clearTimeout(flushTimer);
     flushTimer = setTimeout(flush, DEBOUNCE_MS);
 };

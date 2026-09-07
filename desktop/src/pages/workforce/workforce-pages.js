@@ -2,6 +2,7 @@
   const previous = window.FLY_ROLE_PAGES;
   const templates = {
     'manager-workforce': '<section class="warehouse-page workforce-page"><div class="overview-loading">Đang tải kế hoạch nhân sự...</div></section>',
+    'manager-workforce-approve': '<section class="warehouse-page workforce-page workforce-approve-page"><div class="overview-loading">Đang tải duyệt công...</div></section>',
     'manager-holidays': '<section class="warehouse-page workforce-page manager-holidays"><div class="overview-loading">Đang tải lịch ngày lễ...</div></section>',
     'cashier-schedule': '<section class="warehouse-page workforce-page"><div class="overview-loading">Đang tải lịch làm việc cá nhân...</div></section>'
   };
@@ -31,11 +32,68 @@
     const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`;
   };
-  const payrollPeriodPicker = value => `<div class="payroll-period-picker workforce-payroll-filter" data-keep-native aria-label="Chọn tháng tạm tính lương">
-      <label class="payroll-period-field payroll-month-field"><span>Tháng tạm tính</span>
-        <input type="month" id="workforcePayrollMonth" data-keep-native min="2020-01" max="2100-12" value="${esc(value)}">
+  const vnTodayKey = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
+  const sqlDayKey = value => {
+    if (value == null || value === '') return '';
+    const text = String(value).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+    if (/^\d{4}-\d{2}-\d{2}[ T]00:00:00(?:\.0+)?$/.test(text)) return text.slice(0, 10);
+    const dmy = text.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{4})$/);
+    if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+    const date = value instanceof Date ? value : new Date(text);
+    if (!Number.isFinite(date.getTime())) return '';
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(date);
+  };
+  const readIsoDateInput = input => {
+    const raw = String(input?.value || '').trim();
+    return sqlDayKey(raw);
+  };
+  const readPayrollMonthValue = (root, fallback) => {
+    const monthSel = root.querySelector('#workforcePayrollMonthSelect');
+    const yearSel = root.querySelector('#workforcePayrollYearSelect');
+    if (monthSel?.value && yearSel?.value) {
+      const ym = `${yearSel.value}-${String(monthSel.value).padStart(2, '0')}`;
+      const hidden = root.querySelector('#workforcePayrollMonth');
+      if (hidden) hidden.value = ym;
+      return ym;
+    }
+    const hidden = root.querySelector('#workforcePayrollMonth');
+    const raw = String(hidden?.value || root.querySelector('input[type="month"]')?.value || '').trim();
+    const match = raw.match(/^(\d{4})-(\d{2})$/) || raw.match(/(\d{4})-(\d{2})/);
+    if (match) return `${match[1]}-${match[2]}`;
+    const viMonth = raw.match(/tháng\s*(chín|9|\d{1,2}).*?(\d{4})/i);
+    if (viMonth) {
+      const names = ['một', 'hai', 'ba', 'tư', 'năm', 'sáu', 'bảy', 'tám', 'chín', 'mười', 'mười một', 'mười hai'];
+      const word = String(viMonth[1]).toLocaleLowerCase('vi-VN');
+      const monthNum = /^\d+$/.test(word) ? Number(word) : names.indexOf(word) + 1;
+      if (monthNum >= 1 && monthNum <= 12) return `${viMonth[2]}-${String(monthNum).padStart(2, '0')}`;
+    }
+    return fallback;
+  };
+  const payrollPeriodPicker = value => {
+    const fallback = vnTodayKey().slice(0, 7);
+    const match = String(value || fallback).match(/^(\d{4})-(\d{2})$/);
+    const year = Number(match?.[1] || fallback.slice(0, 4));
+    const month = Number(match?.[2] || fallback.slice(5, 7));
+    const years = Array.from({ length: 8 }, (_, index) => year - 3 + index)
+      .filter(item => item >= 2020 && item <= 2100);
+    if (!years.includes(year)) years.push(year);
+    years.sort((a, b) => a - b);
+    const monthOptions = Array.from({ length: 12 }, (_, index) => {
+      const num = index + 1;
+      return `<option value="${String(num).padStart(2, '0')}" ${num === month ? 'selected' : ''}>Tháng ${num}</option>`;
+    }).join('');
+    const yearOptions = years.map(item => `<option value="${item}" ${item === year ? 'selected' : ''}>${item}</option>`).join('');
+    return `<div class="payroll-period-picker workforce-payroll-filter" data-keep-native aria-label="Chọn tháng tạm tính lương">
+      <label class="payroll-period-field"><span>Tháng</span>
+        <select id="workforcePayrollMonthSelect" data-keep-native>${monthOptions}</select>
       </label>
+      <label class="payroll-period-field"><span>Năm</span>
+        <select id="workforcePayrollYearSelect" data-keep-native>${yearOptions}</select>
+      </label>
+      <input type="hidden" id="workforcePayrollMonth" value="${esc(`${year}-${String(month).padStart(2, '0')}`)}">
     </div>`;
+  };
   const addDays = (date, count) => { const value = new Date(date); value.setDate(value.getDate() + count); return value; };
   const mondayOf = date => { const value = new Date(date); const offset = (value.getDay() + 6) % 7; return addDays(value, -offset); };
   const shortDate = value => new Intl.DateTimeFormat('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' }).format(new Date(`${value}T00:00:00`));
@@ -203,23 +261,45 @@
     });
   };
 
+  const attendanceStatus = item => {
+    if (item.TrangThai === 'Chờ duyệt') return 'Chờ duyệt';
+    if (item.ThoiGianRa || item.TrangThaiCaBan === 'Đã chốt') {
+      if (item.TrangThai === 'Đã duyệt') return 'Đã duyệt';
+      return 'Đã ra ca';
+    }
+    if (item.ThoiGianVao || item.TrangThaiCaBan === 'Đang mở') return 'Đang trong ca';
+    return 'Chưa chấm công';
+  };
+  const attendanceClass = status => {
+    if (status === 'Chờ duyệt') return 'pending';
+    if (status === 'Đã duyệt' || status === 'Đã ra ca' || status === 'Đã chốt') return 'ok';
+    if (status === 'Đang trong ca' || status === 'Đang làm việc') return 'sent';
+    return 'draft';
+  };
+  const attendanceRowHtml = item => {
+    const status = attendanceStatus(item);
+    const outAt = item.ThoiGianRa || item.ThoiGianDongCa;
+    const live = item.ThoiGianVao && !outAt && item.TrangThaiCaBan !== 'Đã chốt';
+    const pending = status === 'Chờ duyệt';
+    const rowClass = [live && 'workforce-live-row', pending && 'workforce-pending-row'].filter(Boolean).join(' ');
+    const paidDetail = item.TrangThai === 'Đã duyệt'
+      ? `<strong>${item.SoPhutDuocDuyet || 0} phút tính lương</strong><small>${item.SoPhutOTTinhLuong ? `Có ${item.SoPhutOTTinhLuong} phút tăng ca` : 'Không tính tăng ca'}</small>`
+      : `<strong>${item.SoPhutOT || 0} phút ngoài ca</strong><small>Chưa tính lương đến khi duyệt</small>`;
+    const approvalNote = item.TrangThai === 'Đã duyệt' && item.GhiChuDuyet ? `<small title="${esc(item.GhiChuDuyet)}">${esc(item.GhiChuDuyet)}</small>` : '';
+    const day = sqlDayKey(item.NgayLam);
+    const approveButton = item.MaChamCong && outAt && item.TrangThai !== 'Đã duyệt'
+      ? `<button class="warehouse-primary approve-attendance" type="button" data-id="${item.MaChamCong}" data-name="${esc(item.TenNV)}" data-shift="${esc(item.TenCa)}" data-day="${esc(day)}" data-scheduled-in="${esc(item.BatDauDuKien)}" data-scheduled-out="${esc(item.KetThucDuKien)}" data-in="${esc(item.ThoiGianVao)}" data-out="${esc(outAt)}" data-actual-minutes="${item.SoPhutLam || 0}" data-outside-minutes="${item.SoPhutOT || 0}">Duyệt</button>`
+      : '—';
+    return `<tr${rowClass ? ` class="${rowClass}"` : ''}><td><strong>${esc(item.TenNV)}</strong><small>${esc(item.ChucVu || item.MaNV)}${item.MaCa ? ` · ${esc(item.MaCa)}` : ''}</small></td><td>${day ? shortDate(day) : '—'}<small>${esc(item.TenCa)}</small></td><td>${fmtDateTime(item.ThoiGianVao)}</td><td>${fmtDateTime(outAt)}</td><td class="num"><strong>${item.SoPhutLam || 0} phút</strong><small>Muộn ${item.PhutDiMuon || 0} · về sớm ${item.PhutVeSom || 0}</small></td><td class="num">${paidDetail}</td><td><span class="status-pill ${attendanceClass(status)}">${esc(status)}</span>${item.TrangThaiCaBan ? `<small>POS: ${esc(item.TrangThaiCaBan)}</small>` : ''}${approvalNote}</td><td>${approveButton}</td></tr>`;
+  };
+
   const initManagerWorkforce = async (root, context) => {
     let setup; let weekStart = mondayOf(new Date());
-    let payrollMonth = dateKey(new Date()).slice(0, 7);
     try { setup = await api(context, '/admin/workforce/setup'); }
     catch (error) { root.innerHTML = `<div class="welcome-card"><h2>Chưa thể mở chức năng phân ca</h2><p>${esc(error.message)}</p></div>`; return; }
     const cashiers = setup.cashiers || setup.employees.filter(item => item.ChucVu === 'Thu ngân');
     const officeStaff = setup.officeStaff || setup.employees.filter(isOfficeEmployee);
     const people = [...officeStaff, ...cashiers];
-
-    const loadPayroll = async () => {
-      if (!payrollMonth) return;
-      try {
-        const data = await api(context, `/admin/workforce/payroll-preview?month=${payrollMonth}`);
-        const body = root.querySelector('#payrollBody');
-        body.innerHTML = data.items.map(item => `<tr><td><strong>${esc(item.TenNV)}</strong><small>${esc(item.ChucVu || item.MaNV)}</small></td><td class="num">${item.SoCa}</td><td class="num">${item.GioLich}</td><td class="num">${item.GioNgay}</td><td class="num">${item.GioDem}</td><td class="num"><strong>${money(item.LuongTamTinh)}</strong></td><td><span class="status-pill ${item.CaThieuChamCong ? 'sent' : 'ok'}">${item.CaThieuChamCong ? `${item.CaThieuChamCong} ca thiếu công` : 'Đủ dữ liệu'}</span></td></tr>`).join('');
-      } catch (error) { context.showToast(error.message, 'error'); }
-    };
 
     const load = async () => {
       const days = Array.from({ length: 7 }, (_, index) => dateKey(addDays(weekStart, index)));
@@ -234,67 +314,13 @@
         const officeShifts = setup.shifts.filter(isOfficeShift);
         const coverageCard = item => `<article class="${isOfficeShift(item) ? 'office' : ''}"><span>${esc(item.TenCa)}</span><strong>${data.items.filter(row => row.MaLoaiCa === item.MaLoaiCa).length}/${expectedCoverage(item, days)}</strong><small>${esc(item.GioBatDau)}–${esc(item.GioKetThuc)}${item.GioNghiBatDau ? ` · nghỉ ${esc(item.GioNghiBatDau)}–${esc(item.GioNghiKetThuc)}` : ''} · ${shiftRoleLabel(item)}</small></article>`;
         const legend = `<span class="workforce-legend"><i class="draft"></i>Bản nháp / chờ công bố lại <i class="published"></i>Đã công bố</span>`;
-        root.innerHTML = `<header class="warehouse-heading workforce-heading"><div><p class="warehouse-kicker">NHÂN SỰ / PHÂN CA</p><h1>Kế hoạch làm việc cửa hàng</h1><p>Thu ngân: 1 ca/ngày, nghỉ 12 giờ, ≤48 giờ/tuần (T2–CN), không đêm thứ 3 liên tiếp; xoay đều loại ca trong tháng. Mua hàng, Thủ kho và Kế toán làm cố định 7h30–17h30, nghỉ trưa 11h30–13h30, Thứ 2–Thứ 7. Lịch đã công bố không khóa cứng: Quản lý sửa ngoại lệ rồi Công bố lịch lại.</p></div><div class="workforce-heading-actions"><button class="warehouse-secondary" id="autoSchedule"><svg><use href="#i-refresh"/></svg>Phân ca tự động</button><button class="warehouse-primary" id="publishSchedule"><svg><use href="#i-approve"/></svg>${needsRepublish ? 'Công bố lại' : 'Công bố lịch'}</button></div></header>
+        root.innerHTML = `<header class="warehouse-heading workforce-heading"><div><p class="warehouse-kicker">NHÂN SỰ / PHÂN CA</p><h1>Kế hoạch làm việc cửa hàng</h1><p>Thu ngân: 1 ca/ngày, nghỉ 12 giờ, ≤48 giờ/tuần (T2–CN), không đêm thứ 3 liên tiếp; xoay đều loại ca trong tháng. Mua hàng, Thủ kho và Kế toán làm cố định 7h30–17h30, nghỉ trưa 11h30–13h30, Thứ 2–Thứ 7. Lịch đã công bố không khóa cứng: Quản lý sửa ngoại lệ rồi Công bố lịch lại. Duyệt chấm công ở menu <strong>Duyệt công</strong>.</p></div><div class="workforce-heading-actions"><button class="warehouse-secondary" id="autoSchedule"><svg><use href="#i-refresh"/></svg>Phân ca tự động</button><button class="warehouse-primary" id="publishSchedule"><svg><use href="#i-approve"/></svg>${needsRepublish ? 'Công bố lại' : 'Công bố lịch'}</button></div></header>
           <section class="workforce-weekbar"><button class="warehouse-icon-button" id="prevWeek"><svg><use href="#i-chevron"/></svg></button><div><span>TUẦN LÀM VIỆC</span><strong>${shortDate(from)} – ${shortDate(to)}</strong><small>Quản lý có thể điều chỉnh ngoại lệ trên lịch đã công bố, rồi Công bố lịch lại. Ô đã chấm công hoặc đã mở POS thì khóa. Ca hành chính trừ 2 giờ nghỉ trưa khi tính lương.</small></div><button class="warehouse-icon-button next" id="nextWeek"><svg><use href="#i-chevron"/></svg></button></section>
           ${needsRepublish ? `<div class="workforce-rule workforce-republish-banner"><svg><use href="#i-warning"/></svg><p>Có ${pendingRepublish} lượt chờ công bố lại sau điều chỉnh ngoại lệ. Chấm công và POS chỉ dùng lịch đã công bố — hãy bấm Công bố lại.</p></div>` : ''}
           <div class="workforce-coverage">${cashierShifts.map(coverageCard).join('')}</div>
           ${officeShifts.length ? `<div class="workforce-coverage office-line">${officeShifts.map(coverageCard).join('')}</div>` : ''}
           <article class="workforce-board"><div class="workforce-board-head"><div><p>KHỐI HÀNH CHÍNH</p><h2>${officeStaff.length} người · 7h30–17h30, nghỉ 11h30–13h30</h2></div>${legend}</div>${renderGrid(officeStaff, days, byEmployeeDay, 'office', weekHasPublished)}</article>
-          <article class="workforce-board"><div class="workforce-board-head"><div><p>THU NGÂN TẠI QUẦY</p><h2>${cashiers.length} nhân viên · xoay ca 24/7</h2></div>${legend}</div>${renderGrid(cashiers, days, byEmployeeDay, 'cashier', weekHasPublished)}</article>
-          <article class="warehouse-table-card workforce-payroll"><div class="warehouse-panel-title"><div><p>CHẤM CÔNG &amp; LƯƠNG</p><h2>Tạm tính theo lượt công đã duyệt</h2></div><div class="workforce-payroll-filter">${payrollPeriodPicker(payrollMonth)}<button class="warehouse-secondary" id="loadPayroll">Xem tháng</button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NHÂN VIÊN</th><th>SỐ CA</th><th>GIỜ LỊCH</th><th>GIỜ NGÀY</th><th>GIỜ ĐÊM</th><th>LƯƠNG TẠM TÍNH</th><th>DỮ LIỆU CÔNG</th></tr></thead><tbody id="payrollBody"><tr><td colspan="7" class="warehouse-empty">Đang tổng hợp...</td></tr></tbody></table></div></article>`;
-        const [attendance, salesShifts] = await Promise.all([
-          api(context, `/admin/workforce/attendance?from=${from}&to=${to}`),
-          api(context, `/admin/finance/sales-shifts?from=${from}&to=${to}`).catch(() => ({ items: [] }))
-        ]);
-        const attendanceStatus = item => {
-          if (item.ThoiGianRa || item.TrangThaiCaBan === 'Đã chốt') {
-            if (item.TrangThai === 'Đã duyệt') return 'Đã duyệt';
-            return 'Đã ra ca';
-          }
-          if (item.ThoiGianVao || item.TrangThaiCaBan === 'Đang mở') return 'Đang trong ca';
-          return 'Chưa chấm công';
-        };
-        const attendanceClass = status => status === 'Đã duyệt' || status === 'Đã ra ca' || status === 'Đã chốt' ? 'ok' : status === 'Đang trong ca' || status === 'Đang làm việc' || status === 'Chờ duyệt' ? 'sent' : 'draft';
-        const attendanceRowHtml = item => {
-          const status = attendanceStatus(item);
-          const outAt = item.ThoiGianRa || item.ThoiGianDongCa;
-          const highlight = (item.ThoiGianVao && !outAt && item.TrangThaiCaBan !== 'Đã chốt') ? ' class="workforce-live-row"' : '';
-          const paidDetail = item.TrangThai === 'Đã duyệt'
-            ? `<strong>${item.SoPhutDuocDuyet || 0} phút tính lương</strong><small>${item.SoPhutOTTinhLuong ? `Có ${item.SoPhutOTTinhLuong} phút tăng ca` : 'Không tính tăng ca'}</small>`
-            : `<strong>${item.SoPhutOT || 0} phút ngoài ca</strong><small>Chưa tính lương đến khi duyệt</small>`;
-          const approvalNote = item.TrangThai === 'Đã duyệt' && item.GhiChuDuyet ? `<small title="${esc(item.GhiChuDuyet)}">${esc(item.GhiChuDuyet)}</small>` : '';
-          const approveButton = item.MaChamCong && outAt && item.TrangThai !== 'Đã duyệt'
-            ? `<button class="warehouse-secondary approve-attendance" data-id="${item.MaChamCong}" data-name="${esc(item.TenNV)}" data-shift="${esc(item.TenCa)}" data-day="${esc(String(item.NgayLam).slice(0, 10))}" data-scheduled-in="${esc(item.BatDauDuKien)}" data-scheduled-out="${esc(item.KetThucDuKien)}" data-in="${esc(item.ThoiGianVao)}" data-out="${esc(outAt)}" data-actual-minutes="${item.SoPhutLam || 0}" data-outside-minutes="${item.SoPhutOT || 0}">Duyệt</button>`
-            : '—';
-          return `<tr${highlight}><td><strong>${esc(item.TenNV)}</strong><small>${esc(item.ChucVu || item.MaNV)}${item.MaCa ? ` · ${esc(item.MaCa)}` : ''}</small></td><td>${shortDate(String(item.NgayLam).slice(0, 10))}<small>${esc(item.TenCa)}</small></td><td>${fmtDateTime(item.ThoiGianVao)}</td><td>${fmtDateTime(outAt)}</td><td class="num"><strong>${item.SoPhutLam || 0} phút</strong><small>Muộn ${item.PhutDiMuon || 0} · về sớm ${item.PhutVeSom || 0}</small></td><td class="num">${paidDetail}</td><td><span class="status-pill ${attendanceClass(status)}">${esc(status)}</span>${item.TrangThaiCaBan ? `<small>POS: ${esc(item.TrangThaiCaBan)}</small>` : ''}${approvalNote}</td><td>${approveButton}</td></tr>`;
-        };
-        const salesRowHtml = item => `<tr><td><strong>${esc(item.MaCa)}</strong><small>${esc(item.TenNV)} · ${esc(item.TenQuay || '—')}</small></td><td>${fmtDateTime(item.ThoiGianBatDau)}</td><td>${fmtDateTime(item.ThoiGianKetThuc)}</td><td class="num">${item.SoHoaDon || 0}</td><td class="num"><strong>${money(item.DoanhThu)}</strong><small>TM ${money(item.TongTienMat)} · CK ${money(item.TongTienChuyenKhoan)} · QR ${money(item.TongTienQR)} · Thẻ ${money(item.TongTienThe)}</small></td><td class="num">${money(item.TienMatHeThong)}</td><td class="num">${item.TienThucNop == null ? '—' : money(item.TienThucNop)}</td><td><span class="status-pill ${attendanceClass(item.TrangThai)}">${esc(item.TrangThai)}</span><small>${esc(item.TrangThaiDoiSoat || '—')}</small></td></tr>`;
-        const closedSales = (salesShifts.items || []).filter(item => item.TrangThai === 'Đã chốt');
-        const openSales = (salesShifts.items || []).filter(item => item.TrangThai === 'Đang mở');
-        root.querySelector('.workforce-payroll').insertAdjacentHTML('beforebegin', `<article class="warehouse-table-card workforce-attendance"><div class="warehouse-panel-title"><div><p>TỔNG HỢP CA / CHẤM CÔNG</p><h2>Giờ thực tế và thời gian được tính lương</h2></div><span class="status-pill sent">${attendance.items.filter(item => item.ThoiGianVao && !item.ThoiGianRa).length} đang làm · ${attendance.items.filter(item => item.TrangThai === 'Chờ duyệt').length} chờ duyệt công</span></div><p class="workforce-rule" style="margin:0 16px 12px">Đóng ca POS sẽ chốt giờ ra thực tế. Khi duyệt, mặc định chỉ tính lương phần làm việc nằm trong ca đã phân; thời gian sau giờ kết thúc ca chỉ được tính khi Quản lý chọn duyệt tăng ca.</p><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NHÂN VIÊN</th><th>CA</th><th>GIỜ VÀO</th><th>GIỜ RA</th><th>GIỜ THỰC TẾ</th><th>NGOÀI CA / TÍNH LƯƠNG</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody id="attendanceBody">${attendance.items.map(attendanceRowHtml).join('') || '<tr><td colspan="8" class="warehouse-empty">Chưa có lịch công bố trong tuần.</td></tr>'}</tbody></table></div></article>
-          <article class="warehouse-table-card workforce-sales-shifts"><div class="warehouse-panel-title"><div><p>BÁO CÁO CA BÁN HÀNG</p><h2>Doanh thu / thực thu theo từng ca</h2></div><span class="status-pill ok">${closedSales.length} ca đã chốt · ${openSales.length} ca đang mở</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>MÃ CA / THU NGÂN</th><th>BẮT ĐẦU</th><th>KẾT THÚC</th><th>HÓA ĐƠN</th><th>DOANH THU / THỰC THU</th><th>TM HỆ THỐNG</th><th>THỰC NỘP</th><th>TRẠNG THÁI</th></tr></thead><tbody id="salesShiftBody">${(salesShifts.items || []).map(salesRowHtml).join('') || '<tr><td colspan="8" class="warehouse-empty">Chưa có ca bán hàng trong tuần.</td></tr>'}</tbody></table></div></article>`);
-        if (root._flyAttendanceTimer) clearInterval(root._flyAttendanceTimer);
-        root._flyAttendanceTimer = setInterval(async () => {
-          if (!document.contains(root) || document.querySelector('.warehouse-modal-backdrop')) return;
-          try {
-            const [liveAttendance, liveSales] = await Promise.all([
-              api(context, `/admin/workforce/attendance?from=${from}&to=${to}`),
-              api(context, `/admin/finance/sales-shifts?from=${from}&to=${to}`).catch(() => ({ items: [] }))
-            ]);
-            const attBody = root.querySelector('#attendanceBody');
-            if (attBody) attBody.innerHTML = liveAttendance.items.map(attendanceRowHtml).join('') || '<tr><td colspan="8" class="warehouse-empty">Chưa có lịch công bố trong tuần.</td></tr>';
-            const salesBody = root.querySelector('#salesShiftBody');
-            if (salesBody) salesBody.innerHTML = (liveSales.items || []).map(salesRowHtml).join('') || '<tr><td colspan="8" class="warehouse-empty">Chưa có ca bán hàng trong tuần.</td></tr>';
-          } catch { /* giữ snapshot cũ nếu API lỗi */ }
-        }, 30000);
-        if (!root._flyApproveBound) {
-          root._flyApproveBound = true;
-          root.addEventListener('click', event => {
-            const button = event.target.closest('.approve-attendance');
-            if (!button) return;
-            openAttendanceApprovalModal(context, button, load);
-          });
-        }
+          <article class="workforce-board"><div class="workforce-board-head"><div><p>THU NGÂN TẠI QUẦY</p><h2>${cashiers.length} nhân viên · xoay ca 24/7</h2></div>${legend}</div>${renderGrid(cashiers, days, byEmployeeDay, 'cashier', weekHasPublished)}</article>`;
         root.querySelector('#prevWeek').addEventListener('click', () => { weekStart = addDays(weekStart, -7); load(); });
         root.querySelector('#nextWeek').addEventListener('click', () => { weekStart = addDays(weekStart, 7); load(); });
         root.querySelector('#autoSchedule').addEventListener('click', async () => {
@@ -318,14 +344,204 @@
           if (!employee) return;
           openEditModal(context, setup, employee, button.dataset.day, byEmployeeDay.get(`${employee.MaNV}|${button.dataset.day}`), load);
         }));
-        root.querySelector('#loadPayroll').addEventListener('click', async () => {
-          payrollMonth = root.querySelector('#workforcePayrollMonth').value;
-          await loadPayroll();
-        });
-        await loadPayroll();
       } catch (error) { context.showToast(error.message, 'error'); }
     };
     await load();
+  };
+
+  const initManagerApprove = async (root, context) => {
+    if (!root) return;
+    let payrollMonth = vnTodayKey().slice(0, 7);
+    let statusFilter = 'Chờ duyệt';
+    let fromDate = '';
+    let toDate = '';
+
+    const emptyAttendance = (title, hint) => `<tr><td colspan="8" class="warehouse-empty workforce-approve-empty"><strong>${esc(title)}</strong><span>${esc(hint)}</span></td></tr>`;
+    const emptyPayroll = (title, hint) => `<tr><td colspan="7" class="warehouse-empty workforce-approve-empty"><strong>${esc(title)}</strong><span>${esc(hint)}</span></td></tr>`;
+    const inDateRange = (item, from, to) => {
+      if (!from && !to) return true;
+      const day = sqlDayKey(item.NgayLam);
+      if (!day) return false;
+      if (from && day < from) return false;
+      if (to && day > to) return false;
+      return true;
+    };
+    const isPendingRow = item => item.TrangThai === 'Chờ duyệt' || attendanceStatus(item) === 'Chờ duyệt';
+
+    const syncPayrollMonth = () => {
+      payrollMonth = readPayrollMonthValue(root, payrollMonth);
+      return payrollMonth;
+    };
+
+    const loadPayroll = async () => {
+      const body = root.querySelector('#payrollBody');
+      const month = syncPayrollMonth();
+      if (!body) return;
+      if (!/^\d{4}-\d{2}$/.test(month)) {
+        context.showToast('Tháng tạm tính không hợp lệ. Hãy chọn lại tháng và năm.', 'error');
+        return;
+      }
+      body.innerHTML = emptyPayroll('Đang tổng hợp lương tạm tính...', `Kỳ ${month}`);
+      try {
+        const data = await api(context, `/admin/workforce/payroll-preview?month=${encodeURIComponent(month)}`);
+        const [year, monthNum] = month.split('-');
+        body.innerHTML = (data.items || []).map(item => `<tr><td><strong>${esc(item.TenNV)}</strong><small>${esc(item.ChucVu || item.MaNV)}</small></td><td class="num">${item.SoCa}</td><td class="num">${item.GioLich}</td><td class="num">${item.GioNgay}</td><td class="num">${item.GioDem}</td><td class="num"><strong>${money(item.LuongTamTinh)}</strong></td><td><span class="status-pill ${item.CaThieuChamCong ? 'sent' : 'ok'}">${item.CaThieuChamCong ? `${item.CaThieuChamCong} ca thiếu công` : 'Đủ dữ liệu'}</span></td></tr>`).join('')
+          || emptyPayroll('Chưa có dữ liệu tháng này', `Không có ca đã công bố trong ${Number(monthNum)}/${year}.`);
+      } catch (error) { context.showToast(error.message, 'error'); }
+    };
+
+    const renderShell = () => {
+      root.innerHTML = `<header class="warehouse-heading workforce-heading workforce-approve-heading"><div><p class="warehouse-kicker">NHÂN SỰ / DUYỆT CÔNG</p><h1>Duyệt chấm công</h1><p>Mặc định hiện toàn bộ ca <strong>Chờ duyệt</strong> — cùng nguồn chuông / Telegram, gồm ngày cũ và ca hành chính. Lọc ngày chỉ khi cần. Không duyệt trên Telegram.</p></div></header>
+        <article id="workforceApprove" class="warehouse-table-card workforce-attendance workforce-approve">
+          <div class="warehouse-panel-title"><div><p>KHỐI 1 · DUYỆT CÔNG</p><h2>Chấm công chờ duyệt và đã duyệt</h2></div><span class="status-pill pending" id="approvePendingCount">Đang tải</span></div>
+          <div class="workforce-approve-filters" data-keep-native>
+            <label class="warehouse-field"><span>Trạng thái</span>
+              <select id="approveStatusFilter" data-keep-native>
+                <option value="Chờ duyệt" ${statusFilter === 'Chờ duyệt' ? 'selected' : ''}>Chờ duyệt</option>
+                <option value="Đã duyệt" ${statusFilter === 'Đã duyệt' ? 'selected' : ''}>Đã duyệt</option>
+                <option value="" ${statusFilter === '' ? 'selected' : ''}>Tất cả</option>
+              </select>
+            </label>
+            <label class="warehouse-field"><span>Từ ngày (tuỳ chọn)</span><input type="date" id="approveFrom" data-keep-native value="${esc(fromDate)}"></label>
+            <label class="warehouse-field"><span>Đến ngày (tuỳ chọn)</span><input type="date" id="approveTo" data-keep-native value="${esc(toDate)}"></label>
+            <div class="workforce-approve-filter-actions">
+              <button class="warehouse-primary workforce-approve-btn" id="applyApproveFilter" type="button">Lọc</button>
+              <button class="warehouse-secondary workforce-approve-btn" id="clearApproveFilter" type="button">Xóa lọc</button>
+            </div>
+          </div>
+          <p class="workforce-approve-hint">Cùng SQL Telegram (<code>ChamCong</code> Chờ duyệt). Để trống ngày thì hiện hết công chờ duyệt. Bấm <strong>Duyệt</strong> tại đây.</p>
+          <div class="warehouse-table-wrap"><table class="warehouse-table workforce-approve-table"><thead><tr><th>NHÂN VIÊN</th><th>CA</th><th>GIỜ VÀO</th><th>GIỜ RA</th><th>GIỜ THỰC TẾ</th><th>NGOÀI CA / TÍNH LƯƠNG</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody id="approveAttendanceBody"><tr><td colspan="8" class="warehouse-empty">Đang tải...</td></tr></tbody></table></div>
+        </article>
+        <article class="warehouse-table-card workforce-payroll workforce-payroll-preview"><div class="warehouse-panel-title workforce-payroll-head"><div><p>KHỐI 2 · LƯƠNG TẠM TÍNH</p><h2>Tạm tính theo lượt công đã duyệt</h2></div><div class="workforce-payroll-filter">${payrollPeriodPicker(payrollMonth)}<button class="warehouse-primary workforce-approve-btn" id="loadPayroll" type="button">Xem tháng</button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NHÂN VIÊN</th><th>SỐ CA</th><th>GIỜ LỊCH</th><th>GIỜ NGÀY</th><th>GIỜ ĐÊM</th><th>LƯƠNG TẠM TÍNH</th><th>DỮ LIỆU CÔNG</th></tr></thead><tbody id="payrollBody"><tr><td colspan="7" class="warehouse-empty">Đang tổng hợp...</td></tr></tbody></table></div></article>`;
+    };
+
+    const fillRows = rows => {
+      const body = root.querySelector('#approveAttendanceBody');
+      const count = root.querySelector('#approvePendingCount');
+      const pendingCount = rows.filter(isPendingRow).length;
+      if (count) {
+        count.textContent = `${pendingCount} chờ duyệt · ${rows.length} dòng`;
+        count.className = `status-pill ${pendingCount ? 'pending' : 'ok'}`;
+      }
+      if (body) {
+        body.innerHTML = rows.map(item => attendanceRowHtml(isPendingRow(item) ? { ...item, TrangThai: 'Chờ duyệt' } : item)).join('')
+          || emptyAttendance('Không có chấm công khớp bộ lọc', 'Thử Xóa lọc để xem hết công chờ duyệt (cùng nguồn Telegram), hoặc đổi trạng thái / khoảng ngày.');
+      }
+    };
+
+    const load = async () => {
+      statusFilter = root.querySelector('#approveStatusFilter')?.value ?? statusFilter;
+      fromDate = readIsoDateInput(root.querySelector('#approveFrom'));
+      toDate = readIsoDateInput(root.querySelector('#approveTo'));
+      const hasRange = /^\d{4}-\d{2}-\d{2}$/.test(fromDate) && /^\d{4}-\d{2}-\d{2}$/.test(toDate);
+      const needRange = hasRange || statusFilter !== 'Chờ duyệt';
+      const queryFrom = hasRange ? fromDate : sqlDayKey(addDays(new Date(`${vnTodayKey()}T00:00:00`), -90));
+      const queryTo = hasRange ? toDate : vnTodayKey();
+      try {
+        const path = needRange
+          ? `/admin/workforce/attendance?from=${queryFrom}&to=${queryTo}`
+          : '/admin/workforce/attendance';
+        const data = await api(context, path);
+        const pending = data.pending || [];
+        let rows;
+        if (statusFilter === 'Chờ duyệt') {
+          rows = pending.filter(item => item.MaChamCong && inDateRange(item, hasRange ? fromDate : '', hasRange ? toDate : ''));
+        } else {
+          const pool = [...(data.items || [])];
+          const seen = new Set(pool.map(item => item.MaChamCong).filter(Boolean));
+          for (const row of pending) {
+            if (row.MaChamCong && !seen.has(row.MaChamCong)) {
+              pool.unshift(row);
+              seen.add(row.MaChamCong);
+            }
+          }
+          rows = pool.filter(item => {
+            if (!item.MaChamCong) return false;
+            if (hasRange && !inDateRange(item, fromDate, toDate)) return false;
+            if (statusFilter === 'Đã duyệt') return item.TrangThai === 'Đã duyệt';
+            return true;
+          });
+        }
+        fillRows(rows);
+      } catch (error) { context.showToast(error.message, 'error'); }
+    };
+
+    const applyFilter = async () => {
+      statusFilter = root.querySelector('#approveStatusFilter')?.value ?? 'Chờ duyệt';
+      fromDate = readIsoDateInput(root.querySelector('#approveFrom'));
+      toDate = readIsoDateInput(root.querySelector('#approveTo'));
+      const fromRaw = String(root.querySelector('#approveFrom')?.value || '').trim();
+      const toRaw = String(root.querySelector('#approveTo')?.value || '').trim();
+      if ((fromRaw && !toRaw) || (!fromRaw && toRaw)) {
+        context.showToast('Hãy chọn đủ Từ ngày và Đến ngày, hoặc để trống cả hai.', 'error');
+        return;
+      }
+      if ((fromRaw || toRaw) && (!fromDate || !toDate)) {
+        context.showToast('Ngày lọc không đọc được. Hãy chọn lại trên lịch.', 'error');
+        return;
+      }
+      await load();
+    };
+
+    const clearFilter = async () => {
+      fromDate = '';
+      toDate = '';
+      const fromEl = root.querySelector('#approveFrom');
+      const toEl = root.querySelector('#approveTo');
+      if (fromEl) fromEl.value = '';
+      if (toEl) toEl.value = '';
+      statusFilter = root.querySelector('#approveStatusFilter')?.value ?? 'Chờ duyệt';
+      await load();
+    };
+
+    if (root.dataset.approveReady === '1' && root.querySelector('#approveAttendanceBody')) {
+      root._flyApprove = { load, loadPayroll, applyFilter, clearFilter };
+      await load();
+      await loadPayroll();
+      return;
+    }
+
+    renderShell();
+    root._flyApprove = { load, loadPayroll, applyFilter, clearFilter };
+    if (!root._flyApproveBound) {
+      root._flyApproveBound = true;
+      root.addEventListener('click', event => {
+        const approveBtn = event.target.closest('.approve-attendance');
+        if (approveBtn) {
+          openAttendanceApprovalModal(context, approveBtn, () => root._flyApprove?.load?.());
+          return;
+        }
+        if (event.target.closest('#loadPayroll')) {
+          event.preventDefault();
+          root._flyApprove?.loadPayroll?.();
+          return;
+        }
+        if (event.target.closest('#applyApproveFilter')) {
+          event.preventDefault();
+          root._flyApprove?.applyFilter?.();
+          return;
+        }
+        if (event.target.closest('#clearApproveFilter')) {
+          event.preventDefault();
+          root._flyApprove?.clearFilter?.();
+        }
+      });
+      root.addEventListener('change', event => {
+        if (event.target.closest('#workforcePayrollMonthSelect, #workforcePayrollYearSelect')) {
+          const hidden = root.querySelector('#workforcePayrollMonth');
+          const month = readPayrollMonthValue(root, payrollMonth);
+          if (hidden) hidden.value = month;
+        }
+      });
+    }
+    if (root._flyAttendanceTimer) clearInterval(root._flyAttendanceTimer);
+    root._flyAttendanceTimer = setInterval(async () => {
+      if (!document.contains(root) || document.querySelector('.warehouse-modal-backdrop')) return;
+      await root._flyApprove?.load?.();
+    }, 30000);
+    root.dataset.approveReady = '1';
+    await load();
+    await loadPayroll();
   };
 
   const initCashierSchedule = async (root, context) => {
@@ -516,6 +732,7 @@
     templates: { ...(previous?.templates || {}), ...templates },
     init: async (pageName, context) => {
       if (pageName === 'manager-workforce') return initManagerWorkforce(document.querySelector('.workforce-page'), context);
+      if (pageName === 'manager-workforce-approve') return initManagerApprove(document.querySelector('#contentArea .workforce-approve-page') || document.querySelector('#contentArea .workforce-page'), context);
       if (pageName === 'manager-holidays') return initHolidays(document.querySelector('.manager-holidays'), context);
       if (pageName === 'cashier-schedule') return initCashierSchedule(document.querySelector('.workforce-page'), context);
       return previous?.init?.(pageName, context);

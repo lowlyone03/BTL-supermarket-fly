@@ -37,7 +37,31 @@
 .workforce-cell strong,.workforce-cell span,.workforce-cell small { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .workforce-cell strong { color:#284739; font-size:11px; }.workforce-cell span { color:#61776b; font-size:10px; }.workforce-cell small { color:#829087; font-size:9px; }
 .workforce-cell.draft { border-color:#ead29a; background:#fff9eb; }.workforce-cell.published { border-color:#c7e1d5; background:#ecf7f1; cursor:pointer; }.workforce-cell.published:disabled { cursor:default; opacity:.88; }.workforce-cell.empty { align-items:center; color:#789087; border-style:dashed; background:#fbfcfb; }
-.workforce-payroll { margin-top:0; }.workforce-payroll-filter input { min-height:42px; border:1px solid #d5dfd9; border-radius:12px; padding:0 12px; color:#29463a; background:#fff; font:inherit; }
+.workforce-payroll { margin-top:0; }
+.workforce-payroll-filter { flex-wrap:wrap; }
+.workforce-payroll-filter input, .workforce-payroll-filter select { min-height:44px; border:1px solid #d5dfd9; border-radius:12px; padding:0 12px; color:#29463a; background:#fff; font:inherit; }
+.workforce-approve-page { display:flex; flex-direction:column; gap:22px; }
+.workforce-approve-heading { margin-bottom:0; }
+.workforce-approve-page .workforce-approve { margin-bottom:0; border-color:#d7e4dc; border-top:4px solid #2c8565; }
+.workforce-approve-page .workforce-payroll-preview { margin-top:0; border-color:#d7e4dc; border-top:4px solid #3d9271; }
+.workforce-approve-page .warehouse-panel-title { align-items:flex-start; flex-wrap:wrap; }
+.workforce-payroll-head { gap:14px; }
+.workforce-approve-page .workforce-payroll-filter { align-items:flex-end; }
+.workforce-approve-page .payroll-period-picker { flex-wrap:wrap; }
+.workforce-approve-page .payroll-period-field select { min-width:132px; height:46px; }
+.workforce-approve-hint { margin:0 18px 14px; color:#5d7167; font-size:13px; line-height:1.5; }
+.workforce-approve-hint code { padding:1px 6px; border-radius:6px; background:#eef5f1; color:#24664d; font-size:12px; }
+.workforce-approve-btn { min-height:46px; min-width:112px; padding:0 18px; font-weight:800; }
+.workforce-approve-page .warehouse-primary.workforce-approve-btn:hover { transform:translateY(-1px); box-shadow:0 10px 20px rgba(44,133,101,.18); }
+.workforce-approve-page .warehouse-secondary.workforce-approve-btn:hover { border-color:#2c8565; color:#1f6b4d; background:#edf7f2; }
+.workforce-approve-table td { vertical-align:top; }
+.workforce-pending-row { background:#fff8e8; }
+.workforce-pending-row td:first-child { box-shadow:inset 3px 0 0 #d7a21c; }
+.workforce-approve-page .status-pill.pending { background:#fff1d6; color:#8a5608; }
+.workforce-approve-empty { padding:36px 20px !important; text-align:center; }
+.workforce-approve-empty strong, .workforce-approve-empty span { display:block; }
+.workforce-approve-empty strong { color:#2a4337; font-size:15px; }
+.workforce-approve-empty span { margin-top:8px; color:#718078; font-size:13px; line-height:1.5; font-weight:500; }
 .workforce-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:15px; }.workforce-form-grid label:last-child { grid-column:1/-1; }
 .warehouse-field > span { display:block; margin-bottom:7px; color:#3d574a; font-size:12px; font-weight:750; }
 .workforce-rule { display:flex; gap:10px; margin-top:16px; padding:13px 15px; border-radius:13px; color:#5c7046; background:#f5f8e9; }
@@ -56,6 +80,12 @@
 .workforce-cell em.clock-pending { color:#9b6500; }
 .workforce-republish-banner { margin:0 0 16px; }
 .workforce-attendance td small, .workforce-sales-shifts td small { display:block; margin-top:3px; color:#7a8981; font-size:11px; }
+.workforce-approve { margin-bottom:20px; }
+.workforce-approve-filters { display:grid; grid-template-columns:minmax(160px,1fr) minmax(160px,1fr) minmax(160px,1fr) auto; gap:12px; align-items:end; margin:0 16px 12px; }
+.workforce-approve-filters .warehouse-field { margin:0; }
+.workforce-approve-filters input[type="date"], .workforce-approve-filters select { min-height:42px; width:100%; box-sizing:border-box; border:1px solid #d5dfd9; border-radius:12px; padding:0 12px; color:#29463a; background:#fff; font:inherit; }
+.workforce-approve-filter-actions { display:flex; gap:8px; flex-wrap:wrap; }
+@media (max-width:900px) { .workforce-approve-filters { grid-template-columns:1fr 1fr; } }
 .attendance-approval-modal { width:min(760px,calc(100vw - 32px)); }
 .attendance-approval-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
 .attendance-approval-summary > div { padding:14px; border:1px solid #d8e3dd; border-radius:14px; background:#f8fbf9; }

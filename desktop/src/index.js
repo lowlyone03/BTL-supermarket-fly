@@ -5,6 +5,9 @@ const adminPageTemplates = require('./pages/admin/admin-page-templates');
 
 app.commandLine.appendSwitch('lang', 'vi-VN');
 app.commandLine.appendSwitch('accept-lang', 'vi-VN,vi');
+// file:// → localhost: Chromium hay đi ::1 (API chỉ listen IPv4) và có thể chặn Local Network Access.
+app.commandLine.appendSwitch('host-resolver-rules', 'MAP localhost 127.0.0.1');
+app.commandLine.appendSwitch('disable-features', 'LocalNetworkAccessChecks,PrivateNetworkAccessChecks,BlockInsecurePrivateNetworkRequests');
 
 if (require('electron-squirrel-startup')) {
   app.quit();

@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Điều hành - Supermarket Fly</title>
-  <link rel="stylesheet" href="dashboard.css?v=count-approve-1">
+  <link rel="stylesheet" href="dashboard.css?v=telegram-p1">
   <link rel="stylesheet" href="../admin/admin.css?v=search-2">
   <link rel="stylesheet" href="../warehouse/warehouse.css?v=invoice-intake-1">
-  <link rel="stylesheet" href="../workforce/workforce.css?v=att-recover-2">
+  <link rel="stylesheet" href="../workforce/workforce.css?v=approve-fix-2">
   <link rel="stylesheet" href="../cashier/cashier.css?v=return-handover-2">
   <link rel="stylesheet" href="../shared/locale-ui.css?v=vi-date-3">
   <link rel="stylesheet" href="../shared/ui-polish.css?v=report-hint-1">
@@ -73,7 +73,8 @@
         <a href="#" class="nav-item active" id="managerHomeNav" data-target="home"><svg><use href="#i-grid"/></svg><span>Tổng quan</span></a>
         <a href="#" class="nav-item" id="managerApprovalNav" data-target="manager-purchase-approvals"><svg><use href="#i-approve"/></svg><span>Trung tâm phê duyệt</span><b class="nav-badge" id="approvalNavBadge">0</b></a>
         <a href="#" class="nav-item" id="managerPayablesNav" data-target="manager-payables"><svg><use href="#i-report"/></svg><span>Theo dõi công nợ</span></a>
-        <a href="#" class="nav-item" id="managerWorkforceNav" data-target="manager-workforce"><svg><use href="#i-calendar"/></svg><span>Phân ca &amp; chấm công</span></a>
+        <a href="#" class="nav-item" id="managerWorkforceNav" data-target="manager-workforce"><svg><use href="#i-calendar"/></svg><span>Phân ca</span></a>
+        <a href="#" class="nav-item" id="managerWorkforceApproveNav" data-target="manager-workforce-approve"><svg><use href="#i-approve"/></svg><span>Duyệt công</span></a>
         <a href="#" class="nav-item" id="managerHolidaysNav" data-target="manager-holidays"><svg><use href="#i-calendar"/></svg><span>Ngày lễ năm</span></a>
         <a href="#" class="nav-item" id="managerReportNav" data-target="manager-reports"><svg><use href="#i-report"/></svg><span>Báo cáo cửa hàng</span></a>
 
@@ -168,6 +169,7 @@
             <svg class="profile-chevron"><use href="#i-chevron"/></svg>
           </button>
           <div class="profile-menu" id="profileMenu" hidden>
+            <button type="button" id="menuTelegramLink">Liên kết Telegram</button>
             <button type="button" id="menuChangePassword">Đổi mật khẩu</button>
             <button type="button" id="menuLogout">Đăng xuất</button>
           </div>
@@ -207,11 +209,38 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="telegramModal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <div><p class="module-kicker">KÊNH ĐIỆN THOẠI</p><h3>Liên kết Telegram</h3></div>
+        <button type="button" class="close-btn" id="closeTelegramModal">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="telegram-lead" id="telegramLead">Tạo mã 6 số, rồi gửi trong chat riêng với bot. Bot chỉ xem dữ liệu nghiệp vụ — không duyệt chứng từ.</p>
+        <p class="telegram-bot" id="telegramBotName">Bot: @supermarket_flybot</p>
+        <div class="telegram-status" id="telegramStatusBox">Đang tải trạng thái...</div>
+        <div class="telegram-otp-block" id="telegramOtpBlock" hidden>
+          <label>Mã liên kết</label>
+          <div class="telegram-otp-row">
+            <strong id="telegramOtpValue">------</strong>
+            <button type="button" class="btn btn-secondary" id="telegramCopyOtp">Sao chép</button>
+          </div>
+          <small id="telegramOtpHint">Mã hết hạn sau 5 phút. Gửi <code>/start 000000</code> trên Telegram.</small>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="cancelTelegramModal">Đóng</button>
+          <button type="button" class="btn btn-outline" id="telegramUnlinkBtn" hidden>Hủy liên kết</button>
+          <button type="button" class="btn btn-primary" id="telegramCreateOtp">Tạo mã</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="../shared/escape-key.js"></script>
   <script src="../shared/api-config.js"></script>
   <script src="../shared/field-validators.js?v=fields-7"></script>
   <script src="../shared/employee-profile.js?v=emp-syll-1"></script>
-  <script src="../shared/locale-ui.js?v=store-pnl-1"></script>
+  <script src="../shared/locale-ui.js?v=approve-fix-2"></script>
   <script src="../shared/search-tools.js?v=search-2"></script>
   <script src="../shared/product-images.js?v=products-1"></script>
   <script src="../shared/report-charts.js?v=charts-7-wh-polish"></script>
@@ -225,9 +254,9 @@
   <script src="../warehouse/stock-issue-pages.js?v=search-2"></script>
   <script src="../accounting/store-pnl.js?v=store-pnl-1"></script>
   <script src="../accounting/accounting-pages.js?v=invoice-intake-1"></script>
-  <script src="../workforce/workforce-pages.js?v=att-recover-2"></script>
+  <script src="../workforce/workforce-pages.js?v=approve-fix-2"></script>
   <script src="../cashier/cashier-pages.js?v=return-heal-1"></script>
   <script src="../shared/role-reports.js?v=charts-7-wh-polish"></script>
-  <script src="dashboard.js?v=count-approve-1"></script>
+  <script src="dashboard.js?v=approve-fix-2"></script>
 </body>
 </html>

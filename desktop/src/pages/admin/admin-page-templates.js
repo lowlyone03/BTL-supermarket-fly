@@ -189,6 +189,23 @@
           </div>
           <div class="table-container"><table class="account-table"><thead><tr><th>Tài khoản</th><th>Nhân viên</th><th>Vai trò</th><th>Trạng thái</th><th>Đăng nhập cuối</th><th class="align-right">Thao tác</th></tr></thead><tbody id="accTableBody"></tbody></table></div>
         </article>
+
+        <article class="surface-card data-surface" id="telegramBindCard">
+          <div class="table-toolbar">
+            <div>
+              <p class="module-kicker" style="margin:0">KÊNH TELEGRAM</p>
+              <strong>Liên kết ChatId đã xác thực</strong>
+              <p style="margin:6px 0 0;color:#68766e;font-size:12px">Quản lý hủy liên kết cưỡng chế. Không nhập token bot trên máy thu ngân.</p>
+            </div>
+            <button class="icon-button" type="button" onclick="loadTelegramBindings()" title="Làm mới" aria-label="Tải lại liên kết Telegram"><svg aria-hidden="true"><use href="#i-refresh"/></svg></button>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead><tr><th>Nhân viên</th><th>Tài khoản</th><th>Vai trò</th><th>ChatId</th><th>Kênh</th><th>Xác thực</th><th class="align-right">Thao tác</th></tr></thead>
+              <tbody id="telegramBindBody"><tr><td colspan="7" class="empty-state">Đang tải...</td></tr></tbody>
+            </table>
+          </div>
+        </article>
       </section>
 
       <div class="modal-backdrop" id="accModal" style="display:none">
@@ -212,7 +229,7 @@
       </div>
       <script src="../shared/field-validators.js?v=fields-7"></script>
       <script src="../shared/employee-profile.js?v=emp-syll-1"></script>
-      <script src="../admin/accounts.js?v=acc-syll-1"></script>`,
+      <script src="../admin/accounts.js?v=telegram-p1"></script>`,
 
     'permissions.html': `
       <section class="admin-module">

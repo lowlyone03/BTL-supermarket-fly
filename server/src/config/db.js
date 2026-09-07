@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('./loadEnv').loadEnv();
 const sql = require('mssql/msnodesqlv8'); 
 
 const config = {
@@ -22,7 +22,7 @@ const poolPromise = new sql.ConnectionPool(config)
   })
   .catch(err => {
     console.error('❌ Lỗi kết nối CSDL: ', err.message);
-    process.exit(1);
+    throw err;
   });
 
 module.exports = {

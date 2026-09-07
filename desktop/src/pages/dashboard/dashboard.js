@@ -86,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const enhanceSelect = select => {
     if (!(select instanceof HTMLSelectElement) || select.dataset.uiEnhanced === 'true') return;
-    if (select.closest('.cashier-payment-modal') || select.closest('.fly-vi-date') || select.closest('[data-keep-native]') || select.closest('.payroll-period-picker') || select.closest('.accounting-payroll') || select.closest('.workforce-payroll-filter') || select.closest('.manager-holidays') || select.closest('.accounting-history') || select.closest('.payroll-fund-queue') || select.closest('.financial-report-filter') || select.closest('.store-pnl-filter')) return;
+    if (select.closest('.cashier-payment-modal') || select.closest('.fly-vi-date') || select.closest('[data-keep-native]') || select.closest('.payroll-period-picker') || select.closest('.accounting-payroll') || select.closest('.workforce-payroll-filter') || select.closest('.workforce-approve-page') || select.closest('.workforce-approve-filters') || select.closest('.manager-holidays') || select.closest('.accounting-history') || select.closest('.payroll-fund-queue') || select.closest('.financial-report-filter') || select.closest('.store-pnl-filter')) return;
     select.dataset.uiEnhanced = 'true';
     const wrapper = document.createElement('div');
     wrapper.className = 'custom-select-control';
@@ -160,6 +160,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('managerApprovalNav').style.display = isManager ? '' : 'none';
   document.getElementById('managerPayablesNav').style.display = isManager ? '' : 'none';
   document.getElementById('managerWorkforceNav').style.display = isManager ? '' : 'none';
+  const approveNav = document.getElementById('managerWorkforceApproveNav');
+  if (approveNav) approveNav.style.display = isManager ? '' : 'none';
   const holidaysNav = document.getElementById('managerHolidaysNav');
   if (holidaysNav) holidaysNav.style.display = isManager ? '' : 'none';
   document.getElementById('managerReportNav').style.display = isManager ? '' : 'none';
@@ -350,6 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return map;
     }, {});
     setNavBadge('manager-purchase-approvals', byTarget['manager-purchase-approvals'] || 0);
+    setNavBadge('manager-workforce-approve', (byTarget['manager-workforce-approve'] || 0) + (byTarget['manager-workforce'] || 0));
     setNavBadge('purchasing-inbox', byTarget['purchasing-inbox'] || 0);
     setNavBadge('warehouse-returns', byTarget['warehouse-returns'] || 0);
     setNavBadge('warehouse-receiving', byTarget['warehouse-receiving'] || 0);
@@ -766,6 +769,88 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('closePwdModal').addEventListener('click', closePasswordModal);
   document.getElementById('cancelPwdModal').addEventListener('click', closePasswordModal);
 
+  const telegramModal = document.getElementById('telegramModal');
+  const telegramAuth = { Authorization: `Bearer ${token}` };
+  const fillTelegramStatus = data => {
+    const box = document.getElementById('telegramStatusBox');
+    const otpBlock = document.getElementById('telegramOtpBlock');
+    const unlinkBtn = document.getElementById('telegramUnlinkBtn');
+    const handle = data.botHandle || `@${data.botUsername || 'supermarket_flybot'}`;
+    document.getElementById('telegramBotName').textContent = `Bot: ${handle}`;
+    unlinkBtn.hidden = !data.bound;
+    if (data.bound) {
+      const when = data.verifiedAt ? new Date(data.verifiedAt).toLocaleString('vi-VN', { timeZone: HANOI_TIME_ZONE }) : '';
+      box.textContent = `Đã liên kết${data.chatMasked ? ` · ${data.chatMasked}` : ''}${when ? ` · lúc ${when}` : ''}.`;
+      otpBlock.hidden = true;
+      return;
+    }
+    box.textContent = 'Chưa liên kết. Tạo mã rồi gửi /start kèm 6 số trong chat riêng với bot.';
+    if (data.pendingOtp) {
+      otpBlock.hidden = false;
+      document.getElementById('telegramOtpValue').textContent = data.pendingOtp;
+      const until = data.otpExpiresAt ? new Date(data.otpExpiresAt).toLocaleTimeString('vi-VN', { timeZone: HANOI_TIME_ZONE }) : '';
+      document.getElementById('telegramOtpHint').innerHTML = `Mã hết hạn ${until || 'sau 5 phút'}. Gửi <code>/start ${data.pendingOtp}</code> trên Telegram.`;
+    } else {
+      otpBlock.hidden = true;
+    }
+  };
+  const loadTelegramStatus = async () => {
+    document.getElementById('telegramStatusBox').textContent = 'Đang tải trạng thái...';
+    try {
+      const response = await fetch(`${API_BASE}/telegram/link-status`, { headers: telegramAuth });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Không tải được trạng thái Telegram.');
+      fillTelegramStatus(data);
+    } catch (error) {
+      document.getElementById('telegramStatusBox').textContent = error.message;
+    }
+  };
+  const openTelegramModal = event => {
+    event?.preventDefault();
+    telegramModal.style.display = 'flex';
+    loadTelegramStatus();
+  };
+  const closeTelegramModal = () => { telegramModal.style.display = 'none'; };
+  document.getElementById('menuTelegramLink')?.addEventListener('click', openTelegramModal);
+  document.getElementById('closeTelegramModal')?.addEventListener('click', closeTelegramModal);
+  document.getElementById('cancelTelegramModal')?.addEventListener('click', closeTelegramModal);
+  document.getElementById('telegramCreateOtp')?.addEventListener('click', async () => {
+    try {
+      const response = await fetch(`${API_BASE}/telegram/link-otp`, { method: 'POST', headers: telegramAuth });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Không tạo được mã.');
+      document.getElementById('telegramOtpBlock').hidden = false;
+      document.getElementById('telegramOtpValue').textContent = data.otp;
+      const handle = data.botHandle || `@${data.botUsername || 'supermarket_flybot'}`;
+      document.getElementById('telegramBotName').textContent = `Bot: ${handle}`;
+      document.getElementById('telegramOtpHint').innerHTML = `Mã hết hạn sau ${data.ttlMinutes || 5} phút. Gửi <code>/start ${data.otp}</code> cho ${handle}.`;
+      document.getElementById('telegramStatusBox').textContent = 'Mã mới đã tạo. Chat riêng với bot — không gửi vào group.';
+      window.showToast('Đã tạo mã liên kết Telegram.', 'success');
+    } catch (error) {
+      window.showToast(error.message, 'error');
+    }
+  });
+  document.getElementById('telegramCopyOtp')?.addEventListener('click', async () => {
+    const otp = document.getElementById('telegramOtpValue').textContent.trim();
+    try {
+      await navigator.clipboard.writeText(otp);
+      window.showToast('Đã sao chép mã.', 'success');
+    } catch {
+      window.showToast('Không sao chép được. Hãy chọn mã rồi Ctrl+C.', 'error');
+    }
+  });
+  document.getElementById('telegramUnlinkBtn')?.addEventListener('click', async () => {
+    try {
+      const response = await fetch(`${API_BASE}/telegram/unlink`, { method: 'POST', headers: telegramAuth });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Không hủy được liên kết.');
+      window.showToast(data.message, 'success');
+      loadTelegramStatus();
+    } catch (error) {
+      window.showToast(error.message, 'error');
+    }
+  });
+
   const profileMenu = document.getElementById('profileMenu');
   const notificationPanel = document.getElementById('notificationPanel');
   const notificationButton = document.getElementById('notificationButton');
@@ -826,7 +911,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const button = event.target.closest('[data-inbox-target]');
     if (!button) return;
     closeInboxPanel();
-    const nav = pageNavItems.find(item => item.dataset.target === button.dataset.inboxTarget);
+    let target = button.dataset.inboxTarget;
+    const title = button.querySelector('strong')?.textContent || '';
+    if (target === 'manager-workforce' && /chấm công/i.test(title)) target = 'manager-workforce-approve';
+    const nav = pageNavItems.find(item => item.dataset.target === target);
     if (nav) openPage(nav);
   });
   document.addEventListener('click', event => {

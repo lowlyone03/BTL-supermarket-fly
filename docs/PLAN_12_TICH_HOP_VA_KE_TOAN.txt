@@ -540,6 +540,9 @@ DEMO
 --------------------------------------------------------------------------------
 A3. TELEGRAM BOT — MOBILE MONITORING COMPANION     Uu tien 3    Pha P1
 --------------------------------------------------------------------------------
+  Chi tiet P1 da chot lai 07/09/2026 trong docs/PLAN_TELEGRAM_BOT_P1.txt
+  (read-only chi voi du lieu nghiep vu; moc bao cao sau ca dem ~06:10,
+   khong cron 22:00).
 
 DINH VI
   Dien thoai QL = mini dashboard. Khong can app mobile.
@@ -606,6 +609,7 @@ PUSH — MAU TIN (QL duoc xem trong app thi bot duoc gui cung muc)
     Trang thai: Can xu ly
 
   Bao cao cuoi ngay (1 tin / ngay, sau dong ca cuoi hoac cron 22:00):
+    (SAI moc 22:00 voi cua hang 24/7 — da chot lai trong PLAN_TELEGRAM_BOT_P1)
     SUPERMARKET FLY – 05/09/2026
     Doanh thu / Gia von / Lai gop
     Tien mat / QR / The / Chuyen khoan

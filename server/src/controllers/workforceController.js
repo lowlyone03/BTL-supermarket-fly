@@ -7,6 +7,7 @@ const {
 const { splitDayNightMinutes } = require('../services/timeService');
 const { closeOpenAttendance } = require('../services/attendanceSync');
 const { logAudit } = require('../services/auditLog');
+const { PENDING_CHAM_CONG_PREDICATE } = require('../services/inboxService');
 
 const clean = (value, max = 120) => String(value ?? '').trim().slice(0, max);
 const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
@@ -435,15 +436,9 @@ const publishSchedules = async (req, res) => {
     } catch (error) { console.error(error); res.status(400).json({ message: error.message }); }
 };
 
-const getAttendance = async (req, res) => {
-    try {
-        const from = clean(req.query.from, 10);
-        const to = clean(req.query.to, 10);
-        if (!validDate(from) || !validDate(to)) return res.status(400).json({ message: 'Khoảng ngày không hợp lệ.' });
-        const pool = await poolPromise;
-        await closeOpenAttendance(pool);
-        const result = await pool.request().input('From', sql.Date, from).input('To', sql.Date, to).query(`
-            SELECT cc.MaChamCong,l.MaLich,l.MaNV,nv.TenNV,nv.ChucVu,l.NgayLam,lc.TenCa,l.NhiemVu,
+const ATTENDANCE_SELECT = `
+            SELECT cc.MaChamCong,l.MaLich,l.MaNV,nv.TenNV,nv.ChucVu,
+                   CONVERT(varchar(10),l.NgayLam,23) NgayLam,lc.TenCa,l.NhiemVu,
                    l.BatDauDuKien,l.KetThucDuKien,lc.SoGio,
                    cc.ThoiGianVao,
                    COALESCE(cc.ThoiGianRa, ca.ThoiGianKetThuc) ThoiGianRa,
@@ -481,10 +476,34 @@ const getAttendance = async (req, res) => {
                     OR CONVERT(date,ca.ThoiGianBatDau)=l.NgayLam
                 )
                 ORDER BY ca.ThoiGianBatDau DESC
-            ) ca
-            WHERE l.NgayLam BETWEEN @From AND @To AND l.TrangThai=N'Đã công bố'
-            ORDER BY l.NgayLam,lc.ThuTu,nv.TenNV`);
-        res.json({ items: result.recordset, serverTime: new Date().toISOString() });
+            ) ca`;
+
+const getAttendance = async (req, res) => {
+    try {
+        const from = clean(req.query.from, 10);
+        const to = clean(req.query.to, 10);
+        const hasRange = validDate(from) && validDate(to);
+        if ((req.query.from || req.query.to) && !hasRange) {
+            return res.status(400).json({ message: 'Khoảng ngày không hợp lệ.' });
+        }
+        const pool = await poolPromise;
+        await closeOpenAttendance(pool);
+        const pendingQuery = pool.request().query(`
+                ${ATTENDANCE_SELECT}
+                WHERE ${PENDING_CHAM_CONG_PREDICATE}
+                ORDER BY cc.ThoiGianRa DESC`);
+        const rangeQuery = hasRange
+            ? pool.request().input('From', sql.VarChar, from).input('To', sql.VarChar, to).query(`
+                ${ATTENDANCE_SELECT}
+                WHERE CONVERT(varchar(10),l.NgayLam,23) BETWEEN @From AND @To AND l.TrangThai=N'Đã công bố'
+                ORDER BY l.NgayLam,lc.ThuTu,nv.TenNV`)
+            : Promise.resolve({ recordset: [] });
+        const [result, pending] = await Promise.all([rangeQuery, pendingQuery]);
+        res.json({
+            items: result.recordset,
+            pending: pending.recordset,
+            serverTime: new Date().toISOString()
+        });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải bảng chấm công.' });

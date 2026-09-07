@@ -71,13 +71,13 @@ document.addEventListener('DOMContentLoaded', () => {
   checkServer.addEventListener('click', async () => {
     checkServer.disabled = true;
     setServerStatus('Đang kiểm tra máy chủ...', '');
+    const origin = saveServer();
+    serverHost.value = window.flyApi.displayHost(origin);
     try {
-      const origin = saveServer();
-      serverHost.value = window.flyApi.displayHost(origin);
       await window.flyApi.probe(origin);
       setServerStatus(`Kết nối được ${window.flyApi.displayHost(origin)}. Có thể đăng nhập.`, 'ok');
     } catch {
-      setServerStatus('Không kết nối được. Máy chủ phải chạy 4_CHAY_MAY_CHU_NHOM.bat, cùng Wi-Fi, và đã mở cổng 3000.', 'error');
+      setServerStatus(window.flyApi.connectionErrorMessage(origin), 'error');
     } finally {
       checkServer.disabled = false;
     }
@@ -134,9 +134,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const isTimeout = error?.name === 'AbortError';
       const isConnectionError = error instanceof TypeError;
       showError(isTimeout
-        ? 'Máy chủ không trả lời. Xóa hết ô Máy chủ nhóm, dán lại nguyên link có https:// (không có :3000), rồi bấm Đăng nhập ngay.'
+        ? window.flyApi.timeoutErrorMessage(origin)
         : isConnectionError
-          ? `Không thể kết nối ${window.flyApi.displayHost(origin)}. Dán lại nguyên link https://....trycloudflare.com (không thêm :3000).`
+          ? window.flyApi.connectionErrorMessage(origin)
           : error.message);
     } finally {
       window.clearTimeout(timeoutId);

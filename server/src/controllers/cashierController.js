@@ -174,6 +174,10 @@ const checkOut = async (req, res) => {
             FROM ChamCong cc JOIN LichLamViec l ON l.MaLich=cc.MaLich
             WHERE l.MaNV=@MaNV AND cc.ThoiGianVao IS NOT NULL AND cc.ThoiGianRa IS NULL`);
         if (!result.rowsAffected[0]) return res.status(400).json({ message: 'Không có lượt chấm công đang mở.' });
+        try {
+            const telegramNotify = require('../services/telegramNotify');
+            telegramNotify.notifySafely(() => telegramNotify.notifyAttendancePending({ MaNV: req.user.MaNV }));
+        } catch { /* Telegram lỗi không làm fail chấm công */ }
         res.json({ message: 'Đã chấm công ra. Thời gian làm việc đang chờ Quản lý duyệt.' });
     } catch (error) {
         if (error instanceof CashierDutyError) return failDuty(res, error);
@@ -456,6 +460,19 @@ const closeShift = async (req, res) => {
         });
         await closeOpenAttendance(transaction, maCa);
         await transaction.commit();
+        try {
+            const telegramNotify = require('../services/telegramNotify');
+            telegramNotify.notifySafely(() => telegramNotify.notifyShiftClosed({
+                MaCa: maCa,
+                MaNV: req.user.MaNV,
+                TenNV: req.user.TenNV,
+                MaQuay: summary.MaQuay,
+                TienMatHeThong: summary.TienMatHeThong,
+                TienThucNop: tienThucNop,
+                ChenhLech: tienThucNop - summary.TienMatHeThong
+            }));
+            telegramNotify.notifySafely(() => telegramNotify.notifyAttendancePending({ MaNV: req.user.MaNV }));
+        } catch { /* Telegram lỗi không làm fail đóng ca */ }
         const warning = handover.warning;
         res.json({
             message: warning

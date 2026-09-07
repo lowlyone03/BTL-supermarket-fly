@@ -193,7 +193,7 @@ button { color: inherit; }
 .user-info strong { max-width: 160px; overflow: hidden; color: #293830; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .user-info small { margin-top: 3px; color: #7f8b84; font-size: 9px; }
 .profile-chevron { width: 12px; height: 12px; fill: none; stroke: #46574e; stroke-width: 2; transform: rotate(90deg); }
-.profile-menu { position: absolute; top: 56px; right: 0; width: 188px; padding: 8px; z-index: 80; border: 1px solid #dce3dd; border-radius: 17px; background: rgba(255,255,255,.98); box-shadow: 0 18px 42px rgba(24,52,41,.14); }
+.profile-menu { position: absolute; top: 56px; right: 0; width: 220px; padding: 8px; z-index: 80; border: 1px solid #dce3dd; border-radius: 17px; background: rgba(255,255,255,.98); box-shadow: 0 18px 42px rgba(24,52,41,.14); }
 .profile-menu button { width: 100%; min-height: 42px; padding: 0 13px; border: 0; border-radius: 11px; background: transparent; cursor: pointer; text-align: left; font-size: 12px; transition: background .16s ease, color .16s ease; }
 .profile-menu button:hover { background: var(--green-50); }
 
@@ -379,6 +379,15 @@ button { color: inherit; }
 .toast.visible { opacity: 1; transform: translateY(0); }
 .toast.error { background: #a64c3a; }
 .toast.success { background: var(--green-700); }
+.telegram-lead { margin: 0 0 10px; color: #5c6f66; font-size: 13px; line-height: 1.5; }
+.telegram-bot { margin: 0 0 14px; color: var(--green-700); font-size: 13px; font-weight: 700; }
+.telegram-status { padding: 12px 14px; border: 1px solid #dce7df; border-radius: 12px; background: var(--green-50); color: #35584a; font-size: 13px; line-height: 1.45; }
+.telegram-otp-block { margin-top: 16px; }
+.telegram-otp-block label { display: block; margin-bottom: 8px; color: #394a41; font-size: 11px; font-weight: 700; }
+.telegram-otp-row { display: flex; align-items: center; gap: 10px; }
+.telegram-otp-row strong { flex: 1; letter-spacing: .28em; font-size: 28px; font-weight: 700; color: #173f34; font-variant-numeric: tabular-nums; }
+.telegram-otp-block small { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.telegram-otp-block code { font-size: 12px; }
 .inbox-toast {
   position: fixed; top: 78px; right: 24px; z-index: 1900;
   width: min(360px, calc(100vw - 32px)); padding: 12px 14px 13px;

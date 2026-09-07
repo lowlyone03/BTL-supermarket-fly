@@ -14,6 +14,7 @@ Chạy app vẫn từ thư mục gốc repo: `1_CAI_DAT_LAN_DAU.bat` rồi `2_CH
 | [PHUONG_AN_KE_TOAN_DA_CHOT.txt](PHUONG_AN_KE_TOAN_DA_CHOT.txt) | Phương án đang chạy trong mã nguồn (02/09/2026) |
 | [PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt](PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt) | Phạm vi Plan A hiệu chỉnh: giữ/cắt gì (31/08/2026) |
 | [PLAN_12_TICH_HOP_VA_KE_TOAN.txt](PLAN_12_TICH_HOP_VA_KE_TOAN.txt) | Plan tổng (bản 3+wording): /payroll QL=UC10 KT=UC33; scanner ĐT để sau — chưa code |
+| [PLAN_TELEGRAM_BOT_P1.txt](PLAN_TELEGRAM_BOT_P1.txt) | Plan Telegram companion P1 (bản chỉnh review 07/09/2026 — 5 điểm + CSDL tối giản) — chưa code |
 
 ## Test và bàn giao
 

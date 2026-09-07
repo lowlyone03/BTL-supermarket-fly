@@ -509,7 +509,7 @@ const rejectCount = async (req, res) => {
         } catch (error) {
             console.error(error);
         }
-        notifyInboxChanged({ action: 'Từ chối điều chỉnh tồn', table: 'KiemKe' });
+        notifyInboxChanged({ action: 'Từ chối điều chỉnh tồn', table: 'KiemKe', recordId: updated.MaKK });
         res.json({
             message: notified
                 ? `Đã từ chối điều chỉnh; tồn giữ nguyên. Đã báo ${notified} Thủ kho đếm lại.`
