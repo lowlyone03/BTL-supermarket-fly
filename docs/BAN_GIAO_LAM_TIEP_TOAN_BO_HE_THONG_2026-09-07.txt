@@ -664,7 +664,9 @@ CSDL Word gốc 35 bảng. Hệ thống đã mở rộng (khoảng 45+ bảng):
   - Cước vận chuyển 4.000 đ/km + bồi 20% khi hư ≥ 1/3 (plan đã chốt)
   - BHXH / BHYT / BHTN / công đoàn
   - TK 242, kho FEFO/lô, nhiều cửa hàng, HĐĐT nhà nước, bán chịu
-  - VNPay / mã vạch / hóa đơn điện tử / Telegram / OCR / AI  (PLAN_12, P1–P2)
+  - VNPay / mã vạch / hóa đơn điện tử / OCR / AI  (PLAN_12, P1–P2)
+  - Telegram companion P1 đã được triển khai sau bản bàn giao này (08/09/2026),
+    gồm OTP, dashboard, chứng từ ảnh, duyệt có audit và giao diện Control Center.
 
 
 ================================================================================

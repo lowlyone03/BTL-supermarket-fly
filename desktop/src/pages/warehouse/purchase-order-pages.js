@@ -94,7 +94,47 @@
       overlay.innerHTML = `<div class="warehouse-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">LẬP ĐƠN MUA HÀNG</p><h2>Từ Phiếu đề nghị đã tiếp nhận</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="warehouse-form-grid"><div class="warehouse-field"><label>Phiếu đề nghị *</label><select id="orderRequest">${requestsData.items.map(item => `<option value="${esc(item.MaDN)}">${esc(item.MaDN)} · ${item.SoMatHang} mặt hàng</option>`).join('')}</select></div><div class="warehouse-field"><label>Nhà cung cấp *</label><select id="orderSupplier">${suppliersData.items.map(item => `<option value="${esc(item.MaNCC)}">${esc(item.TenNCC)}</option>`).join('')}</select></div><div class="warehouse-field"><label>Ngày giao dự kiến *</label>${window.FLY_VI_DATE.dateField('orderDelivery', delivery.toISOString().slice(0, 10))}</div><div class="warehouse-field"><label>Thời hạn thanh toán *</label><input id="orderPaymentDays" type="number" min="30" max="45" value="30"></div><div class="warehouse-field form-span-2"><label>Điều khoản thanh toán</label><input id="orderTerms" maxlength="500" value="Thanh toán toàn bộ một lần sau 30 ngày"></div></div><div class="warehouse-form-lines" id="orderLines"></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-secondary print-order-draft" type="button">Lưu và xem bản in</button><button class="warehouse-secondary save-order">Lưu bản nháp</button><button class="warehouse-primary submit-order">Lưu và gửi duyệt</button></div></div>`;
       document.body.appendChild(overlay); const close = () => overlay.remove(); overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
       if (preferred && requestsData.items.some(item => item.MaDN === preferred)) overlay.querySelector('#orderRequest').value = preferred;
-      const loadLines = async () => { const data = await api(context, `/purchasing/purchase-requests/${overlay.querySelector('#orderRequest').value}`); overlay.querySelector('#orderLines').innerHTML = `<div class="warehouse-order-line heading"><span>CHỌN</span><span>MẶT HÀNG</span><span>ĐỀ NGHỊ</span><span>SL ĐẶT</span><span>ĐƠN GIÁ</span><span>CHIẾT KHẤU (%)</span></div>${data.lines.map(line => `<div class="warehouse-order-line" data-product="${esc(line.MaSP)}"><input class="include-line" type="checkbox" checked><div><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)}</small></div><span>${line.SLDeNghi}</span><input class="order-qty" type="number" min="1" max="${line.SLDeNghi}" value="${line.SLDeNghi}"><input class="order-price" type="number" min="0" step="100" value="${Number(line.GiaNhap || 0)}"><input class="order-discount" type="number" min="0" max="100" step="0.5" value="0"></div>`).join('')}`; };
+      const bindOrderQty = (validateRow) => {
+        overlay.querySelectorAll('#orderLines .qty-stepper').forEach(wrap => {
+          const row = wrap.closest('.warehouse-order-line');
+          const input = wrap.querySelector('.order-qty');
+          if (input) input.dataset.last = String(input.value || '1');
+          window.FLY_QTY.bind(wrap, {
+            commit: (qtyInput, raw, reason) => {
+              const max = Number(row?.dataset.max);
+              const parsed = window.FLY_QTY.parsePositiveInteger(raw, 'Số lượng đặt');
+              if (reason === 'step') {
+                const next = Number(raw);
+                if (next < 1) qtyInput.value = '1';
+                else if (Number.isFinite(max) && next > max) {
+                  qtyInput.value = String(max);
+                  context.showToast(`Không vượt quá ${max} theo Phiếu đề nghị.`, 'error');
+                } else qtyInput.value = String(next);
+                qtyInput.dataset.last = qtyInput.value;
+                validateRow?.(row);
+                return;
+              }
+              if (!parsed.ok) {
+                context.showToast(parsed.message, 'error');
+                qtyInput.value = qtyInput.dataset.last || '1';
+                validateRow?.(row);
+                return;
+              }
+              qtyInput.value = String(parsed.value);
+              qtyInput.dataset.last = String(parsed.value);
+              if (Number.isFinite(max) && parsed.value > max) {
+                context.showToast(`Không vượt quá ${max} theo Phiếu đề nghị.`, 'error');
+              }
+              validateRow?.(row);
+            }
+          });
+        });
+      };
+      const loadLines = async () => {
+        const data = await api(context, `/purchasing/purchase-requests/${overlay.querySelector('#orderRequest').value}`);
+        overlay.querySelector('#orderLines').innerHTML = `<div class="warehouse-order-line heading"><span>CHỌN</span><span>MẶT HÀNG</span><span>ĐỀ NGHỊ</span><span>SL ĐẶT</span><span>ĐƠN GIÁ</span><span>CHIẾT KHẤU (%)</span></div>${data.lines.map(line => `<div class="warehouse-order-line" data-product="${esc(line.MaSP)}" data-max="${Number(line.SLDeNghi)}"><input class="include-line" type="checkbox" checked><div><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)}</small></div><span>${line.SLDeNghi}</span>${window.FLY_QTY.stepperMarkup({ value: line.SLDeNghi, min: 1, max: line.SLDeNghi, inputClass: 'order-qty', ariaLabel: `Số lượng đặt ${line.TenSP}` })}<input class="order-price" type="number" min="0" step="100" value="${Number(line.GiaNhap || 0)}"><input class="order-discount" type="number" min="0" max="100" step="0.5" value="0"></div>`).join('')}`;
+        bindOrderQty();
+      };
       overlay.querySelector('#orderRequest').addEventListener('change', loadLines);
       overlay.querySelector('#orderPaymentDays').addEventListener('input', event => { overlay.querySelector('#orderTerms').value = `Thanh toán toàn bộ một lần sau ${event.target.value || 30} ngày`; });
       const save = async (submit, preview = false) => { const lines = Array.from(overlay.querySelectorAll('.warehouse-order-line[data-product]')).filter(row => row.querySelector('.include-line').checked).map(row => ({ MaSP: row.dataset.product, SoLuong: Number(row.querySelector('.order-qty').value), DonGia: Number(row.querySelector('.order-price').value), ChietKhau: Number(row.querySelector('.order-discount').value) })); if (!lines.length) return context.showToast('Hãy chọn ít nhất một mặt hàng.', 'error'); try { const result = await api(context, '/purchasing/purchase-orders', { method: 'POST', body: JSON.stringify({ MaDN: overlay.querySelector('#orderRequest').value, MaNCC: overlay.querySelector('#orderSupplier').value, NgayGiaoDuKien: overlay.querySelector('#orderDelivery').value, SoNgayThanhToan: Number(overlay.querySelector('#orderPaymentDays').value), DieuKhoanThanhToan: overlay.querySelector('#orderTerms').value, lines }) }); if (submit) await api(context, `/purchasing/purchase-orders/${result.MaPO}/submit`, { method: 'POST' }); context.showToast(preview ? 'Đã lưu bản nháp. Mở xem trước để in.' : (submit ? 'Đã gửi Đơn mua cho Quản lý phê duyệt.' : result.message), 'success'); close(); await onDone(); if (preview) printOrder(await api(context, `/purchasing/purchase-orders/${result.MaPO}`)); } catch (error) { context.showToast(error.message, 'error'); } };
@@ -117,7 +157,7 @@
           : '';
       const lineRows = data.lines.map(line => {
         const max = Number(line.SLToiDaChoDon ?? line.SLTheoDeNghi ?? line.SoLuong);
-        return `<div class="warehouse-order-line" data-product="${esc(line.MaSP)}" data-max="${max}"><input class="include-line" type="checkbox" checked><div><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)}</small></div><div class="source-limit"><strong>${max}</strong><small>Theo Phiếu ${esc(order.MaDN)}</small></div><div class="qty-field"><input class="order-qty" type="number" min="1" max="${max}" value="${line.SoLuong}"><small class="qty-error">Không vượt quá ${max}</small></div><input class="order-price" type="number" min="0" step="100" value="${Number(line.DonGia)}"><input class="order-discount" type="number" min="0" max="100" step="0.5" value="${Number(line.ChietKhau)}"></div>`;
+        return `<div class="warehouse-order-line" data-product="${esc(line.MaSP)}" data-max="${max}"><input class="include-line" type="checkbox" checked><div><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)}</small></div><div class="source-limit"><strong>${max}</strong><small>Theo Phiếu ${esc(order.MaDN)}</small></div><div class="qty-field">${window.FLY_QTY.stepperMarkup({ value: line.SoLuong, min: 1, max, inputClass: 'order-qty', ariaLabel: `Số lượng đặt ${line.TenSP}` })}<small class="qty-error">Không vượt quá ${max}</small></div><input class="order-price" type="number" min="0" step="100" value="${Number(line.DonGia)}"><input class="order-discount" type="number" min="0" max="100" step="0.5" value="${Number(line.ChietKhau)}"></div>`;
       }).join('');
       const sourceAction = order.TrangThai === 'Yêu cầu chỉnh sửa' && order.TrangThaiDeNghi === 'Đã lập đơn'
         ? '<button class="warehouse-secondary return-source"><svg><use href="#i-request"/></svg>Yêu cầu kho cập nhật đề nghị</button>'
@@ -135,6 +175,38 @@
         return !invalid;
       };
       overlay.querySelectorAll('.warehouse-order-line[data-product]').forEach(row => row.querySelector('.order-qty').addEventListener('input', () => validateQuantity(row)));
+      overlay.querySelectorAll('.qty-field .qty-stepper').forEach(wrap => {
+        const row = wrap.closest('.warehouse-order-line');
+        const input = wrap.querySelector('.order-qty');
+        if (input) input.dataset.last = String(input.value || '1');
+        window.FLY_QTY.bind(wrap, {
+          commit: (qtyInput, raw, reason) => {
+            const max = Number(row.dataset.max);
+            const parsed = window.FLY_QTY.parsePositiveInteger(raw, 'Số lượng đặt');
+            if (reason === 'step') {
+              const next = Number(raw);
+              if (next < 1) qtyInput.value = '1';
+              else if (next > max) {
+                qtyInput.value = String(max);
+                context.showToast(`Không vượt quá ${max} theo Phiếu đề nghị.`, 'error');
+              } else qtyInput.value = String(next);
+              qtyInput.dataset.last = qtyInput.value;
+              validateQuantity(row);
+              return;
+            }
+            if (!parsed.ok) {
+              context.showToast(parsed.message, 'error');
+              qtyInput.value = qtyInput.dataset.last || '1';
+              validateQuantity(row);
+              return;
+            }
+            qtyInput.value = String(parsed.value);
+            qtyInput.dataset.last = String(parsed.value);
+            if (parsed.value > max) context.showToast(`Không vượt quá ${max} theo Phiếu đề nghị.`, 'error');
+            validateQuantity(row);
+          }
+        });
+      });
       const save = async (submit, preview = false) => {
         if (!sourceReady) return context.showToast('Phiếu đề nghị nguồn chưa được tiếp nhận lại nên chưa thể sửa Đơn mua.', 'error');
         const selectedRows = Array.from(overlay.querySelectorAll('.warehouse-order-line[data-product]')).filter(row => row.querySelector('.include-line').checked);
@@ -304,12 +376,14 @@
       const issue = data.issue;
       const overlay = document.createElement('div');
       overlay.className = 'warehouse-modal-backdrop';
-      overlay.innerHTML = `<div class="warehouse-modal stock-issue-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">PHÊ DUYỆT PHIẾU XUẤT / ${esc(issue.MaPX)}</p><h2>${esc(issue.LoaiXuat)}</h2><span>${fmtDate(issue.NgayXuat)} · Thủ kho ${esc(issue.NguoiLap)} · ${esc(issue.TenKho)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="manager-readonly-note"><svg><use href="#i-warning"></use></svg><div><strong>Phê duyệt chưa làm giảm tồn kho</strong><span>Sau khi duyệt, Phiếu xuất chuyển sang “Đã duyệt”. Thủ kho phải thực hiện và xác nhận xuất thì hệ thống mới giảm tồn và tạo Giao dịch kho loại Xuất.</span></div></div><div class="stock-issue-summary"><div><span>LOẠI XUẤT</span><strong>${esc(issue.LoaiXuat)}</strong></div><div><span>PHIẾU NHẬP NGUỒN</span><strong>${esc(issue.MaPN || 'Không áp dụng')}</strong></div><div><span>NHÀ CUNG CẤP</span><strong>${esc(issue.TenNCC || 'Không áp dụng')}</strong></div><div><span>SỐ MẶT HÀNG</span><strong>${data.lines.length}</strong></div></div><div class="manager-readonly-note"><svg><use href="#i-request"></use></svg><div><strong>Lý do/Ghi chú xuất kho</strong><span>${esc(issue.GhiChu || '—')}</span></div></div><div class="warehouse-table-wrap"><table class="warehouse-table stock-issue-line-table"><thead><tr><th>SẢN PHẨM</th><th>TỒN HIỆN TẠI</th><th>SỐ LƯỢNG XUẤT</th><th>GIÁ VỐN THAM CHIẾU</th><th>GHI CHÚ DÒNG</th></tr></thead><tbody>${data.lines.map(line => `<tr><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)} · ${esc(line.TenDM)}</small></td><td class="num">${line.SLTonHienTai}</td><td class="num"><strong>${line.SoLuong}</strong></td><td class="num">${money(line.DonGia)}</td><td>${esc(line.GhiChu || '—')}</td></tr>`).join('')}</tbody></table></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Đóng</button><button class="warehouse-danger reject-stock-issue" type="button">Từ chối</button><button class="warehouse-primary approve-stock-issue" type="button">Phê duyệt Phiếu xuất</button></div></div>`;
+      overlay.innerHTML = `<div class="warehouse-modal stock-issue-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">PHÊ DUYỆT PHIẾU XUẤT / ${esc(issue.MaPX)}</p><h2>${esc(issue.LoaiXuat)}</h2><span>${fmtDate(issue.NgayXuat)} · Thủ kho ${esc(issue.NguoiLap)} · ${esc(issue.TenKho)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="manager-readonly-note"><svg><use href="#i-warning"></use></svg><div><strong>${issue.stockImpact?.willDecrease === false || issue.KhongTruTon ? 'Phiếu thông tin — phê duyệt không đổi tồn' : 'Phê duyệt chưa làm giảm tồn kho'}</strong><span>${esc(issue.stockImpact?.detail || 'Sau khi duyệt, Phiếu xuất chuyển sang “Đã duyệt”. Thủ kho phải thực hiện và xác nhận xuất thì hệ thống mới giảm tồn và tạo Giao dịch kho loại Xuất.')}</span></div></div><div class="stock-issue-summary"><div><span>LOẠI XUẤT</span><strong>${esc(issue.LoaiXuat)}</strong></div><div><span>NGUỒN KIỂM KÊ</span><strong>${esc(issue.MaKK || 'Không liên kết')}</strong></div><div><span>NGUỒN ĐỔI TRẢ</span><strong>${esc(issue.MaDT || 'Không liên kết')}</strong></div><div><span>PHIẾU NHẬP NGUỒN</span><strong>${esc(issue.MaPN || 'Không áp dụng')}</strong></div><div><span>NHÀ CUNG CẤP</span><strong>${esc(issue.TenNCC || 'Không áp dụng')}</strong></div><div><span>SỐ MẶT HÀNG</span><strong>${data.lines.length}</strong></div></div><div class="manager-readonly-note"><svg><use href="#i-request"></use></svg><div><strong>Lý do/Ghi chú xuất kho</strong><span>${esc(issue.GhiChu || '—')}</span></div></div><div class="warehouse-table-wrap"><table class="warehouse-table stock-issue-line-table"><thead><tr><th>SẢN PHẨM</th><th>TỒN HIỆN TẠI</th><th>SỐ LƯỢNG XUẤT</th><th>GIÁ VỐN THAM CHIẾU</th><th>GHI CHÚ DÒNG</th></tr></thead><tbody>${data.lines.map(line => `<tr><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)} · ${esc(line.TenDM)}</small></td><td class="num">${line.SLTonHienTai}</td><td class="num"><strong>${line.SoLuong}</strong></td><td class="num">${money(line.DonGia)}</td><td>${esc(line.GhiChu || '—')}</td></tr>`).join('')}</tbody></table></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Đóng</button><button class="warehouse-danger reject-stock-issue" type="button">Từ chối</button><button class="warehouse-primary approve-stock-issue" type="button">Phê duyệt Phiếu xuất</button></div></div>`;
       document.body.appendChild(overlay);
       const close = () => overlay.remove();
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
       overlay.querySelector('.approve-stock-issue').addEventListener('click', async () => {
-        if (!window.confirm(`Phê duyệt ${id}? Tồn kho vẫn giữ nguyên cho tới khi Thủ kho xác nhận xuất.`)) return;
+        if (!window.confirm(issue.KhongTruTon || issue.stockImpact?.willDecrease === false
+          ? `Phê duyệt ${id}? Đây là phiếu thông tin — tồn kho không đổi khi Thủ kho xác nhận.`
+          : `Phê duyệt ${id}? Tồn kho vẫn giữ nguyên cho tới khi Thủ kho xác nhận xuất.`)) return;
         try {
           const result = await api(context, `/admin/approvals/stock-issues/${id}/approve`, { method: 'POST', body: '{}' });
           context.showToast(result.message, 'success'); close(); await onDone();
@@ -443,7 +517,7 @@
           <article class="warehouse-stat"><span>TÀI CHÍNH &amp; ĐỔI TRẢ</span><strong>${queues.finance.length}</strong><small>Phiếu chi NCC và hồ sơ đổi trả đã kiểm tra</small></article>
           <article class="warehouse-stat"><span>CHI LƯƠNG</span><strong>${(queues.payroll || []).length}</strong><small>Phiếu chờ duyệt — rồi giao quỹ cho kế toán</small></article>`;
         root.querySelector('#purchaseApprovalBody').innerHTML = orders.items.length ? orders.items.map(item => `<tr><td><strong>${esc(item.MaPO)}</strong><small>Nguồn ${esc(item.MaDN)}</small></td><td><strong>${esc(item.TenNCC)}</strong><small>Người lập: ${esc(item.NguoiLap)}</small></td><td>${item.SoMatHang} mặt hàng</td><td>${fmtDate(item.NgayGiaoDuKien)}</td><td>${item.SoNgayThanhToan} ngày</td><td class="num"><strong>${money(item.TongTien)}</strong></td><td><button class="warehouse-primary" data-review-order="${esc(item.MaPO)}">Xem và quyết định</button></td></tr>`).join('') : empty(7, 'Không có Đơn mua hàng chờ phê duyệt.');
-        root.querySelector('#warehouseApprovalBody').innerHTML = queues.warehouse.length ? queues.warehouse.map(item => `<tr><td><strong>${esc(item.MaHoSo)}</strong><small>${esc(item.LoaiHoSo)}</small></td><td>${esc(item.NguoiLap)}</td><td>${fmtDate(item.NgayLap)}</td><td>${esc(item.NoiDung || '—')}</td><td><span class="status-pill sent">${esc(item.TrangThai)}</span></td><td>${item.LoaiHoSo === 'Điều chỉnh kiểm kê' ? `<button class="warehouse-primary" data-review-inventory-count="${esc(item.MaHoSo)}">Xem và quyết định</button>` : item.LoaiHoSo === 'Phiếu xuất kho' ? `<button class="warehouse-primary" data-review-stock-issue="${esc(item.MaHoSo)}">Xem và quyết định</button>` : '—'}</td></tr>`).join('') : empty(6, 'Chưa có chứng từ kho do Thủ kho gửi duyệt.');
+        root.querySelector('#warehouseApprovalBody').innerHTML = queues.warehouse.length ? queues.warehouse.map(item => `<tr><td><strong>${esc(item.MaHoSo)}</strong><small>${esc(item.LoaiHoSo)}</small></td><td>${esc(item.NguoiLap)}</td><td>${fmtDate(item.NgayLap)}</td><td>${esc(item.NoiDung || '—')}</td><td class="num"><strong>${money(item.SoTien)}</strong></td><td><span class="status-pill sent">${esc(item.TrangThai)}</span></td><td>${item.LoaiHoSo === 'Điều chỉnh kiểm kê' ? `<button class="warehouse-primary" data-review-inventory-count="${esc(item.MaHoSo)}">Xem và quyết định</button>` : item.LoaiHoSo === 'Phiếu xuất kho' ? `<button class="warehouse-primary" data-review-stock-issue="${esc(item.MaHoSo)}">Xem và quyết định</button>` : '—'}</td></tr>`).join('') : empty(7, 'Chưa có chứng từ kho do Thủ kho gửi duyệt.');
         root.querySelector('#financeApprovalBody').innerHTML = queues.finance.length ? queues.finance.map(item => `<tr><td><strong>${esc(item.MaHoSo)}</strong><small>${esc(item.LoaiHoSo)}</small></td><td>${esc(item.NguoiLap)}</td><td>${fmtDate(item.NgayLap)}</td><td>${esc(item.NoiDung || '—')}</td><td class="num">${money(item.SoTien)}</td><td><span class="status-pill sent">${esc(item.TrangThai)}</span></td><td>${item.LoaiHoSo === 'Phiếu chi Nhà cung cấp' ? `<button class="warehouse-primary" data-review-payment-voucher="${esc(item.MaHoSo)}">Duyệt và giao tiền</button>` : item.LoaiHoSo === 'Đổi trả khách hàng' ? `<button class="warehouse-primary" data-approve-return="${esc(item.MaHoSo)}">Duyệt</button><button class="warehouse-danger" data-reject-return="${esc(item.MaHoSo)}">Từ chối</button>` : '—'}</td></tr>`).join('') : empty(7, 'Chưa có Phiếu chi hoặc hồ sơ đổi trả được gửi duyệt. Hóa đơn chờ đối chiếu và công nợ không nằm trong hàng phê duyệt này.');
         const payrollItems = queues.payroll || [];
         let board = { periods: [] };
@@ -540,7 +614,7 @@
         }
       } catch (error) { context.showToast(error.message, 'error'); }
     };
-    root.innerHTML = `${heading('ĐIỀU HÀNH / PHÊ DUYỆT', 'Trung tâm phê duyệt', 'Hồ sơ chỉ xuất hiện sau khi bộ phận phụ trách gửi đúng bước. Riêng duyệt kiểm kê có chênh lệch sẽ cập nhật tồn và ghi Giao dịch kho Điều chỉnh.', '<button class="warehouse-secondary" id="refreshApprovalCenter"><svg><use href="#i-refresh"/></svg>Làm mới</button>')}<div class="warehouse-stats approval-center-summary" id="approvalSummary"></div><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>MUA HÀNG</p><h2>Đơn mua hàng chờ quyết định</h2></div><span class="warehouse-chip">Nhân viên mua hàng gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>ĐƠN MUA</th><th>NHÀ CUNG CẤP</th><th>QUY MÔ</th><th>NGÀY GIAO</th><th>THANH TOÁN</th><th>TỔNG TIỀN</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="purchaseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>KHO</p><h2>Chứng từ kho chờ phê duyệt</h2></div><span class="warehouse-chip">Thủ kho gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>TRẠNG THÁI</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="warehouseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>TÀI CHÍNH</p><h2>Đề nghị thanh toán NCC và đổi trả</h2></div><span class="warehouse-chip">Kế toán/Thu ngân gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>SỐ TIỀN</th><th>TRẠNG THÁI</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="financeApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue payroll-fund-queue"><div class="warehouse-panel-title"><div><p>LƯƠNG</p><h2>Duyệt phiếu, rồi giao quỹ cho kế toán</h2></div></div><p class="payroll-fund-note">Không giao từng nhân viên — một lần giao cả quỹ cho kế toán.</p><p class="approval-center-note" style="margin:0 16px 12px"><strong>Ba bước.</strong><span> 1. Duyệt từng người hoặc Duyệt tất cả. 2. Giao quỹ cho kế toán. 3. Kế toán chi từng nhân viên từ quỹ đó. Phiếu chi Nhà cung cấp vẫn duyệt và giao theo từng phiếu.</span></p><div id="payrollApprovalBoard"></div></article><div id="payrollSupplierDebtPanel"></div>`;
+    root.innerHTML = `${heading('ĐIỀU HÀNH / PHÊ DUYỆT', 'Trung tâm phê duyệt', 'Hồ sơ chỉ xuất hiện sau khi bộ phận phụ trách gửi đúng bước. Riêng duyệt kiểm kê có chênh lệch sẽ cập nhật tồn và ghi Giao dịch kho Điều chỉnh.', '<button class="warehouse-secondary" id="refreshApprovalCenter"><svg><use href="#i-refresh"/></svg>Làm mới</button>')}<div class="warehouse-stats approval-center-summary" id="approvalSummary"></div><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>MUA HÀNG</p><h2>Đơn mua hàng chờ quyết định</h2></div><span class="warehouse-chip">Nhân viên mua hàng gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>ĐƠN MUA</th><th>NHÀ CUNG CẤP</th><th>QUY MÔ</th><th>NGÀY GIAO</th><th>THANH TOÁN</th><th>TỔNG TIỀN</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="purchaseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>KHO</p><h2>Chứng từ kho chờ phê duyệt</h2></div><span class="warehouse-chip">Thủ kho gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>SỐ TIỀN</th><th>TRẠNG THÁI</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="warehouseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>TÀI CHÍNH</p><h2>Đề nghị thanh toán NCC và đổi trả</h2></div><span class="warehouse-chip">Kế toán/Thu ngân gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>SỐ TIỀN</th><th>TRẠNG THÁI</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="financeApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue payroll-fund-queue"><div class="warehouse-panel-title"><div><p>LƯƠNG</p><h2>Duyệt phiếu, rồi giao quỹ cho kế toán</h2></div></div><p class="payroll-fund-note">Không giao từng nhân viên — một lần giao cả quỹ cho kế toán.</p><p class="approval-center-note" style="margin:0 16px 12px"><strong>Ba bước.</strong><span> 1. Duyệt từng người hoặc Duyệt tất cả. 2. Giao quỹ cho kế toán. 3. Kế toán chi từng nhân viên từ quỹ đó. Phiếu chi Nhà cung cấp vẫn duyệt và giao theo từng phiếu.</span></p><div id="payrollApprovalBoard"></div></article><div id="payrollSupplierDebtPanel"></div>`;
     root.innerHTML = root.innerHTML
       .replace('actor nghiệp vụ', 'bộ phận phụ trách')
       .replace('UC05 · ', '')

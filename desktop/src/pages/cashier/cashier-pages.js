@@ -416,7 +416,7 @@
             <div class="cashier-customer-row"><div class="cashier-customer-who">${avatar(customer?.TenKH || 'K')}<div><strong>${customer ? esc(customer.TenKH) : 'Khách vãng lai'}</strong><small>${customer ? `${esc(customer.SDT || '')} · ${esc(customer.HangThanhVien)} · ${customer.DiemTichLuy} điểm` : 'Không tích điểm'}</small></div></div><button class="warehouse-secondary" id="selectCustomer">Chọn khách</button></div>
             <div class="cashier-pos-extras"><label>Khuyến mãi<select id="promoSelect"><option value="">Không áp dụng</option>${(catalog.promotions || []).map(item => `<option value="${esc(item.MaKM)}" ${maKM === item.MaKM ? 'selected' : ''}>${esc(item.TenKM)}</option>`).join('')}</select></label>${customer ? `<label>Dùng điểm<input id="pointInput" type="number" min="0" max="${customer.DiemTichLuy}" value="${diemSuDung}"></label>` : ''}</div>
             ${(catalog.promotions || []).length ? '' : '<small class="cashier-quote-break">Chưa có KM hiệu lực. Quản lý tạo/ngừng chương trình ở menu Khuyến mãi.</small>'}
-            <div class="cashier-cart-lines">${cart.size ? [...cart.values()].map(line => `<div class="cashier-cart-line">${productPhoto(line, 'cart-product-photo')}<div><strong>${esc(line.TenSP)}</strong><small>${money(line.GiaBan)} × ${line.SoLuong}</small></div><div class="cashier-cart-qty"><button data-action="minus" data-id="${line.MaSP}">−</button><span>${line.SoLuong}</span><button data-action="plus" data-id="${line.MaSP}">+</button></div><strong>${money(Number(line.GiaBan) * line.SoLuong)}</strong></div>`).join('') : '<div class="warehouse-empty">Quét hoặc chọn sản phẩm để bắt đầu.</div>'}</div>
+            <div class="cashier-cart-lines">${cart.size ? [...cart.values()].map(line => `<div class="cashier-cart-line">${productPhoto(line, 'cart-product-photo')}<div><strong>${esc(line.TenSP)}</strong><small>${money(line.GiaBan)} × ${line.SoLuong}</small></div>${window.FLY_QTY.stepperMarkup({ id: line.MaSP, value: line.SoLuong, min: 1, inputClass: 'cashier-cart-qty-input', wrapClass: 'cashier-cart-qty', ariaLabel: `Số lượng ${line.TenSP}` })}<strong>${money(Number(line.GiaBan) * line.SoLuong)}</strong></div>`).join('') : '<div class="warehouse-empty">Quét hoặc chọn sản phẩm để bắt đầu.</div>'}</div>
             <div class="cashier-cart-total"><span>PHẢI THANH TOÁN</span><strong>${money(payable)}</strong></div>
             ${quote ? `<small class="cashier-quote-break">Tiền hàng ${money(quote.TongTienHang)} · Giảm ${money(quote.TienGiamGia)} · Điểm ${money(quote.TienDiemQuyDoi)}</small>` : ''}
             <div class="cashier-pos-actions"><button type="button" class="warehouse-secondary" id="saveDraft" ${cart.size ? '' : 'disabled'}>Lưu nháp</button>${draftId ? '<button type="button" class="warehouse-danger" id="cancelDraft">Hủy nháp</button>' : ''}<button type="button" class="warehouse-primary cashier-checkout" id="checkout" ${cart.size ? '' : 'disabled'}><svg><use href="#i-cash"/></svg>Thanh toán</button></div>
@@ -425,7 +425,7 @@
       const addProduct = async product => {
         if (!product) return;
         const next = (cart.get(product.MaSP)?.SoLuong || 0) + 1;
-        if (next > Number(product.SLTon)) return context.showToast('Số lượng vượt tồn khả dụng.', 'error');
+        if (next > Number(product.SLTon)) return context.showToast(window.FLY_QTY.stockExceededMessage(product), 'error');
         cart.set(product.MaSP, { ...product, SoLuong: next }); await refreshQuote(); render();
       };
       const applySearch = () => {
@@ -470,13 +470,33 @@
       root.querySelector('#posSearchForm')?.addEventListener('submit', submitPosSearch);
       applySearch();
       if (!cart.size) searchBox.focus();
-      root.querySelectorAll('.cashier-cart-qty button').forEach(button => button.addEventListener('click', async () => {
-        const line = cart.get(button.dataset.id);
-        if (button.dataset.action === 'minus') line.SoLuong -= 1;
-        else if (line.SoLuong < Number(line.SLTon)) line.SoLuong += 1;
-        if (line.SoLuong <= 0) cart.delete(line.MaSP); else cart.set(line.MaSP, line);
-        await refreshQuote(); render();
-      }));
+      const applyCartQuantity = async (input, raw, reason) => {
+        const line = cart.get(input.dataset.id);
+        if (!line) return;
+        const parsed = window.FLY_QTY.parsePositiveInteger(raw, 'Số lượng');
+        const stock = Number(line.SLTon);
+        if (reason === 'step' && Number(raw) <= 0) {
+          cart.delete(line.MaSP);
+          await refreshQuote();
+          render();
+          return;
+        }
+        if (!parsed.ok) {
+          context.showToast(parsed.message, 'error');
+          input.value = String(line.SoLuong);
+          return;
+        }
+        if (parsed.value > stock) {
+          context.showToast(window.FLY_QTY.stockExceededMessage(line), 'error');
+          input.value = String(line.SoLuong);
+          return;
+        }
+        if (parsed.value === Number(line.SoLuong)) return;
+        cart.set(line.MaSP, { ...line, SoLuong: parsed.value });
+        await refreshQuote();
+        render();
+      };
+      root.querySelectorAll('.cashier-cart-qty').forEach(wrap => window.FLY_QTY.bind(wrap, { commit: applyCartQuantity }));
       root.querySelector('#selectCustomer').addEventListener('click', pickCustomer);
       root.querySelector('#promoSelect')?.addEventListener('change', async event => { maKM = event.target.value; await refreshQuote(); render(); });
       root.querySelector('#pointInput')?.addEventListener('change', async event => {
@@ -484,6 +504,8 @@
         await refreshQuote(); render();
       });
       root.querySelector('#saveDraft')?.addEventListener('click', async () => {
+        const overStock = [...cart.values()].find(line => Number(line.SoLuong) > Number(line.SLTon));
+        if (overStock) return context.showToast(window.FLY_QTY.stockExceededMessage(overStock), 'error');
         try {
           if (draftId) return context.showToast(`Hóa đơn nháp ${draftId} đã được lưu.`, 'success');
           const invoice = await api(context, '/cashier/invoices', { method: 'POST', body: JSON.stringify({ MaKH: customer?.MaKH || null, MaKM: maKM || null, DiemSuDung: Number(diemSuDung) || 0, lines: linesPayload() }) });
@@ -500,6 +522,8 @@
     };
     const openPayment = async () => {
       if (!cart.size) return context.showToast('Chưa có sản phẩm trong giỏ.', 'error');
+      const overStock = [...cart.values()].find(line => Number(line.SoLuong) > Number(line.SLTon));
+      if (overStock) return context.showToast(window.FLY_QTY.stockExceededMessage(overStock), 'error');
       if (draftId) {
         try {
           const detail = await api(context, `/cashier/invoices/${draftId}`);
@@ -942,7 +966,7 @@
         try {
           const catalog = await api(context, `/cashier/returns/catalog?search=${encodeURIComponent(query)}`);
           if (version !== exchangeSearchVersion || !overlay.isConnected) return;
-          overlay.querySelector('#exchangeHits').innerHTML = (catalog.products || []).slice(0, 12).map(item => `<button type="button" class="cashier-invoice-hit" data-ex="${esc(item.MaSP)}" data-name="${esc(item.TenSP)}" data-price="${Number(item.GiaBan)}" data-stock="${Number(item.SLTon)}"><div><strong>${esc(item.TenSP)}</strong><small>${esc(item.MaSP)} · tồn ${item.SLTon} · ${money(item.GiaBan)}</small></div></button>`).join('') || '<p class="cashier-payment-help">Không có sản phẩm phù hợp.</p>';
+          overlay.querySelector('#exchangeHits').innerHTML = (catalog.products || []).slice(0, 12).map(item => `<button type="button" class="cashier-invoice-hit" data-ex="${esc(item.MaSP)}" data-name="${esc(item.TenSP)}" data-price="${Number(item.GiaBan)}" data-stock="${Number(item.SLTon)}" data-unit="${esc(item.DonViTinh || '')}"><div><strong>${esc(item.TenSP)}</strong><small>${esc(item.MaSP)} · ${window.FLY_QTY.stockLeftText(item)} · ${money(item.GiaBan)}</small></div></button>`).join('') || '<p class="cashier-payment-help">Không có sản phẩm phù hợp.</p>';
         } catch (error) {
           if (version === exchangeSearchVersion) context.showToast(error.message, 'error');
         }
@@ -956,10 +980,43 @@
       overlay.addEventListener('click', event => {
         const hit = event.target.closest('[data-ex]');
         if (hit && overlay.contains(hit) && !overlay.querySelector(`.cashier-exchange-row[data-sp="${hit.dataset.ex}"]`)) {
-          overlay.querySelector('#exchangeLines').insertAdjacentHTML('beforeend', `<div class="cashier-exchange-row" data-sp="${esc(hit.dataset.ex)}" data-price="${hit.dataset.price}"><div><strong>${esc(hit.dataset.name)}</strong><small>${esc(hit.dataset.ex)} · ${money(Number(hit.dataset.price))}</small></div><input class="ex-qty" type="number" min="1" max="${hit.dataset.stock}" value="1"><button type="button" class="warehouse-icon-button" data-remove-ex>×</button></div>`);
+          overlay.querySelector('#exchangeLines').insertAdjacentHTML('beforeend', `<div class="cashier-exchange-row" data-sp="${esc(hit.dataset.ex)}" data-price="${hit.dataset.price}" data-stock="${hit.dataset.stock}" data-name="${esc(hit.dataset.name)}" data-unit="${esc(hit.dataset.unit || '')}"><div><strong>${esc(hit.dataset.name)}</strong><small>${esc(hit.dataset.ex)} · ${money(Number(hit.dataset.price))}</small></div>${window.FLY_QTY.stepperMarkup({ value: 1, min: 1, inputClass: 'ex-qty', ariaLabel: `Số lượng đổi ${hit.dataset.name}` })}<button type="button" class="warehouse-icon-button" data-remove-ex>×</button></div>`);
           overlay.querySelector('#exchangeHits').innerHTML = '';
           overlay.querySelector('#exchangeSearch').value = '';
-          overlay.querySelectorAll('.ex-qty').forEach(input => { input.oninput = updateExchangeTotals; });
+          const row = overlay.querySelector('#exchangeLines .cashier-exchange-row:last-child');
+          const qtyInput = row.querySelector('.ex-qty');
+          qtyInput.dataset.last = '1';
+          window.FLY_QTY.bind(row.querySelector('.qty-stepper'), {
+            commit: (input, raw, reason) => {
+              const stock = Number(row.dataset.stock);
+              const parsed = window.FLY_QTY.parsePositiveInteger(raw, 'Số lượng đổi');
+              if (reason === 'step' && Number(raw) < 1) {
+                input.value = '1';
+                input.dataset.last = '1';
+                updateExchangeTotals();
+                return;
+              }
+              if (!parsed.ok) {
+                context.showToast(parsed.message, 'error');
+                input.value = input.dataset.last || '1';
+                updateExchangeTotals();
+                return;
+              }
+              if (parsed.value > stock) {
+                context.showToast(window.FLY_QTY.stockExceededMessage({
+                  TenSP: row.dataset.name,
+                  SLTon: stock,
+                  DonViTinh: row.dataset.unit
+                }), 'error');
+                input.value = input.dataset.last || '1';
+                updateExchangeTotals();
+                return;
+              }
+              input.value = String(parsed.value);
+              input.dataset.last = String(parsed.value);
+              updateExchangeTotals();
+            }
+          });
           updateExchangeTotals();
         }
         const remove = event.target.closest('[data-remove-ex]');
@@ -975,6 +1032,14 @@
             return qty ? !qty.ok : !Number.isInteger(line.SoLuong) || line.SoLuong < 1;
           });
           if (invalid) return context.showToast(`Số lượng đổi của ${invalid.MaSP} phải là số nguyên lớn hơn 0.`, 'error');
+          const overStock = [...overlay.querySelectorAll('.cashier-exchange-row')].find(row => Number(row.querySelector('.ex-qty').value) > Number(row.dataset.stock));
+          if (overStock) {
+            return context.showToast(window.FLY_QTY.stockExceededMessage({
+              TenSP: overStock.dataset.name,
+              SLTon: overStock.dataset.stock,
+              DonViTinh: overStock.dataset.unit
+            }), 'error');
+          }
         }
         try {
           const result = await api(context, `/cashier/returns/${id}/complete`, { method: 'POST', body: JSON.stringify(payload) });

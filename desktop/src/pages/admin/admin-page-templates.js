@@ -253,24 +253,30 @@
             <h1>Nhật ký hệ thống</h1>
             <p>Ai đã làm gì, lúc nào, trên chứng từ nào. Bấm một dòng để xem ý nghĩa. Mặc định 7 ngày gần đây, ẩn lần đăng nhập. Không sửa hay xóa được.</p>
           </div>
-          <span class="record-count" id="logCount">0 bản ghi</span>
+          <div class="heading-actions">
+            <span class="record-count" id="logCount">0 bản ghi</span>
+          </div>
         </header>
         <article class="surface-card data-surface audit-surface">
           <div class="table-toolbar audit-toolbar">
-            <label class="filter-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input type="text" id="logSearch" placeholder="Tìm người, việc làm, mã chứng từ..."></label>
+            <div class="audit-toolbar-top">
+              <label class="filter-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="logSearch" placeholder="Tìm người, việc làm, mã chứng từ..." autocomplete="off" spellcheck="false"></label>
+              <div class="audit-toolbar-tools">
+                <div class="audit-daterange" role="group" aria-label="Khoảng ngày">
+                  <label>Từ <input type="date" id="logFrom" data-keep-native="1" required></label>
+                  <span aria-hidden="true">–</span>
+                  <label>Đến <input type="date" id="logTo" data-keep-native="1" required></label>
+                </div>
+                <button class="btn btn-secondary" type="button" onclick="clearLogFilters()">Xóa lọc</button>
+                <button class="btn btn-secondary" id="auditReload" type="button"><svg aria-hidden="true"><use href="#i-refresh"/></svg> Tải lại</button>
+                <button class="btn btn-secondary" type="button" onclick="exportAuditCsv()">Xuất CSV</button>
+              </div>
+            </div>
             <div class="filter-actions audit-filters">
               <select id="logKind" class="audit-filter-wide" aria-label="Loại việc"></select>
               <select id="logRole" aria-label="Vai trò"></select>
               <select id="logActor" aria-label="Nhân viên"></select>
               <select id="logAction" aria-label="Hành động"></select>
-              <div class="audit-daterange" role="group" aria-label="Khoảng ngày">
-                <label>Từ <input type="date" id="logFrom" data-keep-native="1" required></label>
-                <span aria-hidden="true">–</span>
-                <label>Đến <input type="date" id="logTo" data-keep-native="1" required></label>
-              </div>
-              <button class="btn btn-secondary" type="button" onclick="clearLogFilters()">Xóa lọc</button>
-              <button class="btn btn-secondary" id="auditReload" type="button"><svg aria-hidden="true"><use href="#i-refresh"/></svg> Tải lại</button>
-              <button class="btn btn-secondary" type="button" onclick="exportAuditCsv()">Xuất CSV</button>
             </div>
           </div>
           <div class="audit-workspace" id="auditWorkspace">
@@ -298,7 +304,7 @@
           </div>
         </article>
       </section>
-      <script src="../admin/audit-log.js?v=audit-rs-1"></script>`,
+      <script src="../admin/audit-log.js?v=audit-rs-3"></script>`,
 
     'backup.html': `
       <section class="admin-module">

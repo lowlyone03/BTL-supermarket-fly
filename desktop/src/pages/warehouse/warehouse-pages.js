@@ -54,12 +54,30 @@
     'Nháp': 'draft', 'Đã gửi': 'sent', 'Đang xử lý': 'processing', 'Yêu cầu bổ sung': 'returned',
     'Đã hủy': 'cancelled', 'Hoàn thành': 'ok', 'Đã lập đơn': 'ok', 'Đã xác nhận': 'ok',
     'Chờ kiểm tra': 'sent', 'Chờ duyệt': 'sent', 'Đã duyệt': 'ok', 'Từ chối': 'cancelled',
-    'Đang kiểm': 'processing', 'Chờ duyệt điều chỉnh': 'sent', 'Hoàn thành không chênh lệch': 'ok'
+    'Đang kiểm': 'processing', 'Chờ duyệt điều chỉnh': 'sent', 'Hoàn thành không chênh lệch': 'ok',
+    'Đã đếm lại': 'draft', 'Đang đếm lại': 'processing'
   }[status] || 'draft');
+  const inventoryCountRowHtml = item => {
+    const display = item.TrangThaiHienThi || item.TrangThai;
+    const note = item.StatusNote || '';
+    const rowClass = item.CanRecount ? 'inventory-count-open-reject' : item.DaDemLai ? 'inventory-count-resolved-reject' : '';
+    const noteClass = item.CanRecount ? 'inventory-count-status-note is-alert' : 'inventory-count-status-note';
+    const openId = item.OpenMaKK || item.MaKK;
+    const action = item.ActionLabel || (item.TrangThai === 'Đang kiểm' ? 'Tiếp tục kiểm' : 'Xem chi tiết');
+    return `<tr class="${rowClass}"><td><strong>${esc(item.MaKK)}</strong><small>${esc(item.TenKho)}</small></td><td>${fmtDate(item.NgayKiemKe)}</td><td><strong>${item.SoMatHang || 0} mặt hàng</strong><small>${item.SoMatHangChenhLech || 0} mặt hàng chênh lệch</small></td><td><strong>Thừa ${item.TongThua || 0}</strong><small>Thiếu ${item.TongThieu || 0}</small></td><td><span class="status-pill ${statusClass(display)}">${esc(display)}</span>${note ? `<small class="${noteClass}">${esc(note)}</small>` : ''}</td><td><button class="warehouse-secondary" data-view-inventory-count="${esc(openId)}">${esc(action)}</button></td></tr>`;
+  };
   const stockStatus = item => item.MucTon === 'Hết hàng' ? 'out' : ['Cần bổ sung', 'Chưa nhập lần đầu'].includes(item.MucTon) ? 'low' : 'ok';
   const productPhoto = (item, className = '') => window.FLY_PRODUCT_IMAGES?.markup(item, { className }) || '';
   const unsellableConditions = new Set(['Hỏng', 'Hết hạn']);
   const isPreRequestCount = count => /trước khi lập đề nghị/i.test(count?.GhiChu || '');
+  const scrapQtyOf = line => {
+    if (!unsellableConditions.has(line.TinhTrangHang)) return 0;
+    const explicit = Number(line.SLHong);
+    if (Number.isInteger(explicit) && explicit > 0) return explicit;
+    const shortage = Math.max(0, Number(line.SLHeThong || 0) - Number(line.SLThucTe || 0));
+    if (shortage > 0) return shortage;
+    return Math.max(0, Number(line.SLThucTe || 0));
+  };
   const classifyCheckedLines = lines => {
     const enough = [];
     const needBuy = [];
@@ -67,17 +85,20 @@
     for (const line of lines) {
       const damaged = unsellableConditions.has(line.TinhTrangHang);
       const actual = Number(line.SLThucTe);
+      const scrapQty = scrapQtyOf(line);
       const min = Number(line.TonKhoToiThieu || 0);
       const ordered = Number(line.SLDatMua || 0);
-      const sellable = damaged ? 0 : actual;
+      const sellable = damaged ? Math.max(0, actual - scrapQty) : actual;
       const remainingNeed = Math.max(0, min - sellable - ordered);
       const item = {
         ...line,
+        SLHong: scrapQty,
+        SoLuong: scrapQty,
         remainingNeed,
         SLDeNghi: Math.max(1, remainingNeed),
-        GhiChu: `Thực tế kiểm đếm: ${actual}${damaged ? ` · ${line.TinhTrangHang}` : ''}`
+        GhiChu: `Thực tế kiểm đếm: ${actual}${damaged ? ` · ${line.TinhTrangHang} ${scrapQty}` : ''}`
       };
-      if (damaged && actual > 0) scrap.push(item);
+      if (scrapQty > 0) scrap.push(item);
       if (remainingNeed > 0) needBuy.push(item);
       else if (!damaged) enough.push(item);
     }
@@ -89,9 +110,10 @@
     DonViTinh: row.dataset.unit,
     SLHeThong: Number(row.dataset.system),
     SLThucTe: Number(row.querySelector('.inventory-count-actual')?.value ?? row.dataset.system),
+    SLHong: Number(row.querySelector('.inventory-count-scrap')?.value || 0),
     TonKhoToiThieu: Number(row.dataset.min || 0),
     SLDatMua: Number(row.dataset.ordered || 0),
-    TinhTrangHang: row.querySelector('.inventory-count-condition')?.value || 'Bình thường',
+    TinhTrangHang: row.querySelector('.inventory-count-condition')?.value || row.querySelector('td:nth-child(6)')?.textContent?.trim() || 'Bình thường',
     NguyenNhan: row.querySelector('.inventory-count-reason')?.value?.trim() || ''
   }));
 
@@ -115,6 +137,24 @@
     return data;
   };
 
+  const openFilledStockIssue = (context, { maPX, prefill } = {}) => {
+    if (maPX) sessionStorage.setItem('fly_open_stock_issue', maPX);
+    else if (prefill) sessionStorage.setItem('fly_stock_issue_prefill', JSON.stringify(prefill));
+    context.navigate('warehouse-stock-issues');
+  };
+  const openScrapFromSource = async (context, kind, id) => {
+    const path = kind === 'count'
+      ? `/warehouse/stock-issues/from-count/${encodeURIComponent(id)}`
+      : `/warehouse/stock-issues/from-return/${encodeURIComponent(id)}`;
+    const data = await api(context, path);
+    if (data.existing?.MaPX) {
+      openFilledStockIssue(context, { maPX: data.existing.MaPX });
+      context.showToast(data.message, 'success');
+      return data;
+    }
+    openFilledStockIssue(context, { prefill: data.prefill });
+    return data;
+  };
   const heading = (kicker, title, subtitle, action = '') => `
     <header class="warehouse-heading">
       <div><p class="warehouse-kicker">${esc(kicker)}</p><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div>${action}
@@ -280,6 +320,7 @@
           <button class="warehouse-secondary print-return" type="button"><svg><use href="#i-report"/></svg>In hồ sơ</button>
           ${editable ? `<button class="warehouse-primary save-inspect" type="button">${mode === 'revise' ? 'Lưu kết quả mới' : 'Ghi nhận và gửi duyệt'}</button>` : ''}
           ${!editable && restocked && ['Đã duyệt', 'Hoàn thành'].includes(ticket.TrangThai) ? `<button class="warehouse-danger flag-mistake" type="button">${ticket.TrangThai === 'Hoàn thành' ? 'Tôi đã tích nhầm — trừ tồn' : 'Tôi đã tích nhầm'}</button>` : ''}
+          ${!editable && !restocked && /không nhập lại/i.test(ticket.KetQuaKiemTra || '') && ['Chờ duyệt', 'Đã duyệt', 'Hoàn thành'].includes(ticket.TrangThai) ? `<button class="warehouse-primary open-return-scrap" type="button">${ticket.MaPXHuy ? `Mở phiếu xuất ${esc(ticket.MaPXHuy)}` : 'Lập phiếu xuất hàng hỏng'}</button>` : ''}
         </div>
       </div>`;
       document.body.appendChild(overlay);
@@ -294,6 +335,16 @@
           }
           const result = await api(context, `/warehouse/returns/${id}/inspect`, { method: 'POST', body: JSON.stringify({ KetQuaKiemTra: overlay.querySelector('#inspectNote').value, DuocNhapLai: restock }) });
           context.showToast(result.message, 'success'); close(); await onDone?.();
+          if (!restock && window.confirm('Hàng loại bỏ/vứt: mở phiếu xuất hủy đã điền SL, tiền và lý do để kiểm soát? Tồn không trừ lần nữa (đã trừ lúc bán).')) {
+            try { await openScrapFromSource(context, 'return', id); }
+            catch (error) { context.showToast(error.message, 'error'); }
+          }
+        } catch (error) { context.showToast(error.message, 'error'); }
+      });
+      overlay.querySelector('.open-return-scrap')?.addEventListener('click', async () => {
+        try {
+          close();
+          await openScrapFromSource(context, 'return', id);
         } catch (error) { context.showToast(error.message, 'error'); }
       });
       overlay.querySelector('.flag-mistake')?.addEventListener('click', async () => {
@@ -329,11 +380,11 @@
         <p class="count-followup-status">Đợt kiểm kê: <strong>${esc(TrangThai || 'Đã ghi nhận')}</strong></p>
         <section class="count-followup-block"><h3>Còn đủ — không lập đề nghị</h3>${list(enough, 'Không có mặt hàng còn đủ sau kiểm tra.')}</section>
         <section class="count-followup-block warn"><h3>Hết hoặc dưới nhu cầu — lập Phiếu đề nghị mua hàng</h3>${list(needBuy, 'Không có mặt hàng cần nhập sau kiểm tra.')}</section>
-        <section class="count-followup-block danger"><h3>Hỏng / hết hạn — Phiếu xuất hủy</h3>${list(scrap, 'Không ghi nhận hàng hỏng hoặc hết hạn.')}<p class="count-followup-hint">Xuất hủy phải qua Quản lý duyệt, Thủ kho xác nhận mới trừ tồn. Không lập nhu cầu ảo nếu hàng còn bán được.</p></section>
+        <section class="count-followup-block danger"><h3>Hỏng / hết hạn — Phiếu xuất hủy</h3>${list(scrap, 'Không ghi nhận hàng hỏng hoặc hết hạn.')}<p class="count-followup-hint">Lập phiếu xuất hủy (loại Hủy hàng) đã điền SL và lý do. Xác nhận xuất mới giảm tồn hàng còn trên kệ. Điều chỉnh kiểm kê chỉ khớp SL thực tế, không trừ trùng.</p></section>
       </div>
       <div class="warehouse-modal-actions">
         <button class="warehouse-secondary modal-close" type="button">Đóng</button>
-        ${scrap.length ? '<button class="warehouse-secondary open-scrap" type="button">Lập Phiếu xuất hủy</button>' : ''}
+        ${scrap.length ? '<button class="warehouse-secondary open-scrap" type="button">Lập phiếu xuất hàng hỏng</button>' : ''}
         ${needBuy.length ? '<button class="warehouse-primary open-request" type="button">Lập phiếu đề nghị mua hàng</button>' : ''}
       </div>
     </div>`;
@@ -354,32 +405,35 @@
     });
   };
 
-  const showScrapIssueConfirm = (context, { MaKK, scrap = [], existingScrap = null, onSkip } = {}) => {
-    const lines = scrap.filter(item => Number(item.SLThucTe || item.SoLuong) > 0);
+  const showScrapIssueConfirm = (context, { MaKK, scrap = [], existingScrap = null, stockImpact = null, onSkip } = {}) => {
+    const lines = scrap.filter(item => Number(item.SLHong || item.SoLuong || item.SLThucTe) > 0);
     if (!lines.length) {
       onSkip?.();
       return;
     }
     const overlay = document.createElement('div');
     overlay.className = 'warehouse-modal-backdrop';
+    const qtyOf = item => Number(item.SLHong || item.SoLuong || 0);
+    const totalValue = lines.reduce((sum, item) => sum + Number(item.ThanhTien || (item.DonGia || item.DonGiaBinhQuan || 0) * qtyOf(item)), 0);
     const rows = lines.map(item => `<tr>
       <td><strong>${esc(item.MaSP)}</strong></td>
       <td>${esc(item.TenSP || item.MaSP)}</td>
-      <td class="num"><strong>${Number(item.SLThucTe || item.SoLuong)}</strong></td>
+      <td class="num"><strong>${qtyOf(item)}</strong></td>
+      <td class="num">${money(item.DonGia || item.DonGiaBinhQuan || 0)}</td>
       <td>${esc(item.TinhTrangHang || 'Hỏng')}</td>
       <td>${esc(item.NguyenNhan || '—')}</td>
     </tr>`).join('');
+    const impact = stockImpact || {};
     overlay.innerHTML = `<div class="warehouse-modal count-followup-modal scrap-confirm-modal" role="dialog" aria-modal="true">
-      <div class="warehouse-modal-heading"><div><p class="warehouse-kicker">XUẤT HỦY TỪ KIỂM KÊ / ${esc(MaKK)}</p><h2>Xác nhận hàng hỏng / hết hạn</h2></div><button class="warehouse-icon-button modal-close" type="button" aria-label="Đóng">×</button></div>
+      <div class="warehouse-modal-heading"><div><p class="warehouse-kicker">XUẤT HỦY TỪ KIỂM KÊ / ${esc(MaKK)}</p><h2>Hàng hỏng phát hiện khi kiểm kê</h2></div><button class="warehouse-icon-button modal-close" type="button" aria-label="Đóng">×</button></div>
       <div class="warehouse-modal-body">
-        <div class="receipt-rule"><svg><use href="#i-warning"/></svg><span>Hàng hỏng/hết hạn sẽ lập phiếu xuất hủy với số lượng = SL thực tế đã đếm. Quản lý duyệt, Thủ kho xác nhận mới trừ tồn. Không trừ trùng với điều chỉnh chênh lệch số lượng.</span></div>
-        ${existingScrap ? `<p class="count-followup-status">Đã có phiếu xuất <strong>${esc(existingScrap.MaPX)}</strong> (${esc(existingScrap.TrangThai)}).</p>` : ''}
-        <div class="warehouse-table-wrap"><table class="warehouse-table scrap-confirm-table"><thead><tr><th>MÃ SP</th><th>TÊN HÀNG</th><th>SL XUẤT</th><th>TÌNH TRẠNG</th><th>NGUYÊN NHÂN</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <div class="stock-issue-impact ${impact.willDecrease === false ? 'no-cut' : 'will-cut'}"><svg><use href="#i-warning"/></svg><div><strong>${esc(impact.title || 'Xác nhận xuất sẽ giảm tồn')}</strong><span>${esc(impact.detail || 'Số thực tế (kể cả hàng hỏng còn trên kệ) vẫn nằm trong tồn. Phiếu hủy này mới viết giảm khi Thủ kho xác nhận. Điều chỉnh kiểm kê không trừ trùng số hỏng còn trên kệ.')}</span></div></div>
+        ${existingScrap ? `<p class="count-followup-status">Đã có phiếu xuất <strong>${esc(existingScrap.MaPX)}</strong> (${esc(existingScrap.TrangThai)}).</p>` : `<p class="count-followup-status">${lines.length} mặt hàng · ${money(totalValue)} giá trị tham chiếu.</p>`}
+        <div class="warehouse-table-wrap"><table class="warehouse-table scrap-confirm-table"><thead><tr><th>MÃ SP</th><th>TÊN HÀNG</th><th>SL HỎNG</th><th>ĐƠN GIÁ</th><th>TÌNH TRẠNG</th><th>NGUYÊN NHÂN</th></tr></thead><tbody>${rows}</tbody></table></div>
       </div>
       <div class="warehouse-modal-actions">
-        <button class="warehouse-secondary skip-scrap" type="button">Bỏ qua</button>
-        <button class="warehouse-secondary create-scrap-draft" type="button">Tạo nháp</button>
-        <button class="warehouse-primary create-scrap-submit" type="button">Tạo và gửi duyệt</button>
+        <button class="warehouse-secondary skip-scrap" type="button">Để sau</button>
+        <button class="warehouse-primary open-filled-scrap" type="button">${existingScrap ? `Mở phiếu xuất ${esc(existingScrap.MaPX)}` : 'Mở phiếu xuất đã điền'}</button>
       </div>
     </div>`;
     document.body.appendChild(overlay);
@@ -390,27 +444,17 @@
     overlay.querySelectorAll('.modal-close').forEach(button => button.addEventListener('click', () => close(true)));
     overlay.addEventListener('click', event => { if (event.target === overlay) close(true); });
     overlay.querySelector('.skip-scrap').addEventListener('click', () => close(true));
-    const createScrap = async (submit) => {
+    overlay.querySelector('.open-filled-scrap').addEventListener('click', async () => {
       const buttons = overlay.querySelectorAll('button');
       buttons.forEach(button => { button.disabled = true; });
       try {
-        const result = await api(context, `/warehouse/inventory-counts/${encodeURIComponent(MaKK)}/scrap-issue`, {
-          method: 'POST',
-          body: JSON.stringify({ submit })
-        });
-        context.showToast(result.message, 'success');
         overlay.remove();
-        if (result.MaPX) {
-          sessionStorage.setItem('fly_open_stock_issue', result.MaPX);
-          context.navigate('warehouse-stock-issues');
-        } else onSkip?.();
+        await openScrapFromSource(context, 'count', MaKK);
       } catch (error) {
         buttons.forEach(button => { button.disabled = false; });
         context.showToast(error.message, 'error');
       }
-    };
-    overlay.querySelector('.create-scrap-draft').addEventListener('click', () => createScrap(false));
-    overlay.querySelector('.create-scrap-submit').addEventListener('click', () => createScrap(true));
+    });
   };
 
   const inventoryCountDetail = async (context, id, onDone, options = {}) => {
@@ -429,38 +473,109 @@
         const condition = editable
           ? `<select class="inventory-count-condition"><option ${line.TinhTrangHang === 'Bình thường' ? 'selected' : ''}>Bình thường</option><option ${line.TinhTrangHang === 'Hỏng' ? 'selected' : ''}>Hỏng</option><option ${line.TinhTrangHang === 'Hết hạn' ? 'selected' : ''}>Hết hạn</option></select>`
           : esc(line.TinhTrangHang || 'Bình thường');
+        const defaultScrap = unsellableConditions.has(line.TinhTrangHang || '')
+          ? (Number(line.SLHong) > 0 ? Number(line.SLHong) : (difference < 0 ? Math.abs(difference) : Number(line.SLThucTe)))
+          : 0;
+        const scrap = editable
+          ? `<input class="inventory-count-scrap" type="number" min="0" step="1" value="${defaultScrap}" ${unsellableConditions.has(line.TinhTrangHang || '') ? '' : 'disabled'} aria-label="Số lượng hỏng ${esc(line.TenSP)}">`
+          : (defaultScrap || '—');
         const reason = editable
           ? `<input class="inventory-count-reason" maxlength="200" value="${esc(line.NguyenNhan || '')}" placeholder="Bắt buộc nếu lệch">`
           : esc(line.NguyenNhan || '—');
-        return `<tr data-product="${esc(line.MaSP)}" data-system="${Number(line.SLHeThong)}" data-name="${esc(line.TenSP)}" data-unit="${esc(line.DonViTinh || '')}" data-min="${Number(line.TonKhoToiThieu || 0)}" data-ordered="${Number(line.SLDatMua || 0)}"><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)} · ${esc(line.TenDM)}</small></td><td class="num"><strong>${Number(line.SLHeThong)}</strong></td><td class="num">${actual}</td><td class="num inventory-count-difference">${difference > 0 ? '+' : ''}${difference}</td><td><span class="status-pill inventory-count-result ${difference === 0 ? 'ok' : 'sent'}">${resultLabel(difference)}</span></td><td>${condition}</td><td>${reason}</td></tr>`;
+        return `<tr data-product="${esc(line.MaSP)}" data-system="${Number(line.SLHeThong)}" data-actual="${Number(line.SLThucTe)}" data-name="${esc(line.TenSP)}" data-unit="${esc(line.DonViTinh || '')}" data-min="${Number(line.TonKhoToiThieu || 0)}" data-ordered="${Number(line.SLDatMua || 0)}"><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)} · ${esc(line.TenDM)}</small></td><td class="num"><strong>${Number(line.SLHeThong)}</strong></td><td class="num">${actual}</td><td class="num inventory-count-difference">${difference > 0 ? '+' : ''}${difference}</td><td><span class="status-pill inventory-count-result ${difference === 0 ? 'ok' : 'sent'}">${resultLabel(difference)}</span></td><td>${condition}</td><td class="num">${scrap}</td><td>${reason}</td></tr>`;
       }).join('');
       const preRequest = options.followUp || isPreRequestCount(count);
-      overlay.innerHTML = `<div class="warehouse-modal inventory-count-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">${preRequest ? 'KIỂM TRA SỐ LƯỢNG THỰC TẾ' : 'KIỂM KÊ KHO'} / ${esc(count.MaKK)}</p><h2>${esc(count.TenKho)}</h2><span>${fmtDate(count.NgayKiemKe)} · ${esc(count.NguoiKiemKe)} · ${esc(count.TrangThai)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="receipt-rule"><svg><use href="#i-warning"/></svg><span>${preRequest ? 'Cảnh báo tồn tối thiểu chỉ là gợi ý. Ghi số thực tế và tình trạng (bình thường / hỏng / hết hạn). Còn đủ thì không lập đề nghị. Hết hoặc dưới nhu cầu thì lập Phiếu đề nghị mua hàng. Tồn hệ thống chỉ đổi sau khi Quản lý duyệt chênh lệch.' : 'Số lượng hệ thống là ảnh chụp lúc tạo đợt. Khi có chênh lệch phải ghi nguyên nhân; tồn kho chỉ thay đổi sau khi Quản lý duyệt.'}</span></div><div class="warehouse-field inventory-count-note"><label>Ghi chú đợt kiểm kê</label><textarea id="inventoryCountNote" maxlength="500" ${editable ? '' : 'disabled'}>${esc(count.GhiChu || '')}</textarea></div>${count.LyDoTuChoi ? `<div class="manager-readonly-note"><svg><use href="#i-warning"/></svg><div><strong>Lý do từ chối — hãy tạo đợt kiểm kê mới và đếm lại</strong><span>${esc(count.LyDoTuChoi)}</span></div></div>` : ''}<div class="warehouse-table-wrap"><table class="warehouse-table inventory-count-table"><thead><tr><th>SẢN PHẨM</th><th>HỆ THỐNG</th><th>THỰC TẾ</th><th>CHÊNH LỆCH</th><th>KẾT QUẢ</th><th>TÌNH TRẠNG</th><th>NGUYÊN NHÂN</th></tr></thead><tbody>${rows}</tbody></table></div>${auditListHtml(data.audit)}</div><div class="warehouse-modal-actions"><div class="inventory-count-submit-hint" ${editable ? '' : 'hidden'}></div><button class="warehouse-secondary close" type="button">Đóng</button>${editable ? '<button class="warehouse-secondary save-count" type="button">Lưu kết quả đếm</button><button class="warehouse-primary submit-count" type="button"></button>' : count.TrangThai === 'Từ chối' ? '<button class="warehouse-primary recount-count" type="button">Tạo đợt kiểm kê mới</button>' : ''}</div></div>`;
+      const displayStatus = count.TrangThaiHienThi || count.TrangThai;
+      let rejectHtml = '';
+      if (count.DaDemLai) {
+        rejectHtml = `<div class="manager-readonly-note inventory-count-resolved"><svg><use href="#i-approve"/></svg><div><strong>Đã đếm lại${count.MaKKThayThe ? ` bằng ${esc(count.MaKKThayThe)}` : ''}</strong><span>${count.LyDoTuChoi ? `Lý do từ chối (lịch sử): ${esc(count.LyDoTuChoi)}` : 'Đợt từ chối này đã được thay bằng đợt kiểm kê mới.'}</span></div></div>`;
+      } else if (count.DangDemLai) {
+        rejectHtml = `<div class="manager-readonly-note"><svg><use href="#i-warning"/></svg><div><strong>Đang đếm lại trên ${esc(count.MaKKThayThe)}</strong><span>${esc(count.LyDoTuChoi || 'Hãy hoàn thành đợt mới; đợt từ chối này không còn là việc đang mở.')}</span></div></div>`;
+      } else if (count.TrangThai === 'Từ chối' || count.LyDoTuChoi) {
+        rejectHtml = `<div class="manager-readonly-note"><svg><use href="#i-warning"/></svg><div><strong>Lý do từ chối — hãy tạo đợt kiểm kê mới và đếm lại</strong><span>${esc(count.LyDoTuChoi)}</span></div></div>`;
+      }
+      let extraActions = '';
+      const scrap = data.scrapLines?.length ? data.scrapLines : classifyCheckedLines(data.lines).scrap;
+      const existingScrap = data.existingScrap || null;
+      if (editable) extraActions = '<button class="warehouse-secondary save-count" type="button">Lưu kết quả đếm</button><button class="warehouse-primary submit-count" type="button"></button>';
+      else if (count.CanRecount) extraActions = '<button class="warehouse-primary recount-count" type="button">Tạo đợt kiểm kê mới</button>';
+      else if (count.DangDemLai && count.MaKKThayThe) extraActions = `<button class="warehouse-primary open-successor" type="button" data-successor="${esc(count.MaKKThayThe)}">Tiếp tục ${esc(count.MaKKThayThe)}</button>`;
+      else if (count.DaDemLai && count.MaKKThayThe) extraActions = `<button class="warehouse-secondary open-successor" type="button" data-successor="${esc(count.MaKKThayThe)}">Xem đợt ${esc(count.MaKKThayThe)}</button>`;
+      if (!editable && scrap.length && !count.CanRecount && !count.DaDemLai && !count.DangDemLai) {
+        extraActions += `<button class="warehouse-primary open-count-scrap" type="button">${existingScrap ? `Mở phiếu xuất ${esc(existingScrap.MaPX)}` : 'Lập phiếu xuất hàng hỏng'}</button>`;
+      }
+      overlay.innerHTML = `<div class="warehouse-modal inventory-count-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">${preRequest ? 'KIỂM TRA SỐ LƯỢNG THỰC TẾ' : 'KIỂM KÊ KHO'} / ${esc(count.MaKK)}</p><h2>${esc(count.TenKho)}</h2><span>${fmtDate(count.NgayKiemKe)} · ${esc(count.NguoiKiemKe)} · ${esc(displayStatus)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="receipt-rule"><svg><use href="#i-warning"/></svg><span>${preRequest ? 'Cảnh báo tồn tối thiểu chỉ là gợi ý. Ghi số thực tế và tình trạng (bình thường / hỏng / hết hạn). Còn đủ thì không lập đề nghị. Hết hoặc dưới nhu cầu thì lập Phiếu đề nghị mua hàng. Tồn hệ thống chỉ đổi sau khi Quản lý duyệt chênh lệch.' : 'Số lượng hệ thống là ảnh chụp lúc tạo đợt. Khi có chênh lệch phải ghi nguyên nhân; tồn kho chỉ thay đổi sau khi Quản lý duyệt.'}</span></div><div class="warehouse-field inventory-count-note"><label>Ghi chú đợt kiểm kê</label><textarea id="inventoryCountNote" maxlength="500" ${editable ? '' : 'disabled'}>${esc(count.GhiChu || '')}</textarea></div>${rejectHtml}<div class="warehouse-table-wrap"><table class="warehouse-table inventory-count-table"><thead><tr><th>SẢN PHẨM</th><th>HỆ THỐNG</th><th>THỰC TẾ</th><th>CHÊNH LỆCH</th><th>KẾT QUẢ</th><th>TÌNH TRẠNG</th><th>SL HỎNG</th><th>NGUYÊN NHÂN</th></tr></thead><tbody>${rows}</tbody></table></div>${auditListHtml(data.audit)}</div><div class="warehouse-modal-actions"><div class="inventory-count-submit-hint" ${editable ? '' : 'hidden'}></div><button class="warehouse-secondary close" type="button">Đóng</button>${extraActions}</div></div>`;
       document.body.appendChild(overlay);
+      window.FLY_UI?.enhanceSelects?.(overlay);
       const close = () => overlay.remove();
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+      if (!editable && scrap.length) {
+        const tableWrap = overlay.querySelector('.inventory-count-table')?.closest('.warehouse-table-wrap');
+        if (tableWrap) {
+          const panel = document.createElement('section');
+          panel.className = 'count-followup-block danger count-scrap-panel';
+          panel.innerHTML = `<h3>Hàng hỏng / hết hạn — lập phiếu xuất hủy</h3>
+            <ul class="count-followup-list">${scrap.map(item => `<li><strong>${esc(item.TenSP || item.MaSP)}</strong><small>${esc(item.MaSP)} · SL hỏng ${item.SLHong || item.SoLuong || item.SLThucTe}${item.DonGia || item.DonGiaBinhQuan ? ` · ${money((item.DonGia || item.DonGiaBinhQuan) * (item.SLHong || item.SoLuong || 0))}` : ''}${item.TinhTrangHang ? ` · ${esc(item.TinhTrangHang)}` : ''}</small></li>`).join('')}</ul>
+            <p class="count-followup-hint">${esc(data.stockImpact?.detail || 'Phiếu xuất loại Hủy hàng, nguồn mã kiểm kê. Xác nhận mới giảm tồn hàng còn trên kệ; không trừ trùng với điều chỉnh chênh lệch.')}${existingScrap ? ` Đã có ${esc(existingScrap.MaPX)} (${esc(existingScrap.TrangThai)}).` : ''}</p>`;
+          tableWrap.after(panel);
+        }
+      }
+      overlay.querySelector('.open-count-scrap')?.addEventListener('click', async () => {
+        try {
+          close();
+          await openScrapFromSource(context, 'count', id);
+        } catch (error) { context.showToast(error.message, 'error'); }
+      });
       overlay.querySelector('.recount-count')?.addEventListener('click', async () => {
         if (!window.confirm('Tạo đợt kiểm kê mới và chụp tồn hiện tại (sau phiếu nhập/xuất) để đếm lại?')) return;
         try {
           const note = `Đếm lại sau từ chối ${id}${count.LyDoTuChoi ? `: ${count.LyDoTuChoi}` : ''}`.slice(0, 500);
-          const result = await api(context, '/warehouse/inventory-counts', { method: 'POST', body: JSON.stringify({ GhiChu: note }) });
+          const result = await api(context, '/warehouse/inventory-counts', { method: 'POST', body: JSON.stringify({ GhiChu: note, MaKKGoc: id }) });
           context.showToast(result.message, 'success');
           close();
-          await onDone();
+          if (typeof onDone === 'function') await onDone();
           inventoryCountDetail(context, result.MaKK, onDone);
         } catch (error) { context.showToast(error.message, 'error'); }
       });
+      overlay.querySelector('.open-successor')?.addEventListener('click', () => {
+        const next = overlay.querySelector('.open-successor')?.dataset.successor;
+        if (!next) return;
+        close();
+        inventoryCountDetail(context, next, onDone);
+      });
+      const actualQty = row => Number(row.querySelector('.inventory-count-actual')?.value ?? row.dataset.actual ?? row.dataset.system);
+      const syncScrapField = row => {
+        const scrapInput = row.querySelector('.inventory-count-scrap');
+        if (!scrapInput) return;
+        const condition = row.querySelector('.inventory-count-condition')?.value || 'Bình thường';
+        const damaged = unsellableConditions.has(condition);
+        scrapInput.disabled = !damaged;
+        if (!damaged) {
+          scrapInput.value = '0';
+          return;
+        }
+        const actual = actualQty(row);
+        const shortage = Math.max(0, Number(row.dataset.system) - actual);
+        if (!Number(scrapInput.value) || Number(scrapInput.dataset.auto) === 1) {
+          scrapInput.value = String(shortage > 0 ? shortage : actual);
+          scrapInput.dataset.auto = '1';
+        }
+      };
       const updateRow = row => {
-        const actual = Number(row.querySelector('.inventory-count-actual').value);
+        const actual = actualQty(row);
         const system = Number(row.dataset.system);
         const difference = Number.isFinite(actual) ? actual - system : 0;
-        row.querySelector('.inventory-count-difference').textContent = `${difference > 0 ? '+' : ''}${difference}`;
+        const diffCell = row.querySelector('.inventory-count-difference');
+        if (diffCell) diffCell.textContent = `${difference > 0 ? '+' : ''}${difference}`;
         const badge = row.querySelector('.inventory-count-result');
-        badge.textContent = resultLabel(difference);
-        badge.className = `status-pill inventory-count-result ${difference === 0 ? 'ok' : 'sent'}`;
+        if (badge) {
+          badge.textContent = resultLabel(difference);
+          badge.className = `status-pill inventory-count-result ${difference === 0 ? 'ok' : 'sent'}`;
+        }
+        syncScrapField(row);
       };
       const differenceCount = () => Array.from(overlay.querySelectorAll('tbody tr[data-product]')).filter(row => {
-        const actual = Number(row.querySelector('.inventory-count-actual').value);
+        const actual = actualQty(row);
         return Number.isFinite(actual) && actual !== Number(row.dataset.system);
       }).length;
       const updateSubmitState = () => {
@@ -479,18 +594,34 @@
         }
       };
       overlay.querySelectorAll('.inventory-count-actual').forEach(input => input.addEventListener('input', () => {
-        updateRow(input.closest('tr'));
+        const row = input.closest('tr');
+        const scrap = row?.querySelector('.inventory-count-scrap');
+        if (scrap) scrap.dataset.auto = '1';
+        updateRow(row);
         updateSubmitState();
       }));
-      updateSubmitState();
+      overlay.querySelectorAll('.inventory-count-condition').forEach(select => select.addEventListener('change', () => {
+        const row = select.closest('tr');
+        const scrap = row?.querySelector('.inventory-count-scrap');
+        if (scrap) scrap.dataset.auto = '1';
+        updateRow(row);
+      }));
+      overlay.querySelectorAll('.inventory-count-scrap').forEach(input => input.addEventListener('input', () => {
+        input.dataset.auto = '0';
+      }));
+      if (editable) {
+        overlay.querySelectorAll('tbody tr[data-product]').forEach(syncScrapField);
+        updateSubmitState();
+      }
       const payload = () => ({
         GhiChu: overlay.querySelector('#inventoryCountNote').value.trim(),
         lines: Array.from(overlay.querySelectorAll('tbody tr[data-product]')).map(row => ({
           MaSP: row.dataset.product,
           SLHeThong: Number(row.dataset.system),
-          SLThucTe: Number(row.querySelector('.inventory-count-actual').value),
-          TinhTrangHang: row.querySelector('.inventory-count-condition').value,
-          NguyenNhan: row.querySelector('.inventory-count-reason').value.trim()
+          SLThucTe: actualQty(row),
+          SLHong: Number(row.querySelector('.inventory-count-scrap')?.value || 0),
+          TinhTrangHang: row.querySelector('.inventory-count-condition')?.value || row.querySelector('td:nth-child(6)')?.textContent?.trim() || 'Bình thường',
+          NguyenNhan: row.querySelector('.inventory-count-reason')?.value?.trim() || ''
         }))
       });
       const save = async () => {
@@ -516,12 +647,12 @@
           await save();
           const followLines = collectCountLines(overlay);
           const result = await api(context, `/warehouse/inventory-counts/${id}/submit`, { method: 'POST', body: '{}' });
-          context.showToast(result.message, 'success'); close(); await onDone();
+          context.showToast(result.message, 'success'); close(); if (typeof onDone === 'function') await onDone();
           const scrap = result.scrapLines?.length ? result.scrapLines : classifyCheckedLines(followLines).scrap;
           const afterScrap = () => {
             if (preRequest) showCountFollowUp(context, { MaKK: id, TrangThai: result.TrangThai, lines: followLines });
           };
-          if (scrap.length) showScrapIssueConfirm(context, { MaKK: id, scrap, existingScrap: result.existingScrap, onSkip: afterScrap });
+          if (scrap.length) showScrapIssueConfirm(context, { MaKK: id, scrap, existingScrap: result.existingScrap, stockImpact: result.stockImpact, onSkip: afterScrap });
           else afterScrap();
         } catch (error) { context.showToast(error.message, 'error'); }
       });
@@ -535,7 +666,7 @@
         const status = root.querySelector('#inventoryCountStatus')?.value || '';
         const data = await api(context, `/warehouse/inventory-counts?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}`);
         if (!root.querySelector('#inventoryCountBody')) {
-          root.innerHTML = `${heading('KHO HÀNG / KIỂM KÊ', 'Kiểm kê và xử lý chênh lệch', 'Thủ kho ghi số thực tế trên đợt kiểm kê; không lập Phiếu đề nghị điều chỉnh riêng.', '<button class="warehouse-primary" id="newInventoryCount"><svg><use href="#i-plus"/></svg>Tạo đợt kiểm kê</button>')}<article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"/></svg><input id="inventoryCountSearch" placeholder="Tìm mã kiểm kê hoặc ghi chú..."></label><div class="warehouse-toolbar-actions"><select id="inventoryCountStatus"><option value="">Tất cả trạng thái</option><option>Đang kiểm</option><option>Chờ duyệt điều chỉnh</option><option>Đã duyệt</option><option>Từ chối</option><option>Hoàn thành không chênh lệch</option></select><button class="warehouse-icon-button" id="refreshInventoryCounts" title="Làm mới"><svg><use href="#i-refresh"/></svg></button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>ĐỢT KIỂM KÊ</th><th>NGÀY KIỂM</th><th>PHẠM VI</th><th>CHÊNH LỆCH</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody id="inventoryCountBody"></tbody></table></div></article>`;
+          root.innerHTML = `${heading('KHO HÀNG / KIỂM KÊ', 'Kiểm kê và xử lý chênh lệch', 'Thủ kho ghi số thực tế trên đợt kiểm kê; không lập Phiếu đề nghị điều chỉnh riêng.', '<button class="warehouse-primary" id="newInventoryCount"><svg><use href="#i-plus"/></svg>Tạo đợt kiểm kê</button>')}<article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"/></svg><input id="inventoryCountSearch" placeholder="Tìm mã kiểm kê hoặc ghi chú..."></label><div class="warehouse-toolbar-actions"><select id="inventoryCountStatus"><option value="">Tất cả trạng thái</option><option>Đang kiểm</option><option>Chờ duyệt điều chỉnh</option><option>Đã duyệt</option><option>Từ chối</option><option>Đã đếm lại</option><option>Hoàn thành không chênh lệch</option></select><button class="warehouse-icon-button" id="refreshInventoryCounts" title="Làm mới"><svg><use href="#i-refresh"/></svg></button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>ĐỢT KIỂM KÊ</th><th>NGÀY KIỂM</th><th>PHẠM VI</th><th>CHÊNH LỆCH</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody id="inventoryCountBody"></tbody></table></div></article>`;
           let timer;
           root.querySelector('#inventoryCountSearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250); });
           root.querySelector('#inventoryCountStatus').addEventListener('change', load);
@@ -552,7 +683,7 @@
             if (button) inventoryCountDetail(context, button.dataset.viewInventoryCount, load);
           });
         }
-        root.querySelector('#inventoryCountBody').innerHTML = data.items.length ? data.items.map(item => `<tr><td><strong>${esc(item.MaKK)}</strong><small>${esc(item.TenKho)}</small></td><td>${fmtDate(item.NgayKiemKe)}</td><td><strong>${item.SoMatHang || 0} mặt hàng</strong><small>${item.SoMatHangChenhLech || 0} mặt hàng chênh lệch</small></td><td><strong>Thừa ${item.TongThua || 0}</strong><small>Thiếu ${item.TongThieu || 0}</small></td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span>${item.LyDoTuChoi ? `<small>${esc(item.LyDoTuChoi)}</small>` : ''}</td><td><button class="warehouse-secondary" data-view-inventory-count="${esc(item.MaKK)}">${item.TrangThai === 'Đang kiểm' ? 'Tiếp tục kiểm' : item.TrangThai === 'Từ chối' ? 'Xem lý do / đếm lại' : 'Xem chi tiết'}</button></td></tr>`).join('') : emptyRow(6, search, 'đợt kiểm kê', 'Chưa có đợt kiểm kê phù hợp.');
+        root.querySelector('#inventoryCountBody').innerHTML = data.items.length ? data.items.map(inventoryCountRowHtml).join('') : emptyRow(6, search, 'đợt kiểm kê', 'Chưa có đợt kiểm kê phù hợp.');
       } catch (error) { showError(root, error); }
     };
     await load();
@@ -614,7 +745,7 @@
       return `<div class="warehouse-form-line" data-product="${esc(item.MaSP)}" data-note="${esc(item.GhiChu || '')}">
         <div><strong>${esc(item.TenSP)}</strong><small>${esc(item.MaSP)} · ${esc(item.DonViTinh || '')}</small></div>
         <span>${current}</span><span>${item.TonKhoToiThieu ?? item.SLTonToiThieu ?? 0}</span><span>${item.SLDatMua ?? 0}</span>
-        <input class="request-qty" type="number" min="1" step="1" value="${suggested}" aria-label="Số lượng đề nghị ${esc(item.TenSP)}">
+        ${window.FLY_QTY.stepperMarkup({ value: suggested, min: 1, inputClass: 'request-qty', ariaLabel: `Số lượng đề nghị ${item.TenSP}` })}
         <button class="remove-line" type="button" title="Bỏ mặt hàng">×</button></div>`;
     }).join('');
     backdrop.innerHTML = `<div class="warehouse-modal" role="dialog" aria-modal="true">
@@ -631,6 +762,27 @@
     backdrop.querySelectorAll('.modal-close').forEach(button => button.addEventListener('click', close));
     backdrop.addEventListener('click', event => { if (event.target === backdrop) close(); });
     backdrop.querySelectorAll('.remove-line').forEach(button => button.addEventListener('click', () => button.closest('.warehouse-form-line').remove()));
+    backdrop.querySelectorAll('.qty-stepper').forEach(wrap => {
+      const input = wrap.querySelector('.request-qty');
+      if (input) input.dataset.last = String(input.value || '1');
+      window.FLY_QTY.bind(wrap, {
+        commit: (qtyInput, raw, reason) => {
+          const parsed = window.FLY_QTY.parsePositiveInteger(raw, 'Số lượng đề nghị');
+          if (reason === 'step' && Number(raw) < 1) {
+            qtyInput.value = '1';
+            qtyInput.dataset.last = '1';
+            return;
+          }
+          if (!parsed.ok) {
+            context.showToast(parsed.message, 'error');
+            qtyInput.value = qtyInput.dataset.last || '1';
+            return;
+          }
+          qtyInput.value = String(parsed.value);
+          qtyInput.dataset.last = String(parsed.value);
+        }
+      });
+    });
 
     const save = async (submit, preview = false) => {
       const rows = Array.from(backdrop.querySelectorAll('.warehouse-form-line[data-product]'));
@@ -973,7 +1125,15 @@
                 <button class="warehouse-secondary" data-view="${esc(item.recordId)}" type="button">Xem hồ sơ</button>
                 ${item.canRevise ? `<button class="warehouse-primary" data-revise="${esc(item.recordId)}" type="button">Sửa kết quả kiểm</button>` : ''}
                 ${item.canFlagMistake ? `<button class="warehouse-danger" data-flag="${esc(item.recordId)}" type="button">${item.status === 'Hoàn thành' ? 'Tôi đã tích nhầm — trừ tồn' : 'Tôi đã tích nhầm'}</button>` : ''}
+                ${item.canCreateScrap ? `<button class="warehouse-primary" data-scrap-return="${esc(item.recordId)}" type="button">${item.existingScrap ? `Mở phiếu xuất ${esc(item.existingScrap.MaPX)}` : 'Lập phiếu xuất hàng hỏng'}</button>` : ''}
               </div>`);
+          }
+          if (item.kind === 'kiem-ke') {
+            return renderHistoryCard(item, `
+              ${item.detail ? `<p class="warehouse-history-note">${esc(item.detail)}</p>` : ''}
+              ${item.canCreateScrap ? `<div class="warehouse-history-actions">
+                <button class="warehouse-primary" data-scrap-count="${esc(item.recordId)}" type="button">${item.existingScrap ? `Mở phiếu xuất ${esc(item.existingScrap.MaPX)}` : 'Lập phiếu xuất hàng hỏng'}</button>
+              </div>` : ''}`);
           }
           return renderHistoryCard(item, item.detail ? `<p class="warehouse-history-note">${esc(item.detail)}</p>` : '');
         }).join('');
@@ -1004,10 +1164,12 @@
         }));
         root.querySelectorAll('[data-scrap-return]').forEach(button => button.addEventListener('click', async () => {
           try {
-            const result = await api(context, `/warehouse/stock-issues/from-return/${button.dataset.scrapReturn}`, { method: 'POST', body: '{}' });
-            sessionStorage.setItem('fly_open_stock_issue', result.MaPX);
-            context.showToast(result.message, 'success');
-            context.navigate('warehouse-stock-issues');
+            await openScrapFromSource(context, 'return', button.dataset.scrapReturn);
+          } catch (error) { context.showToast(error.message, 'error'); }
+        }));
+        root.querySelectorAll('[data-scrap-count]').forEach(button => button.addEventListener('click', async () => {
+          try {
+            await openScrapFromSource(context, 'count', button.dataset.scrapCount);
           } catch (error) { context.showToast(error.message, 'error'); }
         }));
         root.querySelectorAll('[data-go]').forEach(button => button.addEventListener('click', () => context.navigate(button.dataset.go)));

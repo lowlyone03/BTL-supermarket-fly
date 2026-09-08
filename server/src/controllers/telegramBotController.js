@@ -1,5 +1,5 @@
 const crypto = require('node:crypto');
-const { vietnamCalendar } = require('../services/reportingPeriod');
+const { vietnamCalendar, currentPeriodDefaults, resolveReportingPeriod } = require('../services/reportingPeriod');
 const {
     operatingDayOf, formatVnDate, vnParts
 } = require('../services/telegramClock');
@@ -12,6 +12,7 @@ const {
     buildShiftsMessage, buildPaymentsMessage, buildPendingMessage, buildAlertsMessage,
     buildPayrollSummaryMessage, buildPayrollOneMessage,
     buildReportsMenu, reportsMenuKeyboard, buildPnlOnlyMessage,
+    buildManagementReportMessage, managementReportKeyboard,
     replyKeyboard, matchReplyCommand, removeKeyboardMarkup, showMenuInlineKeyboard
 } = require('../services/telegramMessages');
 const teleGuide = require('../services/telegramGuide');
@@ -459,6 +460,40 @@ const flyKeyboard = (user, lang = 'vi') => {
     return { inline_keyboard: rows };
 };
 
+const navCopy = (lang = 'vi') => {
+    const key = normalizeLang(lang);
+    if (key === 'en') return { home: '🏠 Overview', refresh: '🔄 Refresh', reports: '📊 Reports', docs: '📄 Documents' };
+    if (key === 'zh') return { home: '🏠 总览', refresh: '🔄 刷新', reports: '📊 报表', docs: '📄 单据' };
+    return { home: '🏠 Tổng quan', refresh: '🔄 Làm mới', reports: '📊 Báo cáo', docs: '📄 Chứng từ' };
+};
+
+const commandNavigation = (name, lang = 'vi', refreshData = '') => {
+    const copy = navCopy(lang);
+    const callback = refreshData || `cmd:${name}`;
+    const rows = [[
+        { text: copy.refresh, callback_data: callback },
+        { text: copy.home, callback_data: 'cmd:fly' }
+    ]];
+    if (!['reports', 'docs', 'fly'].includes(name)) {
+        rows.push([
+            { text: copy.reports, callback_data: 'cmd:reports' },
+            { text: copy.docs, callback_data: 'cmd:docs' }
+        ]);
+    }
+    return { inline_keyboard: rows };
+};
+
+const decorateCommandResult = (result, name, lang = 'vi', refreshData = '') => {
+    if (typeof result === 'string') {
+        return { text: result, extra: { reply_markup: commandNavigation(name, lang, refreshData) } };
+    }
+    if (!result || result.documents?.length || result.texts?.length || result.extra?.reply_markup) return result;
+    return {
+        ...result,
+        extra: { ...(result.extra || {}), reply_markup: commandNavigation(name, lang, refreshData) }
+    };
+};
+
 const cmdHelp = (user, lang = 'vi') => buildHelpMessage(codes => userHasCommand(user, codes), lang);
 
 const loadTodayBundle = async (pool, user) => {
@@ -612,6 +647,88 @@ const loadPnlDay = async (pool) => {
         return report?.hoatDong || null;
     } catch {
         return null;
+    }
+};
+
+const shiftReportPeriod = (periodType, value, amount) => {
+    const step = Number(amount) || 0;
+    if (periodType === 'month') {
+        const match = String(value).match(/^(\d{4})-(\d{2})$/);
+        if (!match) throw new Error('Kỳ tháng không hợp lệ.');
+        const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1 + step, 1));
+        return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+    }
+    if (periodType === 'quarter') {
+        const match = String(value).match(/^(\d{4})-Q([1-4])$/i);
+        if (!match) throw new Error('Kỳ quý không hợp lệ.');
+        const absolute = Number(match[1]) * 4 + Number(match[2]) - 1 + step;
+        return `${Math.floor(absolute / 4)}-Q${absolute % 4 + 1}`;
+    }
+    if (periodType === 'year') return String(Number(value) + step);
+    throw new Error('Chỉ hỗ trợ báo cáo tháng, quý hoặc năm.');
+};
+
+const addIsoDays = (value, days) => {
+    const date = new Date(`${value}T00:00:00.000Z`);
+    date.setUTCDate(date.getUTCDate() + Number(days || 0));
+    return date.toISOString().slice(0, 10);
+};
+
+const daysBetween = (from, to) => Math.max(0, Math.round(
+    (new Date(`${to}T00:00:00.000Z`) - new Date(`${from}T00:00:00.000Z`)) / 86400000
+));
+
+const cmdManagementReport = async (pool, user, periodType, periodValue, lang = 'vi') => {
+    const denied = denyIfNoUc(user, ['UC10'], lang);
+    if (denied) return denied;
+    const type = String(periodType || '').toLowerCase();
+    try {
+        const current = currentPeriodDefaults();
+        const selected = String(periodValue || current[type] || '').toUpperCase();
+        const period = resolveReportingPeriod({ periodType: type, period: selected });
+        const previousValue = shiftReportPeriod(type, selected, -1);
+        let previousPeriod = resolveReportingPeriod({ periodType: type, period: previousValue });
+        const isCurrent = selected === String(current[type] || '').toUpperCase();
+        if (isCurrent) {
+            const elapsedDays = daysBetween(period.from, current.day) + 1;
+            const alignedEnd = addIsoDays(previousPeriod.from, elapsedDays);
+            const toExclusive = alignedEnd < previousPeriod.toExclusive ? alignedEnd : previousPeriod.toExclusive;
+            previousPeriod = {
+                ...previousPeriod,
+                toExclusive,
+                to: addIsoDays(toExclusive, -1),
+                label: `${previousPeriod.label} · cùng tiến độ`
+            };
+        }
+        const { buildReport } = require('../services/storeProfitLoss');
+        const [report, previousReport] = await Promise.all([
+            buildReport(pool, { period, latestActivity: null, fallbackFrom: null }),
+            buildReport(pool, { period: previousPeriod, latestActivity: null, fallbackFrom: null })
+        ]);
+        const nextValue = shiftReportPeriod(type, selected, 1);
+        const reportWithMeta = {
+            ...report,
+            telegramMeta: { isCurrent, asOf: current.day, comparisonAligned: isCurrent }
+        };
+        return {
+            text: buildManagementReportMessage({ report: reportWithMeta, previousReport }, lang),
+            extra: {
+                reply_markup: managementReportKeyboard({
+                    periodType: type,
+                    period: selected,
+                    previous: previousValue,
+                    next: nextValue,
+                    canNext: selected < String(current[type] || '').toUpperCase(),
+                    current
+                }, lang)
+            }
+        };
+    } catch (error) {
+        console.error(`Telegram báo cáo ${type}:`, error.message);
+        return {
+            text: '⚠️ <b>Chưa lập được báo cáo kỳ này.</b>\n<i>Hãy kiểm tra dữ liệu bán hàng, kỳ lương và thử lại.</i>',
+            extra: { reply_markup: reportsMenuKeyboard(lang) }
+        };
     }
 };
 
@@ -863,10 +980,45 @@ const deliverCommandResult = async (chatId, result, extra = {}) => {
     await reply(chatId, result.text, { ...extra, ...(result.extra || {}) });
 };
 
-const handleDecisionCallback = async (chatId, parsed, user, pool, lang) => {
+const deliverCallbackResult = async (query, result, extra = {}, name = 'fly', lang = 'vi', refreshData = '') => {
+    const chatId = query.message?.chat?.id;
+    const decorated = decorateCommandResult(result, name, lang, refreshData);
+    if (decorated?.documents?.length || decorated?.texts?.length) {
+        return deliverCommandResult(chatId, decorated, extra);
+    }
+    const messageId = query.message?.message_id;
+    const text = typeof decorated === 'string' ? decorated : decorated?.text;
+    const mergedExtra = typeof decorated === 'string'
+        ? extra
+        : { ...extra, ...(decorated?.extra || {}) };
+    if (messageId && query.message?.text && text) {
+        try {
+            const edited = await notify.editMessageText(chatId, messageId, text, mergedExtra);
+            if (!edited?.skipped) return edited;
+        } catch (error) {
+            if (/message is not modified/i.test(error.message || '')) return { unchanged: true };
+        }
+    }
+    return deliverCommandResult(chatId, decorated, extra);
+};
+
+const completedDecisionKeyboard = (parsed, lang = 'vi') => ({
+    inline_keyboard: [
+        [
+            { text: '🔄 Cập nhật', callback_data: `dt:${parsed.kind}:${parsed.id}` },
+            { text: '📄 Chứng từ', callback_data: `docs:${parsed.kind}:${parsed.id}` }
+        ],
+        [
+            { text: navCopy(lang).home, callback_data: 'cmd:fly' },
+            { text: '📋 Việc chờ', callback_data: 'cmd:pending' }
+        ]
+    ]
+});
+
+const handleDecisionCallback = async (chatId, parsed, user, pool, lang, query = {}) => {
     if (parsed.action === 'reports') {
         const text = await cmdReports(pool, user, lang);
-        await deliverCommandResult(chatId, text, withQuiet('reports'));
+        await deliverCallbackResult(query, text, withQuiet('reports'), 'reports', lang);
         return { ok: true, command: 'reports' };
     }
     if (parsed.action === 'docs') {
@@ -877,7 +1029,7 @@ const handleDecisionCallback = async (chatId, parsed, user, pool, lang) => {
     }
     if (parsed.action === 'dt') {
         const packed = await teleDecision.composePendingPush(pool, parsed.kind, parsed.id, lang);
-        await reply(chatId, packed.text, packed.extra);
+        await deliverCallbackResult(query, packed, {}, 'pending', lang, `dt:${parsed.kind}:${parsed.id}`);
         await sendRelatedPhotos(chatId, packed.dossier);
         return { ok: true, command: 'detail', kind: parsed.kind, id: parsed.id };
     }
@@ -895,7 +1047,15 @@ const handleDecisionCallback = async (chatId, parsed, user, pool, lang) => {
     const verdict = await teleDecision.runFlyDecision({
         user, kind: parsed.kind, action: parsed.action, id: parsed.id, pool, chatId
     });
-    await reply(chatId, verdict.text);
+    const messageId = query.message?.message_id;
+    if (messageId && verdict.ok) {
+        await notify.setMessageReaction(chatId, messageId, parsed.action === 'no' ? '👎' : '👍').catch(() => {});
+        await notify.editMessageReplyMarkup(chatId, messageId, completedDecisionKeyboard(parsed, lang)).catch(() => {});
+    }
+    await reply(chatId, verdict.text, {
+        ...(verdict.ok ? { effect: parsed.action === 'no' ? 'alert' : 'success' } : {}),
+        reply_markup: completedDecisionKeyboard(parsed, lang)
+    });
     return {
         ok: verdict.ok,
         status: verdict.status,
@@ -997,8 +1157,12 @@ const handlePrivateMessage = async (message) => {
         await reply(chatId, t(live, 'unknownCmd'));
         return { unknown: true };
     }
+    if (message.message_id) {
+        const activity = parsed.name === 'docs' ? 'upload_photo' : 'typing';
+        await notify.sendChatAction(chatId, activity).catch(() => {});
+    }
     const result = await runCommand(parsed.name, bound.user, bound.pool, chatId, parsed.arg, live);
-    await deliverCommandResult(chatId, result, withQuiet(parsed.name));
+    await deliverCommandResult(chatId, decorateCommandResult(result, parsed.name, live), withQuiet(parsed.name));
     if (parsed.name !== 'fly' && parsed.name !== 'help') {
         auditTelegram(bound.user, `Telegram /${parsed.name}`, { chatId, lenh: `/${parsed.name}`, uc: 'UC01' });
     }
@@ -1008,7 +1172,12 @@ const handlePrivateMessage = async (message) => {
 const handleCallback = async (query) => {
     const chatId = query.message?.chat?.id;
     const data = String(query.data || '');
-    await notify.telegramApi('answerCallbackQuery', { callback_query_id: query.id }).catch(() => {});
+    const liveUi = Boolean(query.message?.message_id);
+    await notify.answerCallbackQuery(query.id, liveUi ? 'Đang cập nhật dữ liệu…' : '').catch(() => {});
+    if (liveUi) {
+        const activity = /docs|dkind/.test(data) ? 'upload_photo' : 'typing';
+        await notify.sendChatAction(chatId, activity).catch(() => {});
+    }
     const langMatch = data.match(/^lang:(vi|en|zh)$/i);
     if (langMatch) {
         return handleLangCallback(chatId, langMatch[1].toLowerCase());
@@ -1017,12 +1186,13 @@ const handleCallback = async (query) => {
     const decision = teleDecision.parseDecisionCallback(data);
     const dkindMatch = data.match(/^dkind:(po|px|kk|dt|pc|cc|hd|pn|hdm)$/i);
     const rptMatch = data.match(/^rpt:(today|debt|pending|shifts|lowstock|pnl)$/i);
+    const periodMatch = data.match(/^period:(month|quarter|year):(\d{4}(?:-\d{2}|-Q[1-4])?)$/i);
     const guideMatch = data.match(/^guide:(revenue|gross|pnl|vat|debt|cash|payroll)$/i);
     if (/\/(pay|complete)\b/i.test(data)) {
         await reply(chatId, t(lang, 'denyWrite'));
         return { forbidden: true };
     }
-    if (!/^cmd:/.test(data) && !decision && !dkindMatch && !rptMatch && !guideMatch) {
+    if (!/^cmd:/.test(data) && !decision && !dkindMatch && !rptMatch && !periodMatch && !guideMatch) {
         await reply(chatId, t(lang, 'denyWrite'));
         return { forbidden: true };
     }
@@ -1071,29 +1241,36 @@ const handleCallback = async (query) => {
     if (dkindMatch) {
         const kind = dkindMatch[1].toLowerCase();
         const rows = await teleDocs.listRecentDocuments(bound.pool, kind);
-        await reply(chatId, teleDocs.buildDocsTypeList(kind, rows, live), {
-            ...withQuiet('docs'),
-            reply_markup: teleDocs.docsTypeListKeyboard(kind, rows, live)
-        });
+        await deliverCallbackResult(query, {
+            text: teleDocs.buildDocsTypeList(kind, rows, live),
+            extra: { reply_markup: teleDocs.docsTypeListKeyboard(kind, rows, live) }
+        }, withQuiet('docs'), 'docs', live, `dkind:${kind}`);
         return { ok: true, command: 'docs', kind };
     }
     if (rptMatch) {
         const which = rptMatch[1].toLowerCase();
         const picked = await cmdReportPick(bound.pool, bound.user, which, live);
-        await deliverCommandResult(chatId, picked, withQuiet(which === 'pending' ? 'pending' : 'reports'));
+        await deliverCallbackResult(query, picked, withQuiet(which === 'pending' ? 'pending' : 'reports'), 'reports', live, `rpt:${which}`);
         return { ok: true, command: 'reports', report: which };
+    }
+    if (periodMatch) {
+        const type = periodMatch[1].toLowerCase();
+        const period = periodMatch[2].toUpperCase();
+        const picked = await cmdManagementReport(bound.pool, bound.user, type, period, live);
+        await deliverCallbackResult(query, picked, withQuiet('reports'), 'reports', live, `period:${type}:${period}`);
+        return { ok: true, command: 'reports', report: type, period };
     }
     if (guideMatch) {
         const topic = guideMatch[1].toLowerCase();
         const picked = cmdGuide(topic, live);
-        await deliverCommandResult(chatId, picked, withQuiet('guide'));
+        await deliverCallbackResult(query, picked, withQuiet('guide'), 'guide', live, `guide:${topic}`);
         return { ok: true, command: 'guide', topic };
     }
     if (decision) {
-        return handleDecisionCallback(chatId, decision, bound.user, bound.pool, live);
+        return handleDecisionCallback(chatId, decision, bound.user, bound.pool, live, query);
     }
     const result = await runCommand(name, bound.user, bound.pool, chatId, '', live);
-    await deliverCommandResult(chatId, result, withQuiet(name));
+    await deliverCallbackResult(query, result, withQuiet(name), name, live);
     return { ok: true, command: name };
 };
 

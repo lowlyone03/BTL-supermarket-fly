@@ -1,17 +1,27 @@
 require('./loadEnv').loadEnv();
-const sql = require('mssql/msnodesqlv8'); 
+const sql = require('mssql/msnodesqlv8');
 
 const config = {
     driver: 'ODBC Driver 17 for SQL Server',
-    server: 'localhost\\SQLEXPRESS',  // Sử dụng localhost thay vì dấu chấm
+    server: 'localhost\\SQLEXPRESS',
     database: 'SupermarketFlyDB',
+    requestTimeout: 60000,
+    connectionTimeout: 30000,
     options: {
-        trustedConnection: true, 
+        trustedConnection: true,
         trustServerCertificate: true,
-        // SQL Server lưu DATETIME theo giờ địa phương của cửa hàng (Hà Nội).
-        // Không diễn giải giá trị này như UTC vì sẽ làm giao diện cộng thêm 7 giờ.
         useUTC: false
     }
+};
+
+const rawQuery = sql.Request.prototype.query;
+let queryGate = Promise.resolve();
+sql.Request.prototype.query = function querySerialized(command, callback) {
+    if (typeof callback === 'function') return rawQuery.call(this, command, callback);
+    const run = () => rawQuery.call(this, command);
+    const pending = queryGate.then(run, run);
+    queryGate = pending.then(() => undefined, () => undefined);
+    return pending;
 };
 
 const poolPromise = new sql.ConnectionPool(config)

@@ -1,0 +1,4042 @@
+================================================================================
+PLAN CHI TIET HE THONG KE TOAN MINI
+SUPERMARKET FLY  —  HE THONG QUAN LY NOI BO MOT CUA HANG
+================================================================================
+
+Ten tai lieu     : PLAN_HE_THONG_KE_TOAN_MINI_CHI_TIET.txt
+Ngay soan        : 08/09/2026
+Ngay cap nhat    : 08/09/2026  (phien ban 1.4 — 4 logic + 2 scope)
+Phien ban        : 1.4
+Vi tri           : supermarket-fly/docs/
+Muc dich         : Ban dac ta de TRIEN KHAI (schema + engine + API + UI + test),
+                   khong phai outline so sai. Nguoi nhan chi viec code theo file nay.
+Mon hoc          : Ung dung he thong thong tin ke toan (AIS) — bai tap lon.
+Pham vi code     : supermarket-fly (Electron + Express :3000 + SQL Server)
+Trang thai code  : P0 UC01-UC33 DANG CHAY. Telegram companion (#3) DA XONG.
+                   Ke toan tong hop (KT loi + KT mo rong, UC34+) CHUA CODE.
+
+Cach dung file nay
+  1. Doc muc 0 (luat bat bien), CHANGELOG 1.4 (va 1.3, 1.2, 1.1), va muc 15
+     (D1-D38) TRUOC khi code.
+  2. Khong pha 3 cot tien P0. Khong tu sinh cong no. Khong ban chiu.
+  3. Neu tai lieu cu / phien ban 1.0 / 1.1 / 1.2 / 1.3 mau thuan: dung COT
+     QUYET DINH o muc 15. D13-D21 = 9 chinh 1.1; D22-D27 = 1.2 (filtered
+     index ButToan, KQKD thuan, VAT NULL vs 0, tra NCC vs Phieu chi, bo
+     DaKetChuyen, bo bang DoiChieuNganHang); D28-D32 = 1.3 (ChoGhiSo unique
+     chi hang active, khoa BLOCK vs WARN, mo lai ky gan nhat, THU_CONG
+     MaChungTu server, THU_CONG khong thanh ly TSCD); D33-D38 = 1.4 (VAT
+     dau vao tru TRA_NCC_HANG, BCDKT J truoc KC = 421+LN KQKD 8.4 khong +911,
+     khoa lai duoc ghi de SoDuDauKy ky sau, LCTT nhan THU_CONG 111/112,
+     1 TKNH mini, UC42 CSV only). Ly do da ghi.
+  4. Khong dung TaiLieu_Du_An/99_Tam_Xu_Ly/.codex-tmp/ke-hoach-ke-toan.txt
+     lam ban chot so UC (file do danh UC30-UC36 cho ke toan — DA TRUNG
+     UC30-UC33 nhan su trong code).
+  5. GIU NGUYEN 1.2: KQKD phat sinh thuan (muc 8.4 / D23), LCTT, BCDKT,
+     VAT NULL≠0 (D20/D24), tra NCC truoc khi lap Phieu chi (D25).
+     1.4 CHI sua J BCDKT truoc KC va nhom THU_CONG tren LCTT — khong thay
+     cong thuc KQKD 8.4, khong them TK/bang.
+  6. GIU NGUYEN 1.3: ChoGhiSo unique chi hang active, khoa BLOCK vs WARN,
+     mo lai ky gan nhat, THU_CONG MaChungTu server, THU_CONG khong thanh ly
+     TSCD. 1.4 CHI them exception he thong ghi de SoDuDauKy khi khoa lai
+     (D35) — khong mo them chuc nang sua so du da chot.
+
+--------------------------------------------------------------------------------
+CHANGELOG 08/09/2026 — phien ban 1.4 (4 logic + 2 scope; de len 1.3 neu mau thuan)
+--------------------------------------------------------------------------------
+
+  E1. UC40 VAT dau vao tru tra NCC — LOI SO. Hien (1.3): VAT dau vao =
+      HD mua da khop + UC36 + TSCD. TRA_NCC_HANG ghi No 331 / Co 156 +
+      Co 1331 -> VAT dau vao giam tren so cai. Neu bang ke khong tru:
+      so cai 1331=600k, bang ke van 800k. CHOT: VAT dau vao = HD mua
+      khop + UC36 + TSCD − VAT hang tra NCC da ghi TRA_NCC_HANG (hieu
+      luc). Bang ke: hang tra NCC la dong AM. Khong them bang. Muc UC40,
+      5.4, 8.9, 8.10, 4.2 (1331), test KT-VAT-R3, Phu luc C, D33.
+
+  E2. BCDKT ky CHUA ket chuyen — QUAN TRONG. UC43 xem duoc khi ky chua
+      khoa (watermark "So lieu tam tinh"). BCDKT 1.3: J = 421 (+ 911
+      neu chua KC) va TS = NV. Truoc KC: 911=0, KQ ky nam o 511/5212/
+      632/642/711 -> BCDKT lech dung LN ky. CHOT:
+        - Ky CHUA ket chuyen: J = 421 + Loi nhuan ke toan mini hien tai
+          cua ky (lay DUNG dong 8 KQKD muc 8.4). KHONG cong 911 (911
+          chua co so).
+        - Sau KET_CHUYEN: J = 421 thoi (911 da ve 421 cung transaction).
+      Ky mo -> BCDKT tam tinh CAN. Ky khoa -> BCDKT chinh thuc CAN.
+      Khong them bang/TK. Muc UC43, 8.0, 8.7, test KT-RPT-09/10, Phu luc C, D34.
+
+  E3. Exception overwrite SoDuDauKy khi khoa lai. 1.3: mo ky gan nhat,
+      ky sau chua nghiep vu, khoa lai copy so du. UC35: "Sua so du sau
+      chot -> BT dieu chinh, khong sua hang so du." Schema DaChot: T8
+      mo roi khoa lai, T9 DaChot=1 — overwrite? CHOT exception, KHONG
+      them chuc nang: Nguoi dung KHONG duoc sua SoDuDauKy da chot.
+      Rieng thao tac HE THONG khi khoa lai ky truoc theo UC39 duoc phep
+      tinh lai va GHI DE so du dau ky tu dong cua ky ke tiep (dieu kien
+      mo lai bao dam ky ke tiep chua co BT nghiep vu). Neu da co BT
+      SODU_DAU_KY cu thi dao/repost hoac tai sinh theo quy tac he thong.
+      Muc UC35, UC39, 7.12, schema DaChot, test KT-CLS-07/09, D35.
+
+  E4. LCTT nhan THU_CONG dung 111/112. THU_CONG vd No 111 / Co 138.
+      LCTT 1.3 phan loai BAN_HANG, DOI_TRA_HOAN, TRA_NCC, CHI_LUONG,
+      CHI_PHI, LECH_QUY, MUA_TSCD roi yeu cau I+II+III = PS No 111+112
+      − PS Co 111+112. THU_CONG khong vao nhom -> lech. CHOT: THU_CONG
+      co PS 111/112 -> "Thu/chi khac tu hoat dong kinh doanh", dau theo
+      No/Co cua 111/112 (No = thu +, Co = chi −). Khong them TK/bang.
+      Muc 8.6, UC43, test KT-RPT-11/12, D36.
+
+  E5. Mot TK ngan hang mini. Bo "1-2 TKNH". Moi BT ngan hang chung TK
+      112. ChiTietButToan KHONG luu MaTKNH -> khong tach VCB vs MB.
+      KHONG them 1121/1122 hay MaTKNH tren dong BT. CHOT: KT mini dung
+      1 tai khoan ngan hang doanh nghiep de doi chieu sao ke. Nhieu NH
+      = huong phat trien. Muc 1.3 (ngoai PV), 1.4 bang so sanh, 4.4,
+      UC42, 6.3, D37.
+
+  E6. UC42 CSV only. Bo Excel khoi nghiep vu/API. Multer CSV, khong
+      parser Excel. CHOT: Import sao ke CSV. Xoa chu Excel nhu yeu cau
+      chuc nang. Muc UC42, 10.4, 11, test KT-BK-03, D38.
+
+  (1.4 DE LEN 1.3 neu mau thuan o 6 diem tren. GIU NGUYEN 1.3: ChoGhiSo
+   unique chi DaXuLy=0, khoa BLOCK vs WARN, mo lai ky gan nhat, THU_CONG
+   MaChungTu server, THU_CONG khong thanh ly TSCD. GIU NGUYEN 1.2: KQKD
+   thuan, LCTT (bo sung THU_CONG), BCDKT (sua J truoc KC), VAT NULL vs 0,
+   tra NCC truoc Phieu chi.)
+
+--------------------------------------------------------------------------------
+CHANGELOG 08/09/2026 — phien ban 1.3 (5 chot dac ta; de len 1.2 neu mau thuan)
+--------------------------------------------------------------------------------
+
+  C1. ChoGhiSo UNIQUE ca lich su — LOI. Cot DaXuLy + CONSTRAINT
+      UQ_ChoGhiSo UNIQUE (LoaiChungTu, MaChungTu, LyDo) chan INSERT
+      sau DaXuLy=1 (vd dao/repost lai KY_KHOA cung chung tu + cung LyDo).
+      CHOT: bo UQ_ChoGhiSo thuong. Khong them bang. Filtered unique
+      (SQL Server hop le — so sanh =, khong LIKE trong filter):
+        CREATE UNIQUE INDEX UX_ChoGhiSo_Active
+          ON ChoGhiSo(LoaiChungTu, MaChungTu, LyDo)
+          WHERE DaXuLy = 0;
+      Hang DaXuLy=1 ra khoi index; INSERT hang moi DaXuLy=0 cung key duoc.
+      Muc 6.2, 6.7, 6.9, 7.3, D28, test KT-ENG-08.
+
+  C2. "Khoa van canh bao" — SIET RULE, khong them chuc nang / khong override.
+      KHONG cho override (BLOCK khoa) neu chung tu DA dat trang thai hop le
+      ma THIEU but toan bat buoc:
+        HD Hoan thanh thieu BAN_HANG/GIA_VON
+        3-way khop thieu MUA_HANG
+        PC thanh cong thieu TRA_NCC
+        Ky luong khoa thieu TRICH_LUONG
+        Chi luong thanh cong thieu CHI_LUONG
+        Chi phi xac nhan thieu CHI_PHI
+      CHI CANH BAO, van khoa duoc:
+        PN da nhan / da xac nhan chua 3-way match
+        Hoa don dang Nhap
+        Chung tu cho duyet
+        Nghiep vu chua du dieu kien ghi so
+      Ly do: khoa + KET_CHUYEN khi HD Hoan thanh thieu BT -> KQKD ky
+      thieu so. Muc UC39, 7.8, 10.4, 11, test KT-CLS-01*, KT-CLS-05, D29.
+
+  C3. Mo lai ky vs so du dau ky sau. Khi khoa: copy so du cuoi -> so du
+      dau ky sau. Mo lai (dao KET_CHUYEN) roi sua BT -> so cuoi ky cu doi,
+      so dau ky sau co the CU. Mini KHONG cascade phuc tap. CHOT:
+        - Chi mo lai ky GAN NHAT neu ky KE TIEP chua co but toan nghiep vu
+          hieu luc (DaGhiSo, DaBiDao=0, LoaiButToan khong phai SODU_DAU_KY).
+          "Nghiep vu" = moi BT tru SODU_DAU_KY (va tru chinh KET_CHUYEN /
+          DAO_KET_CHUYEN cua ky dang mo lai neu can — thuc te 2 loai do
+          nam ky dang mo, khong nam ky sau). Thuc te: ky sau khong co BT
+          hieu luc nao ngoai co the SODU_DAU_KY da copy.
+        - Sau khi sua xong va KHOA LAI: tinh lai / copy lai so du dau
+          ky ke tiep.
+        - Neu ky sau da co phat sinh -> khong cho mo lai ky truoc; sai sot
+          xu ly bang BT dieu chinh o ky DANG MO.
+      Muc UC35, UC39, 5.12, 6.2, 7.12, test KT-CLS-04/06/07, D30.
+
+  C4. THU_CONG: MaChungTu do server sinh. Khong de FE gui maChungTu =
+      "THUCONG" chung (dung unique UX_ButToan_Nguon lan 2).
+      CHOT: server tu sinh MaChungTu = 'TC' + yyMM + 5 so (vd TC260900001).
+      LoaiChungTu='ThuCong'. Payload FE khong bat buoc maChungTu (neu gui
+      thi BO QUA). Unique van (LoaiChungTu, MaChungTu, LoaiButToan).
+      Muc UC37, 5.13, 7.2, 7.3, 10.4, 11, Phu luc A, D31, test KT-ENG-09.
+
+  C5. Xoa "thanh ly TSCD don gian". THU_CONG khong dung cho thanh ly TSCD
+      (UC41 mini khong lam thanh ly / danh gia lai; hoi dong se hoi
+      211/214/GTCL/tien thu/lai lo). CHOT: BT thu cong chi dieu chinh KT
+      duoc phep trong mini, vd thu bu / xoa chenh lech TK 138.
+      Muc UC41, 7.2, 5.5.2, D32.
+
+  (1.3 DE LEN 1.2 neu mau thuan o 5 diem tren. GIU NGUYEN 1.2: KQKD
+   phat sinh thuan, LCTT, BCDKT, VAT NULL vs 0, tra NCC truoc Phieu chi.)
+
+--------------------------------------------------------------------------------
+CHANGELOG 08/09/2026 — phien ban 1.2 (2 loi + 4 cho nho; de len 1.1 neu mau thuan)
+--------------------------------------------------------------------------------
+
+  A1. Filtered unique index SQL Server KHONG ho tro LIKE trong filter
+      predicate. Ban 1.1 viet WHERE DaBiDao=0 AND LoaiButToan NOT LIKE
+      N'DAO%' — migration se FAIL (Microsoft docs). CHOT 1.2: KHONG dung
+      LIKE / NOT LIKE trong filtered index. MaBTGoc phan biet BT dao
+      (NULL = goc; = MaBT goc = dong dao). Unique:
+        UX_ButToan_Nguon  UNIQUE (LoaiChungTu, MaChungTu, LoaiButToan)
+          WHERE DaBiDao = 0 AND MaBTGoc IS NULL
+        UX_ButToan_Dao    UNIQUE (MaBTGoc, LoaiButToan)
+          WHERE MaBTGoc IS NOT NULL AND DaBiDao = 0
+      BT dao co LoaiButToan khac (DAO_BAN_HANG) nen khong dung unique
+      voi BAN_HANG. Repost: goc DaBiDao=1 ra khoi index, BAN_HANG moi
+      DaBiDao=0 vao index. KHONG CAN NOT LIKE. LIKE van dung duoc trong
+      QUERY bao cao (vd loai DAO_KET_CHUYEN). Muc 6.2, 7.4, 7.5, D13, D22.
+
+  A2. KQKD sai khi co but toan dao — QUAN TRONG NHAT. Ban 1.1 sua So cai
+      dung (goc+dao deu DaGhiSo, 100-100=0) nhung KQKD lay PS Co 511,
+      PS No 5212/632/642, PS Co 711. Dao DT: Co 511 100 + BT dao No 511 100
+      ma chi lay PS Co van hien DT 100. CHOT cong thuc phat sinh thuan,
+      loai ket chuyen:
+        511 = PS Co − PS No
+        5212 / 632 / 642 = PS No − PS Co
+        711 = PS Co − PS No
+        KHONG tinh LoaiButToan IN (KET_CHUYEN, DAO_KET_CHUYEN, SODU_DAU_KY)
+      Sua/dao BT tu triet tieu (giong So cai). Muc 0.4, 8.4, UC38, UC43,
+      test KT-RPT, Phu luc C, D23.
+
+  B1. VAT 0% vs chua chon. Ban 1.1 DEFAULT ky thuat = 0 va bat xac nhan
+      neu ThueSuat=0 (tron "chua chon" voi "0% hop le"). CHOT:
+        ThueSuat = NULL  = chua xac dinh / du lieu cu thieu thue
+        ThueSuat = 0     = da xac dinh 0%
+        DEFAULT: NULL (KHONG DEFAULT 0)
+      HD moi hoan thanh: ChiTietHoaDon.ThueSuat BAT BUOC IN (0,5,8,10),
+      KHONG NULL. HD cu (truoc KT): ChiTietHoaDon.ThueSuat NULL -> UC40
+      "Thieu thue". SanPham.ThueSuat NULL = QL chua chon; POS/tao HD moi
+      chan den khi chon 0/5/8/10. UI: "Xac nhan thue suat 0% theo cau
+      hinh san pham?" — khong tranh luan phap ly mien thue. =0 hop le
+      sau xac nhan luc cau hinh SP; NULL moi la chua chon. Muc 6.4,
+      UC40, 10.3, seed, KT-VAT-*, D20, D24.
+
+  B2. Tra hang NCC vs Phieu chi. Edge: CN 10tr, da lap Phieu chi 10tr
+      CHUA thanh toan, tra hang 2tr -> CN con 8tr nhung PC van 10tr.
+      Ban 1.1 chi chan khi da tat toan. CHOT mini, KHONG them workflow:
+      da ton tai Phieu chi cho cong no (bat ky trang thai) thi KHONG
+      cho tra NCC lam giam cong no; phai xu ly tra hang TRUOC KHI lap
+      Phieu chi. Giu 1 cong no – 1 Phieu chi. Muc UC19, 5.10, test
+      KT-PX, R9, D25.
+
+  B3. KyKeToan.DaKetChuyen: cot chi co o schema, khong lifecycle. Logic
+      mo lai ky da la dao 911. CHOT: BO cot DaKetChuyen. Khong luu
+      MaBT_KetChuyen tren ky. Da ket chuyen = ton tai ButToan
+      LoaiButToan='KET_CHUYEN' hieu luc (DaBiDao=0, DaGhiSo) cua ky.
+      Mo lai ky = dao KET_CHUYEN (goc DaBiDao=1 + BT DAO_KET_CHUYEN).
+      Muc 6.2, UC39, 5.12, D11, D26.
+      (1.3 siet dieu kien mo lai + copy lai so du dau: C3 / D30.)
+
+  B4. Muc 2.4 liet ke bang DoiChieuNganHang nhung khong thiet ke.
+      Trang thai doi chieu da nam DongSaoKe (TrangThaiKhop,
+      LoaiChungTuKhop, MaChungTuKhop, GhiChuKhop). CHOT: XOA
+      DoiChieuNganHang khoi danh sach bang. KHONG tao bang moi. Muc 2.4,
+      6.3, 6.5, UC42, D27.
+
+--------------------------------------------------------------------------------
+CHANGELOG 08/09/2026 — phien ban 1.1 (9 chinh + bo sung da thong nhat)
+--------------------------------------------------------------------------------
+
+  1. Dao but toan: goc + dao DEU TrangThai='DaGhiSo' va CUNG xuat hien tren
+     NKC / So cai. Goc danh dau DaBiDao=1 (cot moi). KHONG doi TrangThai goc
+     thanh 'Dao' roi loc so chi lay DaGhiSo (neu the se con -100).
+     Test KT-ENG-04: dao xong So cai ve 0 vi 100 + (-100) = 0.
+     Unique loc BT hieu luc (DaBiDao=0); dao + BT moi khong bi unique chan.
+  2. TSCD mini CHI mua bang 111/112. BO 331 khoi UC41.
+     Dinh khoan: No 211 + No 1331 / Co 111|112. Khong Co 331.
+     Ly do: CongNoPhaiTra P0 chi sinh tu HD mua 3-way; Co 331 khong tao CN
+     -> lech so cai 331 vs man Cong no.
+  3. UC36 bo moi phuong an "ghi no 331" / "KHONG KHUYEN NGHI".
+     Chi: 642 (+1331 neu co VAT) / 111 hoac 112. Tra trong ky.
+     Schema ChiPhiVanHanh.MaTKTien = 111|112.
+  4. Khoa ky KHONG chan POS/P0/chi phi: chung tu van commit, BT o ChoGhiSo.
+     Giu NgayChungTu goc. Khi KT bam "Ghi so tre": NgayHachToan va MaKy
+     chuyen sang ky ke toan DANG MO ke tiep. Chua co ky mo -> tiep tuc
+     ChoGhiSo. Engine KHONG dung NgayHachToan goc thuoc ky khoa roi
+     assertPeriodOpen roi fail. UC36 nhap muon: cung rule (khong 400 chet
+     nghiep vu).
+  5. Bo cot MaBT don tren HoaDon, PhieuDoiTra, KiemKe va moi bang chung tu
+     khac. Truy but toan: ButToan WHERE LoaiChungTu + MaChungTu (+ LoaiButToan).
+     Engine khong UPDATE MaBT tren chung tu goc. Mot chung tu nhieu LoaiButToan.
+  6. Bo bang CauHinhDinhKhoan (schema, migration seed, sprint).
+     Mapping dinh khoan CO DINH trong journalEngine.js (~18 TK, >10 loai BT).
+     Khong lam "accounting rule engine" rieng.
+  7. Doi chieu 331: du cuoi 331 = SUM CongNoPhaiTra.SoTienConLai
+     (con phai tra cuoi ky). KHONG cong "da tat toan trong ky".
+     PS Co 331 = cong no moi trong ky.
+     PS No 331 = thanh toan + tra lai / dieu chinh giam trong ky.
+  8. VAT khong default nghiep vu 8%. Bo SanPham.ThueSuat DEFAULT 8 va cau
+     "pho bien hang tieu dung 2024-2026". Bo UPDATE SET ThueSuat=8.
+     DEFAULT ky thuat = 0. QL phai chon 0/5/8/10 khi tao SP.
+     Bat xac nhan truoc khi ban neu ThueSuat=0 (hoac chua chon).
+     Seed demo: tung SP dung muc nhom quy uoc. Khop PHAM_VI: 0/5/8/10.
+  9. Thong nhat COA = 18 tai khoan MOI NOI (gom TK 138). Sua cho 17 (thieu 138)
+     va 19. TK 421: chu thich so du ket qua luy ke mo hinh mini, CHUA xu ly
+     thue TNDN — khong goi "LN sau thue chua phan phoi" ma khong chu thich.
+     Phu luc C: xoa cum "KHONG xay ra" o vi du 80 TM + 30 QR (typo).
+
+  Bo sung kem theo: HoaDon khong MaBT; UC36 cung rule ky khoa; MaKy doi
+  khi ghi so tre; 18 TK gom 138.
+
+  (1.2 DE LEN 1.1 neu mau thuan: unique KHONG dung NOT LIKE; KQKD thuan
+   khong chi PS Co 511; VAT DEFAULT NULL khong 0; tra NCC chan khi da co
+   Phieu chi; bo DaKetChuyen; bo bang DoiChieuNganHang. Xem CHANGELOG 1.2
+   va D22-D27.)
+  (1.3 DE LEN 1.2 neu mau thuan o C1-C5: ChoGhiSo unique chi DaXuLy=0;
+   khoa BLOCK vs WARN; mo lai ky gan nhat; THU_CONG MaChungTu server;
+   THU_CONG khong thanh ly TSCD. GIU KQKD/LCTT/BCDKT/VAT/tra NCC cua 1.2.
+   Xem CHANGELOG 1.3 va D28-D32.)
+  (1.4 DE LEN 1.3 neu mau thuan o E1-E6 / D33-D38: VAT vao tru
+   TRA_NCC_HANG; BCDKT J truoc KC = 421+LN 8.4 khong +911; khoa lai ghi
+   de SoDuDauKy; LCTT THU_CONG 111/112; 1 TKNH; UC42 CSV. GIU 1.3 va
+   1.2 con lai. Xem CHANGELOG 1.4 va D33-D38.)
+
+================================================================================
+MUC LUC
+================================================================================
+
+  0.   Tom tat dieu hanh + luat bat bien
+  1.   Muc tieu / pham vi / ngoai pham vi
+  2.   Doi chieu he thong HIEN TAI (da co / thieu / bug)
+  3.   Danh sach Use Case ke toan (UC34-UC43 + UC nghiep vu lien quan)
+  4.   He thong tai khoan (COA) mini — 18 TK gom 138
+  5.   So do dinh khoan chuan tung nghiep vu
+  6.   Thiet ke CSDL (bang moi, cot them, rang buoc, migration)
+  7.   Engine but toan (tu sinh, thu cong, idempotent, khoa so, dao,
+       ghi so tre, mo lai ky)
+  8.   Bao cao bat buoc (NKC, so cai, CDPS, KQKD, LCTT, BCDKT, sao ke)
+  9.   Phan quyen 5 actor
+  10.  UI / man hinh Electron
+  11.  API endpoints de xuat
+  12.  Thu tu trien khai theo tuan / pha
+  13.  Quy tac mon hoc / khong duoc lam sai
+  14.  Test plan / bo case
+  15.  Rui ro va quyet dinh da chot (trich nguon; D1-D38)
+  Phu luc A. Ma tran chung tu -> LoaiButToan
+  Phu luc B. File se sua / them
+  Phu luc C. Vi du so (1 chuoi mua-ban-luong-chi phi)
+  Phu luc D. Nguon tai lieu da doc
+  Changelog 08/09/2026 (dau file, phien ban 1.4; giu 1.3, 1.2 va 1.1 lich su)
+
+================================================================================
+0. TOM TAT DIEU HANH + LUAT BAT BIEN
+================================================================================
+
+0.1. Cau chuyen mot cau
+
+  Fly da so hoa chung tu mua-ban-kho-ca-cong no-luong. Lop ke toan mini
+  bien cac chung tu hop le thanh but toan No/Co, roi ra Nhat ky chung,
+  So cai, CDPS, KQKD (KHONG tru tien tra NCC), va (pha mo rong) BCDKT,
+  LCTT, TSCD, sao ke 112. Day la ke toan TONG HOP thu gon 1 cua hang,
+  khong phai MISA/FAST, khong phai ke khai thue nha nuoc.
+
+0.2. Chien luoc pha (DA CHOT — khong chon Plan B ERP)
+
+  P0           Nghiep vu dang chay — GIU, khong pha
+  KT loi       VAT POS + COA + engine + NKC + So cai + CDPS + KQKD
+               + chi phi van hanh trong ky + sua bug P&L
+               LAM TRUOC P1
+  P1           VNPay adapter, barcode, e-receipt, Telegram (Telegram da xong),
+               doi soat dien tu theo ca
+  P2           Replenishment, AI tro ly, OCR (OCR khong tu tao cong no)
+  KT mo rong   TSCD, import sao ke, khoa so, LCTT, BCDKT mini, bang ke VAT
+
+  Khong viet: "so cai chi lam khi mon bat buoc / P1+P2 xong som".
+  Khong dua vao muc CAT: so cai, but toan, BCDKT, VAT, TSCD, sao ke, LCTT.
+
+0.3. Ba cot tien P0 — KHONG DUOC TRON (nguon: PHUONG_AN + PLAN_12 + BAN_GIAO muc 11)
+
+  COT A — DOANH THU / GIA VON
+    HoaDon.TrangThai = "Hoan thanh" (completeInvoice):
+      tru TonKho, snapshot DonGiaVon / ThanhTienVon, GiaoDichKho LoaiGD=Xuat.
+    Doi tra Hoan thanh giam DT/GV, khong sua tay ton.
+    Lai gop = DT thuan - GV thuan.
+    PHIEU THU KHONG CONG DOANH THU LAN HAI.
+    E-receipt KHONG sinh hoa don moi, KHONG sinh but toan thue lan 2.
+    Tien tra NCC KHONG tru vao lai gop / KQKD.
+
+  COT B — KET CA / PHIEU THU (UC22 + UC29)
+    TienMatHeThong = TongTienMat - TongTienHoanMat.
+    QR / The / CK KHONG vao ket.
+    Mot ca DUNG MOT Phieu thu (MaCa UNIQUE).
+    Chen lech = TienThucNop - TienMatHeThong; lech bat buoc LyDoChenhLech.
+    Dong ca CHAN neu con HoaDon Nhap hoac ThanhToan "Cho xac nhan".
+    Phieu thu cho phep so AM (ca chi hoan TM). CK_PhieuThu_1 giu.
+
+  COT C — CONG NO NCC (UC27 + UC28 + UC09)
+    Chi sinh CongNoPhaiTra khi doi chieu 3 ben KHOP
+      (Don mua + Phieu nhap SoLuongChapNhan + Hoa don GTGT).
+    Lap Phieu chi / QL duyet+giao quy / chi that bai: SoTienConLai KHONG DOI.
+    Chi giam no khi KT ghi thanh toan THANH CONG.
+    Khong tra truoc, khong tra tung phan, mot cong no toi da mot Phieu chi.
+    Tra hang NCC giam cong no: CHI TRUOC KHI lap Phieu chi. Da co Phieu chi
+      (bat ky trang thai) -> KHONG cho PX tra NCC giam no (muc 5.10 / D25).
+    Tra NCC (thanh toan) = giam no 331, KHONG PHAI chi phi moi tren KQKD.
+
+0.4. KQKD va dong tien la HAI BAO CAO (PLAN_12 muc 0.4 + B1.5)
+
+  KQKD / P&L  (so cai, PHAT SINH THUAN — muc 8.4 / D23)
+    511 = PS Co − PS No;  5212/632/642 = PS No − PS Co;  711 = PS Co − PS No
+    Loai LoaiButToan IN (KET_CHUYEN, DAO_KET_CHUYEN, SODU_DAU_KY).
+    Doanh thu thuan = 511 − 5212 (da tach VAT; sua/dao BT tu triet tieu)
+    - Gia von thuan (632)
+    - Luong (642, khi khoa bang luong)
+    - Dien nuoc, thue mat bang, VP, cuoc van chuyen (642)
+    - Khau hao (642, khi co TSCD)
+    + Thu nhap khac (711)
+    = Loi nhuan ke toan mini
+    KHONG tru PhieuChi NCC thanh cong.
+    KHONG lay chi PS Co 511 (dao Doanh thu se con DT ao).
+
+  Dong tien / thu-chi quan tri
+    Tien thu khach (TM nop + QR/The/CK thanh cong)
+    - Tien tra NCC
+    - Tra luong
+    - Chi phi da chi
+    - Mua TSCD
+    = Bien dong tien
+
+  Neu da DT - GV roi lai tru tien tra NCC = tru gia tri hang HAI LAN.
+
+0.5. Kho vat ly vs so cai 156 (PLAN_12 muc 0.9 + B-KT.6)
+
+  TonKho TANG luc Phieu nhap XAC NHAN (SoLuongChapNhan).
+  But toan No 156 / No 1331 / Co 331 CHI SAU doi chieu 3 ben KHOP.
+  Khong mo TK 151 (hang mua di duong) / 338 trong do an.
+  Man KT bat buoc canh bao: "N phieu nhap da xac nhan chua du chung tu ghi so."
+
+0.6. Mot loai chi phi CHI GHI O MOT NOI (PLAN_12 muc 0.6 + B-KT.7)
+
+  Cuoc van chuyen MAC DINH = 642 van hanh.
+  KHONG cong vao DonGiaVon / 156.
+  KHONG tru lan nua tren KQKD nhu "chi NCC".
+
+0.7. AI / OCR / Telegram / chatbot
+
+  OCR khong set "Da khop", khong INSERT CongNoPhaiTra.
+  Telegram / AI khong duyet PO, khong chi NCC, khong completeInvoice,
+  khong sinh but toan.
+  Khong goi SupermarketFlyDB la "train data".
+
+0.8. Server khong tin so tien tu client / callback (P1 VNPay)
+
+  IPN du chu ky hop le van phai doi chieu amount voi ThanhToan.SoTien.
+  Khong lien quan truc tiep KT loi, nhung engine 112 se dung MaGiaoDich
+  lam vet sao ke o KT mo rong.
+
+
+================================================================================
+1. MUC TIEU / PHAM VI / NGOAI PHAM VI
+================================================================================
+
+1.1. Muc tieu
+
+  Bien Supermarket Fly tu he thong quan ly noi bo CO DU LIEU ke toan
+  (doi chieu 3 ben, cong no, phieu thu/chi, lai GOP, luong, P&L dieu hanh)
+  thanh he thong CO LOI HACH TOAN:
+    Chung tu hop le
+      -> Engine dinh khoan (idempotent)
+      -> ButToan + ChiTietButToan (tong No = tong Co)
+      -> Nhat ky chung -> So cai -> CDPS
+      -> KQKD mini (dung, khong tru tra NCC)
+      -> (mo rong) khoa so, BCDKT mini, LCTT, bang ke VAT, TSCD, sao ke 112.
+
+  Muc tieu hoc thuat (mon AIS): chung minh duoc chuoi No/Co, truy vet
+  chung tu goc, doi chieu so cai voi nghiep vu (111/112/156/331/511/632/642).
+
+  Muc tieu do an 1 cua hang: vua suc, chay duoc 1 thang xuyen tren 1 CSDL,
+  demo duoc truoc hoi dong, khong mo ERP.
+
+1.2. Pham vi "ke toan mini" (GIU)
+
+  ----- Lop nghiep vu P0 (da co, giu) -----
+  Ban tai quay, khong ban chiu, khong TK 131.
+  Mua hang 1 kho logic, 3-way match, cong no 30-45 ngay, tra 1 lan.
+  Quy ca / Phieu thu chi TM.
+  Luong theo cong (UC30-UC33), khong BHXH/BHYT/BHTN/cong doan.
+  Bao cao 5 actor, ky Asia/Ho_Chi_Minh, lockPeriod.
+
+  ----- KT loi (PHAI LAM, truoc P1) -----
+  VAT tren POS (SanPham.ThueSuat NULL=chua chon / 0|5|8|10=da chon;
+               ChiTietHoaDon.ThueSuat/TienThue, HoaDon.TienThue).
+  Gia niem yet DA GOM VAT; tach 511/33311 luc ghi so, KHONG cong them thue o quay.
+  Danh muc TaiKhoanKeToan + KyKeToan + so du dau ky.
+  Engine tu sinh but toan tu chung tu dat trang thai hop le.
+  But toan thu cong (dieu chinh) cua KT, co audit.
+  Nhat ky chung, So cai, CDPS, KQKD dung cong thuc 0.4 (phat sinh thuan).
+  Chi phi van hanh trong ky (dien, nuoc, thue mat bang, VP, cuoc) — ghi thang 642, khong 242.
+  Sua bug P&L: tach KQKD vs dong tien; xoa chi_ncc_lon khoi "vi sao lo" cua P&L.
+  Canh bao PN da xac nhan chua ghi so.
+
+  ----- KT mo rong (VAN TRONG SCOPE, khong cat) -----
+  TSCD + khau hao thang (211 chua VAT + 1331; cuoi ky No 642 / Co 214).
+  Import sao ke ngan hang CSV + doi chieu 112 (1 TKNH doanh nghiep).
+  Khoa ky, ket chuyen 911, BCDKT mini, LCTT thu gon.
+  Bang ke VAT dau vao / dau ra / chenh lech theo ky (muc do an).
+
+1.3. Ngoai pham vi (KHONG LAM)
+
+  Plan B kieu ERP-MISA (14 phan he, 25-35 bang moi, UC 50-60).
+  Chi phi tra truoc 242 + lich phan bo 12 thang
+    (ly do: cua hang thanh toan 30-45 ngay, khong tra truoc dai han).
+  Kho theo lo / FEFO / TonKhoTheoLo (viet lai kho, khong phai bao cao).
+  TK 151 / 338 (hang di duong / phai tra khac).
+  TK 131 / ban chiu / cong no phai thu khach hang.
+  Nhieu cua hang, nhieu kho, actor Nhan su rieng.
+  HDDT co quan thue, to khai thue phap ly day du.
+  BHXH / BHYT / BHTN / cong doan
+    (luong P0: gio * don gia * he so; lock -> trich 642/334; chi 334/111 hoac 112).
+  Tra truoc NCC, tra no tung phan, nhieu Phieu chi / 1 cong no.
+  Giam cong no luc lap phieu hoac luc QL duyet.
+  Chatbot / OCR / Telegram tu ghi so.
+  Huy hoa don da co ThanhToan Thanh cong ma khong hoan truoc.
+  Khoa POS vao mot nha cung cap thanh toan.
+  Nhieu tai khoan ngan hang / tach so cai 112 theo NH (1121/1122,
+    MaTKNH tren ChiTietButToan). Mini: 1 TKNH doanh nghiep (D37).
+  Import sao ke Excel / parser xls-xlsx (chi CSV — D38).
+
+1.4. Mini vs ke toan doanh nghiep day du — bang so sanh
+
+  Tieu chi                      Mini (CHOT)                 Doanh nghiep day du (KHONG)
+  ----------------------------- --------------------------- ------------------------------
+  So TK                         18 TK (gom 138)             He thong TKTT200 day du
+  Cap TK                        Cap 1 + vai cap 2           Nhieu cap, TK chi tiet theo DT
+  Doi tuong                     NCC tren 331; 1 cua hang    DT, hop dong, bo phan, CP
+  VAT                           Bang ke do an               To khai, HDDT, NXBST
+  TSCD                          Danh muc + KH thang         Thanh ly, danh gia lai, TSCD thue
+  Ngan hang                     1 TKNH DN + import CSV      Nhieu TK, UNC, LNH
+  Luong                         642/334, khong BHXH         334/3383/3384 day du
+  Cuoi ky                       Ket chuyen 911 + khoa       Phan bo, gia thanh, thue TNDN
+  BCDKT / LCTT                  Mini / thu gon              Bieu mau TT200 / VAS
+  Kiem soat                     5 actor, UC + JWT           So do uy quyen, chu ky so
+
+1.5. Dieu kien tien de truoc khi code KT loi
+
+  [ ] P0 E2E mua-ban-ca-luong chay tren 1 CSDL (BAN_GIAO muc 16).
+  [ ] npm run test:next PASS.
+  [ ] Khong mo TK 33311 khi POS chua luu thue (canh bao PHAM_VI muc 1 + 6).
+  [ ] UC34+ khong trung UC30-UC33 (permissions.js hien dung het 01-33).
+
+
+================================================================================
+2. DOI CHIEU HE THONG HIEN TAI
+================================================================================
+
+2.1. Stack va kien truc (khong doi)
+
+  Desktop : Electron Forge, HTML/CSS/JS thuan, khong React/Vue.
+  API     : Node Express 5, JWT, bcrypt, cong 3000, HOST 0.0.0.0.
+  DB      : SQL Server SupermarketFlyDB, mssql/msnodesqlv8, Windows Auth,
+            useUTC=false (DATETIME = gio Ha Noi).
+  Quyen   : requirePermission('UCxx'), khong chi requireRole.
+  1 chuc nang = 3 tang: FE + API + bang/cot.
+
+2.2. 5 actor / 33 UC DANG CHAY (permissions.js)
+
+  QL   UC01-UC10, UC30, UC32     (khong UC31, khong UC33)
+  MH   UC01, UC11-UC14, UC31
+  TK   UC01, UC15-UC21, UC31
+  TN   UC01, UC22-UC26, UC31
+  KT   UC01, UC27-UC29, UC31, UC33
+
+  Word goc dung o UC29. Code GIU 29 UC goc + THEM UC30-UC33 nhan su.
+  Ke toan tong hop PHAI danh tu UC34. Khong dung lai 30-33.
+
+2.3. DA CO — ke toan NGHIEP VU (co the demo)
+
+  ----- Mua / AP -----
+  HoaDonMuaHang + ChiTietHoaDonMuaHang (ThueSuat, TienThue).
+  financialRules.evaluateThreeWayMatch: SP, SL, don gia, thue, tong.
+  Lech -> TrangThaiDoiChieu="Chenh lech", KHONG insert CongNoPhaiTra.
+  Khop -> CongNoPhaiTra (SoTienNo = TongCong hang+thue, MaHDMH UNIQUE).
+  HanThanhToan = ngay doi chieu + SoNgayThanhToan (30-45).
+  PhieuChi UNIQUE MaCongNo; SoTien = toan bo SoTienConLai.
+  Lap som truoc han duoc; thong diep "Tat toan truoc han".
+  QL duyet DONG THOI giao quy (HinhThucCapQuy, NgayCapQuy, GhiChuCapQuy).
+  Khop HinhThucCapQuy voi PhuongThuc (TM <-> TM, CK <-> Uy quyen CK).
+  Chi that bai: no giu; chi thanh cong: SoTienConLai=0, HD "Da thanh toan".
+  CK bat buoc MaGiaoDichNganHang.
+
+  ----- Ban / POS -----
+  4 phuong thuc: 'Tien mat' | 'QR' | 'The' | 'Chuyen khoan'
+  Hon hop duoc; khach PHAI tra DU; khong ban chiu.
+  completeInvoice: tru ton, DonGiaVon, GiaoDichKho Xuat, diem.
+  Nhanh alreadyCompleted: in lai khong tru ton 2 lan.
+  cancelInvoice CHAN neu da co ThanhToan Thanh cong.
+  QR HIEN TAI = nhan + nhap ma tay (chua VNPay). ThanhToan.TrangThai
+  schema co "Cho xac nhan" nhung flow POS chua dung — moc gateway P1.
+
+  ----- Doi tra -----
+  TN lap -> TK kiem -> QL duyet -> TN hoan tat (ca dang mo).
+  Hoan TM tru ket ca xu ly. QR/The/CK hoan tay + MaGiaoDichHoan.
+  Nhap lai kho chi khi KetQuaKiemTra "duoc nhap lai kho".
+  Doi ngang gia: dong "Hang giao doi"; khac gia: hoan + HD moi.
+  HD goc khong sua TongThanhToan.
+
+  ----- Quy ca -----
+  getShiftSummary: TongTienMat/QR/The/CK, TongTienHoanMat,
+    TienMatHeThong = TM - hoan TM.
+  closeShift snapshot + TrangThaiDoiSoat = "Cho Ke toan doi soat".
+  KT lap 1 Phieu thu / 1 ca; xac nhan sau.
+  SoTienTheoHeThong / SoTienThucNop DUOC AM (migration 20260907).
+
+  ----- Luong -----
+  QL duyet cong (OT co phut) -> CHI KT POST build.
+  Con cong cho duyet thi CHAN. Le 8 gio chi nguoi da di lam.
+  KT khoa ky -> lap PhieuChiLuong (TM hoac CK / NV).
+  QL duyet tung nguoi hoac Duyet tat ca (duyet CHUA tra).
+  QL giao 1 CUC quy (QuyLuongKy) -> KT chi tung NV.
+  CK bat buoc ma GD. That bai lam lai CUNG phieu.
+  Bang luong KHONG tru vao lai GOP (UC10/UC29 van dung).
+
+  ----- Bao cao nghiep vu -----
+  Lai gop: financialRules.calculateGrossProfit
+    DT thuan = DT HD hoan thanh - tien hoan hoan thanh
+    GV thuan = GV HD - GV hang tra nhap lai + GV hang giao doi
+    Lai gop  = DT thuan - GV thuan
+  Ky VN, fallback ky co du lieu, lockPeriod, banner, timeout 45s.
+  5 man bao cao actor (role-reports / reportController).
+
+  ----- Menu KT hien tai (dashboard.html) -----
+  Lich lam viec | Doi chieu hoa don | Cong no NCC |
+  Ca & Phieu thu | Bao cao noi bo | Bang luong thang | Lich su hoat dong
+  CHUA CO: danh muc TK, ky, but toan, NKC, so cai, CDPS, KQKD so cai,
+  chi phi 642, TSCD, sao ke, khoa so.
+
+  ----- Menu QL lien quan tien -----
+  Trung tam phe duyet (PO, PX, KK, doi tra, Phieu chi, Phieu chi luong)
+  Theo doi cong no | Bao cao cua hang | P&L dieu hanh (store-pnl.js)
+  Phan ca | Duyet cong | Ngay le
+
+  ----- Telegram (da xong 08/09/2026) -----
+  Read-only + mot so duyet co audit (Control Center). Khong thay the so cai.
+  telegramMessages.js van doc laiLoSauChiPhi (bug P&L) — PHAI sua khi tach KQKD.
+
+  ----- API ke toan nghiep vu dang chay -----
+  /api/accounting/purchase-invoices*          UC27
+  /api/accounting/payables*                   UC28
+  /api/accounting/payment-vouchers*           UC28
+  /api/accounting/shift-settlements*          UC29
+  /api/accounting/shift-receipts*             UC29
+  /api/accounting/reports/financial-summary   UC29
+  /api/accounting/payroll*                    UC33
+  /api/admin/finance/payables                 UC10
+  /api/admin/reports/store-profit-loss        UC10
+  /api/admin/approvals/payment-vouchers*      UC09
+  /api/admin/approvals/payroll-*              UC32
+
+2.4. THIEU — ke toan TONG HOP (chua co trong CSDL/API)
+
+  Bang: TaiKhoanKeToan, KyKeToan, SoDuDauKy, ButToan, ChiTietButToan,
+        LoaiChiPhi, ChiPhiVanHanh, TaiKhoanNganHang (mini: 1 TKNH, D37),
+        TaiSanCoDinh, KhauHaoTaiSan, SaoKeNganHang, DongSaoKe.
+        KHONG tao CauHinhDinhKhoan (mapping co dinh trong journalEngine.js).
+        KHONG tao DoiChieuNganHang (trang thai khop nam DongSaoKe:
+        TrangThaiKhop, LoaiChungTuKhop, MaChungTuKhop, GhiChuKhop).
+  Cot VAT ban: SanPham.ThueSuat (NULL = chua chon; 0/5/8/10 = da chon),
+        ChiTietHoaDon.ThueSuat/TienThue, HoaDon.TienThue.
+  Cot e-receipt (P1, khong chan KT loi): HoaDon.TokenXem, HetHanTokenXem.
+  Cot P1 gateway: ThanhToan.NguonXacNhan, MaThamChieuCong.
+  Engine journalEngine.js — CHUA TON TAI.
+  Man NKC / So cai / CDPS / KQKD so cai — CHUA TON TAI.
+  Quyen UC34+ — CHUA nam trong FUNCTION_CATALOG.
+
+2.5. BUG / SAI BAN CHAT da ghi trong plan (PHAI SUA KHI LAM KQKD LOI)
+
+  ----- BUG-01: P&L tru chi NCC (QUAN TRONG HON UI) -----
+  Nguon: PLAN_12 muc 1.11 + B1.5; storeProfitLoss.js; storeProfitLossMath.js;
+         store-pnl.js dong cong thuc; telegramMessages.js.
+
+  Code hien tai:
+    chiNhaCungCap = SUM PhieuChi "Thanh toan thanh cong" trong ky
+    chiPhiBenThu3 = chiNhaCungCap + cuocVanChuyen
+    laiLoSauChiPhi = lai gop - chiPhiBenThu3 - luong da khoa
+    Nguyen nhan lo: ma 'chi_ncc_lon' = "Chi nha cung cap lon hon lai gop"
+
+  Vi du: mua 10tr, ban DT 15tr GV 10tr -> lai gop 5tr;
+         tra NCC 10tr -> 5tr - 10tr = -5tr. KHONG CON LA LOI NHUAN.
+
+  Xu ly BAT BUOC (tuan 1-3 KT loi):
+    Tach 2 dashboard / 2 API (hoac 1 API tra 2 khoi ro ten):
+      A. KQKD / P&L ke toan: DT - GV - luong - 642 - khau hao. KHONG tru PhieuChi NCC.
+      B. Dong tien quan tri: thu khach - tra NCC - tra luong - chi phi - mua TSCD.
+    Doi ten man QL neu van hien tien tra NCC: "Bao cao thu-chi / dong tien quan tri".
+    Xoa / khong dung chi_ncc_lon trong danh sach "vi sao lo" cua P&L.
+    KeHoachDieuChinhLaiLo: batBuocKeHoach dua tren KQKD AM (hoac dong tien AM
+    neu man thu-chi), KHONG dua tren "lai gop tru tra NCC".
+    Telegram: /today va bao cao cuoi ngay dung cot A, khong laiLoSauChiPhi cu.
+
+  BAN_GIAO muc 2 va 11 van mo ta P&L "tru chi NCC da tra + luong da khoa"
+  nhu HIENTRANG CODE. Do la mo ta dung hien trang, KHONG phai chot dung.
+  Chot dung = PLAN_12 0.4 / B1.5. Xem muc 15.D1.
+
+  ----- BUG-02: Cuoc van chuyen double-count tiem an -----
+  storeProfitLossMath cong cuoc vao chiPhiBenThu3 CUNG chi NCC.
+  PLAN_12 B-KT.7: cuoc chi xuat hien 1 lan, o 642, khong tru kem tra NCC.
+  Hien tai cuoc thuong = 0 (chua co chung tu) — van phai sua cong thuc truoc
+  khi UC36 ghi cuoc.
+
+  ----- BUG-03: VAT ban chua luu -----
+  ChiTietHoaDon khong co ThueSuat/TienThue. Neu mo 33311 truoc khi sua POS
+  thi so VAT dau ra la so ao. PHAM_VI muc 1: bo sung thue tren POS ROI moi
+  dinh khoan. Migration: HD cu ThueSuat NULL (khong gan 0) — UC40 "Thieu thue".
+
+  ----- BUG-04: Hoa don MUA tinh thue KHAC hoa don BAN -----
+  Mua (accountingController): TienThue = ThanhTien * ThueSuat / 100
+    => DonGia / ThanhTien tren HD mua la CHUA VAT (thuan pho bien HD GTGT).
+  Ban (se lam): gia niem yet DA GOM VAT
+    => TienThue = round( ThanhTienSauGiam * t / (100+t) )
+  Khong tron 2 cong thuc. 3-way match giu cong thuc MUA hien tai.
+
+  ----- BUG-05: Word UC29 noi "chua quan ly luong / dien nuoc" -----
+  Word goc (UC_va_Danh_sach...): khong goi lai rong vi chua luong/dien/thue/KH.
+  Hien tai DA CO luong UC33, SAP CO 642. KQKD mini SE goi "loi nhuan ke toan
+  truoc thue (mini)", VAN KHONG goi "loi nhuan rong phap ly" (chua TNDN,
+  chua BHXH, chua 242).
+
+2.6. CSDL hien tai — moc de noi so cai
+
+  Bang goc CreateDB + migration den 08/09 (~45+ bang). Khong co TaiKhoanKeToan.
+  Moc tien / hang / no:
+
+    HoaDon, ChiTietHoaDon, ThanhToan
+    PhieuDoiTra, ChiTietDoiTra
+    CaLamViec (snapshot dong ca), PhieuThu
+    TonKho (SLTon, DonGiaBinhQuan, GiaTriTon), GiaoDichKho
+    PhieuNhap, ChiTietPhieuNhap (SoLuongChapNhan)
+    PhieuXuat (Tra NCC / Huy hang / Su dung noi bo), KiemKe
+    HoaDonMuaHang, ChiTietHoaDonMuaHang, CongNoPhaiTra, PhieuChi
+    KyLuong, BangLuong, PhieuChiLuong, QuyLuongKy, LichSuChiLuong
+    KeHoachDieuChinhLaiLo, ThongBaoCuaHang
+    NhatKy (audit he thong — KHAC Nhat ky chung ke toan)
+
+  CreateDB.HoaDon KHONG co TienThue, TokenXem.
+  CreateDB.SanPham KHONG co ThueSuat, CO GiaNhap/GiaBan/MaVach.
+  CreateDB.ThanhToan CO TrangThai default N'Cho xac nhan'.
+
+2.7. File code moc engine (KHONG viet lai nghiep vu)
+
+  salesController.completeInvoice / cancelInvoice / addPayment
+  returnsController.completeReturn
+  cashierController.getShiftSummary / closeShift
+  settlementController.createReceipt / confirmReceipt
+  accountingController.reconcileInvoice          (sau khop -> goi engine)
+  paymentVoucherController.payVoucher            (ThanhCong -> engine 331)
+  payroll.lock + payrollVoucher.payVoucher       (khoa -> 642/334; chi -> 334)
+  stockIssueController (xac nhan xuat)           (632/642 vs 156)
+  countApprove / inventoryCount (duyet KK)       (632 vs 156)
+  storeProfitLoss.js + storeProfitLossMath.js    (SUA cong thuc)
+  reportController.getFinancialReport            (giu lai gop; them KQKD)
+  financialRules.js                              (them splitVatInclusive)
+  telegramMessages.js                            (doi ten chi tieu P&L)
+
+
+================================================================================
+3. DANH SACH USE CASE KE TOAN
+================================================================================
+
+3.0. Quy uoc danh so — QUYET DINH
+
+  File nhap 31/08 (99_Tam_Xu_Ly/.../ke-hoach-ke-toan.txt) de xuat UC30-UC36
+  cho ke toan. KHONG DUNG: UC30-UC33 da la lich / cham cong / luong.
+
+  Ban chot (PHAM_VI 31-08 muc 5 + PLAN_12 B4):
+
+    UC34  Tai khoan ke toan
+    UC35  Ky ke toan / so du dau ky
+    UC36  Chi phi van hanh trong ky
+    UC37  Tu dong sinh but toan
+    UC38  Nhat ky chung / So cai
+    UC39  Khoa ky
+    UC40  Thue GTGT dau vao / dau ra / tong hop ky
+    UC41  TSCD va khau hao
+    UC42  Import sao ke va doi chieu ngan hang
+    UC43  Bao cao KQKD, BCDKT, LCTT mini
+
+  UC nghiep vu CU van la nguon chung tu (khong danh lai so):
+    UC09, UC18, UC19, UC20, UC22, UC24, UC25, UC26, UC27, UC28, UC29, UC33
+    + P1 gan UC25/UC29 (gateway, doi soat dien tu).
+
+  Phan nay viet DAY DU tung UC34-UC43, roi tom tat UC cu theo goc nhin so cai.
+
+--------------------------------------------------------------------------------
+3.1. UC34 — Quan ly danh muc tai khoan ke toan
+--------------------------------------------------------------------------------
+
+Muc tieu
+  Co mot COA thong nhat de moi but toan chi ra TK hop le, dung tinh chat N/C.
+
+Actor
+  Chinh: KT. Xem: QL (UC10 / UC43). MH/TK/TN: khong.
+
+Trigger
+  KT mo menu "Danh muc tai khoan". Lan dau: seed COA muc 4 (khong de trong).
+
+Luong chinh
+  1. GET danh sach TK (cay cha-con neu MaCha).
+  2. KT them TK (MaTK, TenTK, TinhChat, LoaiBC, MaCha, TrangThai).
+  3. KT sua Ten / ghi chu / ngung su dung. Khong doi MaTK neu da phat sinh.
+  4. KT khong xoa TK da co SoDuDauKy hoac ChiTietButToan; chi Ngung.
+  5. Audit UC34.
+
+Ngoai le
+  MaTK trung, MaTK khong dung quy uoc (chi so + chu so, toi da 8).
+  MaCha khong ton tai hoac tao vong.
+  Sua TinhChat khi da co so du / phat sinh -> 400.
+  Nguoi khong quyen -> 403.
+
+Du lieu vao
+  MaTK, TenTK, TinhChat (No|Co|LuongTinh), LoaiBC (TS|NV|DT|CP|TT),
+  MaCha, TrangThai (Su dung|Ngung), GhiChu.
+
+Du lieu ra
+  Danh sach COA + so TK dang dung / da ngung; canh bao TK thieu so voi seed.
+
+Tieu chi xong
+  Seed du 18 TK (gom 138): 111,112,1331,138,156,211,214,331,33311,334,
+    411,421,511,5212,632,642,711,911. Khong thieu, khong them TK thu 19.
+  Khong xoa duoc 111 neu da co but toan.
+
+--------------------------------------------------------------------------------
+3.2. UC35 — Ky ke toan va so du dau ky
+--------------------------------------------------------------------------------
+
+Muc tieu
+  Moi thang 1 ky. Co so du dau de CDPS / BCDKT khong bat dau tu 0 ao.
+
+Actor
+  KT lap/nhap so du. QL xem. Mo lai ky khoa: QL phe duyet (UC39).
+
+Trigger
+  Lan dau trien khai (nhap so du); moi dau thang (mo ky moi).
+
+Luong chinh
+  1. He thong goi y ky theo thang VN (YYYY-MM, TuNgay 01, DenNgay cuoi thang).
+  2. KT mo ky (TrangThai=Mo). Khong mo 2 ky Mo cung luc (khuyen nghi);
+     cho phep ky tuong lai o trang thai ChuaMo.
+  3. KT nhap SoDuDauKy: MaTK, SoDuNo, SoDuCo (mot ben > 0, mot ben = 0).
+     Toi thieu: 111, 112, 156, 331, 411, 421.
+  4. He thong kiem: tong SoDuNo = tong SoDuCo toan bo TK dau ky.
+  5. KT chot so du dau (khoa sua). Engine tao 1 but toan Loai=SODU_DAU_KY
+     (khong tinh vao phat sinh ky — xem muc 7.6).
+  6. Ky tiep theo: so du dau = so du cuoi ky truoc (copy khi khoa ky truoc).
+     Neu mo lai ky truoc (UC39 / 7.12) roi khoa LAI: tinh lai / copy LAI
+     / GHI DE so du dau ky ke tiep (khong giu so copy lan khoa truoc;
+     NGOAI LE DaChot — muc 7.12 / D35).
+
+Ngoai le
+  Tong No != tong Co dau ky -> khong chot.
+  Nhap so du khi ky da co but toan nghiep vu -> 400 (tru khi chua chot).
+  Sua so du sau khi chot -> phai but toan dieu chinh, khong sua hang so du.
+    NGUOI DUNG KHONG duoc sua SoDuDauKy DaChot=1 (PUT opening 400).
+    NGOAI LE HE THONG (khong them chuc nang / khong man sua): khi KHOA LAI
+    ky truoc theo UC39 / 7.12, he thong duoc phep TINH LAI va GHI DE
+    SoDuDauKy tu dong cua ky ke tiep (ke ca hang DaChot=1 do lan khoa truoc).
+    Dieu kien mo lai bao dam ky ke tiep chua co BT nghiep vu.
+    Neu da co BT SODU_DAU_KY cu: dao/repost hoac tai sinh theo quy tac he thong.
+  Mo lai ky: CHI ky GAN NHAT, va CHI khi ky ke tiep chua co BT nghiep vu
+    hieu luc (muc 7.12 / D30). Khong cascade sua SoDuDauKy khi moi BT thay doi.
+
+Du lieu vao
+  MaKy, TuNgay, DenNgay; bang so du (MaTK, SoDuNo, SoDuCo, GhiChu).
+
+Du lieu ra
+  Trang thai ky; bang so du; chenh lech No-Co (phai = 0).
+
+Tieu chi xong
+  Demo: nhap 111=5tr, 156=20tr, 331=8tr, 411=17tr; CDPS dau ky khop.
+
+--------------------------------------------------------------------------------
+3.3. UC36 — Ghi nhan chi phi van hanh trong ky
+--------------------------------------------------------------------------------
+
+Muc tieu
+  Dien, nuoc, thue mat bang, VP, cuoc xe, quang cao, sua chua — ghi THANG
+  vao 642 (+ 1331 neu co HD GTGT), khong 242.
+
+Actor
+  KT lap. QL xem tren KQKD. Khong can QL duyet neu thanh toan ngay
+  (do an 1 cua hang). Neu muon: TrangThai Nhap -> Xac nhan (KT tu xac nhan).
+
+Trigger
+  Nhan HD dien/nuoc/thue nha; hoac phieu chi cuoc (mac dinh 642).
+
+Luong chinh
+  1. KT chon LoaiChiPhi, NgayChungTu, SoChungTuNCC (neu co), MST (neu co).
+  2. Nhap TienHangChuaVAT, ThueSuat, TienThue, TongCong.
+     He thong tinh: TienThue = round(TienHang * t / 100) neu HD chua VAT
+     (cung quy uoc HD mua). Tong = hang + thue.
+  3. Chon TK tien: CHI 111 hoac 112. KHONG co phuong an ghi no 331
+     (mini: cua hang tra trong ky). MaTKTien CHECK IN ('111','112').
+  4. Xac nhan -> INSERT ChiPhiVanHanh TrangThai=DaXacNhan
+     -> engine: No 642 + No 1331 / Co 111 hoac 112.
+  5. Cuoc van chuyen: LoaiChiPhi=CUOC, luon 642, khong tick "cong vao gia von".
+
+Ngoai le
+  Ky da khoa: KHONG 400 chet nghiep vu. Chung tu van commit (DaXacNhan),
+    BT o ChoGhiSo, giu NgayChungTu goc. Khi KT bam "Ghi so tre":
+    NgayHachToan va MaKy = ky DANG MO ke tiep (cung rule P0, muc 7.3 / 7.11).
+    Chua co ky Mo -> tiep tuc ChoGhiSo.
+  Thieu HD ma van keu 1331 -> 400 (1331 chi khi co so HD + MST + thue > 0).
+  Sua chung tu da xac nhan: dao but toan (goc DaBiDao=1, van DaGhiSo)
+    + lap moi (khong UPDATE so).
+
+Du lieu vao
+  MaLoaiCP, NgayChungTu, SoChungTu, MaNCC (nullable), TienHang, ThueSuat,
+  TienThue, TongCong, MaTKTien (111|112), DinhKem (optional), GhiChu.
+
+Du lieu ra
+  MaCP, dong No/Co, MaBT (id ButToan tra ve API — KHONG luu cot MaBT tren
+  bang ChiPhiVanHanh; truy: LoaiChungTu='ChiPhiVanHanh' + MaChungTu=MaCP).
+
+Tieu chi xong
+  1 phieu dien 2.200.000 (VAT 200.000) CK: No 642 2.000.000, No 1331 200.000,
+  Co 112 2.200.000. KQKD tru 2.000.000, dong tien tru 2.200.000.
+  Bang ke VAT dau vao cong 200.000.
+
+--------------------------------------------------------------------------------
+3.4. UC37 — Tu dong sinh but toan
+--------------------------------------------------------------------------------
+
+Muc tieu
+  Moi nghiep vu hop le sinh DUNG 1 bo but toan (hoac 1 nhom idempotent),
+  can bang No=Co, truy vet LoaiChungTu+MaChungTu+LoaiButToan.
+
+Actor
+  He thong (goi trong cung transaction nghiep vu). KT xem / tai sinh neu
+  thieu (nut "Quet chung tu chua ghi so"). KT lap but toan THU CONG
+  (LoaiButToan=THU_CONG, LoaiChungTu='ThuCong') khi dieu chinh KT duoc
+  phep trong mini (vd thu bu / xoa chenh lech 138). KHONG dung THU_CONG
+  cho thanh ly TSCD. MaChungTu do SERVER sinh (TC+yyMM+5 so, vd
+  TC260900001) — FE khong bat buoc / neu gui thi bo qua (muc 7.2 / D31).
+
+Trigger
+  Xem bang su kien muc 5 va 7.3. Tom tat:
+    HD Hoan thanh, doi tra Hoan thanh, 3-way khop, chi NCC thanh cong,
+    khoa bang luong, chi luong thanh cong, xac nhan chi phi,
+    xac nhan xuat (huy/noi bo/tra NCC), duyet KK,
+    xac nhan Phieu thu CO chenh lech (dieu chinh quy),
+    mua/khau hao TSCD, ket chuyen 911.
+
+Luong chinh
+  1. Nghiep vu commit trang thai hop le trong transaction SQL.
+  2. Goi journalEngine.post({ loai, maChungTu, ngay, user }).
+  3. Engine khoa unique, build dong, kiem No=Co, INSERT ButToan+ChiTiet.
+  4. Neu da ton tai cung khoa + DaBiDao=0 + DaGhiSo -> tra ve MaBT cu
+     (idempotent). BT da dao (DaBiDao=1) KHONG chan post lai.
+  5. Audit: "Sinh but toan {MaBT} tu {LoaiChungTu} {MaChungTu}".
+
+Ngoai le
+  Ky khoa: nghiep vu P0 VAN CHAY (ton/no/tien/HD Hoan thanh). Engine KHONG
+    ghi vao ky Khoa. INSERT ChoGhiSo LyDo=KY_KHOA. Giu NgayChungTu goc.
+    KHONG assertPeriodOpen tren ngay goc thuoc ky khoa (se fail oan).
+    KT bam "Ghi so tre": NgayHachToan + MaKy = ky DANG MO ke tiep
+    (xem 7.3, 7.11). Chua co ky Mo -> van ChoGhiSo. Khong lam vo POS.
+    Chi phi UC36 nhap muon: CUNG rule (khong 400).
+  Mat can bang -> ROLLBACK ca transaction nghiep vu (an toan hon so lech so).
+    Ngoai le thiet ke: neu so thue lam tron lech 1 dong -> engine phan bo
+    phan le vao 511 hoac 642 (quy tac lam tron muc 5.1).
+  Chung tu chua hop le (HD Nhap, 3-way lech, PC chua thanh cong) -> khong goi.
+
+Du lieu vao
+  Tu dong: LoaiChungTu, MaChungTu, LoaiButToan, NgayHachToan, MaNV.
+  THU_CONG: ngay, dien giai, dong No/Co, MaNV. MaChungTu KHONG bat buoc
+    (server sinh). LoaiChungTu server gan 'ThuCong'.
+
+Du lieu ra
+  MaBT (PK ButToan), so dong, tong No, tong Co, daTonTai (bool).
+  Engine KHONG ghi MaBT len bang chung tu goc.
+
+Tieu chi xong
+  100% HD hoan thanh hop le sinh DT+GV; in lai khong sinh lan 2.
+  Quet "chua ghi so" ra dung PN da xac nhan chua khop (KHONG sinh 156).
+
+--------------------------------------------------------------------------------
+3.5. UC38 — Nhat ky chung va So cai
+--------------------------------------------------------------------------------
+
+Muc tieu
+  KT tra cuu toan bo but toan theo ngay (NKC) va theo TK (So cai).
+
+Actor
+  KT day du. QL xem (UC10 hoac UC43 — xem muc 9). MH/TK/TN khong.
+
+Trigger
+  KT chon ky / khoang ngay / TK / loai chung tu.
+
+Luong chinh
+  NKC:
+    1. Loc TuNgay-DenNgay, LoaiButToan, MaChungTu, DaBiDao, Nguon.
+       Nguon so: TrangThai='DaGhiSo' — GOM ca goc (ke ca DaBiDao=1) va
+       BT dao (LoaiButToan LIKE 'DAO_%'). KHONG loc bo goc da dao.
+    2. Bang: Ngay, SoBT, Dien giai, TK, No, Co, chung tu goc (link),
+       cot "Da dao" (DaBiDao), LoaiButToan (DAO_* de nhan dong dao).
+    3. Bam dong -> chi tiet + nut "Mo chung tu nghiep vu".
+  So cai:
+    1. Chon MaTK + ky.
+    2. So du dau + tung dong phat sinh (DaGhiSo, gom goc + dao) + so du
+       chay + so du cuoi. Vi du dao 100: 100 + (-100) = 0.
+    3. In / CSV.
+
+Ngoai le
+  Ky khong ton tai; TK ngung van xem duoc lich su.
+
+Du lieu vao
+  periodType/period hoac from/to; MaTK; q (tim dien giai / ma).
+
+Du lieu ra
+  Mang dong + tong; so du dau/cuoi.
+
+Tieu chi xong
+  So cai 511 (PS Co − PS No, loai KET_CHUYEN/DAO_KET_CHUYEN/SODU_DAU_KY)
+  khop tong DT chua VAT thuan cua HD hoan thanh trong ky (tru 5212 thuan).
+  Dao BAN_HANG: So cai 511 ve 0; KQKD 511 cung ve 0 (khong con PS Co ao).
+  So cai 111 khop TM thanh cong - hoan TM - chi TM + lech quy.
+
+--------------------------------------------------------------------------------
+3.6. UC39 — Khoa ky ke toan
+--------------------------------------------------------------------------------
+
+Muc tieu
+  Chan ghi so VAO ky da khoa (NgayHachToan khong nam trong ky Khoa).
+  Sai sot sau khoa = ghi so tre vao ky MO ke tiep (doi NgayHachToan+MaKy,
+  giu NgayChungTu) HOAC mo lai ky (QL duyet, muc 7.12: chi ky gan nhat,
+  ky sau chua PS nghiep vu). Khoa ky KHONG chan POS/P0
+  va KHONG 400 chi phi UC36 — chung tu van commit, BT ChoGhiSo.
+
+Actor
+  KT chay kiem tra + de nghi khoa. QL xac nhan khoa / mo lai.
+
+Trigger
+  Cuoi thang, sau khi: het HD treo, het PC Cho duyet, het ca chua Phieu thu,
+  het bang luong chua khoa (neu muon KQKD du luong).
+
+Luong chinh
+  1. GET checklist khoa (muc 7.8) — tach 2 nhom BLOCK / WARN.
+     Nhom BLOCK != rong -> KHONG khoa, KHONG override / KHONG "khoa van
+     canh bao". Nhom WARN: hien canh bao, van khoa duoc.
+  2. KT chay ket chuyen 911 (engine KET_CHUYEN) neu CHUA co ButToan
+     LoaiButToan='KET_CHUYEN' hieu luc cua ky (DaBiDao=0, DaGhiSo).
+     KHONG cot DaKetChuyen / MaBT_KetChuyen tren KyKeToan.
+  3. KT gui "De nghi khoa". QL bam Khoa (hoac KT tu khoa neu do an
+     rut gon — MAC DINH: KT khoa, QL mo lai).
+     QUYET DINH mini: KT duoc khoa ky; CHI QL mo lai (audit).
+  4. UPDATE KyKeToan.TrangThai=Khoa, NgayKhoa, MaNV_Khoa.
+  5. Copy so du cuoi -> so du dau ky sau (neu ky sau da mo / da ton tai).
+     Lan khoa LAI sau mo lai: tinh lai / copy LAI / GHI DE SoDuDauKy
+     ky ke tiep (ke ca hang DaChot=1 do lan khoa truoc — NGOAI LE he
+     thong D35; nguoi dung van khong sua hang DaChot). Neu da co BT
+     SODU_DAU_KY cu: dao/repost hoac tai sinh theo quy tac he thong.
+
+Ngoai le
+  Con but toan mat can bang (khong le xay ra neu engine chan) -> khong khoa.
+  BLOCK khoa (KHONG override) khi thieu BT tren chung tu da hop le:
+    HD Hoan thanh thieu BAN_HANG/GIA_VON
+    3-way khop thieu MUA_HANG
+    PC thanh cong thieu TRA_NCC
+    Ky luong khoa thieu TRICH_LUONG
+    Chi luong thanh cong thieu CHI_LUONG
+    Chi phi xac nhan thieu CHI_PHI
+    (HD Hoan thanh ThueSuat NULL chua post BAN_HANG cung nam nhom BLOCK
+    — khong ep post, nhung khong khoa ky thieu so.)
+  CHI CANH BAO, van khoa duoc:
+    PN da nhan / da xac nhan chua 3-way match
+    Hoa don dang Nhap
+    Chung tu cho duyet
+    Nghiep vu chua du dieu kien ghi so
+  KHONG co nut / flag "khoa van canh bao" cho nhom BLOCK.
+  Sau khoa: P0/UC36 van tao chung tu; engine dua BT vao ChoGhiSo.
+    "Ghi so tre" khong ghi vao ky Khoa — chuyen MaKy/NgayHachToan ky Mo.
+  Mo lai: QL nhap ly do; ky ve Mo; khong xoa but toan ket chuyen —
+    dao ket chuyen roi moi mo. QUYET DINH: mo lai = dao 911 + Mo.
+    Dao 911: goc KET_CHUYEN DaBiDao=1 van DaGhiSo; BT DAO_KET_CHUYEN
+    cung DaGhiSo, MaBTGoc = MaBT KET_CHUYEN (muc 7.5).
+    Da ket chuyen = EXISTS ButToan KET_CHUYEN hieu luc (DaBiDao=0, DaGhiSo).
+    Sau mo lai: khong con KET_CHUYEN hieu luc (goc DaBiDao=1).
+    DIEU KIEN mo lai (muc 7.12 / D30):
+      - Chi ky GAN NHAT (ky Khoa moi nhat).
+      - Ky KE TIEP chua co BT nghiep vu hieu luc (DaGhiSo, DaBiDao=0,
+        LoaiButToan <> SODU_DAU_KY). Ky sau chi duoc phep con SODU_DAU_KY
+        da copy luc khoa.
+      - Ky sau da co phat sinh -> 400; sai sot xu ly bang BT dieu chinh
+        o ky DANG MO (khong cascade so du).
+
+Du lieu vao
+  Khoa: MaKy (KHONG flag override / xacNhanBoQuaBlock).
+  Mo lai: MaKy, lyDo.
+
+Du lieu ra
+  Checklist { block, warn } (muc 7.8), ket qua khoa, MaBT ket chuyen
+  (id ButToan — truy LoaiChungTu='KyKeToan' + LoaiButToan='KET_CHUYEN'
+  + DaBiDao=0 + DaGhiSo; KHONG cot MaBT_KetChuyen, KHONG cot DaKetChuyen
+  tren KyKeToan). Mo lai that bai: 400 + ly do (khong gan nhat / ky sau
+  da PS).
+
+--------------------------------------------------------------------------------
+3.7. UC40 — Thue GTGT dau vao / dau ra / tong hop ky
+--------------------------------------------------------------------------------
+
+Muc tieu
+  Bang ke do an: dau ra tu HD ban hoan thanh (va dao doi tra);
+  dau vao tu HD mua da khop + chi phi co HD + mua TSCD co VAT
+  − VAT hang tra NCC da ghi TRA_NCC_HANG (hieu luc).
+  Khong tuyen bo thay phan mem ke khai. Khong them bang.
+
+Actor
+  KT lap/xem. QL xem tong hop.
+
+Trigger
+  Het ky hoac bat cu luc nao trong ky Mo.
+
+Luong chinh
+  1. Chon ky.
+  2. Bang ke dau ra: tung dong HD / dong hang (thue suat, DT chua thue, VAT).
+  3. Bang ke dau vao: HD mua khop + UC36 co 1331 + TSCD
+     − dong AM TRA_NCC_HANG (VAT hang tra NCC da ghi so, hieu luc).
+     Cong thuc (CHOT 1.4 / D33):
+       VAT vao = VAT HD mua khop + VAT UC36 + VAT TSCD
+                 − VAT TRA_NCC_HANG (DaGhiSo, DaBiDao=0).
+     Vi du: HD mua khop VAT 800.000, TRA_NCC_HANG Co 1331 200.000
+       -> so cai 1331 = 600.000; bang ke DUNG = 600.000 (dong tra AM).
+       SAI neu khong tru: bang ke 800.000.
+  4. Tong hop: VAT ra - VAT vao = chenh lech (chua goi "phai nop nha nuoc"
+     neu muon tranh hoi phap ly; nhan: "chenh lech ke toan mini").
+
+Ngoai le
+  HD ban thieu ThueSuat (NULL — du lieu cu truoc migration / chua snapshot)
+    -> danh dau "Thieu thue, can bo sung" va KHONG bia 10%.
+    ThueSuat = 0 tren dong HD la 0% DA XAC DINH, KHONG danh "Thieu thue".
+
+Du lieu ra
+  3 bang + 3 tong. CSV.
+
+Tieu chi xong
+  PHAM_VI muc 6: 1 HD 2 thue suat; KM+diem truoc thue; hoan dao 511+33311;
+  in lai khong but toan 2 lan.
+  Bang ke dau vao khop so cai 1331 (tru VAT TRA_NCC_HANG; dong tra AM).
+
+--------------------------------------------------------------------------------
+3.8. UC41 — TSCD va khau hao  (KT MO RONG)
+--------------------------------------------------------------------------------
+
+Muc tieu
+  May POS, may tinh, tu, dieu hoa, may in... Nguyen gia CHUA VAT.
+  Cuoi ky: No 642 / Co 214. Gia tri con lai = NG - KH luy ke.
+
+Actor
+  KT ghi nhan / chay KH. QL xem.
+
+Trigger
+  Mua TSCD bang tien 111/112 (KHONG mua chiu / KHONG 331); cuoi ky chay KH.
+
+Luong chinh
+  1. KT lap the TSCD: Ten, Nhom, NgayDuaVaoSD, SoThangKH, BoPhan,
+     NguyenGiaChuaVAT, VAT, TK tien (CHI 111|112).
+  2. Xac nhan -> engine: No 211 + No 1331 / Co 111|112.
+     KHONG Co 331. Mini khong tao CongNoPhaiTra cho mua TSCD
+     (CongNoPhaiTra P0 chi sinh tu HD mua 3-way khop).
+  3. Cuoi ky: POST khau-hao. Moi TSCD 1 lan / ky (unique).
+     KH thang = round(NguyenGia / SoThang). Thang cuoi = phan con lai
+     de khong lech 1 dong.
+  4. Khong thanh ly / danh gia lai o mini. KHONG dung THU_CONG de
+     ghi thanh ly TSCD (211/214/GTCL/tien thu/lai lo — ngoai pham vi).
+
+Ngoai le
+  Chay KH 2 lan / ky -> idempotent, tra ve ban cu.
+  TSCD chua dua vao SD -> khong KH.
+  Ky khoa: khong chay KH CHO KY DO (KH thuoc cuoi ky khoa).
+    Mua TSCD sau khoa ky: cung rule P0 — the van luu, BT ChoGhiSo,
+    ghi so tre vao ky Mo (111|112), khong 331.
+
+--------------------------------------------------------------------------------
+3.9. UC42 — Import sao ke va doi chieu ngan hang  (KT MO RONG)
+--------------------------------------------------------------------------------
+
+Muc tieu
+  Doi chieu so 112 (LAY TU BUT TOAN) voi file CSV ngan hang. Khong lay
+  so cai thuan tu file. Mini: 1 tai khoan ngan hang doanh nghiep
+  (D37). Khong tach so cai theo NH. Import CHI CSV (D38) — khong Excel.
+
+Actor
+  KT import + khop. QL xem so chua khop.
+
+Trigger
+  Cuoi ngay / cuoi ky; sau P1 VNPay (co MaGiaoDich that).
+  VAN LAM DUOC truoc VNPay: khop Phieu chi CK, luong CK, QR thu cong.
+
+Luong chinh
+  1. KT chon TaiKhoanNganHang (danh muc 1 TKNH mini), upload CSV
+     (KHONG Excel; khong parser xls/xlsx; multer CSV).
+     (Ngay, SoTien, DienGiai, MaGD, PhatSinhNo, PhatSinhCo — map cot).
+  2. He thong luu SaoKe + DongSaoKe, TrangThai=Chua khop.
+  3. Auto-match:
+       a. MaGiaoDich = ThanhToan.MaGiaoDich | PhieuChi.MaGiaoDichNganHang
+          | PhieuChiLuong.MaGiaoDichNganHang | ChiPhi.MaGD
+       b. Neu khong ma: so tien + ngay (+/- 1 ngay) + chieu thu/chi.
+  4. KT khop tay hoac danh Chenh lech + ly do.
+  5. So 112 van tu ChiTietButToan. Man hien: so cai 112 vs tong sao ke.
+     ChiTietButToan KHONG luu MaTKNH — moi BT ngan hang chung TK 112
+     (khong tach VCB vs MB).
+
+Ngoai le
+  File sai encoding; file khong phai CSV / upload Excel -> 400.
+  Trung dong import (hash dong + MaTKNH + Ngay).
+  Khop 1 dong sao ke 2 lan -> CHAN unique.
+  KHONG bang DoiChieuNganHang: moi dong khop/chenh luu tren DongSaoKe.
+  Them TKNH thu 2 Su dung = huong phat trien (mini 1 TKNH).
+
+--------------------------------------------------------------------------------
+3.10. UC43 — Bao cao KQKD, BCDKT, LCTT mini
+--------------------------------------------------------------------------------
+
+Muc tieu
+  3 bao cao tai chinh thu gon lay TU SO CAI, khong cong tay nhieu bang
+  nghiep vu (tru doi chieu kiem chung).
+
+Actor
+  KT lap. QL xem (UC10 van xem lai gop nghiep vu; UC43 / UC10 mo rong
+  xem KQKD so cai — muc 9).
+
+Trigger
+  Chon ky. LCTT chi full sau UC41+UC42; truoc do van ra duoc nhom
+  Hoat dong tu 111/112.
+
+Luong chinh
+  Xem muc 8 (cong thuc + cot).
+  BCDKT: J theo muc 8.7 / D34
+    (chua KC: 421 + LN KQKD 8.4, KHONG +911; sau KC: 421).
+  LCTT: gom THU_CONG dung 111/112 vao I "Thu/chi khac" (muc 8.6 / D36).
+
+Ngoai le
+  Ky chua khoa: watermark "So lieu tam tinh". Van XEM duoc BCDKT
+    (tam tinh, CAN: J = 421 + LN 8.4).
+  Ky da khoa + da KET_CHUYEN: BCDKT chinh thuc, J = 421, CAN.
+  Thieu so du dau: BCDKT canh bao "Thieu 411/421 — chi minh hoa".
+
+--------------------------------------------------------------------------------
+3.11. UC nghiep vu CU — goc nhin so cai (khong danh lai so)
+--------------------------------------------------------------------------------
+
+UC18 Xac nhan Phieu nhap
+  Actor TK. TonKho += SoLuongChapNhan, DonGiaBinhQuan.
+  SO CAI: KHONG sinh 156. Chi canh bao "cho ghi so".
+
+UC27 Doi chieu 3 chung tu
+  Actor KT. Khop -> CongNo + engine MUA_HANG (156+1331/331).
+  Lech -> khong no, khong but toan.
+  OCR (P2) chi prefill.
+
+UC28 + UC09 Phieu chi NCC
+  Lap / duyet+giao quy: KHONG but toan (quy noi bo).
+  Thanh toan thanh cong: No 331 / Co 111|112.
+
+UC25 Hoan thanh HD
+  Engine BAN_HANG (111/112 / 511+33311) + GIA_VON (632/156).
+  VAT tach sau KM+diem.
+
+UC26 Doi tra Hoan thanh
+  Engine DOI_TRA_HOAN (5212+33311 / 111|112) neu hoan tien.
+  Engine DOI_TRA_NHAP_KHO (156/632) neu nhap lai.
+  Engine DOI_TRA_GIAO_DOI (632/156) cho hang giao doi.
+  Khong nhap lai -> khong dao 632.
+
+UC22 + UC29 Ca / Phieu thu
+  Dong ca / lap PT / xac nhan PT khong lech: KHONG but toan DT.
+  Xac nhan PT CO lech: engine LECH_QUY (muc 5.6).
+
+UC33 Luong
+  Build: khong but toan (GET khong tu tao so — BAN_GIAO 16.5).
+  Lock: No 642 / Co 334 (toan bang).
+  QL duyet + giao quy: khong but toan.
+  Chi thanh cong: No 334 / Co 111|112.
+
+UC19 Xac nhan Phieu xuat
+  Huy: No 632 / Co 156.
+  Noi bo: No 642 / Co 156.
+  Tra NCC: neu da ghi 156 (da khop) -> dao 156+1331 / 331 va giam no
+    CHI khi CHUA ton tai Phieu chi cho cong no do (bat ky trang thai).
+    Da co Phieu chi -> 400, phai tra hang TRUOC KHI lap Phieu chi
+    (giu 1 cong no – 1 Phieu chi; khong sua SoTien PC).
+    Neu CHUA khop: khong but toan 156 (kho vat ly da giam).
+
+UC07 / UC20 Duyet kiem ke
+  Thieu: No 632 / Co 156 (theo DonGiaBinhQuan * |chenh|).
+  Thua: No 156 / Co 711.
+  Duyet chua xong: khong but toan. Ton chi doi sau duyet (P0 giu).
+
+UC24 Lap HD nhap
+  Khong but toan.
+
+P1 UC25 gateway
+  Cung completeInvoice -> cung 1 but toan BAN_HANG. NguonXacNhan khong
+  doi TK (QR van 112).
+
+P1 UC29 doi soat dien tu
+  Khong sinh but toan; doi chieu snapshot ca vs ThanhToan.
+
+
+================================================================================
+4. HE THONG TAI KHOAN (COA) MINI — 1 CUA HANG — 18 TAI KHOAN (GOM 138)
+================================================================================
+
+4.1. Nguyen tac
+
+  So TK theo thong tu 200 (quen thuoc hoi dong), cap 1 + vai cap 2 can dung.
+  Tinh chat: No (du No), Co (du Co), LuongTinh (911).
+  Khong mo TK khong dung. Khong mo 131, 151, 242, 338, 3341/3348 BHXH.
+  CHOT: dung DUNG 18 TK (gom 138). Khong viet 17 (thieu 138) hay 19.
+  Them 138 / 711 / 411 / 421 so voi list toi thieu PLAN_12 B-KT.2
+  (ly do: lech quy, KK thua, so du dau / BCDKT — muc 15.D2).
+
+4.2. Bang COA — 18 tai khoan (bat buoc seed du, gom 138)
+
+  MaTK   Ten                                      TChat   LoaiBC  Dung khi nao
+  -----  ---------------------------------------  ------  ------  --------------------------------
+  111    Tien mat                                 No      TS      Thu TM POS; chi TM NCC/luong/CP;
+                                                                  lech quy; hoan TM
+  112    Tien gui ngan hang                       No      TS      QR, The, CK POS; chi CK;
+                                                                  sao ke doi chieu
+  1331   Thue GTGT duoc khau tru                  No      TS      HD mua khop; CP/TSCD co HD GTGT;
+                                                                  giam khi TRA_NCC_HANG (UC40 tru)
+  138    Phai thu khac (thieu quy ca)             No      TS      Phieu thu thieu: No 138 / Co 111
+  156    Hang hoa                                 No      TS      Mua sau 3-way; GV; doi tra nhap
+                                                                  lai; KK; xuat huy/noi bo
+  211    TSCD huu hinh                            No      TS      Mua TSCD — nguyen gia CHUA VAT
+  214    Hao mon TSCD                             Co      TS      KH thang (so du Co, tru vao 211)
+  331    Phai tra nguoi ban                       Co      NV      3-way khop; tra NCC
+                                                                  (KHONG dung cho mua TSCD)
+  33311  Thue GTGT dau ra                         Co      NV      Ban hang; dao khi hoan
+  334    Phai tra nguoi lao dong                  Co      NV      Khoa luong; chi luong
+  411    Von dau tu cua chu so huu                Co      NV      So du dau / minh hoa von
+  421    Loi nhuan chua phan phoi (mini)          Co      NV      Ket chuyen 911; so du dau.
+                                                                  CHU THICH: so du ket qua
+                                                                  luy ke mo hinh mini, CHUA
+                                                                  xu ly thue TNDN. Khong goi
+                                                                  "LN sau thue chua phan phoi"
+                                                                  neu khong chu thich.
+  511    Doanh thu ban hang va CCDV               Co      DT      HD hoan thanh (chua VAT)
+  5212   Hang ban bi tra lai                      No      DT      Hoan tien (giam DT)
+  632    Gia von hang ban                         No      CP      Xuat ban; KK thieu; huy hang
+  642    Chi phi quan ly doanh nghiep             No      CP      Luong, dien nuoc, thue, VP,
+                                                                  cuoc, KH TSCD, xuat noi bo
+  711    Thu nhap khac                            Co      DT      Phieu thu thua; KK thua
+  911    Xac dinh ket qua kinh doanh              LT      TT      Ket chuyen cuoi ky
+
+4.3. TK khong mo — va ly do
+
+  131     Ban chiu da cat.
+  151     Hang di duong: do an chap nhan lech TonKho vs 156 (B-KT.6).
+  152     Nguyen vat lieu: sieu thi hang hoa = 156.
+  242     Tra truoc 12 thang da cat.
+  338     Khong mo; thua quy dung 711.
+  33312+  Thue khac: ngoai pham vi.
+  335     Chi phi phai tra: luong trich ngay luc khoa, khong can 335.
+  5211    Chiet khau ban: KM/diem tru TRUOC khi vao 511, khong tach TK.
+  641     Chi phi ban hang: gom vao 642 cho don gian mini
+          (1 cua hang, khong tach bo phan ban/QL).
+  821     Chi phi thue TNDN: khong tinh thue TNDN.
+
+4.4. Anh xa phuong thuc tien -> TK
+
+  Tien mat            -> 111
+  QR                  -> 112
+  The                 -> 112
+  Chuyen khoan        -> 112
+
+  Khong tach 1121/1122. ChiTietButToan KHONG luu MaTKNH
+  (khong tach VCB vs MB tren so cai). KT mini dung 1 tai khoan
+  ngan hang doanh nghiep map vao 112 de doi chieu sao ke UC42.
+  Nhieu ngan hang = huong phat trien (ngoai pham vi — D37).
+
+4.5. Anh xa loai chi phi -> 642 (khong mo 6421..6428 bat buoc)
+
+  MaLoaiCP     Ten                      Ghi chu
+  DIEN         Tien dien                1331 neu co HD
+  NUOC         Tien nuoc
+  THUE_NHA     Thue mat bang            tra trong ky
+  VP           Van phong pham
+  CUOC         Cuoc van chuyen          KHONG vao 156
+  QUANG_CAO    Quang cao
+  SUA_CHUA     Sua chua nho
+  KHAC         Chi phi khac
+
+  Bao cao KQKD co the GROUP BY MaLoaiCP (cung 642) de QL doc.
+
+4.6. Seed lan dau (journal seed)
+
+  INSERT COA 18 TK nhu 4.2 (gom 138), TrangThai=Su dung, KhongXoa=1
+  voi TK he thong. Khong seed so du (KT nhap UC35).
+  Khong seed bang CauHinhDinhKhoan (khong co bang nay).
+
+
+================================================================================
+5. SO DO DINH KHOAN CHUAN TUNG NGHIEP VU
+================================================================================
+
+Quy uoc
+  So tien lam tron 2 chu so (round half up, giong financialRules.roundMoney).
+  Moi but toan: SUM(SoTienNo) = SUM(SoTienCo).
+  NgayHachToan = ngay chung tu hop le (NgayLap HD, NgayDoiChieu, NgayTT...).
+  Dien giai bat buoc co ma chung tu.
+
+--------------------------------------------------------------------------------
+5.1. Ban hang — tien mat / QR / the / CK / hon hop + VAT dau ra
+--------------------------------------------------------------------------------
+
+Dieu kien
+  HoaDon.TrangThai = N'Hoan thanh'
+  Tong ThanhToan.TrangThai=N'Thanh cong' = HoaDon.TongThanhToan
+  (P0 da chan tra thieu).
+
+Tach thue TREN DONG (sau KM va diem)
+
+  ThanhTienSauGiam dong
+    = phan bo TongThanhToan theo ty trong ThanhTien dong
+      SAU khi tru TienGiamGia + TienDiemQuyDoi o header.
+    Cach trien khai de xuat (tranh lech 1 dong):
+      1. Tinh Tam = max(0, ThanhTien - GiamGiaDong).
+      2. TyTrong = Tam / SUM(Tam). Neu SUM=0 thi ty trong deu.
+      3. GiamChung = TienGiamGia + TienDiemQuyDoi (header).
+      4. ThanhTienSauGiam_i = round( TongThanhToan * TyTrong ) o moi dong
+         tru dong cuoi = phan con lai (de tong = TongThanhToan).
+      5. t = ChiTietHoaDon.ThueSuat (copy tu SanPham luc ban, KHONG sua sau).
+         HD moi hoan thanh: t BAT BUOC IN (0, 5, 8, 10), KHONG NULL.
+         SanPham.ThueSuat NULL = QL chua chon -> POS chan add line / complete.
+         t = 0: hop le (0%), TienThue_i = 0, DT_i = ThanhTienSauGiam_i.
+         t NULL chi xay ra tren HD cu (truoc KT) — khong complete HD moi;
+         quet ghi so HD cu ThueSuat NULL: KHONG post BAN_HANG, ChoGhiSo
+         LyDo=THIEU_THUE (UC40 "Thieu thue").
+      6. TienThue_i = round( ThanhTienSauGiam_i * t / (100 + t) )  neu t>0
+                      = 0 neu t=0
+      7. DT_i (511) = ThanhTienSauGiam_i - TienThue_i
+      8. HoaDon.TienThue = SUM(TienThue_i)
+      9. Kiem: SUM(DT_i) + SUM(TienThue_i) = TongThanhToan
+         Neu lech 1 dong do lam tron: cong/tru vao DT dong lon nhat.
+
+  1 HD 2 thue suat: 33311 van 1 TK, nhung bang ke UC40 TACH theo dong/suat.
+
+But toan BAN_HANG (LoaiButToan='BAN_HANG', LoaiChungTu='HoaDon')
+
+  No  111     tong ThanhToan TM Thanh cong
+  No  112     tong ThanhToan QR + The + CK Thanh cong
+      Co 511      SUM(DT_i)
+      Co 33311    SUM(TienThue_i)
+
+  Vi du A — TM thuan, VAT 10%, gia niem yet 110.000 (gom VAT), 1 SP:
+    Khach tra 110.000
+    TienThue = round(110000*10/110) = 10.000
+    511 = 100.000
+    No 111 110.000 / Co 511 100.000 / Co 33311 10.000
+
+  Vi du B — hon hop 80.000 TM + 20.000 QR, tong 100.000, VAT 8%:
+    TienThue = round(100000*8/108) = 7.407
+    511 = 92.593
+    No 111 80.000
+    No 112 20.000
+        Co 511  92.593
+        Co 33311 7.407
+
+  Vi du C — KM + diem: hang 200.000, KM 20.000, diem 10.000, tra 170.000 TM, t=10
+    ThanhTienSauGiam = 170.000
+    TienThue = round(170000*10/110) = 15.455
+    511 = 154.545
+    No 111 170.000 / Co 511 154.545 / Co 33311 15.455
+    KHONG hach toan 521 cho KM (KM khong phai hang tra lai).
+
+Khong sinh
+  HD Nhap, Huy, thanh toan That bai / Cho xac nhan.
+  In lai / e-receipt / GET invoice.
+
+--------------------------------------------------------------------------------
+5.2. Gia von / xuat kho luc ban
+--------------------------------------------------------------------------------
+
+Dieu kien
+  Cung luc completeInvoice (cung transaction).
+  DonGiaVon / ThanhTienVon da snapshot tren ChiTietHoaDon.
+  GiaoDichKho LoaiGD=Xuat, LoaiChungTu=HoaDon.
+
+But toan GIA_VON (LoaiButToan='GIA_VON', LoaiChungTu='HoaDon')
+
+  No  632     SUM(ThanhTienVon)
+      Co 156      SUM(ThanhTienVon)
+
+  Tach 2 but toan BAN_HANG va GIA_VON (2 hang ButToan, 2 MaBT PK, cung
+  MaChungTu, khac LoaiButToan). KHONG them cot MaBT tren HoaDon.
+  Truy: ButToan WHERE LoaiChungTu='HoaDon' AND MaChungTu=MaHD
+        AND LoaiButToan IN ('BAN_HANG','GIA_VON').
+  Unique hieu luc goc: UX_ButToan_Nguon
+    (LoaiChungTu, MaChungTu, LoaiButToan)
+    WHERE DaBiDao = 0 AND MaBTGoc IS NULL.
+  KHONG dung NOT LIKE N'DAO%' trong filter (SQL Server khong ho tro LIKE
+  trong filtered index). BT dao: LoaiButToan='DAO_BAN_HANG' / 'DAO_GIA_VON',
+  MaBTGoc = MaBT goc — khong dung unique goc. Muc 6.2 / D22.
+
+  Neu 156 so cai < 0 sau but toan: VAN GHI (vi 156 co the cham so voi TonKho
+  — B-KT.6). Bao cao canh bao "156 am / lech TonKho.GiaTriTon".
+  Khong block POS.
+
+--------------------------------------------------------------------------------
+5.3. Mua hang / nhap kho / cong no NCC / thanh toan NCC
+--------------------------------------------------------------------------------
+
+5.3.1. Xac nhan Phieu nhap (UC18)
+  TonKho tang. KHONG but toan.
+  Ghi hang ChoGhiSo: Loai='PN_CHUA_DOI_CHIEU', MaPN.
+
+5.3.2. Doi chieu khop (UC27)
+  CongNo insert. Engine MUA_HANG (LoaiChungTu='HoaDonMuaHang')
+
+  No  156     TongTienHang (chua VAT)     = HoaDonMuaHang.TongTienHang
+  No  1331    TienThue                    = HoaDonMuaHang.TienThue
+      Co 331      TongCong                    = HoaDonMuaHang.TongCong
+
+  Kiem: TongTienHang + TienThue = TongCong (P0 da check).
+  SoTienNo cong no = TongCong (P0). So cai 331 = SoTienNo.
+
+  Khong dung SoLuongGiao / SoLuongTuChoi: chi hang chap nhan da nam tren
+  PN va HD (3-way). Hang tu choi khong vao 156, khong vao no.
+
+5.3.3. Lap Phieu chi / QL duyet + giao quy
+  KHONG but toan. Khong chuyen 111 noi bo (Plan A: khong 2 cap ket).
+  Ghi NhatKy he thong nhu P0.
+
+5.3.4. Chi NCC thanh cong (UC28)
+  Engine TRA_NCC (LoaiChungTu='PhieuChi')
+
+  Neu PhuongThuc='Tien mat':
+    No  331     SoTien
+        Co 111      SoTien
+  Neu PhuongThuc='Chuyen khoan':
+    No  331     SoTien
+        Co 112      SoTien
+
+  That bai: khong but toan. Thuc hien lai: van 1 unique TRA_NCC / MaPhieu
+  (chi insert khi ThanhCong lan dau).
+
+5.3.5. Khong lam
+  Tra truoc (chua co 331). Tam ung 331 am.
+
+--------------------------------------------------------------------------------
+5.4. VAT dau vao
+--------------------------------------------------------------------------------
+
+  Nam trong MUA_HANG (1331) va UC36 / UC41 khi co HD GTGT.
+  TRA_NCC_HANG Co 1331: giam VAT dau vao (hang tra NCC da khop).
+  Khong sinh 1331 tu OCR.
+  Khong khau tru 1331 khi HD mua Chenh lech.
+  Bang ke UC40: dong DaKhop / ChiPhi DaXacNhan / TSCD DaXacNhan
+    + dong AM TRA_NCC_HANG (VAT hang tra NCC da ghi, hieu luc).
+  Cong thuc (D33): VAT vao = HD mua khop + UC36 + TSCD − TRA_NCC_HANG.
+  Khong them bang. Neu khong tru: so cai 1331 giam, bang ke van so cu.
+
+--------------------------------------------------------------------------------
+5.5. Quỹ ca, nop quy, lech ket
+--------------------------------------------------------------------------------
+
+5.5.1. Mo ca / dong ca / lap Phieu thu / xac nhan KHONG lech
+  KHONG but toan.
+  Ly do: 111 da No luc BAN_HANG (phan TM). PT chi ban giao vat ly.
+
+5.5.2. Xac nhan Phieu thu CO chenh lech
+  ChenhLech = SoTienThucNop - SoTienTheoHeThong
+  (P0: SoTienTheoHeThong = TienMatHeThong luc dong ca).
+
+  Thieu (ChenhLech < 0), |CL| = so thieu:
+    Engine LECH_QUY (LoaiChungTu='PhieuThu')
+    No  138     |CL|     (thu ngan con no quy)
+        Co 111      |CL|
+    Dien giai: "Thieu quy ca {MaCa}, PT {MaPT}"
+
+  Thua (ChenhLech > 0):
+    No  111     CL
+        Co 711      CL
+    Dien giai: "Thua quy ca {MaCa}, PT {MaPT}"
+
+  Khong lech: khong insert LECH_QUY.
+
+  Day la QUYET DINH bo sung so voi cau "PT KHONG sinh but toan" cua PLAN_12
+  (cau do nham DT lan 2). Lych quy KHONG phai doanh thu. Xem 15.D3.
+
+  Khong lap bien ban rieng (P0). 138 giu de sau nay thu duoi / xoa so
+  bang but toan thu cong (No 111 / Co 138 khi thu ngan nop bu;
+  hoac No 642 / Co 138 khi QL cho xoa). Day la vi du dieu chinh KT
+  duoc phep trong mini — KHONG dung THU_CONG cho thanh ly TSCD.
+  Mini khong bat buoc man thu duoi.
+
+--------------------------------------------------------------------------------
+5.6. Luong (KHONG BHXH)
+--------------------------------------------------------------------------------
+
+5.6.1. POST build / GET bang luong
+  Khong but toan.
+
+5.6.2. Khoa ky luong (POST lock)
+  Engine TRICH_LUONG (LoaiChungTu='KyLuong', MaChungTu=MaKy)
+  No  642     SUM(BangLuong.TongLuong) cac dong da lap
+      Co 334      (cung so)
+
+  Chi 1 lan / ky. Tinh lai sau khoa: P0 da chan.
+
+5.6.3. QL duyet PhieuChiLuong + giao QuyLuongKy
+  Khong but toan.
+
+5.6.4. KT chi thanh cong tung NV
+  Engine CHI_LUONG (LoaiChungTu='PhieuChiLuong')
+  No  334     SoTien
+      Co 111      neu TM
+      Co 112      neu CK
+
+  That bai: khong. Idempotent theo MaPhieu.
+
+--------------------------------------------------------------------------------
+5.7. Chi phi van hanh (UC36)
+--------------------------------------------------------------------------------
+
+  Engine CHI_PHI (LoaiChungTu='ChiPhiVanHanh')
+  No  642     TienHangChuaVAT
+  No  1331    TienThue          (0 neu khong HD)
+      Co 111|112  TongCong
+
+  Cuoc: giong het, MaLoaiCP=CUOC.
+  KHONG Co 331. Tra trong ky. Khong tao CongNoPhaiTra tu UC36.
+
+--------------------------------------------------------------------------------
+5.8. TSCD (UC41, KT mo rong)
+--------------------------------------------------------------------------------
+
+5.8.1. Mua va dua vao SD — CHI 111|112
+  Engine MUA_TSCD (LoaiChungTu='TaiSanCoDinh')
+  No  211     NguyenGiaChuaVAT
+  No  1331    VAT
+      Co 111|112   TongCong
+
+  Mini KHONG mua TSCD chiu. KHONG Co 331.
+  Ly do: CongNoPhaiTra P0 chi sinh tu HD mua hang 3-way khop; Co 331
+  khong INSERT cong no -> so cai 331 lech man Cong no.
+
+  KHONG ghi 211 da gom VAT (PLAN_12 B-KT mo rong).
+
+5.8.2. Khau hao thang
+  Engine KHAU_HAO (LoaiChungTu='KyKeToan', MaChungTu=MaKy, unique theo
+  LoaiButToan+MaKy; chi tiet theo MaTSCD o dien giai / bang KhauHaoTaiSan)
+  No  642     tong KH ky
+      Co 214      tong KH ky
+
+  1 lan / ky / tai san (bang KhauHaoTaiSan UNIQUE MaTSCD+MaKy).
+
+--------------------------------------------------------------------------------
+5.9. Dieu chinh kiem ke
+--------------------------------------------------------------------------------
+
+  Khi QL duyet KK (ton da cap nhat, GiaoDichKho Dieu chinh).
+  Don gia = TonKho.DonGiaBinhQuan (hoac DonGiaVon tren ChiTietKiemKe neu luu).
+  SoTien = |ChenhLech| * DonGia.
+
+  Thieu (ChenhLech < 0):
+    Engine KK_THIEU (LoaiChungTu='KiemKe')
+    No  632     SoTien
+        Co 156      SoTien
+
+  Thua (ChenhLech > 0):
+    Engine KK_THUA
+    No  156     SoTien
+        Co 711      SoTien
+
+  Nhieu SP: 1 but toan nhieu dong, hoac 1 but toan gom.
+  Khong chenh: khong but toan.
+  Nhanh huy hang tu KK (PhieuXuat Huy + MaKK): XUAT_HUY (5.10),
+  KHONG ghi KK_THIEU trung (neu SL da nam tren PX huy).
+  QUYET DINH: dong KK co PhieuXuat Huy da xac nhan -> engine chi XUAT_HUY;
+  dong KK con lai moi KK_THIEU/KK_THUA.
+
+--------------------------------------------------------------------------------
+5.10. Phieu xuat thu cong (khi TK xac nhan xuat)
+--------------------------------------------------------------------------------
+
+  Huy hang:
+    Engine XUAT_HUY  No 632 / Co 156  (SL * DonGiaBinhQuan luc xuat)
+
+  Su dung noi bo:
+    Engine XUAT_NOI_BO  No 642 / Co 156
+
+  Tra NCC:
+    Neu HD mua cua PN do DA khop (da co MUA_HANG):
+      CHAN neu da ton tai PhieuChi cho CongNoPhaiTra do (bat ky
+      TrangThai: Cho duyet / Da duyet / Thanh cong / That bai / ...).
+      400: "Da lap Phieu chi cho cong no nay. Tra hang NCC phai xu ly
+      TRUOC KHI lap Phieu chi (1 cong no – 1 Phieu chi)."
+      KHONG giam SoTienConLai, KHONG sinh TRA_NCC_HANG.
+      Mini KHONG them workflow sua/huy PC de tra hang sau.
+      Neu CHUA co Phieu chi:
+        Engine TRA_NCC_HANG
+        No  331     hang + thue tuong ung SL tra
+            Co 156      hang
+            Co 1331     thue
+        DONG THOI giam CongNo (SoTienConLai -= tong) neu con no.
+    Neu CHUA khop: khong but toan (156 chua tang). Chi giam TonKho.
+
+--------------------------------------------------------------------------------
+5.11. Doi tra
+--------------------------------------------------------------------------------
+
+Dieu kien
+  PhieuDoiTra.TrangThai = N'Hoan thanh'
+
+5.11.1. Hoan tien
+  Tach thue THEO DONG HD GOC da luu (Khong lay SanPham.ThueSuat luc tra).
+
+  Voi moi dong Hang khach tra:
+    TyLe = SoLuongTra / SoLuongBan tren HD goc
+    HoanGomVAT = ThanhTienSauGiam_goc * TyLe   (hoac SoTienHoan phan bo)
+    Can: SUM phan bo = PhieuDoiTra.SoTienHoan
+    VAT_dao = round(HoanGomVAT * t / (100+t))
+    5212   = HoanGomVAT - VAT_dao
+
+  Engine DOI_TRA_HOAN (LoaiChungTu='PhieuDoiTra')
+  No  5212    SUM(5212)
+  No  33311   SUM(VAT_dao)
+      Co 111      neu PhuongThucHoan='Tien mat'
+      Co 112      neu QR/The/CK
+
+5.11.2. Nhap lai kho
+  Neu restock:
+    Engine DOI_TRA_NHAP_KHO
+    No  156     SUM(ThanhTienVon hang tra)
+        Co 632      (cung so)
+  Neu khong nhap lai: KHONG dao 632 (GV giu — hang vut).
+    P0 da ghi GiaoDichKho Dieu chinh SL=0.
+
+5.11.3. Doi hang ngang gia
+  Khong hoan tien -> khong DOI_TRA_HOAN.
+  Neu restock hang cu: DOI_TRA_NHAP_KHO nhu tren.
+  Hang giao doi:
+    Engine DOI_TRA_GIAO_DOI
+    No  632     SUM(ThanhTienVon hang giao doi)
+        Co 156      (cung so)
+  Khong dao 511/33311 (khong hoan, DT goc giu — dung lai gop P0:
+  GV thuan += GV giao doi, DT khong doi).
+
+5.11.4. Khac gia
+  P0: hoan hang cu (5.11.1 + 5.11.2) + HD moi (5.1 + 5.2). Khong them TK.
+
+--------------------------------------------------------------------------------
+5.12. Ket chuyen cuoi ky (UC39)
+--------------------------------------------------------------------------------
+
+  Engine KET_CHUYEN (LoaiChungTu='KyKeToan') — thu tu trong 1 giao dich:
+
+    1. No 511     du Co 511 ky        / Co 911
+    2. No 711     du Co 711 ky        / Co 911
+    3. No 911                        / Co 5212  (du No 5212)
+    4. No 911                        / Co 632
+    5. No 911                        / Co 642
+    6. Neu 911 du Co (lai):  No 911 / Co 421
+       Neu 911 du No (lo):   No 421 / Co 911
+
+  Sau ket chuyen, du 511/5212/632/642/711/911 = 0.
+  Idempotent 1 lan / ky: da co KET_CHUYEN hieu luc (DaBiDao=0, DaGhiSo)
+  -> alreadyPosted. KHONG cot DaKetChuyen tren KyKeToan.
+  Mo lai ky: dao toan bo dong KET_CHUYEN
+  (LoaiButToan='DAO_KET_CHUYEN', MaBTGoc; goc DaBiDao=1 van DaGhiSo).
+  CHI mo lai ky GAN NHAT neu ky ke tiep chua co BT nghiep vu hieu luc
+  (DaGhiSo, DaBiDao=0, LoaiButToan <> SODU_DAU_KY). Khoa lai: copy lai
+  / GHI DE so du dau ky ke tiep (NGOAI LE DaChot — D35). Muc 7.12 / D30 / D35.
+
+--------------------------------------------------------------------------------
+5.13. Bang tom tat — SU KIEN vs BUT TOAN
+--------------------------------------------------------------------------------
+
+  Su kien                              LoaiChungTu        LoaiButToan         No              Co
+  -----------------------------------  -----------------  ------------------  --------------  ----------
+  HD hoan thanh (tien)                 HoaDon             BAN_HANG            111 va/hoac 112 511+33311
+  HD hoan thanh (gia von)              HoaDon             GIA_VON             632             156
+  In lai / e-receipt                   --                 KHONG               --              --
+  Phieu thu khong lech                 --                 KHONG               --              --
+  Phieu thu thieu quy                  PhieuThu           LECH_QUY            138             111
+  Phieu thu thua quy                   PhieuThu           LECH_QUY            111             711
+  Doi tra hoan tien                    PhieuDoiTra        DOI_TRA_HOAN        5212+33311      111|112
+  Doi tra nhap lai kho                 PhieuDoiTra        DOI_TRA_NHAP_KHO    156             632
+  Doi tra giao doi                     PhieuDoiTra        DOI_TRA_GIAO_DOI    632             156
+  Khop 3 ben                           HoaDonMuaHang      MUA_HANG            156+1331        331
+  PN xac nhan chua khop                --                 KHONG               --              --
+  Lap PC / giao quy NCC                --                 KHONG               --              --
+  Chi NCC thanh cong                   PhieuChi           TRA_NCC             331             111|112
+  Khoa bang luong                      KyLuong            TRICH_LUONG         642             334
+  Chi luong thanh cong                 PhieuChiLuong      CHI_LUONG           334             111|112
+  Giao quy luong QL->KT                --                 KHONG               --              --
+  Chi phi van hanh                     ChiPhiVanHanh      CHI_PHI             642(+1331)      111|112
+  Cuoc van chuyen                      ChiPhiVanHanh      CHI_PHI             642             111|112
+  Mua TSCD                             TaiSanCoDinh       MUA_TSCD            211+1331        111|112
+  Khau hao thang                       KyKeToan           KHAU_HAO            642             214
+  KK thieu (khong qua PX huy)          KiemKe             KK_THIEU            632             156
+  KK thua                              KiemKe             KK_THUA             156             711
+  Xuat huy                             PhieuXuat          XUAT_HUY            632             156
+  Xuat noi bo                          PhieuXuat          XUAT_NOI_BO         642             156
+  Tra NCC (da khop)                    PhieuXuat          TRA_NCC_HANG        331             156+1331
+  So du dau ky                         KyKeToan           SODU_DAU_KY         (theo bang)     (theo bang)
+  Ket chuyen 911                       KyKeToan           KET_CHUYEN          (muc 5.12)      (muc 5.12)
+  But toan thu cong                    ThuCong            THU_CONG            (KT nhap)       (KT nhap)
+                                       MaChungTu=TC+yyMM+5so (server sinh; FE khong gui / bo qua)
+  Dao but toan                         (goc)              DAO_<LoaiGoc>       dao No<->Co     dao No<->Co
+                                                                  (goc + dao deu DaGhiSo;
+                                                                   goc DaBiDao=1)
+
+
+================================================================================
+6. THIET KE CSDL
+================================================================================
+
+6.1. Nguyen tac schema
+
+  Migration chay lai duoc (IF COL_LENGTH / IF OBJECT_ID).
+  Ten file: SupermarketFly_Migration_YYYYMMDD_TenNgan.sql
+  Them vao CUOI script migrate:next (server/package.json).
+  Khong sua file SQL da chay tren DB chung.
+  FK ve NhanVien / bang chung tu goc. Tien DECIMAL(18,2).
+  Ngay ke toan DATE hoac DATETIME gio Ha Noi (useUTC=false).
+  Khong xoa chung tu nghiep vu khi dao but toan.
+
+6.2. Bang moi — KT loi (Pha schema tuan 1)
+
+----- TaiKhoanKeToan -----
+  MaTK           VARCHAR(8)     PK
+  TenTK          NVARCHAR(200)  NOT NULL
+  TinhChat       NVARCHAR(20)   NOT NULL  CHECK IN (N'No', N'Co', N'LuongTinh')
+  LoaiBC         NVARCHAR(10)   NOT NULL  CHECK IN (N'TS', N'NV', N'DT', N'CP', N'TT')
+  MaCha          VARCHAR(8)     NULL      FK TaiKhoanKeToan(MaTK)
+  Cap            TINYINT        NOT NULL  DEFAULT 1
+  ChoPhepGhiSo   BIT            NOT NULL  DEFAULT 1   -- 0 = chi tong hop
+  LaHeThong      BIT            NOT NULL  DEFAULT 0   -- khong xoa
+  TrangThai      NVARCHAR(20)   NOT NULL  DEFAULT N'Su dung'
+  GhiChu         NVARCHAR(300)  NULL
+  CONSTRAINT CK_TKKT_TrangThai CHECK (TrangThai IN (N'Su dung', N'Ngung'))
+
+  Index: IX_TaiKhoanKeToan_MaCha, IX_TaiKhoanKeToan_TrangThai
+
+----- KyKeToan -----
+  MaKy           VARCHAR(7)     PK        -- YYYY-MM
+  Nam            SMALLINT       NOT NULL
+  Thang          TINYINT        NOT NULL  CHECK (Thang BETWEEN 1 AND 12)
+  TuNgay         DATE           NOT NULL
+  DenNgay        DATE           NOT NULL
+  TrangThai      NVARCHAR(20)   NOT NULL  DEFAULT N'ChuaMo'
+                 CHECK IN (N'ChuaMo', N'Mo', N'DeNghiKhoa', N'Khoa')
+  NgayMo         DATETIME       NULL
+  MaNV_Mo        VARCHAR(20)    NULL      FK NhanVien
+  NgayKhoa       DATETIME       NULL
+  MaNV_Khoa      VARCHAR(20)    NULL      FK NhanVien
+  GhiChu         NVARCHAR(300)  NULL
+  -- KHONG cot DaKetChuyen. KHONG cot MaBT_KetChuyen.
+  -- Da ket chuyen = EXISTS ButToan
+  --   LoaiChungTu='KyKeToan' AND LoaiButToan='KET_CHUYEN'
+  --   AND MaChungTu=MaKy AND DaBiDao=0 AND TrangThai='DaGhiSo'.
+  -- Mo lai ky = reverseJournal KET_CHUYEN (goc DaBiDao=1 + DAO_KET_CHUYEN).
+  -- Mo lai CHI ky GAN NHAT, va CHI khi ky ke tiep chua co BT nghiep vu
+  --   hieu luc (DaGhiSo, DaBiDao=0, LoaiButToan <> SODU_DAU_KY).
+  -- Khoa (ke ca khoa lai): copy / copy lai / GHI DE so du cuoi
+  --   -> SoDuDauKy ky sau (NGOAI LE DaChot — D35).
+  CONSTRAINT CK_Ky_Ngay CHECK (DenNgay >= TuNgay)
+  CONSTRAINT UQ_Ky_NamThang UNIQUE (Nam, Thang)
+
+----- SoDuDauKy -----
+  MaKy           VARCHAR(7)     NOT NULL  FK KyKeToan
+  MaTK           VARCHAR(8)     NOT NULL  FK TaiKhoanKeToan
+  SoDuNo         DECIMAL(18,2)  NOT NULL  DEFAULT 0 CHECK (>= 0)
+  SoDuCo         DECIMAL(18,2)  NOT NULL  DEFAULT 0 CHECK (>= 0)
+  DaChot         BIT            NOT NULL  DEFAULT 0
+                 -- 1 = da chot: NGUOI DUNG khong sua (PUT opening 400).
+                 -- NGOAI LE he thong: UC39 khoa lai ky truoc duoc GHI DE
+                 --   hang SoDuDauKy tu dong cua ky ke tiep (D35 / 7.12).
+                 -- Khong them chuc nang / man "sua so du da chot".
+  GhiChu         NVARCHAR(200)  NULL
+  CONSTRAINT PK_SoDuDauKy PRIMARY KEY (MaKy, MaTK)
+  CONSTRAINT CK_SoDu_MotBen CHECK (
+    (SoDuNo = 0 AND SoDuCo = 0) OR (SoDuNo = 0 AND SoDuCo > 0)
+    OR (SoDuCo = 0 AND SoDuNo > 0))
+
+----- ButToan -----
+  MaBT           VARCHAR(20)    PK        -- BT2609xxxxx
+  MaKy           VARCHAR(7)     NOT NULL  FK KyKeToan
+  NgayHachToan   DATE           NOT NULL
+  NgayChungTu    DATE           NOT NULL  -- GIU ngay CT goc (ke ca khi ghi so tre)
+  LoaiChungTu    NVARCHAR(30)   NOT NULL
+  MaChungTu      VARCHAR(30)    NOT NULL
+  LoaiButToan    NVARCHAR(30)   NOT NULL  -- BAN_HANG, GIA_VON, DAO_BAN_HANG, ...
+  DienGiai       NVARCHAR(500)  NOT NULL
+  TrangThai      NVARCHAR(20)   NOT NULL  DEFAULT N'DaGhiSo'
+                 CHECK IN (N'Nhap', N'DaGhiSo')
+                 -- CHOT: KHONG dung TrangThai='Dao'. Goc + dao deu DaGhiSo.
+  DaBiDao        BIT            NOT NULL  DEFAULT 0
+                 -- 1 = but toan goc da bi dao (van nam tren NKC/So cai)
+  MaBTGoc        VARCHAR(20)    NULL      FK ButToan
+                 -- NULL  = BT goc (BAN_HANG, GIA_VON, KET_CHUYEN, ...)
+                 -- NOT NULL = BT dao; gia tri = MaBT cua BT bi dao
+  TongNo         DECIMAL(18,2)  NOT NULL
+  TongCo         DECIMAL(18,2)  NOT NULL
+  MaNV_Lap       VARCHAR(20)    NOT NULL  FK NhanVien
+  NgayLap        DATETIME       NOT NULL  DEFAULT GETDATE()
+  Nguon          NVARCHAR(20)   NOT NULL  DEFAULT N'TuDong'
+                 CHECK IN (N'TuDong', N'ThuCong', N'Seeding')
+  CONSTRAINT CK_BT_CanBang CHECK (TongNo = TongCo)
+  -- KHONG CONSTRAINT UNIQUE thuong (chan dao + BT moi).
+
+  -- Trang thai BT (CHOT 1.2):
+  --   BT goc hieu luc : DaBiDao=0, MaBTGoc IS NULL
+  --   BT goc da dao   : DaBiDao=1, MaBTGoc IS NULL
+  --                     (van TrangThai=DaGhiSo, van ra NKC/So cai)
+  --   BT dao          : LoaiButToan='DAO_'+LoaiGoc (vd DAO_BAN_HANG),
+  --                     MaBTGoc = MaBT goc, DaBiDao=0
+  --                     Mini: KHONG dao tiep BT DAO_* (khuyen nghi).
+  --                     Neu van reverseJournal tren DAO_*: UPDATE DAO_
+  --                     DaBiDao=1; INSERT LoaiButToan='DAO_'+LoaiHienTai,
+  --                     MaBTGoc = MaBT cua dong DAO_. Khong bat buoc test.
+
+  -- Filtered unique — SQL Server KHONG ho tro LIKE trong filter predicate.
+  --   CREATE INDEX ... WHERE LoaiButToan NOT LIKE N'DAO%'  --> MIGRATION FAIL.
+  --   KHONG dung LIKE / NOT LIKE trong WHERE cua index.
+  --   LIKE van hop le trong QUERY bao cao (muc 8.4).
+  --
+  -- Vi sao KHONG CAN NOT LIKE:
+  --   BT dao co LoaiButToan khac goc (DAO_BAN_HANG != BAN_HANG) nen khong
+  --   dung unique (LoaiChungTu, MaChungTu, LoaiButToan).
+  --   Repost: dao goc (DaBiDao=1, ra khoi index) roi INSERT BAN_HANG moi
+  --   (DaBiDao=0) -> unique OK.
+  --
+  -- KHONG dung UNIQUE (..., MaBTGoc) gom ca goc: MaBTGoc NULL tren goc;
+  --   SQL Server unique + NULL khong dong nhat moi phien ban / filtered.
+  --   An toan: loc MaBTGoc IS NULL (index goc) va IS NOT NULL (index dao).
+
+  Index de xuat (DDL hop le):
+    CREATE UNIQUE INDEX UX_ButToan_Nguon
+      ON ButToan (LoaiChungTu, MaChungTu, LoaiButToan)
+      WHERE DaBiDao = 0 AND MaBTGoc IS NULL;
+      -- Chi BT goc/hieu luc chua dao.
+
+    CREATE UNIQUE INDEX UX_ButToan_Dao
+      ON ButToan (MaBTGoc, LoaiButToan)
+      WHERE MaBTGoc IS NOT NULL AND DaBiDao = 0;
+      -- Toi da 1 BT dao hieu luc / 1 MaBTGoc / 1 LoaiButToan.
+
+    CREATE INDEX IX_ButToan_KyNgay ON ButToan (MaKy, NgayHachToan);
+    CREATE INDEX IX_ButToan_ChungTu ON ButToan (LoaiChungTu, MaChungTu);
+    CREATE INDEX IX_ButToan_Loai ON ButToan (LoaiButToan, TrangThai);
+    CREATE INDEX IX_ButToan_DaBiDao ON ButToan (DaBiDao);
+    CREATE INDEX IX_ButToan_MaBTGoc ON ButToan (MaBTGoc);
+
+----- ChiTietButToan -----
+  -- Moi dong 1 TK, hoac No hoac Co (khong ca hai > 0).
+  -- Linh hoat hon mo hinh "1 dong = 1 cap No/Co" cua file nhap 31/08
+  -- (HD hon hop can 2 No + 2 Co).
+  MaBT           VARCHAR(20)    NOT NULL  FK ButToan ON DELETE CASCADE
+  SoDong         SMALLINT       NOT NULL
+  MaTK           VARCHAR(8)     NOT NULL  FK TaiKhoanKeToan
+  SoTienNo       DECIMAL(18,2)  NOT NULL  DEFAULT 0 CHECK (>= 0)
+  SoTienCo       DECIMAL(18,2)  NOT NULL  DEFAULT 0 CHECK (>= 0)
+  DienGiaiDong   NVARCHAR(300)  NULL
+  MaDoiTuong     VARCHAR(30)    NULL      -- MaNCC / MaNV / MaTSCD / MaSP
+  LoaiDoiTuong   NVARCHAR(20)    NULL      -- NCC|NV|TSCD|SP
+  CONSTRAINT PK_CTBT PRIMARY KEY (MaBT, SoDong)
+  CONSTRAINT CK_CTBT_MotBen CHECK (
+    (SoTienNo > 0 AND SoTienCo = 0) OR (SoTienCo > 0 AND SoTienNo = 0))
+  -- KHONG cot MaTKNH. BT ngan hang dung MaTK='112'. Khong tach VCB/MB.
+  -- Khong them 1121/1122 (D37).
+
+  CREATE INDEX IX_CTBT_TK ON ChiTietButToan (MaTK, MaBT);
+  CREATE INDEX IX_CTBT_DoiTuong ON ChiTietButToan (LoaiDoiTuong, MaDoiTuong);
+
+  -- KHONG tao bang CauHinhDinhKhoan.
+  -- Mapping dinh khoan CO DINH trong journalEngine.js theo muc 5
+  -- (~18 TK, >10 LoaiButToan). Khong lam accounting rule engine rieng.
+
+----- LoaiChiPhi -----
+  MaLoaiCP       VARCHAR(20)    PK
+  TenLoaiCP      NVARCHAR(100)  NOT NULL
+  MaTKMacDinh    VARCHAR(8)     NOT NULL  DEFAULT '642'
+  TrangThai      NVARCHAR(20)   NOT NULL  DEFAULT N'Su dung'
+
+----- ChiPhiVanHanh -----
+  MaCP           VARCHAR(20)    PK
+  MaKy           VARCHAR(7)     NOT NULL  FK KyKeToan
+                 -- ky chua NgayChungTu (co the da Khoa).
+                 -- Khac ButToan.MaKy khi ghi so tre (ButToan.MaKy = ky Mo).
+  MaLoaiCP       VARCHAR(20)    NOT NULL  FK LoaiChiPhi
+  NgayChungTu    DATE           NOT NULL
+  SoChungTu      VARCHAR(50)    NULL
+  MaNCC          VARCHAR(20)    NULL      FK NhaCungCap
+  MaSoThue       VARCHAR(20)    NULL
+  TienHang       DECIMAL(18,2)  NOT NULL  CHECK (>= 0)
+  ThueSuat       DECIMAL(5,2)   NOT NULL  DEFAULT 0
+  TienThue       DECIMAL(18,2)  NOT NULL  DEFAULT 0
+  TongCong       DECIMAL(18,2)  NOT NULL  CHECK (>= 0)
+  MaTKTien       VARCHAR(8)     NOT NULL  -- CHI 111|112 (CHECK), khong 331
+  MaGiaoDich     VARCHAR(50)    NULL
+  TrangThai      NVARCHAR(20)   NOT NULL  DEFAULT N'Nhap'
+                 CHECK IN (N'Nhap', N'DaXacNhan', N'DaHuy')
+  MaNV_Lap       VARCHAR(20)    NOT NULL  FK NhanVien
+  NgayLap        DATETIME       NOT NULL  DEFAULT GETDATE()
+  NgayXacNhan    DATETIME       NULL
+  DuongDanAnh    NVARCHAR(300)  NULL
+  GhiChu         NVARCHAR(500)  NULL
+  CONSTRAINT CK_CP_Tong CHECK (ABS(TongCong - (TienHang + TienThue)) < 0.02)
+  CONSTRAINT CK_CP_TKTien CHECK (MaTKTien IN ('111', '112'))
+  -- KHONG cot MaBT. Truy: LoaiChungTu='ChiPhiVanHanh' + MaChungTu=MaCP.
+
+----- ChoGhiSo (hang doi UC37 quet) -----
+  MaCho          BIGINT         IDENTITY PK
+  LoaiChungTu    NVARCHAR(30)   NOT NULL
+  MaChungTu      VARCHAR(30)    NOT NULL
+  LyDo           NVARCHAR(200)  NOT NULL  -- PN_CHUA_DOI_CHIEU | KY_KHOA | THIEU_THUE | LOI
+  NgayPhatSinh   DATETIME       NOT NULL  DEFAULT GETDATE()
+  DaXuLy         BIT            NOT NULL  DEFAULT 0
+  -- KHONG CONSTRAINT UQ_ChoGhiSo UNIQUE (LoaiChungTu, MaChungTu, LyDo)
+  --   tren CA lich su: sau DaXuLy=1, dao/repost lai KY_KHOA cung CT+LyDo
+  --   se INSERT fail. Khong them bang — chi doi constraint.
+  -- SQL Server filtered unique hop le (so sanh =, khong LIKE):
+  --   CREATE UNIQUE INDEX UX_ChoGhiSo_Active
+  --     ON ChoGhiSo (LoaiChungTu, MaChungTu, LyDo)
+  --     WHERE DaXuLy = 0;
+  -- Hang DaXuLy=1 ra khoi index; INSERT hang moi DaXuLy=0 cung key OK.
+
+6.3. Bang moi — KT mo rong
+
+----- TaiKhoanNganHang -----
+  -- Mini: 1 tai khoan ngan hang doanh nghiep (doi chieu sao ke UC42).
+  -- Nhieu NH = huong phat trien. Khong seed 2 TK. Khong 1121/1122.
+  -- MaTKKeToan luon 112. Khong luu MaTKNH tren ChiTietButToan (D37).
+  MaTKNH         VARCHAR(20)    PK
+  SoTaiKhoan     VARCHAR(30)    NOT NULL
+  TenNH          NVARCHAR(100)  NOT NULL
+  ChiNhanh       NVARCHAR(100)  NULL
+  ChuTaiKhoan    NVARCHAR(150)  NOT NULL
+  MaTKKeToan     VARCHAR(8)     NOT NULL  DEFAULT '112'
+  TrangThai      NVARCHAR(20)   NOT NULL  DEFAULT N'Su dung'
+  CONSTRAINT UQ_TKNH_So UNIQUE (SoTaiKhoan)
+
+----- TaiSanCoDinh -----
+  MaTSCD         VARCHAR(20)    PK
+  TenTSCD        NVARCHAR(200)  NOT NULL
+  Nhom           NVARCHAR(50)   NOT NULL  -- POS|MAY_TINH|TU|DIEU_HOA|MAY_IN|KHAC
+  BoPhan         NVARCHAR(50)   NULL
+  NgayMua        DATE           NOT NULL
+  NgayDuaVaoSD   DATE           NOT NULL
+  SoThangKH      SMALLINT       NOT NULL  CHECK (> 0)
+  NguyenGia      DECIMAL(18,2)  NOT NULL  CHECK (> 0)   -- CHUA VAT
+  TienThue       DECIMAL(18,2)  NOT NULL  DEFAULT 0
+  MaTKTien       VARCHAR(8)     NOT NULL  -- CHI 111|112, khong 331
+  MaNCC          VARCHAR(20)    NULL
+  SoHoaDon       VARCHAR(50)    NULL
+  TrangThai      NVARCHAR(20)   NOT NULL  DEFAULT N'Su dung'
+  MaNV_Lap       VARCHAR(20)    NOT NULL
+  NgayLap        DATETIME       NOT NULL  DEFAULT GETDATE()
+  CONSTRAINT CK_TSCD_TKTien CHECK (MaTKTien IN ('111', '112'))
+  -- KHONG cot MaBT. Truy: LoaiChungTu='TaiSanCoDinh' + MaChungTu=MaTSCD.
+
+----- KhauHaoTaiSan -----
+  MaTSCD         VARCHAR(20)    NOT NULL  FK
+  MaKy           VARCHAR(7)     NOT NULL  FK
+  SoTien         DECIMAL(18,2)  NOT NULL
+  NgayChay       DATETIME       NOT NULL  DEFAULT GETDATE()
+  CONSTRAINT PK_KH PRIMARY KEY (MaTSCD, MaKy)
+  -- KHONG cot MaBT. KH ky = 1 ButToan KHAU_HAO / MaKy (muc 5.8.2).
+
+----- SaoKeNganHang -----
+  MaSaoKe        VARCHAR(20)    PK
+  MaTKNH         VARCHAR(20)    NOT NULL  FK
+  TuNgay         DATE           NOT NULL
+  DenNgay        DATE           NOT NULL
+  TenFile        NVARCHAR(260)  NOT NULL
+  HashFile       VARCHAR(64)    NULL
+  MaNV_Import    VARCHAR(20)    NOT NULL
+  NgayImport     DATETIME       NOT NULL  DEFAULT GETDATE()
+  TrangThai      NVARCHAR(20)   NOT NULL  DEFAULT N'DaNhap'
+
+----- DongSaoKe -----
+  MaDong         BIGINT         IDENTITY PK
+  MaSaoKe        VARCHAR(20)    NOT NULL  FK
+  NgayGD         DATE           NOT NULL
+  SoTien         DECIMAL(18,2)  NOT NULL  -- + thu, - chi (hoac 2 cot)
+  PhatSinhNo     DECIMAL(18,2)  NOT NULL  DEFAULT 0
+  PhatSinhCo     DECIMAL(18,2)  NOT NULL  DEFAULT 0
+  DienGiai       NVARCHAR(300)  NULL
+  MaGiaoDich     VARCHAR(80)    NULL
+  TrangThaiKhop  NVARCHAR(20)   NOT NULL  DEFAULT N'Chua khop'
+                 CHECK IN (N'Chua khop', N'Khop tu dong', N'Khop thu cong',
+                           N'Chenh lech')
+  LoaiChungTuKhop NVARCHAR(30)  NULL
+  MaChungTuKhop  VARCHAR(30)    NULL
+  GhiChuKhop     NVARCHAR(200)  NULL
+  CREATE INDEX IX_DongSaoKe_MaGD ON DongSaoKe (MaGiaoDich);
+  CREATE INDEX IX_DongSaoKe_TienNgay ON DongSaoKe (NgayGD, SoTien);
+  -- KHONG bang DoiChieuNganHang. 4 cot khop o tren la du.
+  -- Import CHI CSV (D38). Khong parser Excel.
+
+6.4. Cot them vao bang CU
+
+----- SanPham -----
+  ThueSuat       DECIMAL(5,2)   NULL
+                 CHECK (ThueSuat IS NULL OR ThueSuat IN (0, 5, 8, 10))
+  -- DEFAULT: NULL (KHONG DEFAULT 0, KHONG 8).
+  -- NULL = QL chua chon / du lieu cu thieu thue.
+  -- 0    = da xac dinh 0% (hop le sau xac nhan luc cau hinh SP).
+  -- 5/8/10 = da chon muc thue.
+  -- QL BAT BUOC chon 0 / 5 / 8 / 10 khi tao/sua SP (UC04). Khong luu NULL
+  --   tren SP moi (force select). Neu chon 0: dialog
+  --   "Xac nhan thue suat 0% theo cau hinh san pham?" (muc 10.3).
+  -- POS / tao HD moi: chan add line + completeInvoice neu SanPham.ThueSuat
+  --   IS NULL. ThueSuat=0 tren SP da cau hinh la hop le — KHONG bat xac
+  --   nhan lai o quay (1.1 bat xac nhan khi =0: BO).
+  -- Seed demo: tung SP dung muc thue nhom quy uoc (0/5/8/10), khong UPDATE
+  --   hang loat = 8, khong de NULL tren SP demo. Khop PHAM_VI: 0/5/8/10.
+  -- Khong sua thue tren dong HD da xong.
+
+----- ChiTietHoaDon -----
+  ThueSuat       DECIMAL(5,2)   NULL
+                 CHECK (ThueSuat IS NULL OR ThueSuat IN (0, 5, 8, 10))
+  TienThue       DECIMAL(18,2)  NOT NULL DEFAULT 0
+  ThanhTienSauGiam DECIMAL(18,2) NULL
+  -- Copy ThueSuat luc add line / complete. TienThue tinh luc complete.
+  -- HD MOI hoan thanh: ThueSuat BAT BUOC IN (0, 5, 8, 10), KHONG NULL
+  --   (app check completeInvoice; khong DEFAULT 0 de tron HD cu).
+  -- HD CU (truoc KT / migration): ThueSuat NULL, TienThue=0
+  --   -> UC40 danh "Thieu thue". KHONG gan 0 (0 = 0% hop le).
+
+----- HoaDon -----
+  TienThue       DECIMAL(18,2)  NOT NULL DEFAULT 0
+  -- KHONG cot MaBT (1 HD = 2 LoaiButToan BAN_HANG + GIA_VON).
+  -- P1 e-receipt (KHONG nam migration KT loi neu song song nganh):
+  TokenXem       VARCHAR(64)    NULL
+  HetHanTokenXem DATETIME       NULL
+  CREATE UNIQUE INDEX UX_HoaDon_TokenXem ON HoaDon(TokenXem) WHERE TokenXem IS NOT NULL;
+
+----- ThanhToan (P1, khong chan KT loi) -----
+  NguonXacNhan   NVARCHAR(20)   NULL      -- ThuCong|VNPay|PayOS
+  MaThamChieuCong VARCHAR(80)   NULL
+
+----- HoaDonMuaHang -----
+  DuongDanAnh    NVARCHAR(300)  NULL      -- moc OCR P2
+  -- KHONG cot MaBT. Truy: LoaiChungTu='HoaDonMuaHang' + MaChungTu=MaHDMH.
+
+----- PhieuChi / PhieuChiLuong / PhieuDoiTra / PhieuXuat / KiemKe / PhieuThu / KyLuong -----
+  KHONG them cot MaBT / MaBT_LechQuy / MaBT_Trich.
+  Truy vet: ButToan WHERE LoaiChungTu + MaChungTu (+ LoaiButToan).
+  Mot chung tu duoc phep nhieu LoaiButToan (vd PhieuDoiTra: HOAN + NHAP_KHO + GIAO_DOI).
+
+6.5. Bang KHONG tao
+
+  TonKhoTheoLo, LoHang, ChiPhiTraTruoc, LichPhanBo, TK 242.
+  Quyen rieng ngoai ChucNang / VaiTro_ChucNang (them dong UC34-UC43).
+  Bang NhatKyChung rieng — NKC = VIEW / query tu ButToan + ChiTietButToan.
+  Khong dung bang NhatKy (audit) thay so cai.
+  CauHinhDinhKhoan — mapping nam trong journalEngine.js.
+  Cot MaBT don tren moi bang chung tu goc (HoaDon, PhieuDoiTra, KiemKe, ...).
+  DoiChieuNganHang — KHONG tao. Trang thai doi chieu nam DongSaoKe
+    (TrangThaiKhop, LoaiChungTuKhop, MaChungTuKhop, GhiChuKhop).
+  Cot KyKeToan.DaKetChuyen — KHONG tao (1.1 liet ke, 1.2 bo).
+
+6.6. View / function de xuat (khong bat buoc migration 1)
+
+  vw_SoCaiDong
+    = ChiTietButToan JOIN ButToan WHERE TrangThai=N'DaGhiSo'
+    -- GOM goc DaBiDao=1 va BT LoaiButToan LIKE 'DAO_%'.
+    -- KHONG loc DaBiDao=0. KHONG loc TrangThai='Dao' (cot do khong ton tai).
+    -- Sau dao: so cai ve 0 vi 100 + (-100) = 0, ca hai dong deu DaGhiSo.
+  fn_SoDuCuoi(@MaTK, @ToExclusive)
+    = SoDuDau + SUM(No) - SUM(Co)  (TK du No)
+    hoac SoDuDauCo + SUM(Co) - SUM(No) (TK du Co)
+    -- SUM lay tu vw_SoCaiDong (DaGhiSo, gom dao).
+
+6.7. Ten migration de xuat (thu tu)
+
+  1) SupermarketFly_Migration_20260909_AccountingCore.sql
+       TaiKhoanKeToan, KyKeToan (KHONG cot DaKetChuyen), SoDuDauKy,
+       ButToan (gom DaBiDao, MaBTGoc),
+       ChiTietButToan, ChoGhiSo
+       UX_ButToan_Nguon / UX_ButToan_Dao nhu muc 6.2 (KHONG LIKE trong filter)
+       UX_ChoGhiSo_Active UNIQUE (LoaiChungTu, MaChungTu, LyDo)
+         WHERE DaXuLy = 0  (KHONG UQ_ChoGhiSo thuong)
+       Seed COA 18 TK muc 4.2 (gom 138)
+       KHONG tao / KHONG seed CauHinhDinhKhoan
+       KHONG tao DoiChieuNganHang
+  2) SupermarketFly_Migration_20260909_VatOnPos.sql
+       SanPham.ThueSuat NULL, CHECK (NULL OR IN (0,5,8,10)), KHONG DEFAULT 0
+       ChiTietHoaDon.ThueSuat NULL (HD cu), TienThue/ThanhTienSauGiam,
+       HoaDon.TienThue
+       KHONG UPDATE SanPham SET ThueSuat=8
+       KHONG UPDATE SanPham SET ThueSuat=0  (0 = 0% hop le, khong phai chua chon)
+       Seed demo: tung SP dung muc thue nhom quy uoc (khong gan loat 8)
+       HD cu: ThueSuat=NULL, TienThue=0 — manh "du lieu truoc VAT", khong bia
+       (ban SP cu ThueSuat NULL: POS chan den khi QL chon 0/5/8/10, muc 10.3)
+  3) SupermarketFly_Migration_20260910_OperatingExpense.sql
+       LoaiChiPhi, ChiPhiVanHanh, seed 8 loai
+  4) SupermarketFly_Migration_20260912_AccountingPermissions.sql
+       INSERT ChucNang UC34-UC43; map KT + QL (xem muc 9)
+       (hoac seed-permissions.js, khong bat buoc SQL)
+  5) KT mo rong:
+       SupermarketFly_Migration_20260920_FixedAssets.sql
+       SupermarketFly_Migration_20260921_BankStatement.sql
+         (SaoKeNganHang + DongSaoKe; KHONG tao DoiChieuNganHang;
+          TaiKhoanNganHang 1 TKNH mini; KHONG cot MaTKNH tren CTBT;
+          import CSV — D37/D38)
+
+  P1 (khong lan voi 1-2 neu 2 nhanh):
+       SupermarketFly_Migration_202609xx_PaymentGateway.sql
+       SupermarketFly_Migration_202609xx_EReceiptToken.sql
+
+6.8. Seed quyen
+
+  Them vao server/src/constants/permissions.js FUNCTION_CATALOG UC34-UC43.
+  ROLE_PERMISSION_CODES:
+    ke toan += UC34, UC35, UC36, UC37, UC38, UC39, UC40, UC41, UC42, UC43
+    quan ly += UC39 (mo lai), UC43 (xem bao cao), UC38 (xem so — tuy chon)
+  Chay lai seed-permissions (khong xoa quyen cu).
+
+6.9. Rang buoc nghiep vu nhac lai o DB
+
+  ButToan.TongNo = TongCo (CHECK).
+  Unique nguon tu dong: UX_ButToan_Nguon
+    (LoaiChungTu, MaChungTu, LoaiButToan)
+    WHERE DaBiDao = 0 AND MaBTGoc IS NULL.
+  Unique BT dao: UX_ButToan_Dao (MaBTGoc, LoaiButToan)
+    WHERE MaBTGoc IS NOT NULL AND DaBiDao = 0.
+  KHONG LIKE / NOT LIKE trong filter index.
+  ChoGhiSo: UX_ChoGhiSo_Active UNIQUE (LoaiChungTu, MaChungTu, LyDo)
+    WHERE DaXuLy = 0. KHONG UQ_ChoGhiSo tren ca lich su. Filter dung =
+    (DaXuLy = 0), khong LIKE — hop le tren SQL Server.
+  KyKeToan 1 dong / thang. KHONG cot DaKetChuyen.
+  KhauHaoTaiSan 1 dong / TSCD / ky.
+  DongSaoKe khong khop 2 chung tu (unique MaDong khi da khop — app check).
+  ChiPhiVanHanh.MaTKTien IN ('111','112'). TaiSanCoDinh.MaTKTien IN ('111','112').
+
+
+================================================================================
+7. ENGINE BUT TOAN
+================================================================================
+
+7.1. File va API noi
+
+  THEM  server/src/services/journalEngine.js
+        Mapping dinh khoan CO DINH theo muc 5 (~18 TK, >10 LoaiButToan).
+        KHONG doc bang CauHinhDinhKhoan. KHONG lam rule engine rieng.
+  THEM  server/src/services/vatSales.js          -- splitVatInclusive
+  THEM  server/src/controllers/ledgerController.js
+  THEM  server/src/routes/ledgerRoutes.js        -- gan /api/ledger
+  SUA   app.js mount /api/ledger
+  Goi engine TRONG transaction nghiep vu (cung sql.Transaction).
+
+  export:
+    postJournal(tx, payload) -> { MaBT, alreadyPosted }
+    reverseJournal(tx, { MaBTGoc, MaNV, lyDo })
+    previewJournal(payload)  -- khong ghi, dung man "Xem dinh khoan"
+    scanUnposted(pool, { MaKy })
+    assertPeriodOpen(tx, ngay)   -- CHI goi voi NgayHachToan SAU khi remap
+                                 -- ky Mo; KHONG goi voi ngay goc ky Khoa
+    postLate(tx, choGhiSoId)     -- Ghi so tre: doi MaKy/NgayHachToan ky Mo
+
+7.2. Khi nao tu sinh / khi nao thu cong
+
+  Tu sinh (Nguon=TuDong): dung bang 5.13, chi khi trang thai hop le.
+  Thu cong (Nguon=ThuCong, LoaiButToan=THU_CONG):
+    KT nhap ngay, dien giai, cac dong TK+No/Co.
+    Bat buoc No=Co. Bat buoc ky Mo.
+    Khong duoc chon TK ChoPhepGhiSo=0 (TK tong).
+    LoaiChungTu server gan 'ThuCong'.
+    MaChungTu do SERVER sinh: 'TC' + yyMM + 5 so (vd TC260900001),
+      generateId prefix TC + yyMM (cung kieu MaBT = BT+yyMM+...).
+      Payload FE khong bat buoc maChungTu; neu gui (ke ca "THUCONG")
+      thi server BO QUA. Unique van UX_ButToan_Nguon
+      (LoaiChungTu, MaChungTu, LoaiButToan).
+    Dung de: dieu chinh KT duoc phep trong mini — vd thu bu / xoa
+      chenh lech TK 138 (No 111 / Co 138; hoac No 642 / Co 138).
+    KHONG dung THU_CONG cho thanh ly TSCD (211/214/GTCL/tien thu/lai lo).
+    UC41 mini khong lam thanh ly / danh gia lai.
+  Khong cho TN/TK/MH nhap but toan.
+  Khong cho sua dong but toan TuDong da ghi. Chi DAO + (neu can) THU_CONG.
+
+7.3. Payload postJournal
+
+  {
+    loaiChungTu, maChungTu, loaiButToan,
+    ngayHachToan, ngayChungTu, dienGiai,
+    lines: [{ maTK, soTienNo, soTienCo, dienGiaiDong, maDoiTuong, loaiDoiTuong }],
+    maNV, nguon
+  }
+
+  THU_CONG: loaiButToan='THU_CONG', nguon='ThuCong'.
+    loaiChungTu / maChungTu KHONG bat buoc; server gan LoaiChungTu='ThuCong'
+    va sinh MaChungTu TC+yyMM+5 so. Neu FE gui maChungTu thi BO QUA.
+
+  Buoc trong engine:
+    1. Khoa UPDLOCK hang ChoGhiSo active (DaXuLy=0) / UX_ChoGhiSo_Active
+       (serializable nhu completeInvoice).
+    2. Tim ButToan cung (LoaiChungTu, MaChungTu, LoaiButToan)
+       TrangThai=DaGhiSo AND DaBiDao=0 AND MaBTGoc IS NULL
+       -> return alreadyPosted=true (KHONG insert).
+       Neu chi con ban DaBiDao=1 (da dao) -> KHONG alreadyPosted, cho phep
+       post BT moi (UX_ButToan_Nguon da nha goc).
+    3. Xac dinh ky ghi so:
+         a. Giu NgayChungTu = ngay chung tu goc (KHONG doi).
+         b. Tim KyKeToan chua NgayChungTu.
+         c. Neu ky do TrangThai=Mo: NgayHachToan = NgayChungTu, MaKy = ky do.
+         d. Neu ky do Khoa (hoac khong co / khong Mo):
+              KHONG assertPeriodOpen(NgayChungTu) — se fail oan.
+              KHONG throw lam rollback P0.
+              INSERT ChoGhiSo LyDo=KY_KHOA neu CHUA co hang DaXuLy=0
+              cung (LoaiChungTu, MaChungTu, LyDo). Hang DaXuLy=1 KHONG
+              chan INSERT moi (UX_ChoGhiSo_Active; khong UQ_ChoGhiSo
+              tren ca lich su). Dao/repost lai KY_KHOA -> hang moi.
+              P0 / UC36 van COMMIT chung tu (HD Hoan thanh, chi phi DaXacNhan).
+              return { queued: true } — chua INSERT ButToan.
+         e. Khi KT bam "Ghi so tre" (UC37):
+              Tim ky ke toan DANG MO ke tiep (TuNgay > DenNgay ky khoa,
+              TrangThai=Mo, uu tien ky Mo som nhat).
+              Neu CO ky Mo: NgayHachToan = TuNgay ky Mo (hoac ngay hien tai
+              neu nam trong ky Mo), MaKy = ky Mo. Roi INSERT ButToan.
+              Neu CHUA co ky Mo: van ChoGhiSo, khong ghi, khong 400 chet.
+    4. Kiem moi MaTK Su dung + ChoPhepGhiSo=1.
+    5. SUM No = SUM Co, tolerance 0.00 (CHECK cot). Lam tron truoc khi goi.
+    6. Generate MaBT (generateId prefix BT + yyMM).
+       THU_CONG: sinh MaChungTu 'TC'+yyMM+5 so; LoaiChungTu='ThuCong';
+       bo qua maChungTu FE.
+    7. INSERT ButToan + ChiTietButToan
+       (TrangThai=DaGhiSo, DaBiDao=0, MaBTGoc NULL neu khong phai dong dao).
+    8. KHONG UPDATE MaBT tren chung tu goc (khong co cot).
+    9. logAudit UC37.
+   10. Anh xa ChoGhiSo: UPDATE DaXuLy=1 (GIU hang — lich su). KHONG
+       can DELETE. Hang DaXuLy=1 ra khoi UX_ChoGhiSo_Active, cho phep
+       INSERT lai cung (LoaiChungTu, MaChungTu, LyDo).
+
+  CHOT MINI (thay the cac phuong an cu):
+    Ky Mo + mat can bang -> throw, rollback P0.
+    Ky Khoa -> P0/chi phi commit + ChoGhiSo; ghi so tre vao ky Mo ke tiep.
+    Engine khong dung NgayHachToan goc thuoc ky khoa roi assertPeriodOpen.
+
+7.4. Idempotent
+
+  Filtered unique UX_ButToan_Nguon
+    (LoaiChungTu, MaChungTu, LoaiButToan)
+    WHERE DaBiDao = 0 AND MaBTGoc IS NULL.
+  BT dao khong nam index nay (MaBTGoc NOT NULL). KHONG loc NOT LIKE 'DAO%'.
+  completeInvoice alreadyCompleted -> khong goi engine lan 2
+    (neu goi, engine van no-op vi DaBiDao=0, MaBTGoc IS NULL).
+  IPN P1 goi completeInvoice 2 lan -> giong P0.
+  OCR khong goi engine.
+  In HD / GET / Telegram khong goi engine.
+  "Quet chua ghi so" chi post khi CHUA co hang DaGhiSo + DaBiDao=0.
+
+7.5. Dao but toan
+
+  reverseJournal:
+    - Chi dao BT TrangThai=DaGhiSo VA DaBiDao=0. Nguon bat ky.
+    - Mini khuyen nghi: KHONG dao BT LoaiButToan bat dau 'DAO_'
+      (khong dao tiep dong dao). De ghi lai nghiep vu: postJournal BT goc moi.
+    - Tao ButToan MOI: LoaiButToan='DAO_'+goc, MaBTGoc = MaBT goc,
+      lines No<->Co, cung so tien, DienGiai='Dao {MaBTGoc}: {lyDo}',
+      TrangThai='DaGhiSo', DaBiDao=0, MaBTGoc NOT NULL.
+    - UPDATE goc: DaBiDao=1. GIU TrangThai='DaGhiSo'. MaBTGoc goc van NULL.
+      KHONG set TrangThai='Dao' (cot gia tri nay khong ton tai).
+    - Goc va dao CUNG xuat hien tren NKC / So cai / vw_SoCaiDong
+      (ca hai DaGhiSo). So cai ve 0 vi 100 + (-100) = 0.
+      Neu loc so chi DaGhiSo ma doi goc thanh 'Dao' thi chi con -100 — SAI.
+    - Unique: goc DaBiDao=1 khong con chiem UX_ButToan_Nguon
+      (filter DaBiDao=0 AND MaBTGoc IS NULL).
+      BT dao nam UX_ButToan_Dao, khong dung unique goc.
+      => neu can ghi lai nghiep vu: postJournal moi cung
+         (LoaiChungTu, MaChungTu, LoaiButToan), MaBTGoc NULL, DaBiDao=0
+         — KHONG bi unique chan.
+      Quy tac repost: dao (giu goc DaBiDao=1) + lap BT moi.
+    - Khong DELETE. Khong UPDATE so dong goc.
+    - Ky khoa: khong dao BT da ghi vao ky Khoa; mo lai ky truoc (UC39 /
+      7.12 — chi ky gan nhat, ky sau chua PS nghiep vu)
+      HOAC (neu chinh sua nghiep vu sau khoa / khong mo lai duoc) dieu
+      chinh bang BT thu cong / ghi so tre ky Mo — khong ghi am vao ky Khoa.
+
+7.6. So du dau ky
+
+  SODU_DAU_KY: Nguon=Seeding, khong tinh vao PHAT SINH ky
+  (bao cao So cai: cot "So du dau" lay SoDuDauKy, KHONG lay but toan nay
+  nhu phat sinh). But toan nay chi de truy vet / in bien ban.
+  CDPS.PhatSinhNo = SUM ChiTiet WHERE LoaiButToan NOT IN ('SODU_DAU_KY').
+  Khi khoa lai ky truoc (D35): neu da co BT SODU_DAU_KY cu cua ky sau
+  thi dao/repost hoac tai sinh; GHI DE hang SoDuDauKy (ke ca DaChot).
+
+7.7. Audit
+
+  Moi post/reverse: NhatKy he thong (auditLog.js) action:
+    "Ghi so {MaBT} {LoaiButToan} {LoaiChungTu} {MaChungTu} No={n} Co={c}"
+    "Dao so {MaBTGoc} -> {MaBTMoi} ly do ..."
+  Khong dung NhatKy lam NKC.
+  Telegram khong ghi so.
+
+7.8. Khoa so — checklist truoc khi khoa (2 nhom, KHONG override)
+
+  Nhom A — BLOCK khoa (API 400). KHONG flag "khoa van canh bao" /
+  override / xacNhanBoQua. Ly do: khoa + KET_CHUYEN khi chung tu da
+  hop le thieu BT -> KQKD / so cai ky thieu so.
+
+  [ ] Khong con ButToan TongNo != TongCo (query an toan).
+  [ ] Khong con HD Hoan thanh thieu BAN_HANG hoac GIA_VON
+      (hang DaGhiSo AND DaBiDao=0 AND MaBTGoc IS NULL).
+      HD Hoan thanh ThueSuat NULL (chua post, checklist "Thieu thue"):
+      khong ep post, NHUNG van BLOCK khoa (thieu BAN_HANG).
+  [ ] Khong con HoaDonMuaHang Da khop thieu MUA_HANG (hieu luc DaBiDao=0).
+  [ ] Khong con PhieuChi Thanh toan thanh cong thieu TRA_NCC (hieu luc).
+  [ ] Khong con KyLuong Da khoa thieu TRICH_LUONG.
+  [ ] Khong con PhieuChiLuong thanh cong thieu CHI_LUONG.
+  [ ] Khong con ChiPhi DaXacNhan thieu CHI_PHI.
+  [ ] Neu tick ket chuyen: chay KET_CHUYEN thanh cong
+      (ton tai ButToan KET_CHUYEN DaBiDao=0 DaGhiSo). KHONG cot DaKetChuyen.
+      (That bai ket chuyen -> khong khoa.)
+
+  Nhom B — CHI CANH BAO, van khoa duoc (khong can override):
+
+  [ ] PN da nhan / da xac nhan chua 3-way match (ChoGhiSo PN_CHUA_DOI_CHIEU).
+  [ ] Hoa don dang Nhap.
+  [ ] Chung tu cho duyet (PC Cho duyet, cham cong Cho duyet, ...).
+  [ ] Nghiep vu chua du dieu kien ghi so (3-way chua khop, PC chua thanh
+      cong, bang luong chua khoa, chi phi con Nhap, ...).
+  [ ] Ca Da chot chua Phieu thu — canh bao, khong chan.
+  [ ] ButToan Nhap (neu con dung trang thai nay) — canh bao; khong nam
+      nhom thieu BT chung tu hoan thanh.
+
+  Sau khoa: postJournal KHONG ghi vao ky Khoa. P0/UC36 commit + ChoGhiSo.
+  Copy so du cuoi -> SoDuDauKy ky sau (lan khoa lai sau mo lai: copy LAI
+  / GHI DE ke ca hang DaChot=1 — NGOAI LE he thong D35).
+  "Ghi so tre" (muc 7.11): doi NgayHachToan + MaKy sang ky Mo ke tiep.
+  Dao BT trong ky Mo: theo 7.5 (goc DaBiDao=1 van DaGhiSo).
+  Mo lai: muc 7.12.
+
+7.9. Quet chung tu chua ghi so (man KT)
+
+  SELECT HD Hoan thanh LEFT JOIN ButToan BAN_HANG
+         (DaGhiSo AND DaBiDao=0 AND MaBTGoc IS NULL) IS NULL
+  UNION MUA, TRA_NCC, TRICH_LUONG, ...
+  UNION PN xac nhan chua HDMH khop (chi canh bao, khong nut Ghi so).
+  UNION hang ChoGhiSo LyDo=KY_KHOA.
+  UNION hang ChoGhiSo LyDo=THIEU_THUE (HD dong ThueSuat NULL — canh bao,
+        KHONG nut Ghi so den khi bo sung thue).
+  Nut "Ghi so" / "Ghi so tre" goi postJournal theo loai (quyen UC37).
+  Ghi so tre: remap MaKy/NgayHachToan nhu 7.3 buoc 3.e.
+
+7.10. Giao voi P1 / P2
+
+  VNPay: khong them LoaiButToan. QR van 112. MaGiaoDich = vet UC42.
+  E-receipt: khong engine.
+  OCR: khong engine cho toi KT bam Doi chieu khop.
+  AI / Telegram: khong engine.
+
+7.11. Ghi so tre / khoa ky — QUY TAC BAT BUOC
+
+  1. Khoa ky KHONG chan POS/P0: completeInvoice, 3-way, chi NCC, luong,
+     doi tra, KK, PX... van COMMIT. BT (neu ky chung tu da Khoa) o ChoGhiSo.
+  2. Giu NgayChungTu goc tren chung tu va tren ButToan khi ghi so tre.
+  3. Khi KT bam "Ghi so tre": NgayHachToan va MaKy = ky ke toan DANG MO
+     ke tiep. Khong ghi vao ky Khoa.
+  4. Neu chua co ky Mo -> tiep tuc ChoGhiSo. Khong 400, khong fail engine.
+  5. Engine KHONG goi assertPeriodOpen(ngayGoc) khi ngay goc thuoc ky Khoa.
+  6. UC36 chi phi nhap muon sau khoa ky: CUNG rule (chung tu luu, ChoGhiSo,
+     ghi so tre ky Mo). Khong 400 chet nghiep vu.
+     ChiPhiVanHanh.MaKy = ky chua NgayChungTu (co the Khoa).
+     ButToan.MaKy khi ghi so tre = ky Mo ke tiep.
+  7. Test KT-CLS-03: P0 van ban; hang ChoGhiSo; bam Ghi so tre -> BT co
+     MaKy = ky Mo, NgayChungTu = ngay HD goc, NgayHachToan thuoc ky Mo.
+
+7.12. Mo lai ky vs so du dau ky sau — QUY TAC BAT BUOC (mini, khong cascade)
+
+  Khi khoa: copy so du cuoi ky nay -> SoDuDauKy (+ SODU_DAU_KY neu dung)
+  cua ky ke tiep.
+
+  Mo lai = reverseJournal KET_CHUYEN (muc 5.12 / 7.5). Sau mo lai, so
+  cuoi ky cu co the doi neu KT sua/dao BT; so dau ky sau co the CU.
+  Mini KHONG cap nhat lan truyen SoDuDauKy moi khi sua 1 BT.
+
+  CHOT:
+    1. Chi mo lai ky GAN NHAT (ky Khoa co DenNgay lon nhat / MaKy moi
+       nhat dang Khoa). Khong mo lai ky cu hon khi da co ky Khoa sau no.
+    2. Ky KE TIEP (TuNgay = DenNgay ky dang mo lai + 1 ngay) chua co
+       but toan NGHIEP VU hieu luc:
+         TrangThai='DaGhiSo' AND DaBiDao=0
+         AND LoaiButToan NOT IN ('SODU_DAU_KY')
+       "Nghiep vu" = moi BT tru SODU_DAU_KY. KET_CHUYEN / DAO_KET_CHUYEN
+       cua ky DANG mo lai nam o ky do, khong tinh vao ky sau. Thuc te:
+       ky sau khong co BT hieu luc nao ngoai co the SODU_DAU_KY da copy.
+    3. Neu ky sau da co phat sinh (BAN_HANG, GIA_VON, MUA_HANG, THU_CONG,
+       KHAU_HAO, ... hoac ca KET_CHUYEN cua ky sau) -> 400. Sai sot xu ly
+       bang BT dieu chinh (THU_CONG / nghiep vu) o ky DANG MO.
+    4. Sau khi sua xong va KHOA LAI ky vua mo: tinh lai so du cuoi va
+       copy LAI / GHI DE SoDuDauKy ky ke tiep (ke ca hang DaChot=1
+       do lan khoa truoc — NGOAI LE he thong, D35). Nguoi dung van
+       KHONG sua hang DaChot (PUT opening 400). Co the dao + post lai
+       SODU_DAU_KY ky sau neu da tao BT seeding (hoac tai sinh theo
+       quy tac he thong).
+    5. Khong cascade sang ky thu 3+. Neu ky thu 3 da Mo/Khoa va da PS
+       thi khong mo duoc ky 1 (vi khong phai gan nhat / ky 2 da PS).
+    6. Khong them chuc nang "sua so du da chot". Exception chi gan
+       thao tac he thong khoa lai UC39.
+
+
+================================================================================
+8. BAO CAO BAT BUOC
+================================================================================
+
+8.0. Nguyen tac chung
+
+  Ky: reportingPeriod.js (VN, lockPeriod, banner) — TAI SU DUNG.
+  So cai / CDPS / KQKD UC43: LAY TU ChiTietButToan + SoDuDauKy.
+  KQKD: phat sinh thuan muc 8.4 (khong chi PS Co 511).
+  BCDKT: J muc 8.7 / D34 (chua KC: 421+LN 8.4, khong +911; sau KC: 421).
+  LCTT: gom THU_CONG dung 111/112 (muc 8.6 / D36).
+  Lai gop UC29/UC10: GIU query HoaDon (doi chieu, khong xoa).
+  Man QL P&L: SUA ten + cong thuc (muc 2.5 BUG-01).
+  Watermark "So lieu tam tinh" neu ky chua khoa (UC43 van xem duoc).
+  Tien format vi-VN. CSV + in PDF (print-documents.js).
+  Moi bao cao: dong "Nguon: So cai ky ..." hoac "Nguon: HoaDon Hoan thanh".
+
+--------------------------------------------------------------------------------
+8.1. Nhat ky chung (NKC)  — UC38
+--------------------------------------------------------------------------------
+
+  Muc dich: moi but toan theo ngay, de kiem No=Co va truy vet.
+
+  Nguon: ButToan JOIN ChiTietButToan WHERE TrangThai='DaGhiSo'
+         AND NgayHachToan in [From, ToExclusive)
+         AND LoaiButToan <> 'SODU_DAU_KY'  (hoac hien rieng nhom Dau ky)
+         -- GOM goc DaBiDao=1 va LoaiButToan LIKE 'DAO_%'.
+         -- KHONG loc TrangThai='Dao' (khong dung gia tri nay).
+
+  Mau cot:
+    Ngay | So BT | Dien giai | Ma TK | Ten TK | No | Co | Chung tu | Loai | Da dao | Nguoi lap
+
+  Cong thuc cuoi trang: Tong No = Tong Co (phai bang).
+  Loc: MaTK, LoaiButToan, MaChungTu, Nguon (TuDong/ThuCong).
+  Click chung tu -> mo man nghiep vu (HD, HDMH, PC, ...).
+
+--------------------------------------------------------------------------------
+8.2. So cai  — UC38
+--------------------------------------------------------------------------------
+
+  Chon 1 MaTK + ky.
+
+  SoDuDau:
+    TK du No: SoDuDauKy.SoDuNo - SoDuDauKy.SoDuCo
+    TK du Co: SoDuDauKy.SoDuCo - SoDuDauKy.SoDuNo
+  Phat sinh: tung dong ChiTiet trong ky tu vw_SoCaiDong
+    (TrangThai=DaGhiSo, loai tru SODU_DAU_KY; GOM goc da dao + BT dao).
+    Vi du dao: +100 va -100 cung so, du chay ve 0.
+  So du chay:
+    du No: dau + luy ke No - luy ke Co
+    du Co: dau + luy ke Co - luy ke No
+
+  Mau cot:
+    Ngay | So BT | Dien giai | Chung tu | No | Co | Du No | Du Co
+
+  Footer: Tong PS No | Tong PS Co | So du cuoi.
+  In "So quy 111" / "So TGNH 112" = so cai loc TK (khong can bang rieng).
+  So 331: them cot MaDoiTuong (MaNCC) neu co; doi chieu CongNoPhaiTra.
+
+--------------------------------------------------------------------------------
+8.3. Can doi phat sinh (CDPS)  — UC38
+--------------------------------------------------------------------------------
+
+  1 dong / 1 TK dang dung (ke ca du = 0 neu muon du COA).
+
+  Cot:
+    Ma TK | Ten TK
+    Du dau No | Du dau Co
+    PS No | PS Co
+    Du cuoi No | Du cuoi Co
+
+  Cong thuc:
+    DuCuoiNo - DuCuoiCo = (DuDauNo - DuDauCo) + PSNo - PSCo
+  Chan:
+    SUM(Du dau No) = SUM(Du dau Co)
+    SUM(PS No) = SUM(PS Co)
+    SUM(Du cuoi No) = SUM(Du cuoi Co)
+  Neu lech -> banner do, khong xuat "dat".
+
+--------------------------------------------------------------------------------
+8.4. KQKD mini  — UC43  (TACH vs dong tien; PHAT SINH THUAN)
+--------------------------------------------------------------------------------
+
+  Nhan tren man: "Ket qua hoat dong ke toan (mini) — KHONG tru tien tra NCC".
+
+  NGUYEN TAC (CHOT 1.2 — sua bug 1.1: KQKD chi lay 1 chieu PS):
+    So cai dung net movement (goc + dao deu DaGhiSo, 100 + (-100) = 0).
+    KQKD PHAI CUNG net. KHONG lay chi PS Co 511 / chi PS No 632.
+    Vi du: BAN_HANG Co 511 100, dao No 511 100.
+      SAI (1.1): PS Co 511 = 100  -> van hien DT 100.
+      DUNG:     511 = PS Co − PS No = 0.
+
+  Loc dong (QUERY — LIKE hop le o day, KHONG dung trong filtered index):
+    ButToan.TrangThai = 'DaGhiSo'
+    AND LoaiButToan NOT IN ('KET_CHUYEN', 'DAO_KET_CHUYEN', 'SODU_DAU_KY')
+    -- GOM DAO_BAN_HANG, DAO_GIA_VON, DAO_DOI_TRA_*, ... de tu triet tieu.
+    -- Loai ket chuyen: neu tinh KET_CHUYEN thi No 511 / Co 911 se nuot DT.
+    -- Co the viet them AND LoaiButToan NOT LIKE N'DAO_KET_CHUYEN' — thua
+    --   neu da co IN list, nhung QUERY thi LIKE duoc.
+
+  Cong thuc phat sinh thuan (1 TK, 1 ky):
+    511  = SUM(SoTienCo) − SUM(SoTienNo)     -- du Co
+    711  = SUM(SoTienCo) − SUM(SoTienNo)     -- du Co
+    5212 = SUM(SoTienNo) − SUM(SoTienCo)     -- du No
+    632  = SUM(SoTienNo) − SUM(SoTienCo)
+    642  = SUM(SoTienNo) − SUM(SoTienCo)
+
+  Cot / dong (lay so cai, ky):
+
+    1. Doanh thu ban hang          = 511 thuan (PS Co − PS No)
+    2. Tru: Hang ban bi tra lai    = 5212 thuan (PS No − PS Co)
+    3. = Doanh thu thuan
+    4. Gia von hang ban            = 632 thuan
+    5. = Loi nhuan gop ke toan
+    6. Chi phi quan ly             = 642 thuan — co the tach dong
+       (cung net: LoaiButToan + DAO_ tuong ung; loai KET_CHUYEN):
+         6a. Luong (TRICH_LUONG ± DAO_TRICH_LUONG)
+         6b. Dien/nuoc/thue/VP/cuoc (CHI_PHI ± DAO_CHI_PHI)
+         6c. Khau hao (KHAU_HAO ± DAO_KHAU_HAO)
+         6d. Xuat noi bo / khac
+    7. Thu nhap khac               = 711 thuan (PS Co − PS No)
+    8. = Loi nhuan ke toan truoc thue (mini)
+       Chu thich man: CHUA xu ly thue TNDN. Khong goi "loi nhuan rong /
+       LN sau thue".
+
+  KHONG tru TRA_NCC. KHONG tru LECH_QUY vao DT (138/711 da nam dung cho).
+  KHONG can nhanh "neu da ket chuyen thi lay PS Co 511" — da loai
+  KET_CHUYEN / DAO_KET_CHUYEN khoi tap hop, nen so DT khong phu thuoc
+  ky da khoa hay dang mo.
+
+  Doi chieu kiem chung (khong de tinh KQKD):
+    Dong 5 ~ lai gop UC29 SAU KHI VAT
+      (lai gop nghiep vu hien tai = DT GOM VAT - GV;
+       sau VAT: DT thuan ke toan = DT gom VAT - VAT - hoan chua VAT).
+    MANH: UC29 GIU lai gop GOM VAT (P0, Word Chuong 6) de khong vo test cu.
+    UC43 KQKD DUNG so chua VAT. Ghi chu tren 2 man: "Khac nhau o VAT".
+
+  Nguon dong:
+    511/5212/632/642/711 tu ChiTietButToan JOIN ButToan (loc tren).
+    Tach 6a-6c: loc LoaiButToan (gom DAO_ tuong ung).
+
+--------------------------------------------------------------------------------
+8.5. Dong tien / thu-chi quan tri  — SUA man P&L cu
+--------------------------------------------------------------------------------
+
+  Ten man QL: "Bao cao thu-chi / dong tien cua hang" (khong goi P&L).
+
+  Tien thu khach
+    = SUM PhieuThu.SoTienThucNop (da xac nhan) trong ky
+    + SUM ThanhToan Thanh cong QR+The+CK (NgayTT trong ky)
+  Tien tra NCC     = SUM PhieuChi Thanh toan thanh cong
+  Tra luong        = SUM PhieuChiLuong thanh cong
+  Chi phi da chi   = SUM ChiPhiVanHanh DaXacNhan.TongCong
+  Mua TSCD (tien)  = SUM MUA_TSCD gan 111/112
+  = Bien dong tien (gan dung 111+112, khong ke so du dau)
+
+  LCTT chinh thuc (8.6) lay tu so cai, man nay lay tu chung tu P0
+  de QL quen mat (va de sua bug ngay).
+
+  Xoa nguyen nhan chi_ncc_lon tren man KQKD.
+  Man thu-chi VAN duoc noi "tra NCC lon" nhu canh bao DONG TIEN.
+
+--------------------------------------------------------------------------------
+8.6. Luu chuyen tien te thu gon (LCTT)  — UC43, sau sao ke + TSCD
+--------------------------------------------------------------------------------
+
+  Phuong phap: tong hop phat sinh 111 + 112 (so cai), phan nhom
+  theo LoaiButToan (khong can bang LCTT phap ly day du).
+  GOM DAO_* nghiep vu (net); loai SODU_DAU_KY / KET_CHUYEN / DAO_KET_CHUYEN.
+
+  I. Hoat dong kinh doanh
+       + BAN_HANG (phan No 111/112)
+       - DOI_TRA_HOAN (phan Co 111/112)
+       - TRA_NCC
+       - CHI_LUONG
+       - CHI_PHI (phan Co 111/112)
+       +/- LECH_QUY (111)
+       +/- THU_CONG dung 111/112: "Thu/chi khac tu hoat dong kinh doanh"
+           Dau theo No/Co cua 111/112 (CHOT 1.4 / D36):
+             PS No 111/112 tren THU_CONG = thu (+)
+             PS Co 111/112 tren THU_CONG = chi (−)
+           THU_CONG khong dung 111/112: KHONG vao LCTT.
+           Vi du No 111 / Co 138: + vao I. Neu bo sot -> I+II+III lech.
+  II. Dau tu
+       - MUA_TSCD (phan Co 111/112)
+  III. Tai chinh
+       Thuong = 0 (1 cua hang, khong vay)
+
+  Tong I+II+III = PS No(111+112) - PS Co(111+112) = bien dong quy+NH.
+  Doi chieu: so du cuoi 111+112 - so du dau 111+112.
+  Khong them TK / bang. GOM DAO_THU_CONG (net) neu dao BT thu cong.
+
+  Lam SAU UC41+UC42 (PHAM_VI muc 4). Truoc do van ra duoc nhom I.
+
+--------------------------------------------------------------------------------
+8.7. Bang can doi ke toan mini (BCDKT)  — UC43
+--------------------------------------------------------------------------------
+
+  Tai san
+    A. Tien va tuong duong     111 + 112
+    B. Phai thu khac           138
+    C. Hang hoa                156
+    D. Thue GTGT duoc khau tru 1331
+    E. TSCD                    211 - 214
+    Tong tai san               A+...+E
+
+  Nguon von
+    F. Phai tra NCC            331
+    G. Thue GTGT dau ra        33311   (neu chua ket chuyen / nop)
+    H. Phai tra NLĐ            334
+    I. Von chu so huu          411
+    J. Ket qua luy ke (mini)   CHOT 1.4 / D34 — KHONG cong 911 khi chua KC:
+       - Ky CHUA ket chuyen (chua co KET_CHUYEN hieu luc):
+           J = du cuoi 421 + Loi nhuan ke toan mini hien tai cua ky
+           (dong 8 muc 8.4 — dung 1 so, khong tinh lai cong thuc khac).
+           KHONG cong 911 (911 chua co so; KQ ky van nam 511/5212/632/642/711).
+           Neu J = 421 + 911 (= 421 + 0) ma khong cong LN 8.4
+           -> BCDKT lech dung LN ky.
+       - Sau KET_CHUYEN (911 ve 421 cung transaction):
+           J = du cuoi 421 thoi. KHONG cong 911 (911 = 0).
+           KHONG cong LN 8.4 lan 2 (da nam trong 421).
+       Chu thich BAT BUOC tren man: day la so du ket qua luy ke mo hinh
+       mini, CHUA xu ly thue TNDN. Khong nhan "LN sau thue chua phan phoi"
+       neu khong co chu thich nay.
+    Tong nguon von             F+...+J
+
+  Chan: Tong TS = Tong NV. Neu thieu so du dau -> banner.
+  Ky mo / chua KC: BCDKT tam tinh (watermark 8.0) VAN PHAI CAN (J gom LN 8.4).
+  Ky khoa + da KC: BCDKT chinh thuc CAN (J = 421).
+  So du lay CUOI KY (CDPS du cuoi). TK DT/CP sau ket chuyen = 0.
+  Khong them bang / TK. UC43 xem duoc khi ky chua khoa.
+
+--------------------------------------------------------------------------------
+8.8. Sao ke / doi chieu 112  — UC42
+--------------------------------------------------------------------------------
+
+  Cot dong sao ke:
+    Ngay | So tien | Dien giai NH | Ma GD | Trang thai khop |
+    Chung tu Fly | So tien Fly | Chenh
+
+  Footer:
+    Tong thu sao ke | Tong chi sao ke
+    So cai 112 PS No / PS Co (cung ky)
+    So dong Chua khop / Chenh lech
+
+  So 112 KHONG lay thuan tu file (PHAM_VI muc 4).
+
+--------------------------------------------------------------------------------
+8.9. Bang ke VAT  — UC40
+--------------------------------------------------------------------------------
+
+  Dau ra:
+    Ngay | MaHD | Doanh thu chua thue | Thue suat | VAT | Tong
+    Nguon: ChiTietHoaDon HD Hoan thanh + dong dao DOI_TRA_HOAN (am)
+    Dong ThueSuat IS NULL -> cot "Thieu thue"; KHONG bia 10%.
+    Dong ThueSuat = 0 -> 0% hop le, VAT = 0, KHONG danh thieu.
+
+  Dau vao:
+    Ngay | So HD NCC | MST | Tien hang | Thue suat | VAT | Tong | Nguon
+    (HoaDonMuaHang Da khop | ChiPhi | TSCD | TRA_NCC_HANG am)
+    Cong thuc (D33): VAT vao = HD mua khop + UC36 + TSCD − VAT TRA_NCC_HANG.
+    Dong TRA_NCC_HANG: VAT va tien hang AM (khong them bang).
+    Vi du: HD mua khop VAT 800.000, TRA_NCC_HANG Co 1331 200.000
+      -> so cai 1331 = 600.000; bang ke DUNG = 600.000.
+      SAI neu khong tru: bang ke 800.000.
+
+  Tong hop ky:
+    VAT ra | VAT vao (sau tru TRA_NCC_HANG) | Chenh lech ke toan mini
+    Nhan: "Khong phai so phai nop to khai."
+
+--------------------------------------------------------------------------------
+8.10. Bao cao doi chieu kiem soat (bat buoc test)
+
+  Ten                    Ve trai                 Ve phai
+  So 331 vs cong no      Du cuoi 331             SUM CongNoPhaiTra.SoTienConLai
+                                                 (con phai tra CUOI KY).
+                                                 KHONG cong "da tat toan trong ky".
+                         PS Co 331               cong no moi trong ky (MUA_HANG)
+                         PS No 331               thanh toan (TRA_NCC) + tra lai
+                                                 hang / dieu chinh giam (TRA_NCC_HANG)
+                                                 trong ky
+  So 156 vs TonKho       Du cuoi 156             SUM TonKho.GiaTriTon
+                                                 CANH BAO lech = PN chua khop
+  So 334 vs luong        Du cuoi 334             Tong luong khoa chua chi
+  So 111 vs ket          Du cuoi 111             Quy dau + TM - hoan - chi TM +/- lech
+                                                 (gan dung, khong can 2 cap ket)
+  Lai gop Word vs 511    Lai gop UC29            511 thuan − 5212 thuan − 632 thuan
+                                                 + VAT (giai thich, khong bat bang)
+  So 1331 vs bang ke     Du cuoi 1331            VAT vao UC40 (sau tru TRA_NCC_HANG)
+
+
+================================================================================
+9. PHAN QUYEN 5 ACTOR
+================================================================================
+
+9.1. Ma tran UC34-UC43
+
+  Chuc nang                         QL          KT          MH/TK/TN
+  --------------------------------  ----------  ----------  ----------
+  UC34 COA xem                      Xem         Sua
+  UC34 COA them/ngung               --          Sua
+  UC35 Mo ky / nhap so du           Xem         Sua
+  UC35 Chot so du                   --          Sua
+  UC36 Chi phi Nhap/xac nhan        Xem         Sua
+  UC37 Quet / ghi so tre            --          Sua
+  UC37 But toan thu cong            --          Sua
+  UC37 Dao but toan                 --          Sua
+  UC38 NKC / So cai                 Xem         Xem+xuat
+  UC39 Khoa ky                      Xem         Khoa
+  UC39 Mo lai ky                    Duyet       De nghi
+  UC40 Bang ke VAT                  Xem         Sua/xuat
+  UC41 TSCD + chay KH               Xem         Sua
+  UC42 Import + khop sao ke         Xem         Sua
+  UC43 KQKD / BCDKT / LCTT          Xem         Xem+xuat
+  Sua P&L/thu-chi QL (UC10)         Xem+ke hoach Xem (neu gan)
+  Ghi so tu POS/kho                 --          He thong
+
+  MH / TK / TN: KHONG menu so cai, KHONG API /api/ledger ghi.
+  Chung van tao HoaDon / PN / PX — engine chay server-side.
+
+9.2. Quyen nghiep vu CU khong doi
+
+  QL UC09 duyet PC, UC07 KK, UC08 doi tra, UC32 duyet cong/giao quy luong.
+  KT UC27-29, UC33.
+  Khong giao UC33 cho QL (P0: QL bam build -> 403).
+
+9.3. Backend
+
+  Moi route ledger: requirePermission('UCxx').
+  Khong chi an nut FE.
+  seed-permissions.js: them map; chay lai tren DB chung co kiem tra
+  khong xoa VaiTro_ChucNang cu.
+
+9.4. Telegram / AI
+
+  Chi DOC so lieu dung UC (QL /today = KQKD dung, khong tru NCC).
+  Khong nut Ghi so / Khoa ky / Dao tren Telegram.
+
+
+================================================================================
+10. UI / MAN HINH ELECTRON
+================================================================================
+
+10.1. Menu KT — them nhom (dashboard.html #navGroupAccounting)
+
+  Nhom hien tai GIU:
+    Lich lam viec | Doi chieu hoa don | Cong no NCC |
+    Ca & Phieu thu | Bao cao noi bo | Bang luong | Lich su
+
+  THEM nhom "KE TOAN TONG HOP":
+    Danh muc tai khoan          data-target=accounting-coa           UC34
+    Ky & so du dau              data-target=accounting-periods       UC35
+    Chi phi van hanh            data-target=accounting-expenses      UC36
+    But toan / cho ghi so       data-target=accounting-journals      UC37
+    Nhat ky chung               data-target=accounting-nkc           UC38
+    So cai                      data-target=accounting-ledger        UC38
+    Can doi phat sinh           data-target=accounting-cdps          UC38
+    Bang ke VAT                 data-target=accounting-vat           UC40
+    Khoa ky                     data-target=accounting-close         UC39
+    Bao cao tai chinh           data-target=accounting-statements    UC43
+
+  THEM nhom "KE TOAN MO RONG" (an neu chua mo pha):
+    Tai san co dinh             data-target=accounting-assets        UC41
+    Sao ke ngan hang            data-target=accounting-bank          UC42
+
+  Canh bao dau nhom: badge so PN chua ghi so + so ChoGhiSo.
+
+10.2. Menu QL
+
+  GIU "Bao cao cua hang" (UC10 lai gop nghiep vu).
+  SUA man store-pnl: doi ten + 2 tab
+    Tab 1: KQKD ke toan (sau khi co so cai; tam thoi: DT-GV-luong-642, KHONG NCC)
+    Tab 2: Thu-chi / dong tien (NCC, luong chi, TM+QR)
+  THEM (UC43 xem): "Bao cao tai chinh" (KQKD/BCDKT/LCTT) — cung template KT, read-only.
+  Trung tam phe duyet: THEM hang "Mo lai ky ke toan" khi KT de nghi
+  (QL duyet van bi 400 neu khong dat 7.12).
+
+10.3. POS — field VAT (UC24/UC25, khong menu moi)
+
+  Cot an / dong tom tat duoi gio:
+    Tong (gia niem yet, gom VAT)
+    Trong do VAT (HoaDon.TienThue) — hien sau quote
+  In HD (print-documents.js):
+    Cot: SL, Don gia (gom VAT), Thanh tien, Thue suat, Tien thue, DT chua thue
+    Footer: Tong thanh toan | Tong VAT | DT chua thue
+  Khong them o "nhap thue" cho TN. Khong cong thue lan 2.
+  Man QL san pham (UC04):
+    Select ThueSuat BAT BUOC 0 / 5 / 8 / 10 khi tao SP. DEFAULT = NULL
+    (chua chon — khong ngam 8%, khong ngam 0%).
+    Khong cho luu SP moi neu QL bo qua select (force chon 1 trong 4 muc).
+    Neu chon 0: dialog "Xac nhan thue suat 0% theo cau hinh san pham?"
+    truoc khi luu. KHONG dung cau "mien thue / khong chiu thue?"
+    (khong tranh luan phap ly).
+  POS (UC24/UC25):
+    Khi add line / completeInvoice neu SanPham.ThueSuat IS NULL
+    (hoac dong HD ThueSuat IS NULL): CHAN — "SP chua chon thue suat.
+    QL cau hinh 0/5/8/10 truoc khi ban."
+    ThueSuat = 0 tren SP da cau hinh: hop le, TienThue=0, KHONG bat
+    dialog xac nhan lai o quay (1.1 bat khi =0: BO).
+    Copy ThueSuat luc add line; khong sua sau khi HD hoan thanh.
+    HD moi Hoan thanh: moi dong ChiTietHoaDon.ThueSuat IN (0,5,8,10).
+
+10.4. Mo ta tung man KT moi
+
+----- accounting-coa -----
+  Bang: MaTK, Ten, Tinh chat, Loai BC, Cha, Trang thai.
+  Nut: Them, Ngung, Sua ten.
+  Validation: MaTK regex ^[0-9]{3,8}$, Ten bat buoc, MaCha ton tai.
+  Khong xoa TK LaHeThong.
+
+----- accounting-periods -----
+  Trai: danh sach ky + chip Mo/Khoa.
+  Phai: bang so du dau, dong tong No/Co, nut Chot.
+  Hang DaChot: khong sua tren UI (PUT 400). Ghi de chi khi he thong
+    khoa lai ky truoc (D35) — khong man "sua so du da chot".
+  Validation: tong No=Co; mot TK mot ben; ky YYYY-MM.
+
+----- accounting-expenses -----
+  Loc ky + loai. Nut "Lap chi phi".
+  Form: Loai*, Ngay*, So CT, NCC, Tien hang*, Thue suat, Tien thue (auto),
+        Tong (auto), TK tien* (CHI 111/112, khong 331), Ma GD (neu 112),
+        File, Ghi chu.
+  Validation: Tong = hang+thue; 1331 chi khi So CT + thue>0.
+    Ngay chung tu thuoc ky Khoa: van cho luu, BT ChoGhiSo (muc 7.11),
+    khong 400. Nut Xac nhan -> hien preview No/Co -> POST.
+
+----- accounting-journals -----
+  Tab 1: Cho ghi so (PN chua khop, ky khoa, thieu but toan) + nut
+         "Ghi so" / "Ghi so tre" (doi MaKy+NgayHachToan ky Mo, giu NgayChungTu).
+  Tab 2: Danh sach but toan (loc).
+  Tab 3: Lap thu cong (grid dong TK, No, Co; live tong).
+         KHONG field maChungTu bat buoc (khong cho FE go "THUCONG").
+         Sau luu: hien MaChungTu server sinh (TC+yyMM+5 so).
+         Khong form thanh ly TSCD / khong goi y 211-214 thanh ly.
+  Tab 4: Preview dinh khoan (chon chung tu P0, GET preview, khong ghi).
+  Validation thu cong: >=2 dong, No=Co, TK hop le, khong dong 0 dong.
+
+----- accounting-nkc / ledger / cdps -----
+  Tai su dung warehouse-table-card + FLY_REPORT_PERIOD.
+  So cai: combobox TK + ky; bang so du chay.
+  CDPS: 1 bang + 3 dong chan (dau / PS / cuoi).
+
+----- accounting-vat -----
+  3 tab: Dau ra | Dau vao | Tong hop. Nut CSV.
+  Tab dau vao: HD mua khop + UC36 + TSCD + dong AM TRA_NCC_HANG (D33).
+  Dong ThueSuat NULL: badge "Thieu thue". Dong =0: hien 0%, khong badge.
+
+----- accounting-close -----
+  Checklist 2 nhom: BLOCK (do, nut Khoa disable / POST 400) va WARN
+  (vang, van khoa duoc). KHONG nut / checkbox "khoa van canh bao"
+  cho nhom BLOCK.
+  BLOCK: HD Hoan thanh thieu BAN_HANG/GIA_VON; 3-way khop thieu MUA_HANG;
+  PC thanh cong thieu TRA_NCC; ky luong khoa thieu TRICH_LUONG;
+  chi luong thanh cong thieu CHI_LUONG; chi phi xac nhan thieu CHI_PHI.
+  WARN: PN da nhan chua 3-way; HD Nhap; CT cho duyet; NV chua du DK ghi so.
+  Nut "Chay ket chuyen" (disable neu da co KET_CHUYEN hieu luc).
+  Nut "Khoa ky" disable khi nhom BLOCK != rong.
+  QL: nut "Mo lai" + textarea ly do (dao KET_CHUYEN, khong flip cot).
+  Mo lai disable / 400 neu khong phai ky gan nhat hoac ky sau da co
+  BT nghiep vu hieu luc (muc 7.12).
+
+----- accounting-statements -----
+  Tab KQKD | BCDKT | LCTT | Dong tien quan tri.
+  Ghi chu do: "KQKD khong tru tra NCC. Cong thuc thuan muc 8.4
+  (dao BT tu triet tieu; khong lay chi PS Co 511)."
+  Dong 421 / J: "Ket qua luy ke mini, CHUA xu ly thue TNDN" (khong nhan
+  "LN sau thue chua phan phoi" neu thieu chu thich).
+  BCDKT J: chua KC = 421 + LN 8.4, KHONG +911; sau KC = 421 (D34).
+  Ky chua khoa: watermark "So lieu tam tinh" — van CAN (J gom LN 8.4).
+  LCTT: dong "Thu/chi khac tu HDKD" khi THU_CONG dung 111/112 (D36).
+
+----- accounting-assets -----
+  Danh sach TSCD: ten, NG, KH luy ke, CL, thang con lai.
+  Form mua: TK tien CHI 111|112 (khong combo 331). Preview: 211+1331 / 111|112.
+  Nut "Chay khau hao ky nay".
+
+----- accounting-bank -----
+  1 TKNH doanh nghiep (khong combo nhieu NH — D37). Upload CSV
+  (KHONG Excel, khong parser xls/xlsx — D38). Bang dong, nut Khop
+  tu dong / Khop tay / Chenh lech. Cot so cai 112 ben phai.
+
+10.5. Validation chung UI
+
+  So tien >= 0, 2 chu so.
+  Ngay chung tu co the nam ky da khoa (P0/UC36 van luu, ChoGhiSo).
+  Nut Ghi so tre chi enable khi co ky Mo ke tiep.
+  Disable nut khi dang submit (tranh double post — server van idempotent).
+  403 hien "Khong du quyen UC..".
+  Timeout 45s giong bao cao cu.
+
+
+================================================================================
+11. API ENDPOINTS DE XUAT
+================================================================================
+
+Tien to /api/ledger  (JWT). Gan app.js. Khong tron vao accountingRoutes
+qua nhieu — KT nghiep vu P0 giu /api/accounting.
+
+  # UC34
+  GET    /api/ledger/accounts
+  POST   /api/ledger/accounts                         KT UC34
+  PATCH  /api/ledger/accounts/:maTK                   KT UC34
+
+  # UC35
+  GET    /api/ledger/periods
+  POST   /api/ledger/periods                          KT UC35   body { MaKy }
+  GET    /api/ledger/periods/:maKy/opening
+  PUT    /api/ledger/periods/:maKy/opening            KT UC35
+         400 neu hang DaChot=1 (nguoi dung khong sua).
+         He thong khoa lai UC39 duoc GHI DE (D35) — khong qua PUT nay.
+  POST   /api/ledger/periods/:maKy/opening/lock       KT UC35
+
+  # UC36
+  GET    /api/ledger/expense-types
+  GET    /api/ledger/expenses
+  POST   /api/ledger/expenses                         KT UC36
+  POST   /api/ledger/expenses/:id/confirm             KT UC36
+  POST   /api/ledger/expenses/:id/cancel              KT UC36
+
+  # UC37
+  GET    /api/ledger/unposted                         KT UC37
+  POST   /api/ledger/unposted/:id/post                KT UC37
+  GET    /api/ledger/journals
+  GET    /api/ledger/journals/:id
+  POST   /api/ledger/journals                         KT UC37  thu cong
+         body: ngay, dienGiai, lines, (khong bat buoc maChungTu /
+         loaiChungTu). Server gan LoaiChungTu='ThuCong', sinh
+         MaChungTu TC+yyMM+5 so; neu FE gui maChungTu thi BO QUA.
+  POST   /api/ledger/journals/:id/reverse             KT UC37
+  GET    /api/ledger/preview?loai=&ma=                KT UC37
+
+  # UC38
+  GET    /api/ledger/reports/journal                  KT|QL UC38
+         ?from=&to=&maTK=&loai=&q=
+  GET    /api/ledger/reports/general-ledger           KT|QL UC38
+         ?maTK=&periodType=&period=&lockPeriod=
+  GET    /api/ledger/reports/trial-balance            KT|QL UC38
+
+  # UC39
+  GET    /api/ledger/periods/:maKy/close-check        KT|QL UC39
+         tra { block: [...], warn: [...] } — muc 7.8. block != []
+         thi close 400. KHONG field override.
+  POST   /api/ledger/periods/:maKy/closing-entry      KT UC39
+  POST   /api/ledger/periods/:maKy/close              KT UC39
+         400 neu block != []. Copy / copy lai / GHI DE SoDuDauKy
+         ky sau (NGOAI LE DaChot — D35). Dao/repost SODU_DAU_KY neu can.
+  POST   /api/ledger/periods/:maKy/reopen             QL UC39  body { LyDo }
+         400 neu khong phai ky gan nhat, hoac ky sau da co BT
+         nghiep vu hieu luc (muc 7.12). KHONG cascade so du luc mo.
+
+  # UC40
+  GET    /api/ledger/reports/vat-output
+  GET    /api/ledger/reports/vat-input
+         VAT vao = HD mua khop + UC36 + TSCD − TRA_NCC_HANG (dong AM)
+  GET    /api/ledger/reports/vat-summary
+
+  # UC41
+  GET    /api/ledger/assets
+  POST   /api/ledger/assets                           KT UC41
+  POST   /api/ledger/assets/:id/confirm               KT UC41
+  POST   /api/ledger/periods/:maKy/depreciation       KT UC41
+
+  # UC42
+  GET    /api/ledger/bank-accounts
+  POST   /api/ledger/bank-accounts
+         Mini: 1 TKNH Su dung. Them TK thu 2 = huong phat trien (D37).
+  POST   /api/ledger/bank-statements                  multer CSV
+         accept .csv; KHONG Excel; khong parser xls/xlsx (D38).
+         400 neu khong phai CSV.
+  GET    /api/ledger/bank-statements/:id
+  POST   /api/ledger/bank-statements/:id/auto-match
+  POST   /api/ledger/bank-lines/:id/match             body { LoaiChungTu, Ma }
+  POST   /api/ledger/bank-lines/:id/mismatch          body { LyDo }
+
+  # UC43
+  GET    /api/ledger/reports/income-statement         KQKD so cai (8.4)
+  GET    /api/ledger/reports/balance-sheet
+         J: chua KC = 421+LN 8.4 (khong +911); sau KC = 421 (D34)
+         watermark tam tinh neu ky chua khoa; TS = NV
+  GET    /api/ledger/reports/cash-flow
+         gom THU_CONG dung 111/112 vao I "Thu/chi khac" (D36)
+  GET    /api/ledger/reports/cash-movement           dong tien chung tu
+
+  # Sua P0 — khong doi path, doi payload
+  GET    /api/admin/reports/store-profit-loss
+         THEM khoi: kqkd { ... khong chiNcc }, dongTien { chiNcc, ... }
+         GIU hoatDong.laiLoSauChiPhi MOT thoi de khong vo FE,
+         DANH DAU deprecated; FE moi khong dung.
+  GET    /api/accounting/reports/financial-summary   giu lai gop Word
+
+Noi goi engine (khong them route, goi service):
+  salesController.completeInvoice
+  returnsController.completeReturn
+  accountingController.reconcileInvoice          (nhanh khop)
+  paymentVoucherController.payVoucher            (ThanhCong)
+  payrollController.lock
+  payrollVoucherController.payVoucher            (ThanhCong)
+  settlementController.confirmReceipt            (neu ChenhLech != 0)
+  stockIssueController (xac nhan xuat)
+  inventoryCount / countApprove (duyet)
+  ledger expenses confirm, assets confirm, depreciation, closing-entry
+
+P1 (khong thuoc KT loi, de tranh dung cot):
+  POST /api/cashier/invoices/:id/payments/qr
+  POST /api/payments/gateway/ipn
+  GET  /receipts/:token
+  GET  /api/accounting/shift-settlements/:id/e-payments   doi soat dien tu
+
+
+================================================================================
+12. THU TU TRIEN KHAI THEO TUAN / PHA
+================================================================================
+
+Dieu kien dau: P0 E2E PASS tren 1 CSDL (Tuan 0). Telegram da xong — khong
+lam lai. VNPay / e-receipt KHONG CHAN KT loi, nhung 2 nhanh KHONG sua
+cung luc HoaDon/ChiTietHoaDon (PLAN_12 3.1).
+
+--------------------------------------------------------------------------------
+12.1. Tuan 0 — P0 smoke (tieu chi xong)
+--------------------------------------------------------------------------------
+
+  [ ] 1 chuoi MUA: de nghi -> PO -> duyet -> nhap -> 3-way -> PC -> giao quy -> chi
+  [ ] 1 chuoi BAN: lich -> check-in -> POS TM+QR thu cong -> dong ca -> PT
+  [ ] 1 chuoi LUONG: duyet cong -> build -> khoa -> phieu -> duyet -> giao quy -> chi
+  [ ] npm run test:next PASS
+  Khong code so cai neu P0 vo.
+
+--------------------------------------------------------------------------------
+12.2. Tuan 1 — Schema + COA + ky  (KT loi-1)
+--------------------------------------------------------------------------------
+
+  Lam: migration 20260909_AccountingCore + seed COA + UC34/UC35 API+UI.
+  Tieu chi xong:
+    [ ] TaiKhoanKeToan 18 TK seed (gom 138; khong 17, khong 19)
+    [ ] Khong co bang CauHinhDinhKhoan
+    [ ] Khong co bang DoiChieuNganHang; khong cot KyKeToan.DaKetChuyen
+    [ ] ButToan co DaBiDao + MaBTGoc; CHECK TrangThai khong co 'Dao'
+    [ ] UX_ButToan_Nguon filter: DaBiDao=0 AND MaBTGoc IS NULL
+        (KHONG NOT LIKE trong filter; migration chay duoc tren SQL Server)
+    [ ] UX_ChoGhiSo_Active: UNIQUE (LoaiChungTu, MaChungTu, LyDo)
+        WHERE DaXuLy = 0. KHONG CONSTRAINT UQ_ChoGhiSo thuong
+    [ ] Mo ky 2026-08 (hoac ky demo), nhap so du dau can bang
+    [ ] Khong xoa duoc 111
+    [ ] permissions UC34 UC35
+
+--------------------------------------------------------------------------------
+12.3. Tuan 2 — VAT POS + in HD  (KT loi-2)
+--------------------------------------------------------------------------------
+
+  Lam: migration VatOnPos; vatSales.js; sua quote/completeInvoice/in;
+       SanPham.ThueSuat tren man QL (bat chon 0/5/8/10, DEFAULT NULL,
+       xac nhan khi chon 0 luc cau hinh SP); dao thue luc completeReturn.
+  Tieu chi xong (PHAM_VI muc 6):
+    [ ] 1 HD 2 dong 8% va 10%: TienThue dung tung dong
+    [ ] KM + diem tru TRUOC khi tinh VAT; No 111/112 = so khach tra
+    [ ] In HD hien gom VAT + chua thue; in lai khong doi so, khong but toan
+        (engine chua bat thi it nhat khong ghi thue 2 lan tren cot)
+    [ ] Doi tra dao dung thue suat dong HD goc
+    [ ] HD cu (truoc migration) ThueSuat NULL — khong bia 10%, UC40
+        "Thieu thue"; POS chan SP ThueSuat NULL
+    [ ] SP ThueSuat=0 (da cau hinh): complete KHONG bat dialog; TienThue=0
+    [ ] Khong UPDATE SanPham SET ThueSuat=8; seed demo dung muc nhom
+
+  Phu thuoc P1: e-receipt in cung cot thue; Token khong nam PR nay
+  neu P1 song song — P1 chi them Token sau khi cot thue da merge.
+
+--------------------------------------------------------------------------------
+12.4. Tuan 3 — Engine + sua P&L  (KT loi-3)
+--------------------------------------------------------------------------------
+
+  Lam: journalEngine; moc completeInvoice, completeReturn, reconcile,
+       payVoucher NCC, lock luong, pay luong, confirmReceipt lech,
+       xuat/KK; UC37 man cho ghi so; SUA storeProfitLoss + store-pnl
+       + telegramMessages.
+  Tieu chi xong:
+    [ ] HD hoan thanh -> 2 BT BAN_HANG + GIA_VON, No=Co
+    [ ] In lai / complete 2 lan -> alreadyPosted
+    [ ] 3-way khop -> MUA_HANG; lech -> 0 BT
+    [ ] PC thanh cong -> TRA_NCC; fail -> 0
+    [ ] PT khong lech -> 0 BT; PT thieu -> LECH_QUY 138/111
+    [ ] Khoa luong -> TRICH_LUONG; chi -> CHI_LUONG
+    [ ] Man QL: 2 tab KQKD (khong NCC) va thu-chi (co NCC)
+    [ ] Khong con chi_ncc_lon tren tab KQKD
+    [ ] Telegram /today khong lay laiLoSauChiPhi cu
+
+--------------------------------------------------------------------------------
+12.5. Tuan 4 — NKC, So cai, CDPS, KQKD so cai + UC36  (KT loi-4)
+--------------------------------------------------------------------------------
+
+  Lam: UC36 chi phi; UC38 3 bao cao; UC43 KQKD (co the chua BCDKT).
+  Tieu chi xong:
+    [ ] NKC tong No = tong Co
+    [ ] CDPS 3 cap tong bang
+    [ ] So cai 511/632/331/111 khop 1 chuoi demo (Phu luc C)
+    [ ] KQKD so cai KHONG tru TRA_NCC
+    [ ] KQKD dung phat sinh thuan muc 8.4 (dao BAN_HANG -> 511 = 0)
+    [ ] 1 phieu dien 642+1331
+    [ ] Canh bao PN chua ghi so hien so > 0 khi test dung
+
+  Day la MUC TIEU "KT loi xong" — duoc phep sang P1.
+
+--------------------------------------------------------------------------------
+12.6. Tuan 5 — P1 VNPay (song song neu da chot VAT+schema)
+--------------------------------------------------------------------------------
+
+  Khong sua ChiTietHoaDon nua. Adapter + Cho xac nhan + IPN doi chieu amount.
+  Tieu chi: PLAN_12 A1. Dong ca QR khong vao ket. Engine van 112.
+  Phu thuoc KT: MaGiaoDich that de UC42 sau.
+
+--------------------------------------------------------------------------------
+12.7. Tuan 6 — P1 barcode + e-receipt
+--------------------------------------------------------------------------------
+
+  TokenXem tren HoaDon. In lai / QR xem KHONG sinh BT thue lan 2.
+  Tieu chi: PLAN_12 A5 A8.
+
+--------------------------------------------------------------------------------
+12.8. Tuan 7 — P1 Telegram (DA XONG) + doi soat dien tu
+--------------------------------------------------------------------------------
+
+  Man UC29 mo rong: GD dien tu theo ca. Khong cong vao Phieu thu.
+  Sua copy P&L tren bot neu chua sua o tuan 3.
+
+--------------------------------------------------------------------------------
+12.9. Tuan 8-9 — P2 replenishment / AI / OCR (khong chung 1 nguoi OCR+replenish)
+--------------------------------------------------------------------------------
+
+  OCR prefill UC27, khong khop, khong no, khong BT.
+  AI chi doc, cited source, khong ghi so.
+
+--------------------------------------------------------------------------------
+12.10. Tuan 10+ — KT mo rong
+--------------------------------------------------------------------------------
+
+  UC41 TSCD + KH (211 chua VAT).
+  UC42 import sao ke CSV (1 TKNH; can MaGiaoDich — tot nhat sau VNPay).
+  UC39 khoa + ket chuyen 911.
+  UC43 BCDKT + LCTT.
+  UC40 bang ke VAT (co the lam som tu tuan 4 neu du thoi gian).
+  Test 1 thang xuyen.
+
+  Tieu chi xong mo rong:
+    [ ] KH chay 1 lan / ky
+    [ ] Sao ke khop MaGiaoDich; lech co trang thai
+    [ ] LCTT = bien dong 111+112 (gom THU_CONG dung 111/112 — D36)
+    [ ] BCDKT TS = NV; 421 chu thich mini chua TNDN
+        Ky chua KC: J = 421 + LN 8.4, KHONG +911; sau KC: J = 421 (D34)
+        Watermark "So lieu tam tinh" khi ky mo — van CAN
+    [ ] Bang ke VAT vao = HD mua + UC36 + TSCD − TRA_NCC_HANG; dong tra AM
+    [ ] Import sao ke CSV only; 1 TKNH; khong MaTKNH tren CTBT (D37/D38)
+    [ ] Khoa ky KHONG chan P0: CT commit, BT ChoGhiSo
+    [ ] Ghi so tre: MaKy+NgayHachToan = ky Mo; giu NgayChungTu
+    [ ] Engine khong assertPeriodOpen tren ngay goc ky Khoa
+    [ ] Ket chuyen: EXISTS KET_CHUYEN hieu luc; KHONG cot DaKetChuyen;
+        mo lai = dao KET_CHUYEN; chi ky gan nhat + ky sau chua PS nghiep vu;
+        khoa lai copy lai / GHI DE SoDuDauKy ky sau (ke ca DaChot — D35);
+        user PUT opening DaChot = 400
+    [ ] Khoa BLOCK khi thieu BT chung tu hop le; WARN (PN chua 3-way,
+        HD Nhap, CT cho duyet) van khoa duoc — KHONG override
+    [ ] KQKD thuan muc 8.4 (dao BAN_HANG -> 511 = 0)
+    [ ] Khong bang DoiChieuNganHang; khop nam DongSaoKe
+
+12.11. 6 thanh vien — goi y (khong bat buoc)
+
+  TV6 ke toan nghiep vu: giu UC27-29, review 3-way + engine MUA/TRA.
+  TV7 luong/P&L: sua storeProfitLoss, moc TRICH/CHI_LUONG.
+  1 nguoi core: journalEngine + schema + UC34/35/38/39.
+  1 nguoi VAT POS + in + doi tra thue.
+  1 nguoi UC36 + man FE.
+  P1 barcode/e-receipt song song SAU merge VatOnPos.
+
+
+================================================================================
+13. QUY TAC MON HOC / KHONG DUOC LAM SAI
+================================================================================
+
+  1. 3-way match: lech 1 tieu chi (SP, SL, don gia, thue, tong) = khong no,
+     khong MUA_HANG. evaluateThreeWayMatch GIU.
+  2. OCR / AI / replenishment KHONG INSERT CongNoPhaiTra, khong set Da khop,
+     khong postJournal.
+  3. Khong double-count chi NCC tren KQKD. Tra NCC = No 331 / Co 111|112.
+  4. Phieu thu khong cong DT lan 2. E-receipt khong sinh HD / BT moi.
+  5. Khong ban chiu, khong 131, khong tra thieu.
+  6. Khong tra truoc NCC, khong tra tung phan, 1 no 1 Phieu chi.
+  7. Cong no khong giam luc lap / duyet / giao quy / chi fail.
+  8. GET bang luong khong tu build. Chi KT POST build. QL khong UC33.
+  9. Cuoc chi o 642, mot noi. Khong vao DonGiaVon.
+ 10. 156 chi sau 3-way. Khong mo 151/338. Canh bao PN cho ghi so.
+ 11. Gia niem yet gom VAT. Khong cong thue o quay. Tach luc ghi so.
+ 12. 1 HD 2 thue suat: tinh theo dong. Dao thue theo dong HD goc.
+ 13. In lai / IPN lan 2 / complete lan 2: idempotent, khong tru ton 2 lan,
+     khong BT 2 lan.
+ 14. Huy HD da thu mot phan: hoan het roi moi huy (PLAN_12 0.7).
+ 15. IPN khong tin amount callback (P1).
+ 16. Server kiem quyen UC, khong chi an menu.
+ 17. Khong UPDATE TonKho / SoTienConLai / but toan tay tren SSMS khi demo.
+ 18. Khong noi "minh train AI" / "DB la train data".
+ 19. Khong ghi so cai / VAT / TSCD / LCTT vao muc CAT.
+ 20. Khong dung UC30-UC33 cho so cai.
+ 21. NhatKy audit != Nhat ky chung.
+ 22. Khong xoa dong ThanhToan Thanh cong; hoan = dong moi / trang thai hoan.
+ 23. Lam tron 2 chu so; dong cuoi chiu phan le.
+  24. Mot loai tien chi di qua 1 con duong (3 cot).
+  25. Bao cao tai chinh lay so cai; bao cao dieu hanh P0 giu de test cu.
+  26. Filtered unique index KHONG dung LIKE / NOT LIKE (D22).
+  27. KQKD = phat sinh thuan (511 = Co−No, 632 = No−Co, ...); loai
+      KET_CHUYEN / DAO_KET_CHUYEN / SODU_DAU_KY. Dao BT tu triet tieu.
+  28. ThueSuat NULL = chua chon / thieu thue; 0 = 0% hop le (D20/D24).
+  29. Tra hang NCC giam no TRUOC khi lap Phieu chi; da co PC -> 400 (D25).
+  30. Khong cot DaKetChuyen; khong bang DoiChieuNganHang (D26/D27).
+  31. ChoGhiSo: unique CHI hang DaXuLy=0 (UX_ChoGhiSo_Active). Khong
+      UQ_ChoGhiSo tren ca lich su (D28).
+  32. Thieu BT tren chung tu da hop le: BLOCK khoa, KHONG override.
+      PN chua 3-way / HD Nhap / CT cho duyet / NV chua du DK: WARN,
+      van khoa duoc (D29).
+  33. Mo lai CHI ky gan nhat neu ky sau chua co BT nghiep vu hieu luc.
+      Khoa lai: copy lai so du dau ky ke tiep. Ky sau da PS -> sua o
+      ky dang Mo (D30).
+  34. THU_CONG: MaChungTu do server sinh (TC+yyMM+5 so). FE khong bat
+      buoc / bo qua neu gui. Khong dung "THUCONG" chung (D31).
+  35. THU_CONG khong dung cho thanh ly TSCD. Chi dieu chinh KT mini
+      (vd 138) (D32).
+  36. VAT dau vao UC40 tru VAT TRA_NCC_HANG; dong bang ke AM (D33).
+  37. BCDKT J: chua KC = 421 + LN 8.4, khong +911; sau KC = 421 (D34).
+  38. Nguoi dung khong sua SoDuDauKy DaChot; he thong khoa lai duoc
+      ghi de (D35). Khong them chuc nang.
+  39. LCTT gom THU_CONG dung 111/112 vao I "Thu/chi khac" (D36).
+  40. 1 TKNH mini; CTBT khong MaTKNH; khong 1121/1122 (D37).
+  41. Import sao ke CSV; khong Excel / khong parser xls-xlsx (D38).
+
+
+================================================================================
+14. TEST PLAN / BO CASE
+================================================================================
+
+Tien to du lieu: TEST-KT-<YYYYMMDD>. Tai khoan: admin / ketoan / thungan /
+thukho / muahang, mat khau 123. Chay tren 1 CSDL.
+
+14.1. Don vi — vatSales + engine
+
+  KT-VAT-01  110.000 gom 10% -> thue 10.000, 511 100.000
+  KT-VAT-02  100.000 gom 8%  -> thue 7.407, 511 92.593
+  KT-VAT-03  2 dong 8% va 10%, tong tra = SUM sau giam
+  KT-VAT-04  KM+diem: thue tinh tren so khach tra
+  KT-VAT-05  ThueSuat 0 (da cau hinh) -> TienThue 0, 511 = so tra; complete
+             KHONG bat dialog xac nhan o POS
+  KT-VAT-06  QL tao SP: DEFAULT NULL; bat chon 0/5/8/10; chon 0 phai xac nhan
+             "Xac nhan thue suat 0% theo cau hinh san pham?"; luu xong =0 hop le
+  KT-VAT-07  POS complete khi SanPham.ThueSuat IS NULL: CHAN (chua chon);
+             khong complete. ThueSuat=0 khong di vao case nay
+  KT-VAT-08  HD cu ChiTietHoaDon.ThueSuat NULL -> UC40 "Thieu thue";
+             ThueSuat=0 tren HD khong danh thieu
+  KT-ENG-01  post 2 lan BAN_HANG cung MaHD -> 1 BT, alreadyPosted
+  KT-ENG-02  No != Co -> throw, khong insert
+  KT-ENG-03  TK ngung -> 400
+  KT-ENG-04  reverse: goc VAN DaGhiSo + DaBiDao=1, MaBTGoc NULL;
+             BT moi DAO_ cung DaGhiSo, MaBTGoc = MaBT goc, DaBiDao=0;
+             So cai 100 + (-100) = 0; ca hai dong deu nam NKC/vw_SoCaiDong;
+             KQKD 511 = PS Co − PS No = 0 (khong con 100)
+  KT-ENG-05  unique goc: (HoaDon, HD001, BAN_HANG)
+             WHERE DaBiDao=0 AND MaBTGoc IS NULL
+             (KHONG NOT LIKE trong index)
+  KT-ENG-06  dao xong post lai BAN_HANG cung MaHD: BT moi OK (unique khong chan)
+  KT-ENG-07  migration CREATE UNIQUE INDEX ... NOT LIKE N'DAO%' KHONG duoc
+             xuat hien trong SQL; filter chi DaBiDao + MaBTGoc IS NULL / NOT NULL
+  KT-ENG-08  ChoGhiSo: INSERT 2 hang DaXuLy=0 cung (Loai, Ma, LyDo) -> fail
+             UX_ChoGhiSo_Active. UPDATE DaXuLy=1 roi INSERT lai cung key ->
+             OK (hang moi). KHONG CONSTRAINT UQ_ChoGhiSo thuong.
+             Dao/repost KY_KHOA cung CT+LyDo khong 2627 unique.
+  KT-ENG-09  THU_CONG: FE khong gui maChungTu (hoac gui "THUCONG"/rac) ->
+             server sinh TC+yyMM+5 so (vd TC260900001), LoaiChungTu=ThuCong.
+             Post lan 2: MaChungTu KHAC lan 1, ca hai ghi duoc. Unique van
+             (LoaiChungTu, MaChungTu, LoaiButToan). KHONG dung chung
+             maChungTu="THUCONG".
+
+14.2. Tich hop ban
+
+  KT-SALE-01  TM thuan: 111, 511, 33311, 632, 156
+  KT-SALE-02  Hon hop 80 TM + 20 QR: 111=80, 112=20, DT 1 lan
+  KT-SALE-03  The + CK deu 112
+  KT-SALE-04  In lai HD: ton khong doi, BT khong them
+  KT-SALE-05  HD Nhap: 0 BT
+  KT-SALE-06  Thanh toan That bai: 0 BT, 0 tru ton
+
+14.3. Doi tra
+
+  KT-RET-01  Hoan TM + nhap lai: 5212+33311/111 va 156/632
+  KT-RET-02  Hoan khong nhap lai: co 5212, khong dao 632
+  KT-RET-03  Doi ngang gia: khong 5212; co 156/632 + 632/156 giao doi
+  KT-RET-04  Thue dao dung suat dong goc (doi suat SP sau khi ban)
+
+14.4. Mua / AP
+
+  KT-PUR-01  PN xac nhan: TonKho+, 0 BT, ChoGhiSo PN_CHUA_DOI_CHIEU
+  KT-PUR-02  3-way lech thue: 0 CongNo, 0 BT
+  KT-PUR-03  3-way khop: 156+1331/331, SoTienNo=TongCong
+  KT-PUR-04  Lap PC + duyet giao quy: 331 khong doi, 0 BT
+  KT-PUR-05  Chi fail: 0 BT, no giu
+  KT-PUR-06  Chi OK TM: 331/111, no=0
+  KT-PUR-07  Chi OK CK: 331/112 + MaGD
+  KT-PUR-08  Khong tao PC thu 2 (P0 unique)
+
+14.5. Ca / PT
+
+  KT-CA-01  Dong ca QR khong vao TienMatHeThong
+  KT-CA-02  PT khop: 0 BT
+  KT-CA-03  PT thieu 50.000: No 138 / Co 111 = 50.000
+  KT-CA-04  PT thua: No 111 / Co 711
+  KT-CA-05  PT so am (chi hoan): van 0 BT neu khong lech
+
+14.6. Luong / CP / KK / PX
+
+  KT-PAY-01  Build: 0 BT
+  KT-PAY-02  Lock: 642/334 = tong bang
+  KT-PAY-03  Lock 2 lan: 1 BT
+  KT-PAY-04  Giao quy luong: 0 BT
+  KT-PAY-05  Chi TM/CK: 334/111 hoac 112
+  KT-EXP-01  Dien 2.200.000 VAT 200k CK: 642+1331/112 (khong 331)
+  KT-EXP-02  Cuoc 500k TM: 642/111, DonGiaVon SP khong doi
+  KT-EXP-03  UC36 xac nhan khi ky Khoa: CT luu, BT ChoGhiSo, khong 400;
+             Ghi so tre -> MaKy ky Mo, NgayChungTu goc
+  KT-KK-01   Thieu 2 SP * gia BQ: 632/156
+  KT-KK-02   Thua: 156/711
+  KT-KK-03   Dong da xuat huy: khong KK_THIEU trung
+  KT-PX-01   Huy: 632/156
+  KT-PX-02   Noi bo: 642/156
+  KT-PX-03   Tra NCC chua khop: 0 BT
+  KT-PX-04   Tra NCC khi DA CO Phieu chi (ke ca CHUA thanh toan): 400,
+             CN khong giam, 0 TRA_NCC_HANG
+  KT-PX-05   Tra NCC da khop, CHUA co Phieu chi: TRA_NCC_HANG + giam CN
+  KT-PX-06   Tra NCC sau khi PC thanh cong (tat toan): 400 (cung rule da co PC)
+
+14.7. Bao cao
+
+  KT-RPT-01  NKC tong No = tong Co
+  KT-RPT-02  CDPS 3 cap
+  KT-RPT-03  KQKD khong chua so PhieuChi NCC
+  KT-RPT-03b KQKD 511 = PS Co − PS No (loai KET_CHUYEN, DAO_KET_CHUYEN,
+             SODU_DAU_KY); dao BAN_HANG 100 -> KQKD DT = 0, khong con 100
+  KT-RPT-03c KQKD 632/5212/642 = PS No − PS Co; 711 = PS Co − PS No
+  KT-RPT-04  Dong tien CO so PhieuChi NCC
+  KT-RPT-05  Du cuoi 331 = SUM SoTienConLai (con phai tra cuoi ky),
+             KHONG cong da tat toan trong ky;
+             PS Co 331 = no moi; PS No 331 = thanh toan + tra hang/DC giam
+  KT-RPT-06  156 vs GiaTriTon: lech dung = PN chua khop
+  KT-RPT-07  UC29 lai gop van dung cong thuc Word (hoi quy)
+  KT-RPT-08  Ky fallback / lockPeriod khong vo
+  KT-RPT-09  BCDKT ky CHUA KET_CHUYEN: J = 421 + LN 8.4; KHONG +911
+             (911 du = 0); TS = NV (tam tinh, watermark).
+             SAI neu J = 421 + 911 (= 421) — lech dung LN ky.
+  KT-RPT-10  BCDKT sau KET_CHUYEN: J = 421; 911 = 0; TS = NV;
+             J KHONG cong LN 8.4 lan 2 (da nam trong 421)
+  KT-RPT-11  LCTT: THU_CONG No 111 / Co 138 vao I "Thu/chi khac" (+);
+             I+II+III = PS No(111+112) − PS Co(111+112)
+  KT-RPT-12  THU_CONG khong dung 111/112: LCTT khong doi
+  KT-RPT-13  Bang ke VAT vao + so cai 1331 khop (sau tru TRA_NCC_HANG)
+
+14.8. Khoa so / VAT / mo rong
+
+  KT-CLS-01  HD Hoan thanh thieu BAN_HANG/GIA_VON -> close-check.block,
+             POST close 400. KHONG override / KHONG "khoa van canh bao"
+  KT-CLS-01b 3-way khop thieu MUA_HANG -> BLOCK khoa
+  KT-CLS-01c PC thanh cong thieu TRA_NCC -> BLOCK khoa
+  KT-CLS-01d Ky luong khoa thieu TRICH_LUONG -> BLOCK khoa
+  KT-CLS-01e Chi luong thanh cong thieu CHI_LUONG -> BLOCK khoa
+  KT-CLS-01f Chi phi xac nhan thieu CHI_PHI -> BLOCK khoa
+  KT-CLS-02  Ket chuyen: 511/632/642/5212/711 = 0, 421 doi
+  KT-CLS-03  Post sau khoa -> ChoGhiSo (P0 van ban; UC36 van luu);
+             Ghi so tre: NgayHachToan+MaKy = ky Mo ke tiep, giu NgayChungTu;
+             engine khong assertPeriodOpen(ngay goc ky Khoa) roi fail
+  KT-CLS-04  Mo lai ky gan nhat, ky sau CHI con SODU_DAU_KY (hoac trong):
+             QL + ly do; dao KET_CHUYEN (goc DaBiDao=1 + DAO_KET_CHUYEN);
+             KHONG cot DaKetChuyen; EXISTS KET_CHUYEN hieu luc = da ket chuyen;
+             SoDuDauKy ky sau CHUA doi luc mo (khong cascade)
+  KT-CLS-05  WARN van khoa duoc: PN da nhan chua 3-way; HD Nhap;
+             CT cho duyet; nghiep vu chua du DK ghi so. close-check.warn
+             != rong, block rong, POST close 200
+  KT-CLS-06  Ky sau da co BT nghiep vu hieu luc (vd BAN_HANG DaGhiSo
+             DaBiDao=0) -> mo lai ky truoc 400. Sua bang THU_CONG / BT
+             dieu chinh o ky DANG MO
+  KT-CLS-07  Mo lai + sua/dao BT + khoa lai -> SoDuDauKy ky ke tiep
+             duoc tinh lai / copy lai / GHI DE (ke ca hang DaChot=1
+             do lan khoa truoc — NGOAI LE he thong D35; khong giu so copy cu).
+             Neu da co BT SODU_DAU_KY cu: dao/repost hoac tai sinh.
+  KT-CLS-08  Mo lai ky khong phai gan nhat (co ky Khoa sau no) -> 400
+  KT-CLS-09  Nguoi dung PUT SoDuDauKy DaChot=1 -> 400 (khong exception
+             thu cong; exception chi thao tac he thong khoa lai UC39)
+  KT-VAT-R1  Bang ke ra = SUM TienThue HD hoan - hoan;
+             dong ThueSuat NULL = "Thieu thue"; dong =0 khong danh thieu
+  KT-VAT-R2  In lai khong tang bang ke
+  KT-VAT-R3  Bang ke dau vao = HD mua khop + UC36 + TSCD − VAT TRA_NCC_HANG;
+             dong TRA_NCC_HANG AM. Vi du: mua VAT 800k, tra hang VAT 200k
+             -> so cai 1331 = 600k, bang ke = 600k (SAI neu bang ke 800k)
+  KT-FA-01   Mua TSCD: 211 chua VAT + 1331 / Co 111|112 (KHONG 331, 0 CongNo)
+  KT-FA-02   KH 2 lan / ky: 1 dong
+  KT-FA-03   Form/API khong cho MaTKTien=331
+  KT-FA-04   THU_CONG khong co luong thanh ly TSCD (khong form/API
+             "thanh ly"; khong goi y 211/214/GTCL). Thu cong chi DC KT
+             mini (vd 138)
+  KT-BK-01   Khop MaGD POS; IPN sai tien khong tao GD thanh cong (P1)
+  KT-BK-02   So 112 file != so cai neu lech — trang thai ro
+  KT-BK-03   Upload .xlsx / Excel / khong phai CSV -> 400; chi nhan CSV
+             (khong parser Excel)
+  KT-BK-04   ChiTietButToan khong cot MaTKNH; moi BT ngan hang MaTK=112;
+             khong 1121/1122; mini 1 TKNH (khong tach VCB vs MB)
+
+14.9. Quyen / hoi quy
+
+  KT-SEC-01  thungan GET /api/ledger/journals -> 403
+  KT-SEC-02  admin POST expenses confirm -> 403 (tru khi gan UC36 — khong gan)
+  KT-SEC-03  QL mo lai ky duoc; KT mo lai 403
+  KT-SEC-04  QL POST payroll build 403 (P0 giu)
+  KT-REG-01  E2E-01..10 P0 van PASS
+  KT-REG-02  Telegram /debt /today khong ghi so
+  KT-REG-03  Double click Xac nhan chi phi: 1 BT
+
+14.10. File test de xuat
+
+  server/test-vat-sales.js
+  server/test-journal-engine.js
+  server/test-ledger-reports.js
+  Gan npm run test:business va test:next.
+
+
+================================================================================
+15. RUI RO VA QUYET DINH DA CHOT
+================================================================================
+
+15.1. Mau thuan tai lieu — va PHUONG AN CHON
+
+D1. P&L tru chi NCC
+  BAN_GIAO 07/09 muc 2, 11, 14: mo ta P&L dieu hanh TRU chi NCC + luong khoa.
+  PLAN_12 0.4 + B1.5 + 1.11: day la SAI BAN CHAT, phai tach KQKD / dong tien.
+  PHUONG_AN muc 3: lai tren bao cao nghiep vu la LAI GOP, khong tru luong.
+  CHON: PLAN_12. BAN_GIAO mo ta HIEN TRANG CODE, khong phai dich den.
+  Ly do: mon AIS; tru NCC sau DT-GV = dem hang 2 lan. Sieu thi mini van
+  can man thu-chi de QL thay tien mat.
+
+D2. COA toi thieu PLAN_12 vs Plan A nhap
+  PLAN_12 B-KT.2: 111,112,1331,156,211,214,331,33311,334,511,5212,632,642,911.
+  File nhap 31/08: them 411,421; VAT "neu ap dung".
+  PHUONG_AN muc 9: so du dau 111/112/156/331/411/421.
+  PHAM_VI: VAT BAN bat buoc.
+  CHON: list PLAN_12 + 411 + 421 + 138 + 711 = DUNG 18 TK (gom 138).
+  Ly do: BCDKT can von/LN; lech quy/KK thua can noi dung; khong mo 151/338
+  (PLAN_12 0.9). 138/711 la cap 1 gon, vua suc.
+  KHONG viet 17 TK (thieu 138) hay 19 TK.
+
+D3. Phieu thu "khong sinh but toan"
+  PLAN_12 B-KT.3 + B1.2: PT KHONG (DT da ghi).
+  CHON: PT khong lech = 0 BT; PT lech = LECH_QUY (138/711), KHONG phai 511.
+  Ly do: cau goc chong double DT; so cai 111 phai khop tien that nop.
+
+D4. So UC ke toan
+  File nhap 31/08: UC30-UC36 ke toan. Code + CAP_NHAT Word: UC30-33 nhan su.
+  PHAM_VI + PLAN_12 B4: UC34-UC43.
+  CHON: UC34-UC43. File nhap = HET HIEU LUC ve so UC.
+
+D5. Plan A vs Plan B
+  File nhap: 2 phuong an. PHAM_VI 31/08: Plan A hieu chinh, GIU VAT/TSCD/
+  sao ke/LCTT, CAT 242 va FEFO. PLAN_12: khong chon B, khong cat so cai.
+  CHON: Plan A hieu chinh = KT loi + KT mo rong. Khong ERP 14 phan he.
+
+D6. Word UC29 "chua luong nen khong goi lai rong"
+  Hien tai DA CO luong. CHON: UC29 giu LAI GOP (gom VAT, cong thuc Chuong 6).
+  UC43 KQKD mini (chua VAT, tru 642 thuan muc 8.4). Khong goi "lai rong phap ly".
+
+D7. Mo hinh ChiTietButToan
+  File nhap: 1 dong = TKNo + TKCo + SoTien.
+  CHON: 1 dong = 1 TK + SoTienNo + SoTienCo (nhieu No/nhieu Co).
+  Ly do: HD hon hop + VAT; de so cai.
+
+D8. Gia von cuoc / 4000d/km
+  BAN_GIAO 14.3: cuoc 4.000 d/km + boi 20% CHUA LAM.
+  PLAN_12: cuoc = 642, khong vao 156.
+  CHON: UC36 nhap so cuoc tay (hoac sau nay tinh km). Khong doi DonGiaVon.
+  Khong implement boi 20% trong KT mini (ngoai pham vi so cai).
+
+D9. Telegram
+  PLAN_12 A3: P1, read-only. BAN_GIAO 14.3: da trien khai 08/09, co duyet
+  audit. CHON: khong lam lai bot. Sua copy P&L. Bot khong postJournal.
+
+D10. BHXH
+  Moi file chot: KHONG. CHON: khong 3383/334BH. Luong = 642/334 + 334/tien.
+
+D11. Ket chuyen / khoa
+  File nhap Plan A: khoa thang, ket chuyen 911.
+  PHAM_VI: khoa so nam KT mo rong (buoc 7).
+  CHON: engine + KQKD tam tinh o KT loi; KET_CHUYEN + khoa that o UC39
+  (co the code nhe tuan 4, bat dung sau khi test xuyen).
+  Da ket chuyen = EXISTS ButToan KET_CHUYEN hieu luc (DaBiDao=0, DaGhiSo).
+  KHONG cot DaKetChuyen / MaBT_KetChuyen tren KyKeToan. Xem D26.
+  Mo lai / copy so du dau: xem D30. Checklist khoa BLOCK vs WARN: D29.
+
+D12. 641 vs 642
+  CHON: gom 641 vao 642. 1 cua hang, khong tach bo phan.
+
+D13. Dao but toan / TrangThai
+  CHON: goc + dao deu TrangThai='DaGhiSo'; goc DaBiDao=1, MaBTGoc NULL.
+  BT dao: LoaiButToan='DAO_'+goc, MaBTGoc = MaBT goc, DaBiDao=0.
+  KHONG dung TrangThai='Dao' de loai goc khoi NKC/So cai
+  (neu loc chi DaGhiSo se con dung dao -100).
+  Unique 1.1 (NOT LIKE N'DAO%' trong filter) SAI — SQL Server khong ho
+  tro LIKE trong filtered index. Unique 1.2: xem D22.
+
+D14. TSCD va 331
+  CHON: TSCD mini CHI mua 111/112. Khong Co 331, khong tao CongNoPhaiTra.
+  Ly do: CN P0 chi sinh tu HD mua 3-way; Co 331 khong tao CN -> lech so.
+  Khong thanh ly / danh gia lai; khong THU_CONG thanh ly — xem D32.
+
+D15. UC36 khong 331
+  CHON: chi 642(+1331)/111|112, tra trong ky. Bo phuong an ghi no 331.
+
+D16. Ghi so tre / khoa ky
+  CHON: khoa ky khong chan P0/UC36. CT commit, BT ChoGhiSo, giu NgayChungTu.
+  Ghi so tre: NgayHachToan+MaKy = ky Mo ke tiep. Chua co ky Mo -> ChoGhiSo.
+  Engine khong assertPeriodOpen tren ngay goc thuoc ky Khoa.
+  ChoGhiSo unique: D28. Checklist khoa: D29. Mo lai ky: D30.
+
+D17. Khong cot MaBT tren chung tu
+  CHON: truy ButToan theo LoaiChungTu+MaChungTu(+LoaiButToan).
+  Engine khong UPDATE MaBT tren CT goc. 1 CT nhieu LoaiButToan.
+
+D18. Khong CauHinhDinhKhoan
+  CHON: mapping co dinh trong journalEngine.js (~18 TK, >10 loai BT).
+  Khong bang cau hinh, khong accounting rule engine rieng.
+
+D19. Doi chieu 331
+  CHON: du cuoi 331 = SUM SoTienConLai (con phai tra cuoi ky).
+  KHONG cong da tat toan trong ky. PS Co = no moi; PS No = TT + tra/DC giam.
+
+D20. VAT NULL vs 0, khong ngam 8%  (1.2 sua 1.1 DEFAULT 0)
+  CHON: SanPham.ThueSuat DEFAULT NULL. NULL = chua chon; 0 = 0% da chon;
+  5/8/10 = muc thue. QL chon 0/5/8/10 khi tao SP; chon 0 thi xac nhan
+  "Xac nhan thue suat 0% theo cau hinh san pham?".
+  POS chan khi ThueSuat IS NULL. ThueSuat=0 hop le, khong bat xac nhan o quay.
+  HD moi hoan thanh: ChiTietHoaDon.ThueSuat IN (0,5,8,10), KHONG NULL.
+  HD cu: ChiTietHoaDon.ThueSuat NULL -> UC40 "Thieu thue" (KHONG gan 0).
+  Seed demo dung muc nhom. Khong UPDATE SET ThueSuat=8.
+  Khong cau "pho bien hang tieu dung 2024-2026".
+  Khong cau UI "mien thue / khong chiu thue?". Xem D24.
+
+D21. TK 421
+  CHON: ten/nhan bao cao = ket qua luy ke mo hinh mini, CHUA thue TNDN.
+  Khong goi "LN sau thue chua phan phoi" neu khong chu thich.
+  BCDKT J (chua KC vs sau KC): D34 (1.4) — khong cong 911 khi chua KC.
+
+D22. Filtered unique index — KHONG LIKE  (1.2 / A1)
+  CHON: SQL Server filtered index khong ho tro LIKE (migration fail neu
+  WHERE ... NOT LIKE N'DAO%').
+  DDL:
+    CREATE UNIQUE INDEX UX_ButToan_Nguon
+      ON ButToan (LoaiChungTu, MaChungTu, LoaiButToan)
+      WHERE DaBiDao = 0 AND MaBTGoc IS NULL;
+    CREATE UNIQUE INDEX UX_ButToan_Dao
+      ON ButToan (MaBTGoc, LoaiButToan)
+      WHERE MaBTGoc IS NOT NULL AND DaBiDao = 0;
+  KHONG CAN NOT LIKE: BT dao LoaiButToan khac goc; repost goc DaBiDao=1
+  ra khoi index. Khong dung UNIQUE gom MaBTGoc (NULL tren goc — unique
+  + NULL SQL Server khong dong nhat). LIKE van dung trong QUERY (D23).
+  Repost = dao + BT moi.
+
+D23. KQKD phat sinh thuan  (1.2 / A2 — quan trong nhat)
+  CHON: KQKD cung net movement voi So cai.
+    511 = PS Co − PS No
+    5212 / 632 / 642 = PS No − PS Co
+    711 = PS Co − PS No
+  KHONG tinh LoaiButToan IN (KET_CHUYEN, DAO_KET_CHUYEN, SODU_DAU_KY).
+  GOM DAO_ nghiep vu (DAO_BAN_HANG, ...) de sua/dao tu triet tieu.
+  KHONG lay chi PS Co 511 (dao DT se con so ao). QUERY duoc dung LIKE;
+  filtered index thi khong. Khong can nhanh "neu da ket chuyen lay PS Co".
+
+D24. VAT 0% vs chua chon  (1.2 / B1)
+  CHON: nhu D20. 1.1 bat xac nhan POS khi ThueSuat=0: BO. NULL moi la
+  chua chon. =0 hop le sau xac nhan luc cau hinh SP.
+
+D25. Tra hang NCC vs Phieu chi  (1.2 / B2)
+  CHON: da ton tai Phieu chi cho cong no (bat ky trang thai) -> KHONG
+  cho PX tra NCC giam cong no. Phai tra hang TRUOC KHI lap Phieu chi.
+  Giu 1 cong no – 1 Phieu chi. KHONG them workflow sua PC / tra hang
+  sau khi lap PC. 1.1 chi chan khi da tat toan: KHONG DU (PC chua TT
+  10tr + tra hang 2tr -> CN 8tr, PC van 10tr).
+
+D26. Bo cot DaKetChuyen  (1.2 / B3)
+  CHON: khong cot DaKetChuyen, khong MaBT_KetChuyen tren KyKeToan.
+  Da ket chuyen = EXISTS ButToan KET_CHUYEN DaBiDao=0 DaGhiSo cua ky.
+  Mo lai = reverseJournal KET_CHUYEN (goc DaBiDao=1 + DAO_KET_CHUYEN).
+  Dieu kien mo lai / so du dau ky sau: D30 (1.3).
+
+D27. Bo bang DoiChieuNganHang  (1.2 / B4)
+  CHON: KHONG tao bang DoiChieuNganHang. Muc 2.4 1.1 liet ke nhung
+  khong thiet ke. Trang thai doi chieu nam DongSaoKe (TrangThaiKhop,
+  LoaiChungTuKhop, MaChungTuKhop, GhiChuKhop).
+
+D28. ChoGhiSo unique lifecycle  (1.3 / C1)
+  CHON: bo UQ_ChoGhiSo UNIQUE (LoaiChungTu, MaChungTu, LyDo) tren ca
+  lich su. Khong them bang. Filtered unique:
+    CREATE UNIQUE INDEX UX_ChoGhiSo_Active
+      ON ChoGhiSo (LoaiChungTu, MaChungTu, LyDo)
+      WHERE DaXuLy = 0;
+  SQL Server hop le (filter so sanh =, khong LIKE). Sau DaXuLy=1,
+  INSERT lai cung CT+LyDo (dao/repost KY_KHOA) duoc. 2 hang DaXuLy=0
+  cung key van bi chan. Xu ly xong: UPDATE DaXuLy=1, khong can DELETE.
+
+D29. Khoa ky BLOCK vs WARN  (1.3 / C2)
+  CHON: siet rule, khong them chuc nang override.
+  BLOCK (400, KHONG "khoa van canh bao"):
+    HD Hoan thanh thieu BAN_HANG/GIA_VON
+    3-way khop thieu MUA_HANG
+    PC thanh cong thieu TRA_NCC
+    Ky luong khoa thieu TRICH_LUONG
+    Chi luong thanh cong thieu CHI_LUONG
+    Chi phi xac nhan thieu CHI_PHI
+  WARN (van khoa duoc):
+    PN da nhan chua 3-way match
+    Hoa don dang Nhap
+    Chung tu cho duyet
+    Nghiep vu chua du dieu kien ghi so
+  Ly do: khoa + KET_CHUYEN khi HD Hoan thanh thieu BT -> KQKD ky thieu so.
+
+D30. Mo lai ky vs so du dau ky sau  (1.3 / C3)
+  CHON: mini khong cascade. Chi mo lai ky GAN NHAT neu ky KE TIEP
+  chua co BT nghiep vu hieu luc (DaGhiSo, DaBiDao=0, LoaiButToan
+  khong phai SODU_DAU_KY). "Nghiep vu" = moi BT tru SODU_DAU_KY
+  (KET_CHUYEN/DAO_KET_CHUYEN cua ky dang mo lai nam ky do, khong
+  nam ky sau). Thuc te: ky sau khong co BT hieu luc nao ngoai co the
+  SODU_DAU_KY da copy. Sau sua va KHOA LAI: tinh lai / copy lai so du
+  dau ky ke tiep. Ky sau da PS -> khong mo lai ky truoc; sai sot xu ly
+  bang BT dieu chinh o ky DANG MO.
+  Ghi de SoDuDauKy DaChot khi khoa lai: D35 (1.4) — exception he thong,
+  nguoi dung van khong sua hang chot.
+
+D31. THU_CONG MaChungTu do server sinh  (1.3 / C4)
+  CHON: khong de FE gui maChungTu="THUCONG" chung (dung unique lan 2).
+  Server gan LoaiChungTu='ThuCong', sinh MaChungTu = 'TC' + yyMM + 5 so
+  (vd TC260900001). Payload FE khong bat buoc maChungTu; neu gui thi
+  BO QUA. Unique van UX_ButToan_Nguon (LoaiChungTu, MaChungTu, LoaiButToan).
+
+D32. THU_CONG khong thanh ly TSCD  (1.3 / C5)
+  CHON: xoa "thanh ly TSCD don gian" khoi THU_CONG. UC41 mini khong
+  lam thanh ly / danh gia lai (hoi dong se hoi 211/214/GTCL/tien thu/
+  lai lo). BT thu cong chi dieu chinh KT duoc phep trong mini, vd
+  thu bu / xoa chenh lech TK 138.
+
+D33. VAT dau vao tru TRA_NCC_HANG  (1.4 / E1)
+  CHON: VAT dau vao = HD mua khop + UC36 + TSCD − VAT hang tra NCC da
+  ghi TRA_NCC_HANG (hieu luc). Bang ke: hang tra NCC la dong AM.
+  Khong them bang. Neu khong tru: so cai 1331 giam (Co 1331) ma bang ke
+  van so cu (vd so cai 600k, bang ke 800k). UC40 / 5.4 / 8.9 / 8.10.
+
+D34. BCDKT ky chua ket chuyen — J khong +911  (1.4 / E2)
+  CHON: ky CHUA ket chuyen: J = 421 + Loi nhuan ke toan mini hien tai
+  cua ky (lay dung KQKD muc 8.4). KHONG cong 911 (911 chua co so; KQ
+  nam 511/5212/632/642/711). Sau KET_CHUYEN: J = 421 thoi (911 da ve
+  421 cung transaction; khong cong LN 8.4 lan 2). Ky mo -> BCDKT tam
+  tinh CAN. Ky khoa -> BCDKT chinh thuc CAN. UC43 xem duoc khi ky chua
+  khoa (watermark "So lieu tam tinh"). Khong them bang/TK.
+  1.3 J = 421 (+ 911 neu chua KC) SAI truoc KC (911=0 -> lech LN ky).
+
+D35. Exception ghi de SoDuDauKy khi khoa lai  (1.4 / E3)
+  CHON: nguoi dung KHONG sua SoDuDauKy DaChot=1 (PUT 400; UC35 giu
+  "sua sau chot = BT dieu chinh"). NGOAI LE he thong, khong them chuc
+  nang: khi khoa lai ky truoc theo UC39 / 7.12, he thong duoc tinh lai
+  va GHI DE so du dau ky tu dong cua ky ke tiep (dieu kien mo lai bao
+  dam ky ke tiep chua BT nghiep vu). Neu da co BT SODU_DAU_KY cu:
+  dao/repost hoac tai sinh theo quy tac he thong.
+
+D36. LCTT nhan THU_CONG dung 111/112  (1.4 / E4)
+  CHON: THU_CONG co PS 111/112 -> nhom I "Thu/chi khac tu hoat dong
+  kinh doanh"; dau theo No/Co cua 111/112 (No = thu +, Co = chi −).
+  THU_CONG khong dung 111/112: khong vao LCTT. Khong them TK/bang.
+  1.3 thieu nhom nay -> I+II+III lech bien dong 111+112.
+
+D37. Mot TK ngan hang mini  (1.4 / E5)
+  CHON: KT mini dung 1 tai khoan ngan hang doanh nghiep de doi chieu
+  sao ke. Bo "1-2 TKNH". Moi BT ngan hang chung TK 112. ChiTietButToan
+  KHONG luu MaTKNH (khong tach VCB vs MB). KHONG them 1121/1122 hay
+  MaTKNH tren dong BT. Nhieu NH = huong phat trien (ngoai pham vi).
+
+D38. UC42 import sao ke CSV only  (1.4 / E6)
+  CHON: import sao ke CSV. Bo Excel khoi nghiep vu/API. Multer CSV,
+  khong parser Excel. Upload khong phai CSV -> 400.
+
+15.2. Rui ro
+
+  R1  Idempotent fail -> tru ton / BT 2 lan     Mitigation: unique + test ENG-01
+  R2  156 != TonKho (PN chua khop) bi hoi       Mitigation: banner + cau bao ve B-KT.6
+  R3  Lam tron VAT lech 1 dong                  Mitigation: dong cuoi chiu le
+  R4  Sua P&L vo FE/Telegram                    Mitigation: giu field cu deprecated
+  R5  2 nhanh sua HoaDon                        Mitigation: VAT merge truoc P1 token
+  R6  Scope truot sang Plan B                   Mitigation: muc 1.3, khong 242/FEFO
+  R7  Hoi dong hoi to khai thue                 Mitigation: nhan "bang ke do an"
+  R8  Ky khoa chan POS                          Mitigation: P0 commit + ChoGhiSo;
+                                                Ghi so tre vao ky Mo (doi MaKy/
+                                                NgayHachToan); khong assert ngay goc
+  R9  Tra NCC hang khi da co Phieu chi        Mitigation: 400, tra hang
+                                                TRUOC khi lap PC (D25)
+  R10 So du dau khong can                       Mitigation: UC35 chan chot
+  R11 Filtered index LIKE fail migration        Mitigation: D22, test ENG-07
+  R12 KQKD PS Co 511 sau dao con DT ao          Mitigation: D23, test RPT-03b
+  R13 ChoGhiSo UQ ca lich su chan requeue       Mitigation: D28, test ENG-08
+  R14 Khoa+KET_CHUYEN khi HD thieu BT           Mitigation: D29, test CLS-01*
+                                                -> KQKD ky thieu so
+  R15 Mo lai ky cu / ky sau da PS -> so du lech Mitigation: D30, test CLS-04/06/07
+  R16 Bang ke VAT vao khong tru TRA_NCC_HANG    Mitigation: D33, test VAT-R3
+                                                -> so cai 1331 != bang ke
+  R17 BCDKT chua KC lech LN (J=421+911=421)     Mitigation: D34, test RPT-09/10
+  R18 Khoa lai khong ghi de SoDuDauKy DaChot    Mitigation: D35, test CLS-07/09
+  R19 LCTT lech vi THU_CONG 111/112             Mitigation: D36, test RPT-11/12
+
+15.3. Cau bao ve ngan (hoc thuoc)
+
+  "Chung tu la nguon, but toan la ket qua. Khong nhap so 2 lan."
+  "Tra NCC giam 331, khong phai chi phi tren KQKD."
+  "Gia niem yet gom VAT; tach 511/33311 luc ghi so."
+  "Ton kho vat ly tang luc nhap; 156 tang luc du 3 chung tu."
+  "Tra hang NCC truoc khi lap Phieu chi. Da co PC thi khong giam no."
+  "KQKD = phat sinh thuan; dao BT tu triet tieu. Khong chi lay PS Co 511."
+  "ThueSuat NULL khac 0%. Unique filtered khong dung LIKE."
+  "ChoGhiSo unique chi hang DaXuLy=0. Thieu BT chung tu hop le: BLOCK khoa."
+  "Mo lai chi ky gan nhat; ky sau chua PS nghiep vu. Khoa lai copy lai so du."
+  "THU_CONG: MaChungTu do server sinh. Khong dung thanh ly TSCD."
+  "VAT dau vao tru hang tra NCC (TRA_NCC_HANG). Dong bang ke AM."
+  "BCDKT chua KC: J = 421 + LN KQKD 8.4, khong cong 911."
+  "SoDuDauKy DaChot: user khong sua; khoa lai ky truoc duoc ghi de."
+  "LCTT gom THU_CONG dung 111/112. Mini 1 TKNH. Sao ke CSV."
+
+
+================================================================================
+PHU LUC A — MA TRAN CHUNG TU -> LOAIBUTTOAN
+================================================================================
+
+  HoaDon              BAN_HANG, GIA_VON
+  PhieuDoiTra         DOI_TRA_HOAN, DOI_TRA_NHAP_KHO, DOI_TRA_GIAO_DOI
+  HoaDonMuaHang       MUA_HANG
+  PhieuChi            TRA_NCC
+  PhieuThu            LECH_QUY (optional)
+  KyLuong             TRICH_LUONG, KET_CHUYEN (khac bang), KHAU_HAO
+  PhieuChiLuong       CHI_LUONG
+  ChiPhiVanHanh       CHI_PHI
+  TaiSanCoDinh        MUA_TSCD
+  KiemKe              KK_THIEU, KK_THUA
+  PhieuXuat           XUAT_HUY, XUAT_NOI_BO, TRA_NCC_HANG
+  KyKeToan            SODU_DAU_KY, KET_CHUYEN, KHAU_HAO, DAO_KET_CHUYEN
+  ThuCong             THU_CONG        MaChungTu = TC+yyMM+5 so (server)
+  (moi LoaiGoc)       DAO_<LoaiGoc>   MaBTGoc = MaBT goc; goc DaBiDao=1
+
+
+================================================================================
+PHU LUC B — FILE SE SUA / THEM
+================================================================================
+
+  THEM
+    server/migrations/SupermarketFly_Migration_20260909_AccountingCore.sql
+    server/migrations/SupermarketFly_Migration_20260909_VatOnPos.sql
+    server/migrations/SupermarketFly_Migration_20260910_OperatingExpense.sql
+    server/src/services/journalEngine.js
+    server/src/services/vatSales.js
+    server/src/controllers/ledgerController.js
+    server/src/routes/ledgerRoutes.js
+    server/test-vat-sales.js
+    server/test-journal-engine.js
+    desktop/src/pages/accounting/ledger-pages.js
+    desktop/src/pages/accounting/ledger.css   (neu can, uu tien tai warehouse.css)
+
+  SUA
+    server/src/app.js
+    server/src/constants/permissions.js
+    server/seed-permissions.js
+    server/package.json                       migrate:next
+    server/src/controllers/salesController.js
+    server/src/controllers/returnsController.js
+    server/src/controllers/accountingController.js
+    server/src/controllers/paymentVoucherController.js
+    server/src/controllers/payrollController.js
+    server/src/controllers/payrollVoucherController.js
+    server/src/controllers/settlementController.js
+    server/src/controllers/stockIssueController.js
+    server/src/services/countApprove.js
+    server/src/services/storeProfitLoss.js
+    server/src/services/storeProfitLossMath.js
+    server/src/services/telegramMessages.js
+    server/src/services/financialRules.js
+    desktop/src/pages/dashboard/dashboard.html  (menu)
+    desktop/src/pages/dashboard/dashboard.js
+    desktop/src/pages/accounting/accounting-pages.js
+    desktop/src/pages/accounting/store-pnl.js
+    desktop/src/pages/cashier/cashier-pages.js  (tom tat VAT)
+    desktop/src/pages/admin/products.js         (ThueSuat)
+    desktop/src/pages/shared/print-documents.js
+
+  KHONG SUA (tru khi bug P0)
+    Luong 3 cot tien, evaluateThreeWayMatch logic khop.
+    payosController.js — khong tao (PLAN_12).
+
+
+================================================================================
+PHU LUC C — VI DU SO (1 CHUOI DEMO BAO VE)
+================================================================================
+
+Gia dinh so du dau ky 09/2026:
+  111  5.000.000    112  10.000.000    156  20.000.000
+  331  8.000.000    411  27.000.000
+
+1) Ban TM 1 SP gia niem yet 110.000 (VAT 10%), von 70.000
+   BAN_HANG: No 111 110.000 / Co 511 100.000 / Co 33311 10.000
+   GIA_VON:  No 632 70.000 / Co 156 70.000
+   Lai gop Word (gom VAT): 110.000 - 70.000 = 40.000
+   Lai gop KQKD: 100.000 - 70.000 = 30.000
+
+2) Ban hon hop 80.000 TM + 30.000 QR, gia 110.000 gom 10%
+   Tong = 110.000. Dung: 80 TM + 30 QR tren HD 110.000.
+   No 111 80.000 + No 112 30.000 / Co 511 100.000 / Co 33311 10.000
+
+3) Khop HD mua: hang 2.000.000, VAT 8% = 160.000, tong 2.160.000
+   No 156 2.000.000 + No 1331 160.000 / Co 331 2.160.000
+   TonKho da tang tu luc PN (truoc do 156 chua +2.000.000 tren so cai).
+
+4) QL giao quy + KT chi NCC 2.160.000 CK
+   Lap/duyet: 0 BT, SoTienConLai van 2.160.000
+   Chi OK: No 331 2.160.000 / Co 112 2.160.000
+   KQKD: KHONG tru 2.160.000
+   Dong tien: -2.160.000
+
+5) Khoa luong ky 8.800.000, chi TM 5.000.000 + CK 3.800.000
+   Lock: No 642 8.800.000 / Co 334 8.800.000
+   Giao quy: 0 BT
+   Chi: No 334 5.000.000 / Co 111; No 334 3.800.000 / Co 112
+
+6) Hoa don dien 2.200.000 (hang 2.000.000 + VAT 200.000) CK
+   No 642 2.000.000 + No 1331 200.000 / Co 112 2.200.000
+
+7) PT ca: he thong 500.000, nop 480.000, ly do thieu
+   No 138 20.000 / Co 111 20.000
+
+8) KQKD ky (chi cac GD tren, bo qua so du) — PHAT SINH THUAN muc 8.4
+   511 = PS Co − PS No = 100.000 + 100.000 = 200.000
+   632 = PS No − PS Co = 70.000 + 70.000 = 140.000
+   642 = PS No − PS Co = 8.800.000 + 2.000.000 = 10.800.000
+   DT thuan     200.000
+   - GV           140.000
+   = Lai gop ke toan                 60.000
+   - Luong                           8.800.000
+   - Dien                            2.000.000
+   = Lo ke toan mini                -10.740.000
+   Tra NCC 2.160.000 KHONG nam day.
+
+9) Dong tien (rut gon)
+   Thu khach TM+QR   110.000 + 110.000 = 220.000  (gop VAT)
+   - Tra NCC                         2.160.000
+   - Luong                           8.800.000
+   - Dien                            2.200.000
+   = Am manh (minh hoa: can so du dau 111+112)
+
+10) CDPS: tong PS No = tong PS Co. BCDKT sau ket chuyen: 421 doi dung lo
+    (so du ket qua luy ke mini, CHUA thue TNDN — chu thich tren man).
+    KQKD VAN dung 511 thuan (loai KET_CHUYEN) — khong doi thanh 0 vi
+    ket chuyen da bi loai khoi tap hop muc 8.4.
+    BCDKT truoc KC (D34): xem (13).
+
+11) Dao BAN_HANG cua GD (1) — minh hoa bug 1.1 vs 1.2
+    Goc: Co 511 100.000, DaGhiSo, DaBiDao=1, MaBTGoc NULL
+    Dao: No 511 100.000, LoaiButToan=DAO_BAN_HANG, MaBTGoc=MaBT goc, DaGhiSo
+    So cai 511: +100.000 Co va +100.000 No = 0
+    KQKD SAI (1.1, chi PS Co 511): DT = 100.000  (con so ao)
+    KQKD DUNG (1.2): 511 = PS Co − PS No = 0
+    (Loai KET_CHUYEN / DAO_KET_CHUYEN / SODU_DAU_KY; GOM DAO_BAN_HANG)
+
+12) VAT dau vao tru TRA_NCC_HANG (D33) — minh hoa 1.3 vs 1.4
+    Gia dinh: HD mua khop VAT 800.000 (1331 No 800.000); khong UC36/TSCD.
+    Tra hang NCC da khop, CHUA PC: TRA_NCC_HANG Co 1331 200.000.
+    So cai 1331 = 800.000 − 200.000 = 600.000.
+    Bang ke DUNG (1.4): 800.000 − 200.000 = 600.000 (dong tra AM).
+    Bang ke SAI (1.3, khong tru TRA_NCC_HANG): 800.000.
+    Chuoi demo (3)+(6): VAT mua 160.000 + dien 200.000 = 360.000;
+    neu tra hang VAT 40.000 -> bang ke / so cai 1331 = 320.000.
+
+13) BCDKT truoc / sau KET_CHUYEN (D34) — minh hoa lech LN ky
+    Tu (8): LN ke toan mini 8.4 = −10.740.000. Gia dinh 421 dau ky = 0.
+    Truoc KC: 911 = 0; KQ nam 511/5212/632/642/711.
+    J DUNG = 421 + LN 8.4 = −10.740.000. TS = NV (tam tinh, watermark).
+    J SAI (1.3: 421 + 911) = 0 + 0 = 0 — lech dung 10.740.000.
+    Sau KET_CHUYEN: 911 ve 421 cung transaction; J = 421 = −10.740.000;
+    KHONG cong LN 8.4 lan 2. TS = NV (chinh thuc).
+
+14) LCTT THU_CONG dung 111 (D36)
+    THU_CONG thu bu: No 111 20.000 / Co 138 20.000.
+    LCTT I: +20.000 "Thu/chi khac tu hoat dong kinh doanh".
+    I+II+III van = PS No(111+112) − PS Co(111+112).
+    SAI 1.3 (THU_CONG khong vao nhom): I+II+III lech 20.000.
+
+
+================================================================================
+PHU LUC D — NGUON TAI LIEU DA DOC (08/09/2026)
+================================================================================
+
+  supermarket-fly/docs/
+    PLAN_12_TICH_HOP_VA_KE_TOAN.txt
+    PHUONG_AN_KE_TOAN_DA_CHOT.txt
+    PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt
+    BAN_GIAO_LAM_TIEP_TOAN_BO_HE_THONG_2026-09-07.txt
+    DOI_CHIEU_HE_THONG_HIEN_TAI_VOI_TAI_LIEU_GOC_2026-08-31.md
+    KE_HOACH_DU_LIEU_VA_GIAO_DIEN_BAO_CAO_5_ACTOR.md
+    PLAN_TELEGRAM_BOT_P1.txt          (tham chieu: bot da xong, khong ghi so)
+
+  TaiLieu_Du_An/01_Yeu_Cau_Nghiep_Vu/
+    UC_va_Danh_sach_chuc_nang_Supermarket_Fly.txt
+    Cac_chuc_nang_moi_chot_hom_nay_Supermarket_Fly.txt
+    CAP_NHAT_CHI_TIET_PHAN_MOI_SO_VOI_WORD_Supermarket_Fly.txt
+    PHAN_CONG_7_THANH_VIEN_VA_CHI_TIET_DU_AN_Supermarket_Fly.txt
+    BAN_GIAO_LAM_TIEP_TOAN_BO_HE_THONG_2026-09-07.txt
+
+  TaiLieu_Du_An/99_Tam_Xu_Ly/.codex-tmp/ke-hoach-ke-toan.txt
+    (ban nhap 2 phuong an 31/08 — HET HIEU LUC ve so UC30-36; dung de
+     doi chieu y tuong bang/COA, KHONG dung lam ban chot)
+
+  Schema / code da doc:
+    server/migrations/SupermarketFly_CreateDB.sql
+    server/migrations/SupermarketFly_Migration_20260901_PaymentFundHandover.sql
+    server/migrations/SupermarketFly_Migration_20260903_PayrollEngine.sql
+    server/migrations/SupermarketFly_Migration_20260904_PayrollCommonFund.sql
+    server/migrations/SupermarketFly_Migration_20260905_StoreProfitLoss.sql
+    server/src/constants/permissions.js
+    server/src/routes/accountingRoutes.js
+    server/src/routes/adminRoutes.js
+    server/src/controllers/accountingController.js
+    server/src/controllers/salesController.js
+    server/src/controllers/returnsController.js
+    server/src/controllers/stockIssueController.js
+    server/src/services/financialRules.js
+    server/src/services/storeProfitLoss.js
+    server/src/services/storeProfitLossMath.js
+    server/src/services/countApprove.js
+    desktop/src/pages/dashboard/dashboard.html
+    desktop/src/pages/accounting/accounting-pages.js
+    desktop/src/pages/accounting/store-pnl.js
+
+  Khong dung lam buoc tiep theo (BAN_GIAO muc 20):
+    docs/HUONG_DI_VA_THIET_KE_ACTOR_TIEP_THEO.md
+
+
+================================================================================
+DONG FILE
+================================================================================
+
+Ngay soan        : 08/09/2026
+Ngay cap nhat    : 08/09/2026
+Nguoi soan       : ke hoach KT mini — doi chieu tai lieu da chot + code P0
+Phien ban        : 1.4  (4 logic + 2 scope: VAT vao tru TRA_NCC_HANG,
+                   BCDKT J chua KC = 421+LN 8.4 khong +911, khoa lai ghi
+                   de SoDuDauKy DaChot, LCTT nhan THU_CONG 111/112,
+                   1 TKNH mini, UC42 CSV only;
+                   giu 1.3: ChoGhiSo unique chi DaXuLy=0, khoa BLOCK
+                   vs WARN, mo lai ky gan nhat + copy lai so du, THU_CONG
+                   MaChungTu server, THU_CONG khong thanh ly TSCD;
+                   giu 1.2: KQKD thuan, LCTT, BCDKT, VAT NULL vs 0,
+                   tra NCC truoc PC, filtered unique ButToan khong LIKE,
+                   bo DaKetChuyen, bo DoiChieuNganHang;
+                   giu 1.1: dao DaBiDao, TSCD/UC36 khong 331, ghi so tre,
+                   bo MaBT chung tu, bo CauHinhDinhKhoan, doi chieu 331,
+                   18 TK gom 138, chu thich 421)
+Trang thai       : SAN SANG TRIỂN KHAI (chua code UC34+)
+Buoc ke tiep     : Tuan 0 smoke P0 -> Tuan 1 schema COA 18 TK + ky
+                   (UX_ButToan_*, UX_ChoGhiSo_Active, khong DaKetChuyen,
+                   khong DoiChieuNganHang)
+                   -> Tuan 2 VAT POS (DEFAULT NULL) -> Tuan 3 engine + sua P&L
+                   -> Tuan 4 KQKD thuan muc 8.4
+Xem              : CHANGELOG 08/09/2026 o dau file + muc 15.D13-D38
+
+HET TAI LIEU.
+================================================================================

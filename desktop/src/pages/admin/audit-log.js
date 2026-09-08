@@ -83,6 +83,7 @@
     };
 
     const state = { page: 1, total: 0, items: [], selected: null };
+    let filtersReady = false;
 
     const resultBadge = row => {
         const ok = String(row.ketQuaHienThi || 'Thành công') !== 'Thất bại';
@@ -255,7 +256,10 @@
     };
 
     applyDefaultDates();
-    loadFilters().then(loadLogs);
+    loadFilters().then(() => {
+        filtersReady = true;
+        return loadLogs();
+    });
     ['logSearch'].forEach(id => {
         let timer;
         document.getElementById(id)?.addEventListener('input', () => {
@@ -264,8 +268,13 @@
         });
     });
     ['logKind', 'logAction', 'logRole', 'logActor', 'logFrom', 'logTo'].forEach(id => {
-        document.getElementById(id)?.addEventListener('change', () => { state.page = 1; loadLogs(); });
-        document.getElementById(id)?.addEventListener('input', () => { state.page = 1; loadLogs(); });
+        const reload = () => {
+            if (!filtersReady) return;
+            state.page = 1;
+            loadLogs();
+        };
+        document.getElementById(id)?.addEventListener('change', reload);
+        document.getElementById(id)?.addEventListener('input', reload);
     });
     document.getElementById('auditPrev')?.addEventListener('click', () => { if (state.page > 1) { state.page -= 1; loadLogs(); } });
     document.getElementById('auditNext')?.addEventListener('click', () => { if (state.page * 50 < state.total) { state.page += 1; loadLogs(); } });

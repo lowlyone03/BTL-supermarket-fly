@@ -1,12 +1,16 @@
 const { sql, poolPromise } = require('../config/db');
-const { isRestockAccepted } = require('../services/financialRules');
 const { logAudit } = require('../services/auditLog');
-const { scrapLinesFromRows, countScrapNote } = require('../services/countScrap');
+const { storedStockImpact } = require('../services/countScrap');
 const { ensureCountScrapSchema } = require('../services/countScrapSchema');
+const {
+    findActiveIssue,
+    loadCountScrapSource,
+    loadReturnDiscardSource,
+    listPendingSources
+} = require('../services/stockIssueSources');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 const issueTypes = new Set(['Trả NCC', 'Hủy hàng', 'Sử dụng nội bộ']);
-const returnIssueMarker = maDT => `Nguồn đổi trả ${maDT}.`;
 
 const generateId = async (transaction, table, column, prefix, digits = 3) => {
     const result = await new sql.Request(transaction)
@@ -55,8 +59,65 @@ const normalizeLines = lines => {
         if (seen.has(MaSP)) throw new Error(`Sản phẩm ${MaSP} bị lặp trong Phiếu xuất.`);
         if (!Number.isInteger(SoLuong) || SoLuong <= 0) throw new Error(`Số lượng xuất của ${MaSP} phải là số nguyên lớn hơn 0.`);
         seen.add(MaSP);
-        return { MaSP, SoLuong, GhiChu: clean(line.GhiChu, 200) || null };
+        const DonGia = line.DonGia == null || line.DonGia === '' ? null : Number(line.DonGia);
+        if (DonGia != null && (!Number.isFinite(DonGia) || DonGia < 0)) {
+            throw new Error(`Đơn giá tham chiếu của ${MaSP} không hợp lệ.`);
+        }
+        return { MaSP, SoLuong, GhiChu: clean(line.GhiChu, 200) || null, DonGia };
     });
+};
+
+const assertLinesMatchSource = (lines, allowed, label) => {
+    const allowedMap = new Map((allowed || []).map(line => [line.MaSP, line]));
+    for (const line of lines) {
+        const source = allowedMap.get(line.MaSP);
+        if (!source) throw new Error(`Sản phẩm ${line.MaSP} không thuộc ${label}.`);
+        const maxQty = Number(source.SoLuong || source.SLThucTe || 0);
+        if (line.SoLuong > maxQty) throw new Error(`Sản phẩm ${line.MaSP} chỉ được xuất tối đa ${maxQty} theo ${label}.`);
+        if (line.DonGia == null && source.DonGia != null) line.DonGia = Number(source.DonGia);
+    }
+};
+
+const insertIssueHeader = async (transaction, { maPX, warehouse, user, header, status }) => {
+    const base = () => new sql.Request(transaction)
+        .input('MaPX', sql.VarChar, maPX)
+        .input('MaKho', sql.VarChar, warehouse.MaKho)
+        .input('MaNV', sql.VarChar, user.MaNV)
+        .input('LoaiXuat', sql.NVarChar, header.LoaiXuat)
+        .input('MaNCC', sql.VarChar, header.MaNCC || null)
+        .input('MaPN', sql.VarChar, header.MaPN)
+        .input('GhiChu', sql.NVarChar, header.GhiChu)
+        .input('TrangThai', sql.NVarChar, status);
+    const attempts = [
+        req => req
+            .input('MaKK', sql.VarChar, header.MaKK || null)
+            .input('MaDT', sql.VarChar, header.MaDT || null)
+            .input('KhongTruTon', sql.Bit, header.KhongTruTon ? 1 : 0)
+            .query(`INSERT PhieuXuat(MaPX,MaKho,MaNV,LoaiXuat,MaNCC,MaPN,MaKK,MaDT,KhongTruTon,NgayXuat,TrangThai,GhiChu)
+                    VALUES(@MaPX,@MaKho,@MaNV,@LoaiXuat,@MaNCC,@MaPN,@MaKK,@MaDT,@KhongTruTon,GETDATE(),@TrangThai,@GhiChu)`),
+        req => req
+            .input('MaKK', sql.VarChar, header.MaKK || null)
+            .input('KhongTruTon', sql.Bit, header.KhongTruTon ? 1 : 0)
+            .query(`INSERT PhieuXuat(MaPX,MaKho,MaNV,LoaiXuat,MaNCC,MaPN,MaKK,KhongTruTon,NgayXuat,TrangThai,GhiChu)
+                    VALUES(@MaPX,@MaKho,@MaNV,@LoaiXuat,@MaNCC,@MaPN,@MaKK,@KhongTruTon,GETDATE(),@TrangThai,@GhiChu)`),
+        req => req
+            .input('MaKK', sql.VarChar, header.MaKK || null)
+            .query(`INSERT PhieuXuat(MaPX,MaKho,MaNV,LoaiXuat,MaNCC,MaPN,MaKK,NgayXuat,TrangThai,GhiChu)
+                    VALUES(@MaPX,@MaKho,@MaNV,@LoaiXuat,@MaNCC,@MaPN,@MaKK,GETDATE(),@TrangThai,@GhiChu)`),
+        req => req.query(`INSERT PhieuXuat(MaPX,MaKho,MaNV,LoaiXuat,MaNCC,MaPN,NgayXuat,TrangThai,GhiChu)
+                    VALUES(@MaPX,@MaKho,@MaNV,@LoaiXuat,@MaNCC,@MaPN,GETDATE(),@TrangThai,@GhiChu)`)
+    ];
+    let lastError;
+    for (const attempt of attempts) {
+        try {
+            await attempt(base());
+            return;
+        } catch (error) {
+            lastError = error;
+            if (!/Invalid column name/i.test(error.message || '')) throw error;
+        }
+    }
+    throw lastError;
 };
 
 const validateIssue = async (transaction, header, lines) => {
@@ -102,7 +163,9 @@ const replaceLines = async (transaction, maPX, lines, productMap) => {
     await new sql.Request(transaction).input('MaPX', sql.VarChar, maPX)
         .query('DELETE FROM ChiTietPhieuXuat WHERE MaPX=@MaPX');
     for (const line of lines) {
-        const cost = Number(productMap.get(line.MaSP)?.DonGiaBinhQuan || 0);
+        const cost = line.DonGia != null && Number.isFinite(Number(line.DonGia))
+            ? Number(line.DonGia)
+            : Number(productMap.get(line.MaSP)?.DonGiaBinhQuan || 0);
         await new sql.Request(transaction)
             .input('MaPX', sql.VarChar, maPX)
             .input('MaSP', sql.VarChar, line.MaSP)
@@ -125,36 +188,37 @@ const listIssues = async (req, res) => {
             .input('TuKhoa', sql.NVarChar, keyword)
             .input('Mau', sql.NVarChar, `%${keyword}%`)
             .input('TrangThai', sql.NVarChar, status);
+        const listSql = (cols) => `
+                    SELECT px.MaPX,px.LoaiXuat,px.MaPN,${cols}px.NgayXuat,px.TrangThai,px.GhiChu,px.LyDoTuChoi,
+                           k.TenKho,ncc.TenNCC,COUNT(ct.MaSP) SoMatHang,SUM(ct.SoLuong) TongSoLuong,
+                           SUM(ct.SoLuong*ct.DonGia) TongGiaTriThamChieu
+                    FROM PhieuXuat px JOIN Kho k ON k.MaKho=px.MaKho
+                    LEFT JOIN NhaCungCap ncc ON ncc.MaNCC=px.MaNCC
+                    LEFT JOIN ChiTietPhieuXuat ct ON ct.MaPX=px.MaPX
+                    WHERE px.MaNV=@MaNV AND (@TrangThai=N'' OR px.TrangThai=@TrangThai)
+                      AND (@TuKhoa=N'' OR px.MaPX LIKE @Mau COLLATE Latin1_General_100_CI_AI OR px.LoaiXuat LIKE @Mau COLLATE Latin1_General_100_CI_AI
+                           OR px.MaPN LIKE @Mau COLLATE Latin1_General_100_CI_AI OR px.GhiChu LIKE @Mau COLLATE Latin1_General_100_CI_AI OR ncc.TenNCC LIKE @Mau COLLATE Latin1_General_100_CI_AI)
+                    GROUP BY px.MaPX,px.LoaiXuat,px.MaPN,${cols}px.NgayXuat,px.TrangThai,px.GhiChu,
+                             px.LyDoTuChoi,k.TenKho,ncc.TenNCC
+                    ORDER BY px.NgayXuat DESC`;
         let result;
         try {
-            result = await bind().query(`SELECT px.MaPX,px.LoaiXuat,px.MaPN,px.MaKK,px.NgayXuat,px.TrangThai,px.GhiChu,px.LyDoTuChoi,
-                           k.TenKho,ncc.TenNCC,COUNT(ct.MaSP) SoMatHang,SUM(ct.SoLuong) TongSoLuong,
-                           SUM(ct.SoLuong*ct.DonGia) TongGiaTriThamChieu
-                    FROM PhieuXuat px JOIN Kho k ON k.MaKho=px.MaKho
-                    LEFT JOIN NhaCungCap ncc ON ncc.MaNCC=px.MaNCC
-                    LEFT JOIN ChiTietPhieuXuat ct ON ct.MaPX=px.MaPX
-                    WHERE px.MaNV=@MaNV AND (@TrangThai=N'' OR px.TrangThai=@TrangThai)
-                      AND (@TuKhoa=N'' OR px.MaPX LIKE @Mau COLLATE Latin1_General_100_CI_AI OR px.LoaiXuat LIKE @Mau COLLATE Latin1_General_100_CI_AI
-                           OR px.MaPN LIKE @Mau COLLATE Latin1_General_100_CI_AI OR px.GhiChu LIKE @Mau COLLATE Latin1_General_100_CI_AI OR ncc.TenNCC LIKE @Mau COLLATE Latin1_General_100_CI_AI)
-                    GROUP BY px.MaPX,px.LoaiXuat,px.MaPN,px.MaKK,px.NgayXuat,px.TrangThai,px.GhiChu,
-                             px.LyDoTuChoi,k.TenKho,ncc.TenNCC
-                    ORDER BY px.NgayXuat DESC`);
+            result = await bind().query(listSql('px.MaKK,px.MaDT,px.KhongTruTon,'));
         } catch (columnError) {
-            if (!/Invalid column name|MaKK/i.test(columnError.message || '')) throw columnError;
-            result = await bind().query(`SELECT px.MaPX,px.LoaiXuat,px.MaPN,px.NgayXuat,px.TrangThai,px.GhiChu,px.LyDoTuChoi,
-                           k.TenKho,ncc.TenNCC,COUNT(ct.MaSP) SoMatHang,SUM(ct.SoLuong) TongSoLuong,
-                           SUM(ct.SoLuong*ct.DonGia) TongGiaTriThamChieu
-                    FROM PhieuXuat px JOIN Kho k ON k.MaKho=px.MaKho
-                    LEFT JOIN NhaCungCap ncc ON ncc.MaNCC=px.MaNCC
-                    LEFT JOIN ChiTietPhieuXuat ct ON ct.MaPX=px.MaPX
-                    WHERE px.MaNV=@MaNV AND (@TrangThai=N'' OR px.TrangThai=@TrangThai)
-                      AND (@TuKhoa=N'' OR px.MaPX LIKE @Mau COLLATE Latin1_General_100_CI_AI OR px.LoaiXuat LIKE @Mau COLLATE Latin1_General_100_CI_AI
-                           OR px.MaPN LIKE @Mau COLLATE Latin1_General_100_CI_AI OR px.GhiChu LIKE @Mau COLLATE Latin1_General_100_CI_AI OR ncc.TenNCC LIKE @Mau COLLATE Latin1_General_100_CI_AI)
-                    GROUP BY px.MaPX,px.LoaiXuat,px.MaPN,px.NgayXuat,px.TrangThai,px.GhiChu,
-                             px.LyDoTuChoi,k.TenKho,ncc.TenNCC
-                    ORDER BY px.NgayXuat DESC`);
+            if (!/Invalid column name|MaKK|MaDT|KhongTruTon/i.test(columnError.message || '')) throw columnError;
+            try {
+                result = await bind().query(listSql('px.MaKK,'));
+            } catch (innerError) {
+                if (!/Invalid column name|MaKK/i.test(innerError.message || '')) throw innerError;
+                result = await bind().query(listSql(''));
+            }
         }
-        res.json({ items: result.recordset });
+        const items = result.recordset.map(item => {
+            const note = String(item.GhiChu || '');
+            const maDT = item.MaDT || (note.match(/Nguồn đổi trả\s+(DT[A-Z0-9]+)/i) || [])[1] || null;
+            return { ...item, MaDT: maDT, KhongTruTon: Boolean(item.KhongTruTon) || Boolean(maDT) };
+        });
+        res.json({ items });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải danh sách Phiếu xuất kho.' });
@@ -180,7 +244,7 @@ const getIssueDetail = async (req, res, ownerOnly) => {
         const issue = header.recordset[0];
         const relatedMatch = String(issue.GhiChu || '').match(/Nguồn đổi trả\s+(DT[A-Z0-9]+)/i)
             || String(issue.GhiChu || '').match(/\b(DT\d{8,})\b/);
-        const maDT = relatedMatch ? relatedMatch[1] : null;
+        const maDT = issue.MaDT || (relatedMatch ? relatedMatch[1] : null);
         const cashierReason = (String(issue.GhiChu || '').match(/Lý do thu ngân:\s*(.+?)(?:\.|$)/i) || [])[1] || null;
         const [lines, audit, stockMoves, related] = await Promise.all([
             pool.request()
@@ -215,10 +279,18 @@ const getIssueDetail = async (req, res, ownerOnly) => {
         ]);
         const confirmLog = audit.recordset.find(row => /xác nhận xuất/i.test(row.HanhDong || ''));
         const relatedTicket = related.recordset[0] || null;
+        const tongGiaTri = lines.recordset.reduce((sum, line) => sum + Number(line.SoLuong || 0) * Number(line.DonGia || 0), 0);
         res.json({
             issue: {
                 ...issue,
+                TongGiaTriThamChieu: tongGiaTri,
                 MaDT: relatedTicket?.MaDT || maDT,
+                KhongTruTon: Boolean(issue.KhongTruTon) || Boolean(relatedTicket?.MaDT || maDT),
+                stockImpact: storedStockImpact({
+                    ...issue,
+                    MaDT: relatedTicket?.MaDT || maDT,
+                    KhongTruTon: Boolean(issue.KhongTruTon) || Boolean(relatedTicket?.MaDT || maDT)
+                }),
                 LyDoThuNgan: cashierReason || relatedTicket?.LyDo || null,
                 NguoiXacNhan: confirmLog?.TenNV || (issue.TrangThai === 'Đã xác nhận' ? issue.NguoiLap : null),
                 NgayXacNhan: confirmLog?.ThoiGian || stockMoves.recordset[0]?.NgayGD || null
@@ -286,30 +358,99 @@ const getSourceReceipt = async (req, res) => {
     }
 };
 
+const existingIssueResponse = (existing, sourceLabel) => {
+    const confirmed = existing.TrangThai === 'Đã xác nhận';
+    return {
+        MaPX: existing.MaPX,
+        existed: true,
+        submitted: existing.TrangThai !== 'Nháp',
+        confirmed,
+        message: confirmed
+            ? `Đã có phiếu xuất ${existing.MaPX} cho ${sourceLabel}.`
+            : `Đã có phiếu xuất ${existing.MaPX} (${existing.TrangThai}) từ ${sourceLabel}. Mở để xem nội dung hoặc tiếp tục gửi duyệt.`
+    };
+};
+
+const persistLinkedIssue = async ({ transaction, user, header, lines, submitNow, sourceLabel, impact }) => {
+    const warehouse = await getWarehouse(new sql.Request(transaction));
+    header.MaKho = warehouse.MaKho;
+    header.MaNCC = null;
+    const validation = await validateIssue(transaction, header, lines);
+    const maPX = await generateId(transaction, 'PhieuXuat', 'MaPX', datePrefix('PX'));
+    const nextStatus = submitNow ? 'Chờ duyệt' : 'Nháp';
+    try {
+        await insertIssueHeader(transaction, {
+            maPX, warehouse, user, header, status: nextStatus
+        });
+    } catch (error) {
+        if (error.number === 2601 || error.number === 2627) {
+            const again = await findActiveIssue(transaction, { maKK: header.MaKK, maDT: header.MaDT, lock: true });
+            return { duplicate: true, existing: again };
+        }
+        throw error;
+    }
+    await replaceLines(transaction, maPX, lines, validation.productMap);
+    const stockNote = impact?.KhongTruTon
+        ? 'phiếu thông tin, xác nhận không trừ tồn'
+        : 'tồn kho chưa thay đổi cho tới khi xác nhận xuất';
+    await writeAudit(transaction, user, submitNow ? 'Lập và gửi duyệt Phiếu xuất kho' : 'Lập Phiếu xuất kho', maPX,
+        `Hủy hàng từ ${sourceLabel}; ${nextStatus}; ${stockNote}`);
+    return { maPX, nextStatus };
+};
+
 const createIssue = async (req, res) => {
-    const transaction = new sql.Transaction(await poolPromise);
+    const pool = await poolPromise;
+    const transaction = new sql.Transaction(pool);
     try {
         const header = normalizeHeader(req.body);
         const lines = normalizeLines(req.body.lines);
+        const maKK = clean(req.body.MaKK, 20) || null;
+        const maDT = clean(req.body.MaDT, 20) || null;
+        if (maKK && maDT) throw new Error('Phiếu xuất chỉ liên kết một nguồn: kiểm kê hoặc đổi trả.');
+        await ensureCountScrapSchema(pool);
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        header.MaKK = maKK;
+        header.MaDT = maDT;
+        header.KhongTruTon = false;
+        if (maKK || maDT) {
+            if (header.LoaiXuat !== 'Hủy hàng') throw new Error('Phiếu xuất từ hàng hỏng phải là loại Hủy hàng.');
+            const source = maKK
+                ? await loadCountScrapSource(transaction, { maKK, maNV: req.user.MaNV, lock: true })
+                : await loadReturnDiscardSource(transaction, { maDT, maNV: req.user.MaNV, lock: true });
+            if (source.existing) {
+                await transaction.commit();
+                return res.json(existingIssueResponse(source.existing, maKK || maDT));
+            }
+            assertLinesMatchSource(lines, source.prefill.lines, maKK ? `kiểm kê ${maKK}` : `đổi trả ${maDT}`);
+            header.KhongTruTon = source.impact.KhongTruTon;
+            if (!header.GhiChu) header.GhiChu = source.prefill.GhiChu;
+        }
         const warehouse = await getWarehouse(new sql.Request(transaction));
         header.MaKho = warehouse.MaKho;
         const validation = await validateIssue(transaction, header, lines);
+        header.MaNCC = validation.supplier?.MaNCC || null;
         const maPX = await generateId(transaction, 'PhieuXuat', 'MaPX', datePrefix('PX'));
-        await new sql.Request(transaction)
-            .input('MaPX', sql.VarChar, maPX)
-            .input('MaKho', sql.VarChar, warehouse.MaKho)
-            .input('MaNV', sql.VarChar, req.user.MaNV)
-            .input('LoaiXuat', sql.NVarChar, header.LoaiXuat)
-            .input('MaNCC', sql.VarChar, validation.supplier?.MaNCC || null)
-            .input('MaPN', sql.VarChar, header.MaPN)
-            .input('GhiChu', sql.NVarChar, header.GhiChu)
-            .query(`INSERT PhieuXuat(MaPX,MaKho,MaNV,LoaiXuat,MaNCC,MaPN,NgayXuat,TrangThai,GhiChu)
-                    VALUES(@MaPX,@MaKho,@MaNV,@LoaiXuat,@MaNCC,@MaPN,GETDATE(),N'Nháp',@GhiChu)`);
+        try {
+            await insertIssueHeader(transaction, {
+                maPX, warehouse, user: req.user, header, status: 'Nháp'
+            });
+        } catch (error) {
+            if (error.number === 2601 || error.number === 2627) {
+                const again = await findActiveIssue(transaction, { maKK, maDT, lock: true });
+                await transaction.commit();
+                return res.json(existingIssueResponse(again || { MaPX: maPX, TrangThai: 'Nháp' }, maKK || maDT));
+            }
+            throw error;
+        }
         await replaceLines(transaction, maPX, lines, validation.productMap);
-        await writeAudit(transaction, req.user, 'Lập Phiếu xuất kho', maPX, `${header.LoaiXuat}; lưu Nháp; tồn kho chưa thay đổi`);
+        await writeAudit(transaction, req.user, 'Lập Phiếu xuất kho', maPX,
+            `${header.LoaiXuat}${maKK ? `; nguồn ${maKK}` : ''}${maDT ? `; nguồn ${maDT}` : ''}; lưu Nháp; ${header.KhongTruTon ? 'không trừ tồn khi xác nhận' : 'tồn kho chưa thay đổi'}`);
         await transaction.commit();
-        res.status(201).json({ message: `Đã lưu Phiếu xuất ${maPX} ở trạng thái Nháp.`, MaPX: maPX });
+        res.status(201).json({
+            message: `Đã lưu Phiếu xuất ${maPX} ở trạng thái Nháp.`,
+            MaPX: maPX,
+            KhongTruTon: header.KhongTruTon
+        });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);
@@ -317,115 +458,105 @@ const createIssue = async (req, res) => {
     }
 };
 
+const previewFromCount = async (req, res) => {
+    try {
+        const maKK = clean(req.params.id, 20);
+        if (!maKK) throw new Error('Thiếu mã đợt kiểm kê.');
+        const pool = await poolPromise;
+        await ensureCountScrapSchema(pool);
+        const source = await loadCountScrapSource(pool, { maKK, maNV: req.user.MaNV });
+        res.json({
+            existing: source.existing,
+            prefill: source.prefill,
+            stockImpact: source.impact,
+            message: source.existing
+                ? `Đã có phiếu xuất ${source.existing.MaPX} (${source.existing.TrangThai}) từ ${maKK}.`
+                : `Đã điền ${source.scrap.length} mặt hàng hỏng từ ${maKK}.`
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không thể tải hàng hỏng từ kiểm kê.' });
+    }
+};
+
+const previewFromReturn = async (req, res) => {
+    try {
+        const maDT = clean(req.params.id, 20);
+        if (!maDT) throw new Error('Thiếu mã phiếu đổi trả.');
+        const pool = await poolPromise;
+        await ensureCountScrapSchema(pool);
+        const source = await loadReturnDiscardSource(pool, { maDT, maNV: req.user.MaNV });
+        res.json({
+            existing: source.existing,
+            prefill: source.prefill,
+            stockImpact: source.impact,
+            message: source.existing
+                ? `Đã có phiếu xuất ${source.existing.MaPX} (${source.existing.TrangThai}) từ ${maDT}.`
+                : `Đã điền hàng khách trả hỏng từ ${maDT}.`
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không thể tải hàng đổi trả loại bỏ.' });
+    }
+};
+
+const getPendingSources = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        await ensureCountScrapSchema(pool);
+        const pending = await listPendingSources(pool, { maNV: req.user.MaNV });
+        res.json(pending);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Không thể tải hàng hỏng chờ lập phiếu xuất.' });
+    }
+};
+
 const createIssueFromReturn = async (req, res) => {
     const maDT = clean(req.params.id, 20);
-    const transaction = new sql.Transaction(await poolPromise);
+    const submitNow = Boolean(req.body?.submit);
+    const pool = await poolPromise;
+    const transaction = new sql.Transaction(pool);
     try {
         if (!maDT) throw new Error('Thiếu mã phiếu đổi trả.');
+        await ensureCountScrapSchema(pool);
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
-        const ticketResult = await new sql.Request(transaction)
-            .input('MaDT', sql.VarChar, maDT)
-            .query(`SELECT MaDT, MaNV_KiemTra, TrangThai, KetQuaKiemTra, LyDo
-                    FROM PhieuDoiTra WITH (UPDLOCK, HOLDLOCK)
-                    WHERE MaDT=@MaDT`);
-        if (!ticketResult.recordset.length) throw new Error('Không tìm thấy phiếu đổi trả.');
-        const ticket = ticketResult.recordset[0];
-        if (ticket.MaNV_KiemTra !== req.user.MaNV) {
-            throw new Error('Chỉ thủ kho đã kiểm phiếu này mới lập phiếu xuất hỏng từ lịch sử kho.');
-        }
-        if (ticket.TrangThai !== 'Hoàn thành') {
-            throw new Error('Chỉ lập phiếu xuất hỏng sau khi phiếu đổi trả đã hoàn thành và hàng đã nhập lại kho.');
-        }
-        if (!isRestockAccepted(ticket.KetQuaKiemTra)) {
-            throw new Error('Phiếu này không nhập lại kho nên không cần xuất hủy. Hàng đã loại bỏ lúc kiểm.');
-        }
-        const reversed = await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT).query(`
-            SELECT TOP 1 MaGD FROM GiaoDichKho
-            WHERE LoaiChungTu=N'DoiTra' AND MaChungTu=@MaDT AND LoaiGD=N'Xuất' AND GhiChu LIKE N'%tích nhầm%'`);
-        if (reversed.recordset.length) {
-            throw new Error('Đã trừ tồn khi xác nhận tích nhầm. Không lập thêm phiếu xuất hủy.');
-        }
-
-        const marker = returnIssueMarker(maDT);
-        const existing = await new sql.Request(transaction)
-            .input('MaNV', sql.VarChar, req.user.MaNV)
-            .input('Mau', sql.NVarChar, `%${marker}%`)
-            .query(`SELECT TOP 1 MaPX, TrangThai FROM PhieuXuat WITH (UPDLOCK, HOLDLOCK)
-                    WHERE MaNV=@MaNV AND GhiChu LIKE @Mau
-                      AND TrangThai IN (N'Nháp', N'Chờ duyệt', N'Đã duyệt', N'Đã xác nhận')
-                    ORDER BY CASE TrangThai
-                        WHEN N'Nháp' THEN 1 WHEN N'Chờ duyệt' THEN 2 WHEN N'Đã duyệt' THEN 3 ELSE 4 END,
-                        NgayXuat DESC`);
-        if (existing.recordset.length) {
-            const row = existing.recordset[0];
+        const source = await loadReturnDiscardSource(transaction, { maDT, maNV: req.user.MaNV, lock: true });
+        if (source.existing) {
             await transaction.commit();
-            const confirmed = row.TrangThai === 'Đã xác nhận';
-            return res.json({
-                MaPX: row.MaPX,
-                existed: true,
-                confirmed,
-                message: confirmed
-                    ? `Đã có phiếu xuất ${row.MaPX} xác nhận trừ tồn cho ${maDT}.`
-                    : `Đã có phiếu xuất ${row.MaPX} (${row.TrangThai}) từ ${maDT}. Mở để tiếp tục gửi duyệt/xác nhận.`
-            });
+            return res.json(existingIssueResponse(source.existing, maDT));
         }
-
-        const lineRows = await new sql.Request(transaction)
-            .input('MaDT', sql.VarChar, maDT)
-            .query(`SELECT MaSP, SoLuong, LyDo FROM ChiTietDoiTra
-                    WHERE MaDT=@MaDT AND LoaiDong=N'Hàng khách trả' AND SoLuong>0`);
-        if (!lineRows.recordset.length) throw new Error('Phiếu đổi trả không có hàng khách trả để xuất hủy.');
-
-        const warehouse = await getWarehouse(new sql.Request(transaction));
         const header = {
             LoaiXuat: 'Hủy hàng',
             MaPN: null,
-            GhiChu: clean(`${marker} Tích nhầm nhập lại kho bán — xuất hủy hàng hỏng/hết hạn. Lý do thu ngân: ${ticket.LyDo || 'không ghi'}.`, 500)
+            MaKK: null,
+            MaDT: maDT,
+            KhongTruTon: true,
+            GhiChu: source.prefill.GhiChu
         };
-        const lines = normalizeLines(lineRows.recordset.map(line => ({
-            MaSP: line.MaSP,
-            SoLuong: line.SoLuong,
-            GhiChu: `Từ ${maDT}${line.LyDo ? `: ${line.LyDo}` : ''}`
-        })));
-        const validation = await validateIssue(transaction, header, lines);
-        const maPX = await generateId(transaction, 'PhieuXuat', 'MaPX', datePrefix('PX'));
-        await new sql.Request(transaction)
-            .input('MaPX', sql.VarChar, maPX)
-            .input('MaKho', sql.VarChar, warehouse.MaKho)
-            .input('MaNV', sql.VarChar, req.user.MaNV)
-            .input('LoaiXuat', sql.NVarChar, header.LoaiXuat)
-            .input('GhiChu', sql.NVarChar, header.GhiChu)
-            .query(`INSERT PhieuXuat(MaPX,MaKho,MaNV,LoaiXuat,MaNCC,MaPN,NgayXuat,TrangThai,GhiChu)
-                    VALUES(@MaPX,@MaKho,@MaNV,@LoaiXuat,NULL,NULL,GETDATE(),N'Nháp',@GhiChu)`);
-        await replaceLines(transaction, maPX, lines, validation.productMap);
-        await writeAudit(transaction, req.user, 'Lập Phiếu xuất kho', maPX,
-            `Hủy hàng từ đổi trả ${maDT}; lưu Nháp; tồn kho chưa thay đổi`);
+        const lines = normalizeLines(source.prefill.lines);
+        const saved = await persistLinkedIssue({
+            transaction, user: req.user, header, lines, submitNow,
+            sourceLabel: `đổi trả ${maDT}`, impact: source.impact
+        });
+        if (saved.duplicate) {
+            await transaction.commit();
+            return res.json(existingIssueResponse(saved.existing || { MaPX: null, TrangThai: 'Nháp' }, maDT));
+        }
         await transaction.commit();
         res.status(201).json({
-            MaPX: maPX,
+            MaPX: saved.maPX,
             existed: false,
-            message: `Đã lập phiếu xuất hủy ${maPX} (Nháp) từ ${maDT}. Gửi duyệt rồi Thủ kho xác nhận xuất mới trừ tồn.`
+            submitted: submitNow,
+            KhongTruTon: true,
+            message: submitNow
+                ? `Đã lập phiếu xuất hủy ${saved.maPX} từ ${maDT} và gửi Quản lý duyệt. Xác nhận không trừ tồn (đã trừ lúc bán).`
+                : `Đã lập phiếu xuất hủy ${saved.maPX} (Nháp) từ ${maDT}. Phiếu ghi SL/tiền/hàng; xác nhận không trừ tồn lần nữa.`
         });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);
         res.status(400).json({ message: error.message || 'Không thể lập phiếu xuất hỏng từ đổi trả.' });
-    }
-};
-
-const findActiveCountScrap = async (transaction, maKK) => {
-    try {
-        const existing = await new sql.Request(transaction)
-            .input('MaKK', sql.VarChar, maKK)
-            .query(`SELECT TOP 1 MaPX, TrangThai FROM PhieuXuat WITH (UPDLOCK, HOLDLOCK)
-                    WHERE MaKK=@MaKK AND TrangThai IN (N'Nháp', N'Chờ duyệt', N'Đã duyệt', N'Đã xác nhận')
-                    ORDER BY CASE TrangThai
-                        WHEN N'Nháp' THEN 1 WHEN N'Chờ duyệt' THEN 2 WHEN N'Đã duyệt' THEN 3 ELSE 4 END,
-                        NgayXuat DESC`);
-        return existing.recordset[0] || null;
-    } catch (error) {
-        if (/Invalid column name|MaKK/i.test(error.message || '')) return null;
-        throw error;
     }
 };
 
@@ -438,103 +569,54 @@ const createIssueFromCount = async (req, res) => {
         if (!maKK) throw new Error('Thiếu mã đợt kiểm kê.');
         await ensureCountScrapSchema(pool);
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
-        const countResult = await new sql.Request(transaction)
-            .input('MaKK', sql.VarChar, maKK)
-            .input('MaNV', sql.VarChar, req.user.MaNV)
-            .query(`SELECT MaKK, MaKho, MaNV, TrangThai FROM KiemKe WITH (UPDLOCK, HOLDLOCK)
-                    WHERE MaKK=@MaKK AND MaNV=@MaNV`);
-        if (!countResult.recordset.length) throw new Error('Không tìm thấy đợt kiểm kê của bạn.');
-        const count = countResult.recordset[0];
-        if (count.TrangThai === 'Đang kiểm') throw new Error('Hãy gửi đợt kiểm kê trước khi lập phiếu xuất hủy.');
-        if (count.TrangThai === 'Từ chối') throw new Error('Đợt kiểm kê đã bị từ chối, không lập phiếu xuất hủy.');
-
-        const existing = await findActiveCountScrap(transaction, maKK);
-        if (existing) {
-            if (submitNow && existing.TrangThai === 'Nháp') {
-                await new sql.Request(transaction).input('MaPX', sql.VarChar, existing.MaPX)
+        const source = await loadCountScrapSource(transaction, { maKK, maNV: req.user.MaNV, lock: true });
+        if (source.existing) {
+            if (submitNow && source.existing.TrangThai === 'Nháp') {
+                await new sql.Request(transaction).input('MaPX', sql.VarChar, source.existing.MaPX)
                     .query(`UPDATE PhieuXuat SET TrangThai=N'Chờ duyệt',MaNV_Duyet=NULL,NgayDuyet=NULL,LyDoTuChoi=NULL
                             WHERE MaPX=@MaPX`);
-                await writeAudit(transaction, req.user, 'Gửi duyệt Phiếu xuất kho', existing.MaPX,
+                await writeAudit(transaction, req.user, 'Gửi duyệt Phiếu xuất kho', source.existing.MaPX,
                     `Hủy hàng từ kiểm kê ${maKK}; tồn kho chưa thay đổi`);
                 await transaction.commit();
                 return res.json({
-                    MaPX: existing.MaPX,
+                    MaPX: source.existing.MaPX,
                     existed: true,
                     submitted: true,
-                    message: `Đã gửi phiếu xuất hủy ${existing.MaPX} (từ ${maKK}) sang Quản lý duyệt.`
+                    message: `Đã gửi phiếu xuất hủy ${source.existing.MaPX} (từ ${maKK}) sang Quản lý duyệt.`
                 });
             }
             await transaction.commit();
-            const confirmed = existing.TrangThai === 'Đã xác nhận';
-            return res.json({
-                MaPX: existing.MaPX,
-                existed: true,
-                submitted: existing.TrangThai !== 'Nháp',
-                confirmed,
-                message: confirmed
-                    ? `Đã có phiếu xuất ${existing.MaPX} xác nhận trừ tồn cho kiểm kê ${maKK}.`
-                    : `Đã có phiếu xuất ${existing.MaPX} (${existing.TrangThai}) từ kiểm kê ${maKK}.`
-            });
+            return res.json(existingIssueResponse(source.existing, `kiểm kê ${maKK}`));
         }
-
-        const scrapRows = await new sql.Request(transaction).input('MaKK', sql.VarChar, maKK).query(`
-            SELECT ct.MaSP, sp.TenSP, ct.SLThucTe, ct.TinhTrangHang, ct.NguyenNhan
-            FROM ChiTietKiemKe ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
-            WHERE ct.MaKK=@MaKK AND ct.TinhTrangHang IN (N'Hỏng', N'Hết hạn') AND ct.SLThucTe>0`);
-        const scrap = scrapLinesFromRows(scrapRows.recordset);
-        if (!scrap.length) throw new Error('Đợt kiểm kê không có hàng hỏng/hết hạn còn số lượng thực tế để xuất hủy.');
-
-        const warehouse = await getWarehouse(new sql.Request(transaction));
         const header = {
             LoaiXuat: 'Hủy hàng',
             MaPN: null,
-            GhiChu: countScrapNote(maKK, scrap)
+            MaKK: maKK,
+            MaDT: null,
+            KhongTruTon: source.impact.KhongTruTon,
+            GhiChu: source.prefill.GhiChu
         };
-        const lines = normalizeLines(scrap.map(line => ({
-            MaSP: line.MaSP,
-            SoLuong: line.SLThucTe,
-            GhiChu: `${line.TinhTrangHang}${line.NguyenNhan ? `: ${line.NguyenNhan}` : ''}`
-        })));
-        const validation = await validateIssue(transaction, { ...header, MaKho: warehouse.MaKho }, lines);
-        const maPX = await generateId(transaction, 'PhieuXuat', 'MaPX', datePrefix('PX'));
-        const nextStatus = submitNow ? 'Chờ duyệt' : 'Nháp';
-        try {
-            await new sql.Request(transaction)
-                .input('MaPX', sql.VarChar, maPX)
-                .input('MaKho', sql.VarChar, warehouse.MaKho)
-                .input('MaNV', sql.VarChar, req.user.MaNV)
-                .input('LoaiXuat', sql.NVarChar, header.LoaiXuat)
-                .input('GhiChu', sql.NVarChar, header.GhiChu)
-                .input('MaKK', sql.VarChar, maKK)
-                .input('TrangThai', sql.NVarChar, nextStatus)
-                .query(`INSERT PhieuXuat(MaPX,MaKho,MaNV,LoaiXuat,MaNCC,MaPN,MaKK,NgayXuat,TrangThai,GhiChu)
-                        VALUES(@MaPX,@MaKho,@MaNV,@LoaiXuat,NULL,NULL,@MaKK,GETDATE(),@TrangThai,@GhiChu)`);
-        } catch (error) {
-            if (/Invalid column name|MaKK/i.test(error.message || '')) {
-                throw new Error('Cần chạy migration thêm cột PhieuXuat.MaKK trước khi lập phiếu xuất hủy từ kiểm kê.');
-            }
-            if (error.number === 2601 || error.number === 2627) {
-                const again = await findActiveCountScrap(transaction, maKK);
-                await transaction.commit();
-                return res.json({
-                    MaPX: again?.MaPX,
-                    existed: true,
-                    message: `Đã có phiếu xuất ${again?.MaPX} từ kiểm kê ${maKK}.`
-                });
-            }
-            throw error;
+        const lines = normalizeLines(source.prefill.lines);
+        const saved = await persistLinkedIssue({
+            transaction, user: req.user, header, lines, submitNow,
+            sourceLabel: `kiểm kê ${maKK}`, impact: source.impact
+        });
+        if (saved.duplicate) {
+            await transaction.commit();
+            return res.json(existingIssueResponse(saved.existing || { MaPX: null, TrangThai: 'Nháp' }, `kiểm kê ${maKK}`));
         }
-        await replaceLines(transaction, maPX, lines, validation.productMap);
-        await writeAudit(transaction, req.user, submitNow ? 'Lập và gửi duyệt Phiếu xuất kho' : 'Lập Phiếu xuất kho', maPX,
-            `Hủy hàng từ kiểm kê ${maKK}; ${nextStatus}; tồn kho chưa thay đổi`);
         await transaction.commit();
+        const stockHint = source.impact.KhongTruTon
+            ? 'Xác nhận không trừ trùng tồn.'
+            : 'Thủ kho xác nhận xuất mới trừ tồn hàng hỏng còn trên kệ.';
         res.status(201).json({
-            MaPX: maPX,
+            MaPX: saved.maPX,
             existed: false,
             submitted: submitNow,
+            KhongTruTon: source.impact.KhongTruTon,
             message: submitNow
-                ? `Đã lập phiếu xuất hủy ${maPX} từ ${maKK} và gửi Quản lý duyệt. Thủ kho xác nhận xuất mới trừ tồn.`
-                : `Đã lập phiếu xuất hủy ${maPX} (Nháp) từ ${maKK}. Gửi duyệt rồi Thủ kho xác nhận xuất mới trừ tồn.`
+                ? `Đã lập phiếu xuất hủy ${saved.maPX} từ ${maKK} và gửi Quản lý duyệt. ${stockHint}`
+                : `Đã lập phiếu xuất hủy ${saved.maPX} (Nháp) từ ${maKK}. ${stockHint}`
         });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
@@ -549,14 +631,37 @@ const updateIssue = async (req, res) => {
         const header = normalizeHeader(req.body);
         const lines = normalizeLines(req.body.lines);
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
-        const current = await new sql.Request(transaction)
-            .input('MaPX', sql.VarChar, req.params.id)
-            .input('MaNV', sql.VarChar, req.user.MaNV)
-            .query(`SELECT MaKho,TrangThai FROM PhieuXuat WITH(UPDLOCK,HOLDLOCK)
-                    WHERE MaPX=@MaPX AND MaNV=@MaNV`);
+        let current;
+        try {
+            current = await new sql.Request(transaction)
+                .input('MaPX', sql.VarChar, req.params.id)
+                .input('MaNV', sql.VarChar, req.user.MaNV)
+                .query(`SELECT MaKho,TrangThai,MaKK,MaDT,KhongTruTon FROM PhieuXuat WITH(UPDLOCK,HOLDLOCK)
+                        WHERE MaPX=@MaPX AND MaNV=@MaNV`);
+        } catch (columnError) {
+            if (!/Invalid column name|MaKK|MaDT|KhongTruTon/i.test(columnError.message || '')) throw columnError;
+            current = await new sql.Request(transaction)
+                .input('MaPX', sql.VarChar, req.params.id)
+                .input('MaNV', sql.VarChar, req.user.MaNV)
+                .query(`SELECT MaKho,TrangThai FROM PhieuXuat WITH(UPDLOCK,HOLDLOCK)
+                        WHERE MaPX=@MaPX AND MaNV=@MaNV`);
+        }
         if (!current.recordset.length) throw new Error('Không tìm thấy Phiếu xuất kho.');
-        if (current.recordset[0].TrangThai !== 'Nháp') throw new Error('Chỉ được sửa Phiếu xuất đang ở trạng thái Nháp.');
-        header.MaKho = current.recordset[0].MaKho;
+        const row = current.recordset[0];
+        if (row.TrangThai !== 'Nháp') throw new Error('Chỉ được sửa Phiếu xuất đang ở trạng thái Nháp.');
+        if ((row.MaKK || row.MaDT) && header.LoaiXuat !== 'Hủy hàng') {
+            throw new Error('Phiếu xuất liên kết kiểm kê/đổi trả phải giữ loại Hủy hàng.');
+        }
+        if (row.MaKK || row.MaDT) {
+            const source = row.MaKK
+                ? await loadCountScrapSource(transaction, { maKK: row.MaKK, maNV: req.user.MaNV, lock: true })
+                : await loadReturnDiscardSource(transaction, { maDT: row.MaDT, maNV: req.user.MaNV, lock: true });
+            assertLinesMatchSource(lines, source.prefill.lines, row.MaKK ? `kiểm kê ${row.MaKK}` : `đổi trả ${row.MaDT}`);
+            header.MaKK = row.MaKK || null;
+            header.MaDT = row.MaDT || null;
+            header.KhongTruTon = Boolean(row.KhongTruTon) || Boolean(row.MaDT);
+        }
+        header.MaKho = row.MaKho;
         const validation = await validateIssue(transaction, header, lines);
         await new sql.Request(transaction)
             .input('MaPX', sql.VarChar, req.params.id)
@@ -629,10 +734,19 @@ const decideIssue = approved => async (req, res) => {
             .input('LyDo', sql.NVarChar, approved ? null : reason)
             .query(`UPDATE PhieuXuat SET TrangThai=@TrangThai,MaNV_Duyet=@MaNV,NgayDuyet=GETDATE(),LyDoTuChoi=@LyDo
                     WHERE MaPX=@MaPX`);
+        const infoOnly = Boolean(header.KhongTruTon) || Boolean(header.MaDT);
         await writeAudit(transaction, req.user, approved ? 'Phê duyệt Phiếu xuất kho' : 'Từ chối Phiếu xuất kho',
-            req.params.id, approved ? 'Cho phép Thủ kho thực hiện xuất; tồn kho chưa thay đổi' : reason);
+            req.params.id, approved
+                ? (infoOnly ? 'Cho phép Thủ kho xác nhận phiếu thông tin; tồn kho không đổi' : 'Cho phép Thủ kho thực hiện xuất; tồn kho chưa thay đổi')
+                : reason);
         await transaction.commit();
-        res.json({ message: approved ? 'Đã phê duyệt Phiếu xuất. Tồn kho chưa thay đổi cho tới khi Thủ kho xác nhận xuất.' : 'Đã từ chối Phiếu xuất; tồn kho được giữ nguyên.' });
+        res.json({
+            message: approved
+                ? (infoOnly
+                    ? 'Đã phê duyệt Phiếu xuất thông tin. Thủ kho xác nhận để khóa hồ sơ; tồn kho không đổi.'
+                    : 'Đã phê duyệt Phiếu xuất. Tồn kho chưa thay đổi cho tới khi Thủ kho xác nhận xuất.')
+                : 'Đã từ chối Phiếu xuất; tồn kho được giữ nguyên.'
+        });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);
@@ -657,49 +771,68 @@ const confirmIssue = async (req, res) => {
         const lines = normalizeLines(details.recordset);
         await validateIssue(transaction, header, lines);
 
+        const skipAllStock = Boolean(header.KhongTruTon) || Boolean(header.MaDT);
+        let decreased = 0;
+        let documented = 0;
         for (const line of lines) {
             const stockResult = await new sql.Request(transaction)
                 .input('MaKho', sql.VarChar, header.MaKho)
                 .input('MaSP', sql.VarChar, line.MaSP)
                 .query(`SELECT SLTon,DonGiaBinhQuan FROM TonKho WITH(UPDLOCK,HOLDLOCK)
                         WHERE MaKho=@MaKho AND MaSP=@MaSP`);
-            if (!stockResult.recordset.length || Number(stockResult.recordset[0].SLTon) < line.SoLuong) {
-                const available = Number(stockResult.recordset[0]?.SLTon || 0);
+            const available = Number(stockResult.recordset[0]?.SLTon || 0);
+            const cost = Number(stockResult.recordset[0]?.DonGiaBinhQuan || line.DonGia || 0);
+            const documentary = skipAllStock || (header.MaKK && available < line.SoLuong);
+            if (!documentary && available < line.SoLuong) {
                 throw new Error(`Tồn kho sản phẩm ${line.MaSP} chỉ còn ${available}, không đủ xác nhận xuất ${line.SoLuong}.`);
             }
-            const cost = Number(stockResult.recordset[0].DonGiaBinhQuan || 0);
-            await new sql.Request(transaction)
-                .input('MaKho', sql.VarChar, header.MaKho)
-                .input('MaSP', sql.VarChar, line.MaSP)
-                .input('SoLuong', sql.Int, line.SoLuong)
-                .query(`UPDATE TonKho SET SLTon=SLTon-@SoLuong,
-                            GiaTriTon=(SLTon-@SoLuong)*DonGiaBinhQuan,NgayCapNhat=GETDATE()
-                        WHERE MaKho=@MaKho AND MaSP=@MaSP AND SLTon>=@SoLuong`);
             await new sql.Request(transaction)
                 .input('MaPX', sql.VarChar, req.params.id)
                 .input('MaSP', sql.VarChar, line.MaSP)
                 .input('DonGia', sql.Decimal(18, 2), cost)
                 .query('UPDATE ChiTietPhieuXuat SET DonGia=@DonGia WHERE MaPX=@MaPX AND MaSP=@MaSP');
+            if (!documentary) {
+                await new sql.Request(transaction)
+                    .input('MaKho', sql.VarChar, header.MaKho)
+                    .input('MaSP', sql.VarChar, line.MaSP)
+                    .input('SoLuong', sql.Int, line.SoLuong)
+                    .query(`UPDATE TonKho SET SLTon=SLTon-@SoLuong,
+                                GiaTriTon=(SLTon-@SoLuong)*DonGiaBinhQuan,NgayCapNhat=GETDATE()
+                            WHERE MaKho=@MaKho AND MaSP=@MaSP AND SLTon>=@SoLuong`);
+                decreased += 1;
+            } else {
+                documented += 1;
+            }
             const maGD = await generateId(transaction, 'GiaoDichKho', 'MaGD', datePrefix('GD'), 4);
             await new sql.Request(transaction)
                 .input('MaGD', sql.VarChar, maGD)
                 .input('MaKho', sql.VarChar, header.MaKho)
                 .input('MaSP', sql.VarChar, line.MaSP)
                 .input('MaNV', sql.VarChar, req.user.MaNV)
-                .input('SoLuong', sql.Int, -line.SoLuong)
+                .input('SoLuong', sql.Int, documentary ? 0 : -line.SoLuong)
                 .input('DonGiaVon', sql.Decimal(18, 2), cost)
-                .input('ThanhTienVon', sql.Decimal(18, 2), cost * line.SoLuong)
+                .input('ThanhTienVon', sql.Decimal(18, 2), documentary ? 0 : cost * line.SoLuong)
                 .input('MaPX', sql.VarChar, req.params.id)
-                .input('GhiChu', sql.NVarChar, `${header.LoaiXuat}${line.GhiChu ? `; ${line.GhiChu}` : ''}`)
+                .input('LoaiGD', sql.NVarChar, documentary ? 'Điều chỉnh' : 'Xuất')
+                .input('GhiChu', sql.NVarChar, documentary
+                    ? `Xuất hủy thông tin — không trừ tồn${line.GhiChu ? `; ${line.GhiChu}` : ''}`
+                    : `${header.LoaiXuat}${line.GhiChu ? `; ${line.GhiChu}` : ''}`)
                 .query(`INSERT GiaoDichKho(MaGD,MaKho,MaSP,MaNV,LoaiGD,SoLuong,DonGiaVon,ThanhTienVon,LoaiChungTu,MaChungTu,NgayGD,GhiChu)
-                        VALUES(@MaGD,@MaKho,@MaSP,@MaNV,N'Xuất',@SoLuong,@DonGiaVon,@ThanhTienVon,N'PhieuXuat',@MaPX,GETDATE(),@GhiChu)`);
+                        VALUES(@MaGD,@MaKho,@MaSP,@MaNV,@LoaiGD,@SoLuong,@DonGiaVon,@ThanhTienVon,N'PhieuXuat',@MaPX,GETDATE(),@GhiChu)`);
         }
         await new sql.Request(transaction).input('MaPX', sql.VarChar, req.params.id)
             .query(`UPDATE PhieuXuat SET TrangThai=N'Đã xác nhận' WHERE MaPX=@MaPX`);
-        await writeAudit(transaction, req.user, 'Xác nhận xuất kho', req.params.id,
-            `${header.LoaiXuat}; đã giảm tồn ${lines.length} mặt hàng và ghi Giao dịch kho loại Xuất`);
+        const auditParts = [
+            header.LoaiXuat,
+            decreased ? `đã giảm tồn ${decreased} mặt hàng` : '',
+            documented ? `ghi nhận ${documented} mặt hàng không trừ tồn` : ''
+        ].filter(Boolean).join('; ');
+        await writeAudit(transaction, req.user, 'Xác nhận xuất kho', req.params.id, auditParts);
         await transaction.commit();
-        res.json({ message: `Đã xác nhận xuất ${lines.length} mặt hàng. Tồn kho và thẻ kho đã được cập nhật.` });
+        const message = decreased
+            ? `Đã xác nhận xuất. Giảm tồn ${decreased} mặt hàng.${documented ? ` ${documented} mã ghi nhận thông tin, không trừ trùng.` : ''}`
+            : `Đã xác nhận phiếu xuất thông tin ${req.params.id}. Tồn kho không đổi (đã trừ lúc bán hoặc đã điều chỉnh kiểm kê).`;
+        res.json({ message });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);
@@ -713,6 +846,9 @@ module.exports = {
     getApprovalIssueDetail: (req, res) => getIssueDetail(req, res, false),
     getOptions,
     getSourceReceipt,
+    getPendingSources,
+    previewFromCount,
+    previewFromReturn,
     createIssue,
     createIssueFromReturn,
     createIssueFromCount,

@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let inboxBackoff = 2000;
   let inboxToastTimer = 0;
   let inboxLive = false;
+  let inboxFollowUp = 0;
   const announcedInboxIds = new Set();
   let closeInboxPanel = () => {};
 
@@ -110,7 +111,11 @@ document.addEventListener('DOMContentLoaded', () => {
     syncSelectControl(select);
   };
 
-  const enhanceSelects = root => root.querySelectorAll('select').forEach(enhanceSelect);
+  const enhanceSelects = root => {
+    if (!(root instanceof Element)) return;
+    if (root.matches('select')) enhanceSelect(root);
+    root.querySelectorAll('select').forEach(enhanceSelect);
+  };
   const selectObserver = new MutationObserver(mutations => {
     mutations.forEach(mutation => {
       if (mutation.type === 'attributes' && mutation.target instanceof HTMLSelectElement) syncSelectControl(mutation.target);
@@ -118,12 +123,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (changedSelect) syncSelectControl(changedSelect);
       mutation.addedNodes.forEach(node => {
         if (!(node instanceof Element)) return;
-        if (node.matches('select')) enhanceSelect(node);
         enhanceSelects(node);
       });
     });
   });
-  selectObserver.observe(contentArea, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
+  window.FLY_UI = Object.assign(window.FLY_UI || {}, { enhanceSelects });
+  selectObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
   document.addEventListener('click', closeSelectMenu);
   document.addEventListener('scroll', closeSelectMenu, true);
   window.addEventListener('resize', closeSelectMenu);
@@ -389,6 +394,11 @@ document.addEventListener('DOMContentLoaded', () => {
       applyInbox(data, { announce });
     } catch { /* giữ inbox cũ nếu API tạm lỗi */ }
   };
+  const refreshInboxSoon = ({ announce = true } = {}) => {
+    loadInbox({ announce });
+    clearTimeout(inboxFollowUp);
+    inboxFollowUp = setTimeout(() => loadInbox({ announce }), 650);
+  };
   const stopInboxPoll = () => {
     if (inboxTimer) {
       clearInterval(inboxTimer);
@@ -420,6 +430,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }, wait);
   };
   const closeInboxStream = () => {
+    clearTimeout(inboxFollowUp);
+    inboxFollowUp = 0;
     if (inboxReadyWatch) {
       clearTimeout(inboxReadyWatch);
       inboxReadyWatch = 0;
@@ -447,7 +459,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (!response.ok || !response.body) throw new Error('stream');
     markInboxLive();
-    loadInbox({ announce: true });
+    refreshInboxSoon({ announce: true });
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -458,7 +470,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const parts = buffer.split('\n\n');
       buffer = parts.pop();
       for (const block of parts) {
-        if (/event:\s*inbox/.test(block)) loadInbox({ announce: true });
+        if (/event:\s*inbox/.test(block)) refreshInboxSoon({ announce: true });
       }
     }
     throw new Error('ended');
@@ -488,7 +500,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const onPing = () => {
       markInboxLive();
-      loadInbox({ announce: true });
+      refreshInboxSoon({ announce: true });
     };
     inboxSource.addEventListener('ready', onPing);
     inboxSource.addEventListener('inbox', onPing);

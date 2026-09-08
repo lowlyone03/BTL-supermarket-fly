@@ -349,7 +349,7 @@ button { color: inherit; }
 .custom-select-trigger[aria-expanded="true"] svg { transform: rotate(-90deg); }
 .select-menu {
   position: fixed;
-  z-index: 1000;
+  z-index: 2400;
   max-height: 286px;
   padding: 7px;
   overflow-y: auto;
@@ -403,8 +403,9 @@ button { color: inherit; }
 .telegram-otp-row strong { flex: 1; letter-spacing: .28em; font-size: 28px; font-weight: 700; color: #173f34; font-variant-numeric: tabular-nums; }
 .telegram-otp-block small { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .telegram-otp-block code { font-size: 12px; }
+.inbox-toast[hidden] { display: none !important; }
 .inbox-toast {
-  position: fixed; top: 78px; right: 24px; z-index: 1900;
+  position: fixed; top: 78px; right: 24px; z-index: 1600;
   width: min(360px, calc(100vw - 32px)); padding: 12px 14px 13px;
   display: flex; flex-direction: column; gap: 3px;
   border: 1px solid #d7e3dc; border-radius: 16px;

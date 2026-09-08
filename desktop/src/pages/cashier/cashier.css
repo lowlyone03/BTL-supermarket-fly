@@ -129,6 +129,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
 }
 
 .cashier-cart-qty button {
@@ -138,6 +139,31 @@
   border-radius: 7px;
   background: #fff;
   cursor: pointer;
+}
+
+.cashier-cart-qty-input {
+  width: 52px;
+  height: 28px;
+  padding: 0 4px;
+  border: 1px solid #d7dfda;
+  border-radius: 7px;
+  background: #fff;
+  color: #1d2f27;
+  text-align: center;
+  font: inherit;
+  font-weight: 700;
+  -moz-appearance: textfield;
+}
+
+.cashier-cart-qty-input::-webkit-outer-spin-button,
+.cashier-cart-qty-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cashier-cart-qty-input:focus {
+  outline: 2px solid rgba(44, 133, 101, .28);
+  border-color: #2c8565;
 }
 
 .cashier-cart-total {
@@ -702,7 +728,8 @@
   border-radius: 10px;
 }
 
-.cashier-exchange-row input { width: 88px; }
+.cashier-exchange-row .ex-qty { width: 52px; height: 28px; }
+.cashier-exchange-row .qty-stepper input { height: 28px; }
 
 .return-form-actions { margin-top: 16px; padding-top: 8px; }
 

@@ -1,6 +1,6 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
-const { scrapLinesFromRows } = require('../services/countScrap');
+const { scrapLinesFromRows, countStockImpact } = require('../services/countScrap');
 const { ensureCountScrapSchema } = require('../services/countScrapSchema');
 const {
     qty,
@@ -14,6 +14,14 @@ const {
 } = require('../services/countApprove');
 const { ensureStoreProfitLossSchema } = require('../services/storeProfitLoss');
 const { notifyInboxChanged } = require('../services/notificationHub');
+const { ensureCountSuccessorSchema } = require('../services/countSuccessorSchema');
+const {
+    decorateCount,
+    isPreRequestNote,
+    syncRejectedCountSuccessors,
+    linkOpenRejections,
+    markRejectedRecounted
+} = require('../services/countLifecycle');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 const conditionValues = new Set(['Bình thường', 'Hỏng', 'Hết hạn']);
@@ -60,13 +68,22 @@ const normalizeLines = (lines, requireReason = false) => {
             throw new Error(`Sản phẩm ${MaSP} có chênh lệch nhưng chưa ghi nguyên nhân.`);
         }
         seen.add(MaSP);
-        return { MaSP, SLThucTe, NguyenNhan, TinhTrangHang };
+        const SLHong = Number(line.SLHong);
+        return {
+            MaSP,
+            SLThucTe,
+            NguyenNhan,
+            TinhTrangHang,
+            SLHong: Number.isInteger(SLHong) && SLHong >= 0 ? SLHong : null
+        };
     });
 };
 
 const listCounts = async (req, res) => {
     try {
         const pool = await poolPromise;
+        await ensureCountSuccessorSchema(pool);
+        try { await syncRejectedCountSuccessors(pool); } catch (error) { console.error(error); }
         const status = clean(req.query.status, 30);
         const keyword = clean(req.query.search, 100);
         const result = await pool.request()
@@ -76,6 +93,7 @@ const listCounts = async (req, res) => {
             .input('Mau', sql.NVarChar, `%${keyword}%`)
             .query(`SELECT kk.MaKK,kk.MaKho,k.TenKho,kk.NgayKiemKe,kk.TrangThai,
                            kk.GhiChu,kk.LyDoTuChoi,kk.NgayDuyet,nvd.TenNV NguoiDuyet,
+                           kk.MaKKGoc,kk.MaKKThayThe,thay.TrangThai TrangThaiThayThe,
                            COUNT(ct.MaSP) SoMatHang,
                            SUM(CASE WHEN ct.ChenhLech<>0 THEN 1 ELSE 0 END) SoMatHangChenhLech,
                            SUM(CASE WHEN ct.ChenhLech>0 THEN ct.ChenhLech ELSE 0 END) TongThua,
@@ -83,13 +101,20 @@ const listCounts = async (req, res) => {
                     FROM KiemKe kk JOIN Kho k ON k.MaKho=kk.MaKho
                     LEFT JOIN ChiTietKiemKe ct ON ct.MaKK=kk.MaKK
                     LEFT JOIN NhanVien nvd ON nvd.MaNV=kk.MaNV_Duyet
+                    LEFT JOIN KiemKe thay ON thay.MaKK=kk.MaKKThayThe
                     WHERE kk.MaNV=@MaNV
                       AND (@TrangThai=N'' OR kk.TrangThai=@TrangThai)
                       AND (@TuKhoa=N'' OR kk.MaKK LIKE @Mau COLLATE Latin1_General_100_CI_AI OR k.TenKho LIKE @Mau COLLATE Latin1_General_100_CI_AI OR kk.GhiChu LIKE @Mau COLLATE Latin1_General_100_CI_AI)
                     GROUP BY kk.MaKK,kk.MaKho,k.TenKho,kk.NgayKiemKe,kk.TrangThai,
-                             kk.GhiChu,kk.LyDoTuChoi,kk.NgayDuyet,nvd.TenNV
-                    ORDER BY kk.NgayKiemKe DESC`);
-        res.json({ items: result.recordset });
+                             kk.GhiChu,kk.LyDoTuChoi,kk.NgayDuyet,nvd.TenNV,
+                             kk.MaKKGoc,kk.MaKKThayThe,thay.TrangThai
+                    ORDER BY CASE kk.TrangThai
+                                WHEN N'Đang kiểm' THEN 0
+                                WHEN N'Từ chối' THEN 1
+                                WHEN N'Chờ duyệt điều chỉnh' THEN 2
+                                ELSE 3
+                             END, kk.NgayKiemKe DESC`);
+        res.json({ items: result.recordset.map(decorateCount) });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải danh sách kiểm kê.' });
@@ -99,21 +124,26 @@ const listCounts = async (req, res) => {
 const getCountDetail = ownerOnly => async (req, res) => {
     try {
         const pool = await poolPromise;
+        await ensureCountSuccessorSchema(pool);
+        try { await syncRejectedCountSuccessors(pool); } catch (error) { console.error(error); }
         const header = await pool.request()
             .input('MaKK', sql.VarChar, req.params.id)
             .input('MaNV', sql.VarChar, req.user.MaNV)
             .input('KiemTraChuSoHuu', sql.Bit, ownerOnly ? 1 : 0)
-            .query(`SELECT kk.*,k.TenKho,k.DiaChi,nv.TenNV NguoiKiemKe,nvd.TenNV NguoiDuyet
+            .query(`SELECT kk.*,k.TenKho,k.DiaChi,nv.TenNV NguoiKiemKe,nvd.TenNV NguoiDuyet,
+                           thay.TrangThai TrangThaiThayThe
                     FROM KiemKe kk JOIN Kho k ON k.MaKho=kk.MaKho
                     JOIN NhanVien nv ON nv.MaNV=kk.MaNV
                     LEFT JOIN NhanVien nvd ON nvd.MaNV=kk.MaNV_Duyet
+                    LEFT JOIN KiemKe thay ON thay.MaKK=kk.MaKKThayThe
                     WHERE kk.MaKK=@MaKK AND (@KiemTraChuSoHuu=0 OR kk.MaNV=@MaNV)`);
         if (!header.recordset.length) return res.status(404).json({ message: 'Không tìm thấy đợt kiểm kê.' });
         const lines = await pool.request()
             .input('MaKK', sql.VarChar, req.params.id)
             .input('MaKho', sql.VarChar, header.recordset[0].MaKho)
             .query(`SELECT ct.*,sp.TenSP,sp.MaVach,sp.DonViTinh,sp.TonKhoToiThieu,dm.TenDM,
-                           ISNULL(tk.SLTon,0) SLTonHienTai, ISNULL(tk.SLDatMua,0) SLDatMua
+                           ISNULL(tk.SLTon,0) SLTonHienTai, ISNULL(tk.SLDatMua,0) SLDatMua,
+                           ISNULL(tk.DonGiaBinhQuan,0) DonGiaBinhQuan
                     FROM ChiTietKiemKe ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
                     JOIN DanhMuc dm ON dm.MaDM=sp.MaDM
                     LEFT JOIN TonKho tk ON tk.MaKho=@MaKho AND tk.MaSP=ct.MaSP
@@ -125,7 +155,7 @@ const getCountDetail = ownerOnly => async (req, res) => {
             LEFT JOIN NhanVien n ON n.MaNV=t.MaNV
             WHERE nk.BangLienQuan=N'KiemKe' AND nk.MaBanGhi=@MaBanGhi
             ORDER BY nk.ThoiGian`);
-        const count = header.recordset[0];
+        const count = decorateCount(header.recordset[0]);
         let stockWarnings = [];
         try {
             const discrepancyIds = lines.recordset.filter(line => qty(line.ChenhLech) !== 0).map(line => line.MaSP);
@@ -139,12 +169,27 @@ const getCountDetail = ownerOnly => async (req, res) => {
         } catch (error) {
             console.error(error);
         }
+        const scrapLines = scrapLinesFromRows(lines.recordset);
+        let existingScrap = null;
+        try {
+            await ensureCountScrapSchema(pool);
+            const linked = await pool.request().input('MaKK', sql.VarChar, req.params.id).query(`
+                SELECT TOP 1 MaPX, TrangThai, KhongTruTon FROM PhieuXuat
+                WHERE MaKK=@MaKK AND TrangThai IN (N'Nháp', N'Chờ duyệt', N'Đã duyệt', N'Đã xác nhận')
+                ORDER BY NgayXuat DESC`);
+            existingScrap = linked.recordset[0] || null;
+        } catch (error) {
+            if (!/Invalid column name|MaKK|KhongTruTon/i.test(error.message || '')) throw error;
+        }
         res.json({
             count,
             lines: lines.recordset,
             audit: audit.recordset,
             stockWarnings,
-            suggestedRejectReason: suggestedRejectReason(stockWarnings)
+            suggestedRejectReason: suggestedRejectReason(stockWarnings),
+            scrapLines,
+            existingScrap,
+            stockImpact: countStockImpact(scrapLines)
         });
     } catch (error) {
         console.error(error);
@@ -153,17 +198,47 @@ const getCountDetail = ownerOnly => async (req, res) => {
 };
 
 const createCount = async (req, res) => {
-    const transaction = new sql.Transaction(await poolPromise);
+    const pool = await poolPromise;
+    await ensureCountSuccessorSchema(pool);
+    const maKKGoc = clean(req.body?.MaKKGoc, 20) || null;
+    const transaction = new sql.Transaction(pool);
     try {
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         const warehouse = await getWarehouse(new sql.Request(transaction));
-        const MaKK = await generateId(transaction, 'KiemKe', 'MaKK', datePrefix('KK'));
         const scoped = Object.prototype.hasOwnProperty.call(req.body || {}, 'products');
         const productIds = scoped
             ? [...new Set((Array.isArray(req.body.products) ? req.body.products : [])
                 .map(id => clean(id, 20)).filter(Boolean))]
             : [];
         if (scoped && !productIds.length) throw new Error('Hãy chọn ít nhất một mặt hàng để kiểm tra số lượng thực tế.');
+        if (maKKGoc) {
+            const origin = await new sql.Request(transaction)
+                .input('MaKK', sql.VarChar, maKKGoc)
+                .input('MaNV', sql.VarChar, req.user.MaNV)
+                .query(`SELECT MaKK, MaKho, TrangThai, MaKKThayThe FROM KiemKe WITH(UPDLOCK,HOLDLOCK)
+                        WHERE MaKK=@MaKK AND MaNV=@MaNV`);
+            const source = origin.recordset[0];
+            if (!source) throw new Error('Không tìm thấy đợt kiểm kê cần đếm lại.');
+            if (source.MaKho !== warehouse.MaKho) throw new Error('Đợt kiểm kê không thuộc kho đang làm việc.');
+            if (source.TrangThai === 'Đã đếm lại') throw new Error('Đợt này đã được đếm lại. Mở đợt thay thế để xem kết quả.');
+            if (source.TrangThai !== 'Từ chối') throw new Error('Chỉ đếm lại đợt bị từ chối.');
+            const existing = await new sql.Request(transaction)
+                .input('MaKKGoc', sql.VarChar, maKKGoc)
+                .input('MaKKThayThe', sql.VarChar, source.MaKKThayThe || '')
+                .query(`SELECT TOP 1 MaKK FROM KiemKe WITH(UPDLOCK,HOLDLOCK)
+                        WHERE TrangThai=N'Đang kiểm'
+                          AND (MaKKGoc=@MaKKGoc OR (@MaKKThayThe<>'' AND MaKK=@MaKKThayThe))
+                        ORDER BY NgayKiemKe DESC`);
+            if (existing.recordset[0]) {
+                await transaction.commit();
+                return res.json({
+                    message: 'Đã có đợt đang đếm lại, mở tiếp để hoàn thành.',
+                    MaKK: existing.recordset[0].MaKK,
+                    reused: true
+                });
+            }
+        }
+        const MaKK = await generateId(transaction, 'KiemKe', 'MaKK', datePrefix('KK'));
         const note = clean(req.body.GhiChu, 500)
             || (scoped ? 'Kiểm tra số lượng thực tế trước khi lập đề nghị mua hàng.' : null);
         await new sql.Request(transaction)
@@ -171,8 +246,9 @@ const createCount = async (req, res) => {
             .input('MaKho', sql.VarChar, warehouse.MaKho)
             .input('MaNV', sql.VarChar, req.user.MaNV)
             .input('GhiChu', sql.NVarChar, note)
-            .query(`INSERT KiemKe(MaKK,MaKho,MaNV,NgayKiemKe,TrangThai,GhiChu)
-                    VALUES(@MaKK,@MaKho,@MaNV,GETDATE(),N'Đang kiểm',@GhiChu)`);
+            .input('MaKKGoc', sql.VarChar, maKKGoc)
+            .query(`INSERT KiemKe(MaKK,MaKho,MaNV,NgayKiemKe,TrangThai,GhiChu,MaKKGoc)
+                    VALUES(@MaKK,@MaKho,@MaNV,GETDATE(),N'Đang kiểm',@GhiChu,@MaKKGoc)`);
         if (scoped) {
             for (const MaSP of productIds) {
                 const inserted = await new sql.Request(transaction)
@@ -208,12 +284,23 @@ const createCount = async (req, res) => {
         await writeAudit(transaction, req.user, 'Tạo đợt kiểm kê', MaKK,
             scoped
                 ? `Kiểm tra số lượng thực tế ${lineCount.recordset[0].SoDong} mặt hàng trước khi lập đề nghị`
-                : `Chụp số tồn hệ thống của ${lineCount.recordset[0].SoDong} mặt hàng`);
+                : maKKGoc
+                    ? `Đếm lại sau từ chối ${maKKGoc}; chụp ${lineCount.recordset[0].SoDong} mặt hàng`
+                    : `Chụp số tồn hệ thống của ${lineCount.recordset[0].SoDong} mặt hàng`);
+        if (!scoped) {
+            await linkOpenRejections(transaction, { MaKho: warehouse.MaKho, MaKK, MaKKGoc: maKKGoc });
+            if (maKKGoc) {
+                await writeAudit(transaction, req.user, 'Tạo đợt đếm lại', maKKGoc, `Thay bằng ${MaKK}`);
+            }
+        }
         await transaction.commit();
+        if (!scoped) notifyInboxChanged({ action: 'Tạo đợt kiểm kê', table: 'KiemKe', recordId: MaKK });
         res.status(201).json({
             message: scoped
                 ? 'Đã lập đợt kiểm kê để kiểm tra số lượng thực tế và phẩm chất hàng.'
-                : 'Đã tạo đợt kiểm kê và lấy số tồn hệ thống.',
+                : maKKGoc
+                    ? 'Đã tạo đợt kiểm kê mới để đếm lại trên số tồn hiện tại.'
+                    : 'Đã tạo đợt kiểm kê và lấy số tồn hệ thống.',
             MaKK,
             scoped: Boolean(scoped)
         });
@@ -225,7 +312,9 @@ const createCount = async (req, res) => {
 };
 
 const saveCount = async (req, res) => {
-    const transaction = new sql.Transaction(await poolPromise);
+    const pool = await poolPromise;
+    await ensureCountScrapSchema(pool);
+    const transaction = new sql.Transaction(pool);
     try {
         const lines = normalizeLines(req.body.lines);
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
@@ -240,19 +329,30 @@ const saveCount = async (req, res) => {
             .query('SELECT COUNT(*) SoDong FROM ChiTietKiemKe WHERE MaKK=@MaKK');
         if (Number(expected.recordset[0].SoDong) !== lines.length) throw new Error('Phải ghi nhận đủ toàn bộ mặt hàng trong đợt kiểm kê.');
         for (const line of lines) {
-            const result = await new sql.Request(transaction)
-                .input('MaKK', sql.VarChar, req.params.id)
-                .input('MaSP', sql.VarChar, line.MaSP)
-                .input('SLThucTe', sql.Int, line.SLThucTe)
-                .input('NguyenNhan', sql.NVarChar, line.NguyenNhan)
-                .input('TinhTrangHang', sql.NVarChar, line.TinhTrangHang)
-                .query(`UPDATE ChiTietKiemKe
+            const bind = (includeScrap) => {
+                const request = new sql.Request(transaction)
+                    .input('MaKK', sql.VarChar, req.params.id)
+                    .input('MaSP', sql.VarChar, line.MaSP)
+                    .input('SLThucTe', sql.Int, line.SLThucTe)
+                    .input('NguyenNhan', sql.NVarChar, line.NguyenNhan)
+                    .input('TinhTrangHang', sql.NVarChar, line.TinhTrangHang);
+                if (includeScrap) request.input('SLHong', sql.Int, line.SLHong);
+                return request.query(`UPDATE ChiTietKiemKe
                         SET SLThucTe=@SLThucTe,ChenhLech=@SLThucTe-SLHeThong,
                             KetQuaDoiChieu=CASE WHEN @SLThucTe>SLHeThong THEN N'Thừa'
                                               WHEN @SLThucTe<SLHeThong THEN N'Thiếu' ELSE N'Khớp' END,
                             NguyenNhan=@NguyenNhan,TinhTrangHang=@TinhTrangHang
+                            ${includeScrap ? ',SLHong=@SLHong' : ''}
                         WHERE MaKK=@MaKK AND MaSP=@MaSP;
                         SELECT @@ROWCOUNT affected;`);
+            };
+            let result;
+            try {
+                result = await bind(true);
+            } catch (error) {
+                if (!/Invalid column name|SLHong/i.test(error.message || '')) throw error;
+                result = await bind(false);
+            }
             if (!Number(result.recordset[0].affected)) throw new Error(`Sản phẩm ${line.MaSP} không thuộc đợt kiểm kê.`);
         }
         await new sql.Request(transaction)
@@ -274,14 +374,16 @@ const submitCount = async (req, res) => {
     const transaction = new sql.Transaction(pool);
     try {
         await ensureCountScrapSchema(pool);
+        await ensureCountSuccessorSchema(pool);
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         const current = await new sql.Request(transaction)
             .input('MaKK', sql.VarChar, req.params.id)
             .input('MaNV', sql.VarChar, req.user.MaNV)
-            .query(`SELECT TrangThai FROM KiemKe WITH(UPDLOCK,HOLDLOCK)
+            .query(`SELECT TrangThai, MaKho, MaKKGoc, GhiChu FROM KiemKe WITH(UPDLOCK,HOLDLOCK)
                     WHERE MaKK=@MaKK AND MaNV=@MaNV`);
         if (!current.recordset.length) throw new Error('Không tìm thấy đợt kiểm kê.');
-        if (current.recordset[0].TrangThai !== 'Đang kiểm') throw new Error('Chỉ được hoàn tất đợt đang kiểm.');
+        const header = current.recordset[0];
+        if (header.TrangThai !== 'Đang kiểm') throw new Error('Chỉ được hoàn tất đợt đang kiểm.');
         const summary = await new sql.Request(transaction).input('MaKK', sql.VarChar, req.params.id).query(`
             UPDATE ChiTietKiemKe
             SET ChenhLech=SLThucTe-SLHeThong,
@@ -302,9 +404,12 @@ const submitCount = async (req, res) => {
             .input('TrangThai', sql.NVarChar, nextStatus)
             .query('UPDATE KiemKe SET TrangThai=@TrangThai WHERE MaKK=@MaKK');
         const scrapRows = await new sql.Request(transaction).input('MaKK', sql.VarChar, req.params.id).query(`
-            SELECT ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SLThucTe, ct.TinhTrangHang, ct.NguyenNhan
+            SELECT ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SLHeThong, ct.SLThucTe, ct.TinhTrangHang, ct.NguyenNhan,
+                   ISNULL(tk.SLTon,0) SLTonHienTai, ISNULL(tk.DonGiaBinhQuan,0) DonGiaBinhQuan
             FROM ChiTietKiemKe ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
-            WHERE ct.MaKK=@MaKK AND ct.TinhTrangHang IN (N'Hỏng', N'Hết hạn') AND ct.SLThucTe>0
+            LEFT JOIN TonKho tk ON tk.MaKho=(SELECT MaKho FROM KiemKe WHERE MaKK=@MaKK) AND tk.MaSP=ct.MaSP
+            WHERE ct.MaKK=@MaKK AND ct.TinhTrangHang IN (N'Hỏng', N'Hết hạn')
+              AND (ct.SLThucTe < ct.SLHeThong OR ct.SLThucTe>0)
             ORDER BY sp.TenSP`);
         const scrapLines = scrapLinesFromRows(scrapRows.recordset);
         let existingScrap = null;
@@ -319,12 +424,27 @@ const submitCount = async (req, res) => {
         }
         await writeAudit(transaction, req.user, hasDifference ? 'Gửi duyệt điều chỉnh tồn' : 'Hoàn thành kiểm kê', req.params.id,
             hasDifference ? `${info.SoChenhLech} mặt hàng chênh lệch, chờ Quản lý duyệt` : 'Không phát sinh chênh lệch, không cập nhật tồn');
+        const closed = await markRejectedRecounted(transaction, {
+            MaKK: req.params.id,
+            MaKho: header.MaKho,
+            MaKKGoc: header.MaKKGoc,
+            heuristic: !isPreRequestNote(header.GhiChu) || Boolean(header.MaKKGoc)
+        });
+        for (const oldId of closed) {
+            await writeAudit(transaction, req.user, 'Đã đếm lại sau từ chối', oldId, `Thay bằng ${req.params.id}`);
+        }
         await transaction.commit();
+        notifyInboxChanged({
+            action: hasDifference ? 'Gửi duyệt điều chỉnh tồn' : 'Hoàn thành kiểm kê',
+            table: 'KiemKe',
+            recordId: req.params.id
+        });
         res.json({
             message: hasDifference ? 'Đã chuyển đợt kiểm kê sang Chờ duyệt điều chỉnh.' : 'Đã hoàn thành kiểm kê, không phát sinh chênh lệch.',
             TrangThai: nextStatus,
             scrapLines,
-            existingScrap
+            existingScrap,
+            stockImpact: countStockImpact(scrapLines)
         });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
@@ -334,7 +454,9 @@ const submitCount = async (req, res) => {
 };
 
 const approveCount = async (req, res) => {
-    const transaction = new sql.Transaction(await poolPromise);
+    const pool = await poolPromise;
+    await ensureCountSuccessorSchema(pool);
+    const transaction = new sql.Transaction(pool);
     try {
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         const header = await new sql.Request(transaction)
@@ -431,6 +553,15 @@ const approveCount = async (req, res) => {
             skipped.length ? skipped.join('; ') : ''
         ].filter(Boolean).join('. ');
         await writeAudit(transaction, req.user, 'Phê duyệt điều chỉnh tồn', req.params.id, auditNote);
+        const closed = await markRejectedRecounted(transaction, {
+            MaKK: req.params.id,
+            MaKho: count.MaKho,
+            MaKKGoc: count.MaKKGoc,
+            heuristic: !isPreRequestNote(count.GhiChu) || Boolean(count.MaKKGoc)
+        });
+        for (const oldId of closed) {
+            await writeAudit(transaction, req.user, 'Đã đếm lại sau từ chối', oldId, `Thay bằng ${req.params.id}`);
+        }
         await transaction.commit();
         const message = written.length
             ? `Đã duyệt và điều chỉnh tồn cho ${written.length} mặt hàng.${skipped.length ? ` ${skipped.join('. ')}.` : ''}`

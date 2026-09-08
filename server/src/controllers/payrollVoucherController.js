@@ -1,5 +1,6 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit, listAuditLogs } = require('../services/auditLog');
+const { notifyInboxChanged } = require('../services/notificationHub');
 const { ensurePayrollSchema } = require('../services/payrollSchema');
 const { validMonth, VALID_METHODS, dateKey, voucherMaPhieu } = require('../services/payrollEngine');
 const { voucherSelect } = require('./payrollController');
@@ -329,6 +330,7 @@ const decideVoucher = approved => async (req, res) => {
         if (approved) {
             const voucher = await approveOne(transaction, req.user, maPhieu);
             await transaction.commit();
+            notifyInboxChanged({ action: 'Duyệt Phiếu chi lương', table: 'PhieuChiLuong', recordId: maPhieu });
             return res.json({
                 message: `Đã duyệt Phiếu chi lương ${maPhieu} (${voucher.TenNV}). Chưa giao quỹ. Sau khi duyệt xong kỳ, bấm Giao quỹ chung một lần.`,
                 MaPhieu: maPhieu, TrangThai: 'Đã duyệt'
@@ -352,6 +354,7 @@ const decideVoucher = approved => async (req, res) => {
             content: `Từ chối ${voucher.MaPhieu}. Lý do: ${reason}. Kế toán sửa trên cùng phiếu.`
         });
         await transaction.commit();
+        notifyInboxChanged({ action: 'Từ chối Phiếu chi lương', table: 'PhieuChiLuong', recordId: maPhieu });
         res.json({ message: `Đã từ chối Phiếu chi lương ${maPhieu}.`, MaPhieu: maPhieu, TrangThai: 'Từ chối' });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
@@ -382,6 +385,7 @@ const approveAll = async (req, res) => {
             content: `Đã duyệt ${approved.length} phiếu kỳ ${month}. Chưa giao quỹ — bước tiếp theo là giao quỹ chung một lần.`
         });
         await transaction.commit();
+        notifyInboxChanged({ action: 'Duyệt hàng loạt Phiếu chi lương', table: 'KyLuong', recordId: month });
         res.json({
             message: `Đã duyệt ${approved.length} phiếu kỳ ${month}. Tiếp theo hãy giao quỹ chung một lần cho Kế toán.`,
             MaKy: month,
@@ -451,6 +455,7 @@ const handOverFund = async (req, res) => {
             content: `Kỳ ${month}: giao TM +${tmTopUp} (còn ${Number(after.SoTienMatCon)}), ủy quyền CK +${ckTopUp} (còn ${Number(after.SoTienCKCon)}). Kế toán chích từng nhân viên từ quỹ này.`
         });
         await transaction.commit();
+        notifyInboxChanged({ action: 'Giao quỹ lương chung', table: 'QuyLuongKy', recordId: month });
         res.json({
             message: `Đã giao quỹ chung kỳ ${month}. Tiền mặt ${tmTopUp ? `+${tmTopUp}` : 'không thêm'}; chuyển khoản ${ckTopUp ? `+${ckTopUp}` : 'không thêm'}. Kế toán chi từng người từ quỹ còn lại.`,
             MaKy: month,

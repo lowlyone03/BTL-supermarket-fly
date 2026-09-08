@@ -316,6 +316,26 @@ select:focus-visible,
 .warehouse-modal-heading h2 { font-size: 21px; }
 .warehouse-modal-body { padding: 19px 20px; }
 .warehouse-modal-actions { padding: 13px 20px; }
+.inventory-count-modal {
+  height: min(860px, 92vh);
+  max-height: 92vh;
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+}
+.inventory-count-modal .warehouse-modal-heading,
+.inventory-count-modal .warehouse-modal-actions {
+  position: relative;
+  z-index: 5;
+  flex: 0 0 auto;
+}
+.inventory-count-modal .warehouse-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+}
+.inventory-count-modal .warehouse-table th { z-index: 1; }
 
 /* Accessible disabled state without making text illegible. */
 button:disabled,
@@ -516,6 +536,9 @@ select:disabled,
 .days-badge.due-today { color: #7a4b0e; background: #fef3d4; }
 .days-badge.due-soon { color: #6b5a12; background: #fef7e0; }
 .days-badge.safe { color: #1f523f; background: #e2f3eb; }
+.payment-voucher-table td strong.payable-due-date.is-due-safe { color: #20342a; }
+.payment-voucher-table td strong.payable-due-date.is-overdue { color: #8b2e1a; }
+.payment-voucher-table .payable-origin-date { color: #6b7c73; }
 
 /* ── 4. Đổi trả – KPI cards with icons ── */
 .report-return-kpis {
@@ -859,4 +882,37 @@ select:disabled,
 }
 @keyframes ui-spin {
   to { transform: rotate(360deg); }
+}
+
+/* Nhật ký hệ thống: keep title, count, search and filters outside the table scroller. */
+.filter-search input {
+  height: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.audit-toolbar.table-toolbar {
+  flex-shrink: 0;
+  min-height: auto;
+  overflow: visible;
+  flex-direction: column;
+  align-items: stretch;
+}
+.audit-toolbar .filter-search {
+  height: 40px;
+  max-width: 100%;
+}
+.audit-filters .custom-select-control {
+  width: 148px;
+  max-width: 180px;
+  flex: 0 1 148px;
+}
+.audit-filters .custom-select-control:has(#logKind) {
+  width: 200px;
+  max-width: 240px;
+  flex-basis: 200px;
+}
+.audit-table-wrap {
+  height: auto;
+  max-height: none;
+  overflow: auto;
 }

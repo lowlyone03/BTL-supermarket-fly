@@ -238,7 +238,64 @@
     return fallbackBanner(from, report.period.label);
   };
 
+  const parsePositiveInteger = (value, label = 'Số lượng') => {
+    if (window.FLY_FIELDS?.validatePositiveInteger) return window.FLY_FIELDS.validatePositiveInteger(value, label);
+    if (value === '' || value === null || value === undefined) return { ok: false, message: `${label} là bắt buộc.` };
+    const num = Number(value);
+    if (!Number.isInteger(num) || num < 1) return { ok: false, message: `${label} phải là số nguyên lớn hơn 0.` };
+    return { ok: true, value: num };
+  };
+  const stockLeftText = (item) => {
+    const stock = Number(item?.SLTon ?? item?.SLTonHienTai ?? 0);
+    const unit = String(item?.DonViTinh || '').trim();
+    return unit ? `còn ${stock} ${unit}` : `còn ${stock}`;
+  };
+  const stockExceededMessage = (item) => {
+    const name = item?.TenSP || item?.MaSP || 'Sản phẩm';
+    const stock = Number(item?.SLTon ?? item?.SLTonHienTai ?? 0);
+    const unit = String(item?.DonViTinh || '').trim();
+    return `${name} chỉ còn ${stock}${unit ? ` ${unit}` : ''}.`;
+  };
+  const stepperMarkup = ({
+    id = '',
+    value = 1,
+    min = 1,
+    max = '',
+    inputClass = 'qty-stepper-input',
+    wrapClass = 'qty-stepper',
+    ariaLabel = 'Số lượng'
+  } = {}) => {
+    const maxNum = max === '' || max == null ? NaN : Number(max);
+    const maxAttr = Number.isFinite(maxNum) ? ` max="${maxNum}"` : '';
+    const idAttr = id !== '' && id != null ? ` data-id="${esc(id)}"` : '';
+    return `<span class="${esc(wrapClass)}"><button type="button" data-qty-step="-1" aria-label="Giảm số lượng">−</button><input class="${esc(inputClass)}" type="number" inputmode="numeric" min="${Number(min)}"${maxAttr} step="1" value="${Number(value)}"${idAttr} aria-label="${esc(ariaLabel)}"><button type="button" data-qty-step="1" aria-label="Tăng số lượng">+</button></span>`;
+  };
+  const bindStepper = (wrap, { commit } = {}) => {
+    if (!wrap || typeof commit !== 'function') return;
+    const input = wrap.querySelector('input[type="number"]');
+    if (!input) return;
+    wrap.querySelectorAll('[data-qty-step]').forEach(button => {
+      button.addEventListener('click', () => {
+        const delta = Number(button.dataset.qtyStep);
+        const current = Number(input.value);
+        const base = Number.isInteger(current) ? current : 0;
+        commit(input, base + delta, 'step');
+      });
+    });
+    input.addEventListener('focus', () => {
+      try { input.select(); } catch { /* ignore */ }
+    });
+    input.addEventListener('change', () => commit(input, input.value, 'change'));
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        input.blur();
+      }
+    });
+  };
+
   window.FLY_VI_DATE = { MONTHS, dateField, monthField, datetimeField, mount, refresh, hydrate: hydrateNative, periodToolbar };
   window.FLY_REPORT_PERIOD = { defaults: reportPeriodDefaults, set: setReportPeriod, syncFromReport, activeFallbackBanner };
   window.FLY_UI = { avatar, person, kpi, kpiGrid, bars, hue };
+  window.FLY_QTY = { parsePositiveInteger, stockLeftText, stockExceededMessage, stepperMarkup, bind: bindStepper };
 })();

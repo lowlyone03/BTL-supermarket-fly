@@ -8,7 +8,7 @@ const {
 const {
     formatMoney, maskChatId, escapeHtml, buildA1Message, buildA2Message, buildB12Message,
     buildA3Message, buildInboxPushMessage, buildAttendancePendingMessage, buildPushCard,
-    formatTelegramValue, FLY_HINT, isManagerRole, normalizeLang, splitTelegramText
+    formatTelegramValue, FLY_HINT, isManagerRole, telegramAudience, normalizeLang, splitTelegramText
 } = require('./telegramMessages');
 const { isProductImagePath } = require('./telegramVoucherImage');
 
@@ -83,6 +83,11 @@ const botToken = () => String(process.env.TELEGRAM_BOT_TOKEN || '')
 const botUsername = () => String(process.env.TELEGRAM_BOT_USERNAME || 'supermarket_flybot').replace(/^@/, '');
 const webhookUrl = () => String(process.env.TELEGRAM_WEBHOOK_URL || '').trim();
 const webhookSecret = () => String(process.env.TELEGRAM_WEBHOOK_SECRET || '').trim();
+const messageEffectId = (kind) => {
+    const key = String(kind || '').trim().toUpperCase();
+    if (!key) return '';
+    return String(process.env[`TELEGRAM_EFFECT_${key}_ID`] || '').trim();
+};
 
 const getTelegramStatus = () => status;
 const setTelegramStatus = value => { status = value; };
@@ -123,8 +128,12 @@ const telegramApi = async (method, payload = {}, options = {}) => {
 
 const sendMessage = async (chatId, text, extra = {}) => {
     if (!chatId || !text) return { skipped: true };
-    const { parse_mode = 'HTML', disable_notification, reply_markup, ...rest } = extra;
+    const {
+        parse_mode = 'HTML', disable_notification, reply_markup,
+        effect, message_effect_id, ...rest
+    } = extra;
     const chunks = splitTelegramText(sanitizeJsDateText(String(text)));
+    const effectId = String(message_effect_id || messageEffectId(effect)).trim();
     let last = { skipped: true };
     for (let index = 0; index < chunks.length; index += 1) {
         const payload = {
@@ -136,10 +145,61 @@ const sendMessage = async (chatId, text, extra = {}) => {
         };
         if (disable_notification === true) payload.disable_notification = true;
         else payload.disable_notification = false;
+        if (effectId && index === chunks.length - 1) payload.message_effect_id = effectId;
         if (reply_markup && index === chunks.length - 1) payload.reply_markup = reply_markup;
         last = await telegramApi('sendMessage', payload);
     }
     return last;
+};
+
+const sendChatAction = async (chatId, action = 'typing') => {
+    if (!chatId) return { skipped: true };
+    return telegramApi('sendChatAction', { chat_id: chatId, action });
+};
+
+const answerCallbackQuery = async (callbackQueryId, text = '', options = {}) => {
+    if (!callbackQueryId) return { skipped: true };
+    const payload = { callback_query_id: callbackQueryId };
+    if (text) payload.text = String(text).slice(0, 200);
+    if (options.show_alert === true) payload.show_alert = true;
+    if (options.cache_time != null) payload.cache_time = Number(options.cache_time) || 0;
+    return telegramApi('answerCallbackQuery', payload);
+};
+
+const editMessageText = async (chatId, messageId, text, extra = {}) => {
+    if (!chatId || !messageId || !text) return { skipped: true };
+    const clean = sanitizeJsDateText(String(text));
+    if (clean.length > 3900) return { skipped: true, reason: 'too-long' };
+    const { parse_mode = 'HTML', reply_markup, ...rest } = extra;
+    const payload = {
+        chat_id: chatId,
+        message_id: messageId,
+        text: clean,
+        parse_mode,
+        link_preview_options: { is_disabled: true },
+        ...rest
+    };
+    if (reply_markup) payload.reply_markup = reply_markup;
+    return telegramApi('editMessageText', payload);
+};
+
+const editMessageReplyMarkup = async (chatId, messageId, replyMarkup = { inline_keyboard: [] }) => {
+    if (!chatId || !messageId) return { skipped: true };
+    return telegramApi('editMessageReplyMarkup', {
+        chat_id: chatId,
+        message_id: messageId,
+        reply_markup: replyMarkup
+    });
+};
+
+const setMessageReaction = async (chatId, messageId, emoji = '👍', { isBig = true } = {}) => {
+    if (!chatId || !messageId) return { skipped: true };
+    return telegramApi('setMessageReaction', {
+        chat_id: chatId,
+        message_id: messageId,
+        reaction: [{ type: 'emoji', emoji }],
+        is_big: Boolean(isBig)
+    });
 };
 
 const sendPhotoMultipart = async (chatId, buffer, filename, extra = {}) => {
@@ -274,7 +334,7 @@ const markPushSent = async (pool, loai, ma) => {
 const boundRecipients = async (pool, { roles, ucAny, maNV } = {}) => {
     const { sql } = db();
     const recipientSql = (withLang) => `
-            SELECT d.MaNV, d.ChatId, d.MaTK, d.Bat, ${withLang ? 'd.NgoonNgu,' : 'NULL AS NgoonNgu,'} n.TenNV, v.TenVaiTro, t.TrangThai AS TrangThaiTK, t.MaVaiTro
+            SELECT d.MaNV, d.ChatId, d.MaTK, d.Bat, ${withLang ? 'd.NgoonNgu,' : 'NULL AS NgoonNgu,'} n.TenNV, v.TenVaiTro, t.TenDangNhap, t.TrangThai AS TrangThaiTK, t.MaVaiTro
             FROM TelegramDangKy d
             JOIN NhanVien n ON n.MaNV = d.MaNV
             JOIN TaiKhoan t ON t.MaNV = d.MaNV AND (d.MaTK IS NULL OR t.MaTK = d.MaTK)
@@ -358,7 +418,7 @@ const SALE_OR_QUIET = /đăng nhập|đăng xuất|đổi mật khẩu|hoàn th�
 const INBOX_FRESH_MS = 12 * 60 * 1000;
 
 const pushTo = async (pool, recipients, loai, ma, text, { once = false, extra = {} } = {}) => {
-    if (!recipients.length || !text) return { sent: 0, skipped: true };
+    if (!recipients.length || text == null || text === '') return { sent: 0, skipped: true };
     if (await shouldSkipPush(pool, loai, ma, { once })) return { sent: 0, skipped: true };
     const keys = relatedPushKeys(loai, ma);
     const tokens = keys.map(key => `${key.loai}|${key.ma}`);
@@ -367,7 +427,10 @@ const pushTo = async (pool, recipients, loai, ma, text, { once = false, extra = 
     try {
         for (const person of recipients) {
             try {
-                await sendMessage(person.ChatId, text, { disable_notification: false, ...extra });
+                const body = typeof text === 'function' ? text(person) : text;
+                if (!body) continue;
+                const extraOf = typeof extra === 'function' ? extra(person) : extra;
+                await sendMessage(person.ChatId, body, { disable_notification: false, ...extraOf });
                 sent += 1;
             } catch (error) {
                 runtime.log('Telegram send:', error.message);
@@ -750,18 +813,54 @@ handlers['Phê duyệt Phiếu chi'] = async (ctx) => {
     }));
 };
 
-handlers['Thanh toán Phiếu chi thành công'] = async (ctx) => {
-    const rec = await boundRecipients(ctx.pool, { roles: ['Quản lý', 'Kế toán'] });
-    await pushTo(ctx.pool, rec, 'PC_THANH_CONG', ctx.recordId, eventCard('THANH TOÁN PHIẾU CHI THÀNH CÔNG', {
-        Mã: ctx.recordId, 'Ghi chú': 'Đã tất toán (chỉ thông tin).'
+handlers['Từ chối Phiếu chi'] = async (ctx) => {
+    const kt = await boundRecipients(ctx.pool, { roles: ['Kế toán'], ucAny: ['UC28'] });
+    await pushTo(ctx.pool, kt, 'PC_TU_CHOI', ctx.recordId, eventCard('QL TỪ CHỐI PHIẾU CHI', {
+        Mã: ctx.recordId,
+        'Lý do': ctx.content || '—',
+        'Ghi chú': 'Sửa và gửi lại trên Fly.'
     }));
 };
 
-handlers['Ghi nhận thanh toán Phiếu chi thất bại'] = async (ctx) => {
-    const rec = await boundRecipients(ctx.pool, { roles: ['Quản lý', 'Kế toán'] });
-    await pushTo(ctx.pool, rec, 'PC_THAT_BAI', ctx.recordId, eventCard('THANH TOÁN PHIẾU CHI THẤT BẠI', {
-        Mã: ctx.recordId, 'Ghi chú': 'Nợ không đổi. Làm lại trên Fly.'
+handlers['Từ chối Phiếu chi lương'] = async (ctx) => {
+    const kt = await boundRecipients(ctx.pool, { roles: ['Kế toán'], ucAny: ['UC33'] });
+    await pushTo(ctx.pool, kt, 'PCL_TU_CHOI', ctx.recordId, eventCard('QL TỪ CHỐI PHIẾU CHI LƯƠNG', {
+        Mã: ctx.recordId,
+        'Lý do': ctx.content || '—',
+        'Ghi chú': 'Sửa trên cùng phiếu. Mở Fly.'
     }));
+};
+
+const pushPaymentResult = async (ctx, outcome) => {
+    const rec = await boundRecipients(ctx.pool, { roles: ['Quản lý', 'Kế toán'] });
+    if (!rec.length) return;
+    const loai = outcome === 'fail' ? 'PC_THAT_BAI' : 'PC_THANH_CONG';
+    const fallbackTitle = outcome === 'fail' ? 'THANH TOÁN PHIẾU CHI THẤT BẠI' : 'THANH TOÁN PHIẾU CHI THÀNH CÔNG';
+    const fallbackNote = outcome === 'fail' ? 'Nợ không đổi. Làm lại trên Fly.' : 'Đã tất toán (chỉ thông tin).';
+    try {
+        const { composePaymentPush } = require('./telegramApprove');
+        const packed = await composePaymentPush(ctx.pool, ctx.recordId, {
+            outcome,
+            actor: ctx.user,
+            content: ctx.content
+        });
+        await pushTo(ctx.pool, rec, loai, ctx.recordId, person => packed.textFor(person), {
+            extra: packed.extra
+        });
+    } catch (error) {
+        runtime.log('Telegram payment card:', error.message);
+        await pushTo(ctx.pool, rec, loai, ctx.recordId, eventCard(fallbackTitle, {
+            Mã: ctx.recordId, 'Ghi chú': fallbackNote
+        }));
+    }
+};
+
+handlers['Thanh toán Phiếu chi thành công'] = async (ctx) => {
+    await pushPaymentResult(ctx, 'success');
+};
+
+handlers['Ghi nhận thanh toán Phiếu chi thất bại'] = async (ctx) => {
+    await pushPaymentResult(ctx, 'fail');
 };
 
 handlers['Lập Phiếu chi lương'] = handlers['Gửi lại Phiếu chi lương'] = async (ctx) => {
@@ -985,6 +1084,12 @@ module.exports = {
     setTelegramStatus,
     telegramApi,
     sendMessage,
+    sendChatAction,
+    answerCallbackQuery,
+    editMessageText,
+    editMessageReplyMarkup,
+    setMessageReaction,
+    messageEffectId,
     sendPhoto,
     shouldSkipPush,
     relatedPushKeys,
@@ -1004,6 +1109,7 @@ module.exports = {
     stopCompanionJobs,
     roleHasUc,
     codesForRole,
+    telegramAudience,
     formatMoney,
     maskChatId,
     PUSH_WINDOW_MS,

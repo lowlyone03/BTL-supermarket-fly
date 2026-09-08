@@ -392,6 +392,12 @@ const getHistory = async (req, res) => {
         const kind = String(req.query.kind || 'all').trim();
         const search = String(req.query.search || '').trim();
         const pool = await poolPromise;
+        try {
+            const { ensureCountSuccessorSchema } = require('../services/countSuccessorSchema');
+            await ensureCountSuccessorSchema(pool);
+        } catch (error) {
+            console.error(error);
+        }
         const bind = () => pool.request()
             .input('MaNV', sql.VarChar, req.user.MaNV)
             .input('MaTK', sql.Int, req.user.MaTK)
@@ -436,12 +442,19 @@ const getHistory = async (req, res) => {
                 WHERE pn.MaNV=@MaNV AND pn.NgayNhap>=@From AND pn.NgayNhap<@ToExclusive
                 ORDER BY pn.NgayNhap DESC`),
             bind().query(`
-                SELECT px.MaPX, px.NgayXuat, px.LoaiXuat, px.TrangThai, px.GhiChu, px.NgayDuyet
+                SELECT px.MaPX, px.NgayXuat, px.LoaiXuat, px.TrangThai, px.GhiChu, px.NgayDuyet, px.MaKK, px.MaDT, px.KhongTruTon
                 FROM PhieuXuat px
                 WHERE px.MaNV=@MaNV AND px.NgayXuat>=@From AND px.NgayXuat<@ToExclusive
-                ORDER BY px.NgayXuat DESC`),
+                ORDER BY px.NgayXuat DESC`).catch(error => {
+                if (!/Invalid column name|MaKK|MaDT|KhongTruTon/i.test(error.message || '')) throw error;
+                return bind().query(`
+                    SELECT px.MaPX, px.NgayXuat, px.LoaiXuat, px.TrangThai, px.GhiChu, px.NgayDuyet
+                    FROM PhieuXuat px
+                    WHERE px.MaNV=@MaNV AND px.NgayXuat>=@From AND px.NgayXuat<@ToExclusive
+                    ORDER BY px.NgayXuat DESC`);
+            }),
             bind().query(`
-                SELECT kk.MaKK, kk.NgayKiemKe, kk.TrangThai, kk.GhiChu, kk.NgayDuyet, kk.LyDoTuChoi
+                SELECT kk.MaKK, kk.NgayKiemKe, kk.TrangThai, kk.GhiChu, kk.NgayDuyet, kk.LyDoTuChoi, kk.MaKKThayThe
                 FROM KiemKe kk
                 WHERE kk.MaNV=@MaNV AND kk.NgayKiemKe>=@From AND kk.NgayKiemKe<@ToExclusive
                 ORDER BY kk.NgayKiemKe DESC`),
@@ -479,12 +492,36 @@ const getHistory = async (req, res) => {
             auditByRecord.get(key).push(row);
         }
 
+        const pxByReturn = new Map();
+        const pxByCount = new Map();
+        for (const row of issues.recordset) {
+            const relatedDt = row.MaDT || (String(row.GhiChu || '').match(/Nguồn đổi trả\s+(DT[A-Z0-9]+)/i) || [])[1];
+            if (relatedDt && !pxByReturn.has(relatedDt)) pxByReturn.set(relatedDt, row);
+            if (row.MaKK && !pxByCount.has(row.MaKK)) pxByCount.set(row.MaKK, row);
+        }
+        const countScrapById = new Map();
+        try {
+            const scrapRows = await bind().query(`
+                SELECT kk.MaKK,
+                       SUM(CASE WHEN ct.TinhTrangHang IN (N'Hỏng', N'Hết hạn') AND ct.SLThucTe>0 THEN 1 ELSE 0 END) SoHong,
+                       SUM(CASE WHEN ct.TinhTrangHang IN (N'Hỏng', N'Hết hạn') AND ct.SLThucTe>0 THEN ct.SLThucTe ELSE 0 END) SLHong
+                FROM KiemKe kk
+                JOIN ChiTietKiemKe ct ON ct.MaKK=kk.MaKK
+                WHERE kk.MaNV=@MaNV AND kk.NgayKiemKe>=@From AND kk.NgayKiemKe<@ToExclusive
+                GROUP BY kk.MaKK`);
+            for (const row of scrapRows.recordset) countScrapById.set(row.MaKK, row);
+        } catch (error) {
+            console.error(error);
+        }
+
         const inspectionCards = inspections.recordset.map(ticket => {
             const restock = isRestockAccepted(ticket.KetQuaKiemTra);
             const scrap = /không nhập lại/i.test(String(ticket.KetQuaKiemTra || ''));
             const corrected = /Sửa tích nhầm|Đã trừ tồn tích nhầm|Đã sửa tích nhầm/i.test(`${ticket.KetQuaKiemTra || ''} ${ticket.GhiChu || ''}`);
             const mistaken = restock && looksUnsellable(ticket.LyDo);
             const products = (linesByTicket.get(ticket.MaDT) || []).filter(line => line.LoaiDong === 'Hàng khách trả');
+            const linkedPx = pxByReturn.get(ticket.MaDT) || null;
+            const canCreateScrap = scrap && !corrected && ['Chờ duyệt', 'Đã duyệt', 'Hoàn thành'].includes(ticket.TrangThai);
             return {
                 kind: 'doi-tra',
                 at: ticket.NgayKiemTra,
@@ -509,6 +546,8 @@ const getHistory = async (req, res) => {
                 corrected,
                 canRevise: ticket.TrangThai === 'Chờ duyệt',
                 canFlagMistake: restock && !corrected && ['Đã duyệt', 'Hoàn thành'].includes(ticket.TrangThai),
+                canCreateScrap,
+                existingScrap: linkedPx ? { MaPX: linkedPx.MaPX, TrangThai: linkedPx.TrangThai } : null,
                 ticket,
                 products,
                 stockMoves: movesByTicket.get(ticket.MaDT) || [],
@@ -530,29 +569,44 @@ const getHistory = async (req, res) => {
                 amount: row.TongTien
             })),
             ...issues.recordset.map(row => {
-                const related = String(row.GhiChu || '').match(/Nguồn đổi trả\s+(DT[A-Z0-9]+)/i);
+                const related = row.MaDT || (String(row.GhiChu || '').match(/Nguồn đổi trả\s+(DT[A-Z0-9]+)/i) || [])[1] || null;
+                const source = row.MaKK ? `Kiểm kê ${row.MaKK}` : related ? `Đổi trả ${related}` : row.LoaiXuat;
                 return {
                     kind: 'phieu-xuat',
                     at: row.NgayXuat,
                     recordId: row.MaPX,
                     title: `Phiếu xuất ${row.MaPX}`,
-                    subtitle: `${row.LoaiXuat} · ${row.TrangThai}`,
-                    tone: /hủy|hỏng|trả/i.test(row.LoaiXuat || '') ? 'warn' : 'info',
+                    subtitle: `${source} · ${row.TrangThai}${row.KhongTruTon ? ' · không trừ tồn' : ''}`,
+                    tone: /hủy|hỏng|trả/i.test(row.LoaiXuat || '') || row.KhongTruTon ? 'warn' : 'info',
                     status: row.TrangThai,
                     detail: row.GhiChu || null,
-                    relatedReturnId: related ? related[1] : null
+                    relatedReturnId: related,
+                    relatedCountId: row.MaKK || null
                 };
             }),
-            ...counts.recordset.map(row => ({
-                kind: 'kiem-ke',
-                at: row.NgayKiemKe,
-                recordId: row.MaKK,
-                title: `Kiểm kê ${row.MaKK}`,
-                subtitle: row.TrangThai,
-                tone: row.TrangThai === 'Từ chối' ? 'danger' : /duyệt|hoàn thành/i.test(row.TrangThai || '') ? 'ok' : 'info',
-                status: row.TrangThai,
-                detail: row.LyDoTuChoi || row.GhiChu || null
-            })),
+            ...counts.recordset.map(row => {
+                const scrapInfo = countScrapById.get(row.MaKK);
+                const linkedPx = pxByCount.get(row.MaKK);
+                const soHong = Number(scrapInfo?.SoHong || 0);
+                const canCreateScrap = soHong > 0 && !['Đang kiểm', 'Từ chối', 'Đã đếm lại'].includes(row.TrangThai);
+                return {
+                    kind: 'kiem-ke',
+                    at: row.NgayKiemKe,
+                    recordId: row.MaKK,
+                    title: `Kiểm kê ${row.MaKK}`,
+                    subtitle: row.TrangThai === 'Đã đếm lại' && row.MaKKThayThe
+                        ? `Đã đếm lại · ${row.MaKKThayThe}`
+                        : (soHong ? `${row.TrangThai} · ${soHong} mã hỏng/hết hạn` : row.TrangThai),
+                    tone: row.TrangThai === 'Từ chối' ? 'danger' : /duyệt|hoàn thành|đếm lại/i.test(row.TrangThai || '') ? 'ok' : 'info',
+                    status: row.TrangThai,
+                    detail: row.TrangThai === 'Đã đếm lại'
+                        ? (row.MaKKThayThe ? `Thay bằng ${row.MaKKThayThe}` : row.LyDoTuChoi)
+                        : (row.LyDoTuChoi || row.GhiChu || null),
+                    scrapCount: soHong,
+                    canCreateScrap,
+                    existingScrap: linkedPx ? { MaPX: linkedPx.MaPX, TrangThai: linkedPx.TrangThai } : null
+                };
+            }),
             ...requests.recordset.map(row => ({
                 kind: 'de-nghi',
                 at: row.NgayGui || row.NgayLap,

@@ -24,6 +24,44 @@ const row = (id, target, title, detail, at, tone = 'info') => ({
 
 const many = (recordset, map) => (recordset || []).map(map).filter(item => item?.id);
 
+const moneyVi = value => {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '';
+    return `${Math.round(number).toLocaleString('vi-VN')} đ`;
+};
+
+const joinDetail = (...parts) => parts.map(part => String(part || '').trim()).filter(Boolean).join(' · ');
+
+const pcPayTitle = row => (row.TrangThai === 'Thanh toán thất bại'
+    ? `Thanh toán Phiếu chi ${row.MaPhieu} thất bại, thực hiện lại`
+    : 'Quản lý đã giao tiền, cần thanh toán NCC');
+
+const pcPayDetail = row => joinDetail(
+    row.MaPhieu,
+    row.TenNCC,
+    moneyVi(row.SoTien),
+    row.NguoiDuyet ? `${row.NguoiDuyet} đã duyệt` : ''
+);
+
+const pcRejectTitle = row => `Quản lý từ chối Phiếu chi ${row.MaPhieu}`;
+
+const pcRejectDetail = row => joinDetail(
+    row.TenNCC,
+    moneyVi(row.SoTien),
+    row.NguoiDuyet,
+    row.LyDoTuChoi
+);
+
+const pclRejectTitle = row => `Quản lý từ chối Phiếu chi lương ${row.MaPhieu}`;
+
+const pclRejectDetail = row => joinDetail(
+    row.TenNV,
+    `kỳ ${row.MaKy}`,
+    moneyVi(row.SoTien),
+    row.NguoiDuyet,
+    row.LyDoTuChoi
+);
+
 const PENDING_CHAM_CONG_PREDICATE = `cc.TrangThai = N'Chờ duyệt'`;
 
 const vnDay = value => {
@@ -52,7 +90,7 @@ const inboxHint = {
     'Quản lý': 'Việc nhân viên vừa gửi hiện ngay. Chấm công chờ duyệt: mở menu Duyệt công (cả ngày cũ và ca hành chính). Chuông kêu một tiếng khi có việc mới — không cần F5.',
     'Thủ kho': 'Đổi trả, xe đến kho, phiếu xuất đã duyệt hoặc kiểm kê bị từ chối cần đếm lại hiện ngay. Chuông kêu một tiếng khi có việc mới.',
     'Nhân viên mua hàng': 'Đề nghị từ kho và đơn mua đã duyệt được đẩy sang đây ngay. Chuông kêu một tiếng khi có việc mới.',
-    'Kế toán': 'Ca đã chốt, hóa đơn chờ đối chiếu và phiếu chi sẵn sàng thanh toán hiện ngay.',
+    'Kế toán': 'Ca đã chốt, hóa đơn chờ đối chiếu, phiếu chi Quản lý vừa duyệt hoặc từ chối, và phiếu sẵn sàng thanh toán hiện ngay. Chuông kêu một tiếng khi có việc mới.',
     'Thu ngân': 'Lịch hôm nay, đổi trả chờ kho/quản lý, và phiếu đã duyệt cần xác nhận — hiện ngay khi có việc mới.'
 };
 
@@ -169,6 +207,14 @@ const listForRole = async (pool, user) => {
                        LEFT JOIN NhanVien nv ON nv.MaNV=kk.MaNV_Duyet
                        WHERE kk.TrangThai=N'Từ chối'
                          AND COALESCE(kk.NgayDuyet, kk.NgayKiemKe)>=DATEADD(day,-14,GETDATE())
+                         AND NOT EXISTS (
+                            SELECT 1 FROM KiemKe later
+                            WHERE later.MaKho=kk.MaKho
+                              AND later.MaKK<>kk.MaKK
+                              AND later.NgayKiemKe>COALESCE(kk.NgayDuyet, kk.NgayKiemKe)
+                              AND later.TrangThai IN (N'Đang kiểm', N'Chờ duyệt điều chỉnh', N'Đã duyệt', N'Hoàn thành không chênh lệch', N'Đã đếm lại')
+                              AND (later.GhiChu IS NULL OR later.GhiChu NOT LIKE N'%trước khi lập đề nghị%')
+                         )
                        ORDER BY COALESCE(kk.NgayDuyet, kk.NgayKiemKe) DESC`)),
             safeRows(() => q().query(`SELECT TOP 8 kk.MaKK, kk.NgayKiemKe
                        FROM KiemKe kk
@@ -235,37 +281,59 @@ const listForRole = async (pool, user) => {
 
     if (isRole(user, 'Kế toán')) {
         await ensurePayrollSchema(pool).catch(() => {});
-        const [shifts, invoices, pay, overdue, payrollPay] = await Promise.all([
-            q().query(`SELECT TOP 8 ca.MaCa, ca.ThoiGianKetThuc, nv.TenNV
+        const [shifts, invoices, pay, payReject, overdue, payrollPay, payrollReject] = await Promise.all([
+            safeRows(() => q().query(`SELECT TOP 8 ca.MaCa, ca.ThoiGianKetThuc, nv.TenNV
                        FROM CaLamViec ca JOIN NhanVien nv ON nv.MaNV=ca.MaNV
                        WHERE ca.TrangThai=N'Đã chốt' AND ca.TrangThaiDoiSoat=N'Chờ Kế toán đối soát'
-                       ORDER BY ca.ThoiGianKetThuc DESC`),
-            q().query(`SELECT TOP 8 hd.MaHDMH, hd.SoHoaDon, hd.NgayTiepNhan, hd.TrangThaiDoiChieu, ncc.TenNCC
+                       ORDER BY ca.ThoiGianKetThuc DESC`)),
+            safeRows(() => q().query(`SELECT TOP 8 hd.MaHDMH, hd.SoHoaDon, hd.NgayTiepNhan, hd.TrangThaiDoiChieu, ncc.TenNCC
                        FROM HoaDonMuaHang hd JOIN NhaCungCap ncc ON ncc.MaNCC=hd.MaNCC
                        WHERE hd.TrangThaiDoiChieu IN (N'Chờ đối chiếu', N'Chờ Phiếu nhập', N'Chênh lệch')
-                       ORDER BY hd.NgayTiepNhan DESC`),
-            q().query(`SELECT TOP 8 pc.MaPhieu, pc.NgayDuyet, pc.SoTien, ncc.TenNCC
-                       FROM PhieuChi pc JOIN NhaCungCap ncc ON ncc.MaNCC=pc.MaNCC
+                       ORDER BY hd.NgayTiepNhan DESC`)),
+            safeRows(() => q().query(`SELECT TOP 8 pc.MaPhieu, pc.NgayDuyet, pc.SoTien, pc.TrangThai, ncc.TenNCC,
+                              nvDuyet.TenNV NguoiDuyet
+                       FROM PhieuChi pc
+                       LEFT JOIN NhaCungCap ncc ON ncc.MaNCC=pc.MaNCC
+                       LEFT JOIN NhanVien nvDuyet ON nvDuyet.MaNV=pc.MaNV_Duyet
                        WHERE pc.TrangThai IN (N'Đã duyệt', N'Thanh toán thất bại')
-                       ORDER BY pc.NgayDuyet DESC`),
-            q().query(`SELECT COUNT(*) SoLuong FROM CongNoPhaiTra
-                       WHERE SoTienConLai>0 AND HanThanhToan<CONVERT(date,GETDATE())`),
-            q().query(`SELECT TOP 8 pcl.MaPhieu, pcl.NgayDuyet, pcl.SoTien, nv.TenNV, pcl.MaKy, pcl.TrangThai, pcl.PhuongThuc,
-                              q.SoTienMatCon, q.SoTienCKCon, q.SoTienCKGiao
+                       ORDER BY pc.NgayDuyet DESC`)),
+            safeRows(() => q().query(`SELECT TOP 8 pc.MaPhieu, pc.NgayDuyet, pc.SoTien, pc.LyDoTuChoi, ncc.TenNCC,
+                              nvDuyet.TenNV NguoiDuyet
+                       FROM PhieuChi pc
+                       LEFT JOIN NhaCungCap ncc ON ncc.MaNCC=pc.MaNCC
+                       LEFT JOIN NhanVien nvDuyet ON nvDuyet.MaNV=pc.MaNV_Duyet
+                       WHERE pc.TrangThai=N'Từ chối'
+                         AND COALESCE(pc.NgayDuyet, pc.NgayChungTu)>=DATEADD(day,-14,GETDATE())
+                       ORDER BY COALESCE(pc.NgayDuyet, pc.NgayChungTu) DESC`)),
+            safeRows(() => q().query(`SELECT COUNT(*) SoLuong FROM CongNoPhaiTra
+                       WHERE SoTienConLai>0 AND HanThanhToan<CONVERT(date,GETDATE())`)),
+            safeRows(() => q().query(`SELECT TOP 8 pcl.MaPhieu, pcl.NgayDuyet, pcl.SoTien, nv.TenNV, pcl.MaKy, pcl.TrangThai, pcl.PhuongThuc,
+                              q.SoTienMatCon, q.SoTienCKCon, q.SoTienCKGiao, nvDuyet.TenNV NguoiDuyet
                        FROM PhieuChiLuong pcl
                        JOIN NhanVien nv ON nv.MaNV=pcl.MaNV
+                       LEFT JOIN NhanVien nvDuyet ON nvDuyet.MaNV=pcl.MaNV_Duyet
                        LEFT JOIN QuyLuongKy q ON q.MaKy=pcl.MaKy
                        WHERE pcl.TrangThai IN (N'Đã duyệt', N'Thanh toán thất bại')
-                       ORDER BY pcl.NgayDuyet DESC`)
+                       ORDER BY pcl.NgayDuyet DESC`)),
+            safeRows(() => q().query(`SELECT TOP 8 pcl.MaPhieu, pcl.NgayDuyet, pcl.SoTien, nv.TenNV, pcl.MaKy, pcl.LyDoTuChoi,
+                              nvDuyet.TenNV NguoiDuyet
+                       FROM PhieuChiLuong pcl
+                       JOIN NhanVien nv ON nv.MaNV=pcl.MaNV
+                       LEFT JOIN NhanVien nvDuyet ON nvDuyet.MaNV=pcl.MaNV_Duyet
+                       WHERE pcl.TrangThai=N'Từ chối'
+                         AND COALESCE(pcl.NgayDuyet, pcl.NgayLap)>=DATEADD(day,-14,GETDATE())
+                       ORDER BY COALESCE(pcl.NgayDuyet, pcl.NgayLap) DESC`))
         ]);
         items.push(
-            ...many(shifts.recordset, r => row(`ca:${r.MaCa}`, 'accounting-settlements', 'Ca đã chốt, cần lập/xác nhận Phiếu thu',
+            ...many(shifts, r => row(`ca:${r.MaCa}`, 'accounting-settlements', 'Ca đã chốt, cần lập/xác nhận Phiếu thu',
                 `${r.MaCa} · ${r.TenNV}`, r.ThoiGianKetThuc, 'urgent')),
-            ...many(invoices.recordset, r => row(`hdmh:${r.MaHDMH}`, 'accounting-invoices', 'Hóa đơn Nhà cung cấp cần đối chiếu',
+            ...many(invoices, r => row(`hdmh:${r.MaHDMH}`, 'accounting-invoices', 'Hóa đơn Nhà cung cấp cần đối chiếu',
                 `${r.SoHoaDon} · ${r.TenNCC} · ${r.TrangThaiDoiChieu}`, r.NgayTiepNhan, 'urgent')),
-            ...many(pay.recordset, r => row(`pc-pay:${r.MaPhieu}`, 'accounting-payables', 'Quản lý đã giao tiền, cần thanh toán NCC',
-                `${r.MaPhieu} · ${r.TenNCC}`, r.NgayDuyet, 'urgent')),
-            ...many(payrollPay.recordset, r => {
+            ...many(pay, r => row(`pc-pay:${r.MaPhieu}`, 'accounting-payables', pcPayTitle(r),
+                pcPayDetail(r), r.NgayDuyet, 'urgent')),
+            ...many(payReject, r => row(`pc-no:${r.MaPhieu}`, 'accounting-payables', pcRejectTitle(r),
+                pcRejectDetail(r), r.NgayDuyet, 'urgent')),
+            ...many(payrollPay, r => {
                 const ready = r.PhuongThuc === 'Tiền mặt'
                     ? Number(r.SoTienMatCon || 0) >= Number(r.SoTien || 0)
                     : Number(r.SoTienCKCon || 0) >= Number(r.SoTien || 0);
@@ -275,10 +343,13 @@ const listForRole = async (pool, user) => {
                         ? 'Quản lý đã giao quỹ chung, cần chi lương'
                         : 'Phiếu lương đã duyệt, chờ Quản lý giao quỹ chung';
                 return row(`pcl-pay:${r.MaPhieu}`, 'accounting-payroll', title,
-                    `${r.MaPhieu} · ${r.TenNV} · kỳ ${r.MaKy}`, r.NgayDuyet, 'urgent');
-            })
+                    joinDetail(r.MaPhieu, r.TenNV, `kỳ ${r.MaKy}`, moneyVi(r.SoTien), r.NguoiDuyet),
+                    r.NgayDuyet, 'urgent');
+            }),
+            ...many(payrollReject, r => row(`pcl-no:${r.MaPhieu}`, 'accounting-payroll', pclRejectTitle(r),
+                pclRejectDetail(r), r.NgayDuyet, 'urgent'))
         );
-        const overdueCount = Number(overdue.recordset[0]?.SoLuong || 0);
+        const overdueCount = Number(overdue[0]?.SoLuong || 0);
         if (overdueCount) {
             items.push(row(`cn-over:${overdueCount}`, 'accounting-payables', 'Công nợ quá hạn',
                 `${overdueCount} khoản còn phải trả đã quá hạn thanh toán`, new Date(), 'info'));
@@ -341,5 +412,7 @@ const listForRole = async (pool, user) => {
 
 module.exports = {
     listForRole, inboxHint, roleOf, isRole,
-    listPendingAttendance, PENDING_CHAM_CONG_PREDICATE
+    listPendingAttendance, PENDING_CHAM_CONG_PREDICATE,
+    moneyVi, joinDetail, pcPayTitle, pcPayDetail, pcRejectTitle, pcRejectDetail,
+    pclRejectTitle, pclRejectDetail
 };

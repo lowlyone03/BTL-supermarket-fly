@@ -1,5 +1,6 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
+const { notifyInboxChanged } = require('../services/notificationHub');
 
 const clean = (value, max = 120, fallback = null) => String(value ?? '').trim().slice(0, max) || fallback;
 const PAYMENT_METHODS = new Set(['Tiền mặt', 'Chuyển khoản']);
@@ -113,15 +114,17 @@ const getPayable = async (req, res) => {
     }
 };
 
-const createVoucher = async (req, res) => {
+const voucherPrefix = () => {
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit' }).formatToParts(new Date());
+    const get = type => parts.find(part => part.type === type)?.value;
+    return `PC${get('year')}${get('month')}`;
+};
+
+const insertOnePaymentVoucher = async (user, MaCongNo, { PhuongThuc, NoiDung, GhiChu }) => {
+    if (!PAYMENT_METHODS.has(PhuongThuc)) throw new Error('Phương thức Phiếu chi chỉ gồm Tiền mặt hoặc Chuyển khoản.');
+    if (!NoiDung) throw new Error('Nội dung chi là bắt buộc.');
     const transaction = new sql.Transaction(await poolPromise);
     try {
-        const MaCongNo = clean(req.params.id, 20);
-        const PhuongThuc = clean(req.body.PhuongThuc, 30);
-        const NoiDung = clean(req.body.NoiDung, 500);
-        const GhiChu = clean(req.body.GhiChu, 500);
-        if (!PAYMENT_METHODS.has(PhuongThuc)) throw new Error('Phương thức Phiếu chi chỉ gồm Tiền mặt hoặc Chuyển khoản.');
-        if (!NoiDung) throw new Error('Nội dung chi là bắt buộc.');
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         const debtResult = await new sql.Request(transaction).input('Id', sql.VarChar, MaCongNo).query(`
             SELECT cn.*,hd.SoHoaDon,hd.MaPO,hd.MaPN,hd.TrangThaiDoiChieu,ncc.TenNCC
@@ -143,30 +146,96 @@ const createVoucher = async (req, res) => {
         const existing = await new sql.Request(transaction).input('Id', sql.VarChar, MaCongNo)
             .query('SELECT MaPhieu FROM PhieuChi WITH (UPDLOCK,HOLDLOCK) WHERE MaCongNo=@Id');
         if (existing.recordset.length) throw new Error(`Công nợ đã có Phiếu chi ${existing.recordset[0].MaPhieu}; không được tạo Phiếu chi thứ hai.`);
-        const now = new Date();
-        const prefix = `PC${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
-        const MaPhieu = await generateId(transaction, prefix);
+        const MaPhieu = await generateId(transaction, voucherPrefix());
         await new sql.Request(transaction)
             .input('MaPhieu', sql.VarChar, MaPhieu).input('MaNCC', sql.VarChar, debt.MaNCC)
             .input('MaCongNo', sql.VarChar, MaCongNo).input('SoTien', sql.Decimal(18, 2), debt.SoTienConLai)
             .input('PhuongThuc', sql.NVarChar, PhuongThuc).input('NoiDung', sql.NVarChar, NoiDung)
-            .input('MaNV', sql.VarChar, req.user.MaNV).input('GhiChu', sql.NVarChar, GhiChu)
+            .input('MaNV', sql.VarChar, user.MaNV).input('GhiChu', sql.NVarChar, GhiChu)
             .query(`INSERT INTO PhieuChi
                     (MaPhieu,MaNCC,MaCongNo,SoTien,PhuongThuc,MaGiaoDichNganHang,NgayChungTu,
                      NoiDung,MaNV,MaNV_Duyet,NgayDuyet,LyDoTuChoi,TrangThai,GhiChu)
                     VALUES(@MaPhieu,@MaNCC,@MaCongNo,@SoTien,@PhuongThuc,NULL,GETDATE(),
                            @NoiDung,@MaNV,NULL,NULL,NULL,N'Chờ duyệt',@GhiChu)`);
-        await writeAudit(transaction, req.user, 'Lập và gửi duyệt Phiếu chi', MaPhieu,
+        await writeAudit(transaction, user, 'Lập và gửi duyệt Phiếu chi', MaPhieu,
             `${early ? 'Tất toán sớm. ' : ''}Công nợ ${MaCongNo}; thanh toán toàn bộ ${Number(debt.SoTienConLai)} cho ${debt.TenNCC}`);
         await transaction.commit();
-        res.status(201).json({
+        return {
             message: early
                 ? `Đã lập Phiếu chi ${MaPhieu} (tất toán trước hạn) và gửi Quản lý duyệt + giao tiền. Công nợ chưa thay đổi.`
                 : `Đã lập Phiếu chi ${MaPhieu} và gửi Quản lý duyệt + giao tiền. Công nợ chưa thay đổi.`,
-            MaPhieu, MaCongNo, SoTien: debt.SoTienConLai, TrangThai: 'Chờ duyệt', TatToanSom: early
-        });
+            MaPhieu, MaCongNo, MaNCC: debt.MaNCC, TenNCC: debt.TenNCC,
+            SoTien: debt.SoTienConLai, TrangThai: 'Chờ duyệt', TatToanSom: early
+        };
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        throw error;
+    }
+};
+
+const createVoucher = async (req, res) => {
+    try {
+        const result = await insertOnePaymentVoucher(req.user, clean(req.params.id, 20), {
+            PhuongThuc: clean(req.body.PhuongThuc, 30),
+            NoiDung: clean(req.body.NoiDung, 500),
+            GhiChu: clean(req.body.GhiChu, 500)
+        });
+        res.status(201).json(result);
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
+
+const createVouchersBulk = async (req, res) => {
+    try {
+        const ids = [...new Set((Array.isArray(req.body.MaCNPTra) ? req.body.MaCNPTra : [])
+            .map(id => clean(id, 20)).filter(Boolean))];
+        const PhuongThuc = clean(req.body.PhuongThuc, 30);
+        const NoiDung = clean(req.body.NoiDung, 500);
+        const GhiChu = clean(req.body.GhiChu, 500);
+        if (!ids.length) throw new Error('Chọn ít nhất một khoản công nợ chưa lập Phiếu chi.');
+        if (ids.length > 30) throw new Error('Mỗi đợt tối đa 30 khoản công nợ.');
+        if (!PAYMENT_METHODS.has(PhuongThuc)) throw new Error('Phương thức Phiếu chi chỉ gồm Tiền mặt hoặc Chuyển khoản.');
+        if (!NoiDung) throw new Error('Nội dung chi là bắt buộc.');
+        const pool = await poolPromise;
+        await ensureFundColumns(pool);
+        const lookup = pool.request();
+        ids.forEach((id, index) => lookup.input(`d${index}`, sql.VarChar, id));
+        const preview = await lookup.query(`${payableSelect}
+            WHERE cn.MaCNPTra IN (${ids.map((_, index) => `@d${index}`).join(',')})`);
+        if (preview.recordset.length !== ids.length) throw new Error('Có khoản công nợ không tồn tại hoặc bạn không xem được.');
+        const suppliers = [...new Set(preview.recordset.map(row => row.MaNCC))];
+        if (suppliers.length > 1) {
+            throw new Error('Chỉ lập phiếu chi hàng loạt cho cùng một Nhà cung cấp. Mỗi Nhà cung cấp một đợt — không gộp nhiều NCC.');
+        }
+        const created = [];
+        const errors = [];
+        for (const id of ids) {
+            const row = preview.recordset.find(item => item.MaCNPTra === id);
+            const lineContent = clean(`${NoiDung} (${id} · HĐ ${row?.SoHoaDon || ''})`.trim(), 500);
+            try {
+                created.push(await insertOnePaymentVoucher(req.user, id, {
+                    PhuongThuc, NoiDung: lineContent, GhiChu
+                }));
+            } catch (error) {
+                errors.push({ MaCNPTra: id, message: error.message });
+            }
+        }
+        if (!created.length) {
+            return res.status(400).json({
+                message: errors[0]?.message || 'Không lập được Phiếu chi nào.',
+                items: [], errors
+            });
+        }
+        const ncc = created[0].TenNCC;
+        res.status(201).json({
+            message: errors.length
+                ? `Đã lập ${created.length}/${ids.length} Phiếu chi cho ${ncc}. ${errors.length} khoản lỗi — công nợ chưa đổi trên phiếu đã lập.`
+                : `Đã lập ${created.length} Phiếu chi cho ${ncc} và gửi Quản lý duyệt + giao tiền. Mỗi khoản một phiếu, công nợ chưa đổi.`,
+            items: created,
+            errors
+        });
+    } catch (error) {
         res.status(400).json({ message: error.message });
     }
 };
@@ -334,6 +403,11 @@ const decideVoucher = approved => async (req, res) => {
             approved ? `Đã giao tiền (${fundMethod}) cho Kế toán tất toán ${voucher.MaCongNo}; chưa giảm công nợ`
                 : `Từ chối Phiếu chi; công nợ giữ nguyên. Lý do: ${reason}`);
         await transaction.commit();
+        notifyInboxChanged({
+            action: approved ? 'Phê duyệt Phiếu chi' : 'Từ chối Phiếu chi',
+            table: 'PhieuChi',
+            recordId: MaPhieu
+        });
         res.json({
             message: approved
                 ? `Đã duyệt và giao tiền cho Kế toán trên Phiếu chi ${MaPhieu}. Công nợ chỉ giảm sau khi Kế toán thanh toán thành công cho Nhà cung cấp.`
@@ -351,6 +425,7 @@ module.exports = {
     listPayables,
     getPayable,
     createVoucher,
+    createVouchersBulk,
     resubmitVoucher,
     payVoucher,
     getApprovalDetail,

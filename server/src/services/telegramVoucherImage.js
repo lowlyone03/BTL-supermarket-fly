@@ -195,13 +195,25 @@ const buildVoucherSvgs = (doc = {}, options = {}) => {
         let y = MARGIN;
         const parts = [];
 
-        parts.push(`<rect x="18" y="18" width="${PAGE_W - 36}" height="${PAGE_H - 36}" fill="#ffffff" stroke="#c3cfc8" stroke-width="1.4"/>`);
-        parts.push(`<rect x="26" y="26" width="${PAGE_W - 52}" height="${PAGE_H - 52}" fill="none" stroke="#e1e8e4" stroke-width="0.8"/>`);
+        parts.push(`<defs>
+          <linearGradient id="flyHeader" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#123c69"/>
+            <stop offset="55%" stop-color="#146b73"/>
+            <stop offset="100%" stop-color="#1d8b67"/>
+          </linearGradient>
+          <filter id="paperShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#123c69" flood-opacity="0.16"/>
+          </filter>
+        </defs>`);
+        parts.push(`<rect width="${PAGE_W}" height="${PAGE_H}" fill="#eef5f7"/>`);
+        parts.push(`<rect x="18" y="18" width="${PAGE_W - 36}" height="${PAGE_H - 36}" rx="18" fill="#ffffff" stroke="#c9d8dd" stroke-width="1.4" filter="url(#paperShadow)"/>`);
+        parts.push(`<rect x="27" y="27" width="${PAGE_W - 54}" height="${PAGE_H - 54}" rx="13" fill="none" stroke="#e3ecef" stroke-width="0.9"/>`);
 
-        parts.push(`<rect x="${MARGIN}" y="${y}" width="${CONTENT_W}" height="54" rx="6" fill="#f3f8f5"/>`);
-        parts.push(iconStore(MARGIN + 10, y + 12, 1.15));
-        parts.push(`<text x="${MARGIN + 48}" y="${y + 24}" font-size="18" font-weight="700" fill="#16382c">SUPERMARKET FLY · Hà Nội</text>`);
-        parts.push(`<text x="${MARGIN + 48}" y="${y + 44}" font-size="12" fill="#5d6f67">Giấy chứng từ nội bộ · không phải ảnh sản phẩm</text>`);
+        parts.push(`<rect x="${MARGIN}" y="${y}" width="${CONTENT_W}" height="54" rx="12" fill="url(#flyHeader)"/>`);
+        parts.push(`<circle cx="${MARGIN + 27}" cy="${y + 27}" r="19" fill="#ffffff" opacity="0.96"/>`);
+        parts.push(iconStore(MARGIN + 15, y + 15, 1.02));
+        parts.push(`<text x="${MARGIN + 58}" y="${y + 24}" font-size="18" font-weight="700" fill="#ffffff">SUPERMARKET FLY · Hà Nội</text>`);
+        parts.push(`<text x="${MARGIN + 58}" y="${y + 44}" font-size="12" fill="#d9f6ec">Control Center · Chứng từ nội bộ đã xác thực</text>`);
         y += 72;
         parts.push(`<line x1="${MARGIN}" y1="${y}" x2="${PAGE_W - MARGIN}" y2="${y}" stroke="#1d5c45" stroke-width="2"/>`);
         y += 36;

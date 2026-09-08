@@ -225,7 +225,7 @@
 .purchase-order-actions svg { width:15px; height:15px; flex:0 0 15px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
 .order-source-wait { min-height:38px; display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:0 12px; border:1px solid #efd6ac; border-radius:12px; color:#90621d; background:#fff7e8; font-size:11px; font-weight:800; white-space:nowrap; }
 
-.warehouse-modal-backdrop { position: fixed; inset: 0; z-index: 1500; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(15,34,25,.42); backdrop-filter: blur(3px); }
+.warehouse-modal-backdrop { position: fixed; inset: 0; z-index: 2200; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(15,34,25,.42); }
 .warehouse-modal { width: min(980px, 95vw); max-height: 90vh; overflow: auto; border: 1px solid rgba(255,255,255,.7); border-radius: 22px; background: #fbfcfb; box-shadow: 0 28px 80px rgba(14,39,27,.24); }
 .warehouse-modal-heading { position: sticky; top: 0; z-index: 2; padding: 20px 24px; border-bottom: 1px solid #dde5e0; background: rgba(251,252,251,.97); }
 .warehouse-modal-heading h2 { margin: 4px 0 0; font-size: 23px; }
@@ -235,13 +235,13 @@
 .warehouse-field input { height: 44px; padding: 0 13px; }
 .warehouse-field textarea { min-height: 84px; padding: 12px 13px; resize: vertical; }
 .warehouse-form-lines { overflow: hidden; margin: 18px 0; border: 1px solid #dce4df; border-radius: 15px; }
-.warehouse-form-line { display: grid; grid-template-columns: minmax(190px,1.4fr) repeat(4,minmax(84px,.55fr)) 38px; gap: 10px; align-items: center; padding: 12px 14px; border-top: 1px solid #e4e9e6; }
+.warehouse-form-line { display: grid; grid-template-columns: minmax(190px,1.4fr) repeat(3,minmax(84px,.55fr)) minmax(128px,.8fr) 38px; gap: 10px; align-items: center; padding: 12px 14px; border-top: 1px solid #e4e9e6; }
 .warehouse-form-line:first-child { border-top: 0; }
 .warehouse-form-line.heading { background: #f4f7f5; color: #6d7f75; font-size: 10px; font-weight: 850; letter-spacing: .06em; }
 .warehouse-form-line input { width: 100%; height: 38px; padding: 0 9px; border: 1px solid #d6dfda; border-radius: 10px; font: inherit; }
 .warehouse-form-line .remove-line { width: 34px; height: 34px; border: 0; border-radius: 10px; background: #fff0ec; color: #ad4d38; cursor: pointer; }
 .warehouse-field select { width: 100%; height: 44px; padding: 0 13px; border: 1px solid #d5dfd9; border-radius: 13px; background: #fff; color: #24362d; font: inherit; outline: none; }
-.warehouse-order-line { display: grid; grid-template-columns: 48px minmax(210px,1.4fr) 90px repeat(3,minmax(105px,.65fr)); gap: 10px; align-items: center; padding: 12px 14px; border-top: 1px solid #e4e9e6; }
+.warehouse-order-line { display: grid; grid-template-columns: 48px minmax(210px,1.4fr) 90px minmax(148px,.8fr) repeat(2,minmax(105px,.65fr)); gap: 10px; align-items: center; padding: 12px 14px; border-top: 1px solid #e4e9e6; }
 .warehouse-order-line:first-child { border-top: 0; }
 .warehouse-order-line.heading { color: #6d7f75; background: #f4f7f5; font-size: 10px; font-weight: 850; letter-spacing: .06em; }
 .warehouse-order-line input[type="number"] { width: 100%; height: 38px; padding: 0 9px; border: 1px solid #d6dfda; border-radius: 10px; font: inherit; }
@@ -253,7 +253,14 @@
 .order-edit-modal .warehouse-modal-heading,.order-edit-modal .warehouse-modal-actions { position:relative; flex:0 0 auto; }
 .order-edit-modal .warehouse-modal-body { min-height:0; overflow:auto; }
 .order-edit-lines { overflow-x:auto; overflow-y:visible; }
-.order-edit-lines .warehouse-order-line { min-width:1080px; grid-template-columns:48px minmax(250px,1.45fr) 155px repeat(3,minmax(130px,.67fr)); }
+.order-edit-lines .warehouse-order-line { min-width:1080px; grid-template-columns:48px minmax(250px,1.45fr) 155px minmax(160px,.8fr) repeat(2,minmax(130px,.67fr)); }
+.qty-stepper { display:flex; align-items:center; gap:6px; min-width:0; }
+.qty-stepper button { flex:0 0 28px; width:28px; height:28px; border:1px solid #d7dfda; border-radius:7px; background:#fff; color:#1d2f27; cursor:pointer; }
+.qty-stepper input { flex:1 1 auto; min-width:0; width:0; height:38px; padding:0 6px; text-align:center; font:inherit; font-weight:700; -moz-appearance:textfield; }
+.qty-stepper input::-webkit-outer-spin-button,.qty-stepper input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+.qty-field .qty-stepper { width:100%; }
+.warehouse-form-line .qty-stepper input,
+.warehouse-order-line .qty-stepper input[type="number"] { width:0; min-width:0; }
 .source-limit strong,.source-limit small,.qty-field small { display:block; }
 .source-limit strong { color:#1d4d3b; font-size:16px; }
 .source-limit small { margin-top:3px; }
@@ -315,17 +322,67 @@
 .warehouse-receipt-line.heading { background:#f7f8f5; color:#6d7d76; font-size:11px; font-weight:800; letter-spacing:.04em; }
 .warehouse-receipt-line input { width:100%; min-width:0; height:42px; border:1px solid #d7dfda; border-radius:11px; padding:0 10px; color:#23342d; background:#fff; }
 .warehouse-receipt-line input:focus { outline:0; border-color:#2f8a6d; box-shadow:0 0 0 3px rgba(47,138,109,.1); }
-.inventory-count-modal { width:min(1240px,96vw); }
-.inventory-count-modal .warehouse-modal-body { max-height:70vh; overflow:auto; }
+.inventory-count-modal {
+  width: min(1240px, 96vw);
+  height: min(860px, 92vh);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.inventory-count-modal .warehouse-modal-heading,
+.inventory-count-modal .warehouse-modal-actions {
+  position: relative;
+  z-index: 4;
+  flex: 0 0 auto;
+}
+.inventory-count-modal .warehouse-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+}
+.inventory-count-modal .warehouse-table-wrap { max-width: 100%; }
+.inventory-count-modal .warehouse-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  pointer-events: auto;
+}
 .inventory-count-note { margin:16px 0; }
-.inventory-count-table { min-width:1120px; }
-.inventory-count-table input,.inventory-count-table select { width:100%; min-width:90px; height:40px; border:1px solid #d7dfda; border-radius:10px; padding:0 9px; color:#23342d; background:#fff; font:inherit; }
+.inventory-count-table { min-width:1120px; border-collapse: separate; border-spacing: 0; }
+.inventory-count-table th { position: sticky; top: 0; z-index: 1; }
+.inventory-count-table td { position: relative; z-index: 0; }
+.inventory-count-table input,
+.inventory-count-table select,
+.inventory-count-table .custom-select-control,
+.inventory-count-table .custom-select-trigger {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-width: 90px;
+  height: 40px;
+  border: 1px solid #d7dfda;
+  border-radius: 10px;
+  padding: 0 9px;
+  color: #23342d;
+  background: #fff;
+  font: inherit;
+  pointer-events: auto;
+}
+.inventory-count-table .custom-select-trigger { display: flex; align-items: center; }
 .inventory-count-table input:focus,.inventory-count-table select:focus { outline:0; border-color:#2f8a6d; box-shadow:0 0 0 3px rgba(47,138,109,.1); }
 .inventory-count-table .inventory-count-reason { min-width:190px; }
-.inventory-count-submit-hint { min-width:0; margin-right:auto; display:flex; flex-direction:column; align-items:flex-start; gap:3px; color:#5f7067; font-size:12px; line-height:1.35; }
+.inventory-count-submit-hint { min-width:0; margin-right:auto; display:flex; flex-direction:column; align-items:flex-start; gap:3px; color:#5f7067; font-size:12px; line-height:1.35; pointer-events: none; }
 .inventory-count-submit-hint strong { color:#243c31; font-size:13px; }
 .inventory-count-submit-hint.has-difference strong { color:#986500; }
 .inventory-count-submit-hint.no-difference strong { color:#247457; }
+.inventory-count-status-note { display:block; margin-top:6px; max-width:42ch; line-height:1.4; }
+.inventory-count-status-note.is-alert { color:#9a5a48; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.warehouse-table tr.inventory-count-resolved-reject { opacity:.92; }
+.manager-readonly-note.inventory-count-resolved { border-color:#d7e4ee; color:#3d5a73; background:rgba(234,240,248,.94); }
 .stock-issue-modal { width:min(1260px,96vw); }
 .stock-issue-modal .warehouse-modal-body { max-height:70vh; overflow:auto; }
 .stock-issue-fields { display:grid; grid-template-columns:minmax(180px,.65fr) minmax(280px,1fr) minmax(320px,1.35fr); gap:14px; align-items:start; margin:16px 0; }
@@ -497,9 +554,36 @@
 .payment-voucher-fields input,.payment-voucher-fields select,.payment-voucher-fields textarea { width:100%; box-sizing:border-box; }
 .payment-voucher-rejection { margin:15px 0 0; padding:13px 15px; border:1px solid #efc8ba; border-radius:13px; color:#9e4330; background:#fff2ed; }
 .payment-voucher-stats { grid-template-columns:repeat(3,minmax(0,1fr)); }
-.payment-voucher-table { min-width:1180px; }
+.payment-voucher-table { min-width:1220px; }
 .payment-voucher-table td small { display:block; margin-top:4px; color:#7a8981; font-size:11px; }
 .payment-voucher-table td .status-pill { display:inline-flex; margin-top:6px; }
+.payment-voucher-table .payable-check-col { width:42px; text-align:center; }
+.payment-voucher-table .payable-check-col input { cursor:pointer; }
+.payable-selected-hint { color:#5a6f66; font-size:12px; font-weight:650; white-space:nowrap; }
+.payable-origin-date {
+  color:#6b7c73;
+  -webkit-text-fill-color:#6b7c73;
+  text-decoration:none;
+}
+.payable-due-date {
+  text-decoration:none;
+  -webkit-text-fill-color:currentColor;
+}
+.payable-due-date.is-due-safe,
+.warehouse-table td strong.payable-due-date.is-due-safe { color:#20342a; -webkit-text-fill-color:#20342a; }
+.payable-due-date.is-due-soon,
+.warehouse-table td strong.payable-due-date.is-due-soon { color:#6b5a12; -webkit-text-fill-color:#6b5a12; }
+.payable-due-date.is-due-today,
+.warehouse-table td strong.payable-due-date.is-due-today { color:#7a4b0e; -webkit-text-fill-color:#7a4b0e; }
+.payable-due-date.is-overdue,
+.warehouse-table td strong.payable-due-date.is-overdue { color:#8b2e1a; -webkit-text-fill-color:#8b2e1a; }
+.payable-bulk-group { margin:0 0 14px; padding:12px 14px; border:1px solid #dbe5df; border-radius:14px; background:#f7faf8; }
+.payable-bulk-group > strong { display:block; margin-bottom:8px; color:#1f523f; }
+.payable-bulk-group ul { margin:0; padding:0; list-style:none; }
+.payable-bulk-group li { display:flex; justify-content:space-between; gap:12px; padding:7px 0; border-top:1px solid #e4ebe6; font-size:13px; }
+.payable-bulk-group li:first-child { border-top:0; }
+.payable-bulk-group li span { color:#3d5348; }
+.payable-bulk-group li strong { color:#1f523f; white-space:nowrap; }
 .payment-voucher-wait { display:inline-flex; min-height:36px; align-items:center; color:#718078; font-size:11px; font-weight:750; }
 .bank-code-field[hidden] { display:none; }
 .cashier-open-shift,.cashier-active-shift { min-height:270px; margin-bottom:20px; padding:30px 34px; overflow:hidden; border:1px solid #cfe0d7; border-radius:22px; background:linear-gradient(120deg,rgba(255,255,255,.97),rgba(234,245,238,.94)); box-shadow:0 16px 36px rgba(31,64,51,.075); }
@@ -868,6 +952,18 @@
   font-size: 12px;
   font-weight: 750;
 }
+.stock-issue-impact { display:flex; gap:10px; align-items:flex-start; margin:0 0 14px; padding:13px 14px; border:1px solid #ead7a8; border-radius:14px; background:#fffaf0; }
+.stock-issue-impact svg { width:18px; height:18px; flex:none; margin-top:2px; fill:none; stroke:currentColor; stroke-width:1.8; }
+.stock-issue-impact.will-cut { color:#8a5a12; }
+.stock-issue-impact.no-cut { border-color:#c5ddd2; background:#f3faf6; color:#1f6b4d; }
+.stock-issue-impact strong, .stock-issue-impact span { display:block; }
+.stock-issue-impact strong { font-size:13px; }
+.stock-issue-impact span { margin-top:4px; font-size:12px; line-height:1.45; font-weight:500; }
+.stock-issue-source-list { display:grid; gap:8px; margin:0 0 16px; }
+.stock-issue-source-choice { display:flex; flex-direction:column; align-items:flex-start; gap:4px; width:100%; padding:12px 14px; border:1px solid #dce6e0; border-radius:14px; background:#fff; text-align:left; cursor:pointer; font:inherit; }
+.stock-issue-source-choice:hover { border-color:#2f8a6d; box-shadow:0 0 0 3px rgba(47,138,109,.1); }
+.stock-issue-source-choice small { color:#66766e; }
+.count-scrap-panel { margin-top:14px; }
 .stock-issue-related-link {
   appearance: none;
   border: 0;

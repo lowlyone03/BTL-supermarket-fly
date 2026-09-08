@@ -504,6 +504,16 @@ Khi **lỗ** (hoặc DT thuần < lương khóa): hiện nguyên nhân theo số
 - **TK — Lịch sử kho:** việc đã làm tại kho (kiểm kê, nhập, xuất, đề nghị).
 - Chuông thông báo 12s: phê duyệt, kế hoạch lỗ, công chờ duyệt, v.v.
 
+### Telegram companion cho Quản lý
+
+- Dashboard dạng card: trạng thái vận hành, doanh thu, giá vốn, lãi gộp, tỷ trọng 4 kênh thanh toán và các cảnh báo cần ưu tiên.
+- Menu ba ngôn ngữ, nút dùng màu mặc định tương thích mọi giao diện Telegram, điều hướng **Tổng quan / Làm mới / Báo cáo / Chứng từ** và cập nhật ngay trên tin hiện tại để không làm đầy chat.
+- Báo cáo quản trị **Tháng / Quý / Năm**: doanh thu hóa đơn, hoàn tiền, doanh thu thuần, giá vốn, lãi gộp, chi NCC/cước, lương đã khóa, lãi/lỗ sau chi phí, biên lợi nhuận, dòng tiền và so sánh cùng tiến độ kỳ trước.
+- Công nợ, tồn thấp, ca, thanh toán, lương và việc chờ có badge màu, progress bar và phân cấp nội dung rõ trên màn hình điện thoại.
+- Khi tải dữ liệu/chứng từ, Telegram hiện animation `typing` / `upload_photo`. Duyệt thành công có reaction; nút duyệt cũ được khóa lại để tránh bấm lặp.
+- Có thể bật message effect cho chat riêng bằng `TELEGRAM_EFFECT_SUCCESS_ID` và `TELEGRAM_EFFECT_ALERT_ID`; để trống thì bot vẫn chạy bình thường.
+- Bảo mật giữ nguyên: OTP từ Fly, kiểm tra vai trò/quyền UC ở mỗi lệnh, webhook secret, chống gửi lặp và ghi Nhật ký hệ thống.
+
 ---
 
 ## API
@@ -520,6 +530,7 @@ Prefix `/api`. Health: `GET /api/health`.
 | `/api/accounting` | Đối chiếu, công nợ, phiếu thu, lương, quỹ, lịch sử KT |
 | `/api/cashier` | Ca, POS, HĐ, đổi trả |
 | `/api/notifications` | Chuông |
+| `/api/telegram` | Liên kết OTP, trạng thái kênh và webhook Telegram |
 
 Một số endpoint lương / quỹ:
 
@@ -564,7 +575,7 @@ Một số controller còn `ensure*Schema()` lúc gọi API (máy cũ tự ALTER
 | `npm run setup:next` | migrate + seed + dọn demo |
 | `npm run test:next` | syntax check + test nghiệp vụ / ảnh / tìm kiếm / in / ca |
 
-Ở **server** thêm: `test:payroll`, `test:payroll-fund`, `test:store-pnl`, `test:business`, …
+Ở **server** thêm: `test:payroll`, `test:payroll-fund`, `test:store-pnl`, `test:business`, `test:telegram`, …
 
 ---
 

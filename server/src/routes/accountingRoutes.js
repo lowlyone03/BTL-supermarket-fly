@@ -22,6 +22,7 @@ router.post('/purchase-invoices/:id/reconcile', requirePermission('UC27'), contr
 router.get('/payables', requirePermission('UC28'), paymentVoucher.listPayables);
 router.get('/payables/:id', requirePermission('UC28'), paymentVoucher.getPayable);
 router.post('/payables/:id/payment-voucher', requirePermission('UC28'), paymentVoucher.createVoucher);
+router.post('/payment-vouchers/bulk', requirePermission('UC28'), paymentVoucher.createVouchersBulk);
 router.post('/payment-vouchers/:id/resubmit', requirePermission('UC28'), paymentVoucher.resubmitVoucher);
 router.post('/payment-vouchers/:id/pay', requirePermission('UC28'), paymentVoucher.payVoucher);
 router.get('/shift-settlements', requirePermission('UC29'), settlement.listShifts);

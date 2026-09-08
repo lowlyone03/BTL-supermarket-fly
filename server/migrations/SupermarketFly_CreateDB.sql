@@ -526,6 +526,8 @@ CREATE TABLE [KiemKe] (
     [NgayDuyet] DATETIME NULL,
     [LyDoTuChoi] NVARCHAR(500) NULL,
     [GhiChu] NVARCHAR(500) NULL,
+    [MaKKGoc] VARCHAR(20) NULL,
+    [MaKKThayThe] VARCHAR(20) NULL,
     CONSTRAINT [PK_KiemKe] PRIMARY KEY ([MaKK])
 );
 GO

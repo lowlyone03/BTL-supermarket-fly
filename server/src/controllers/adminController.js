@@ -85,19 +85,33 @@ const getApprovalQueues = async (req, res) => {
     try {
         const pool = await poolPromise;
         await ensurePayrollSchema(pool);
-        const [warehouse, finance, payroll] = await Promise.all([
-            pool.request().query(`
+        const warehouse = await pool.request().query(`
                 SELECT N'Phiếu xuất kho' AS LoaiHoSo,px.MaPX AS MaHoSo,px.NgayXuat AS NgayLap,
-                       nv.TenNV AS NguoiLap,px.LoaiXuat AS NoiDung,px.TrangThai
+                       nv.TenNV AS NguoiLap,px.LoaiXuat AS NoiDung,px.TrangThai,
+                       ISNULL((SELECT SUM(ct.SoLuong * ct.DonGia) FROM ChiTietPhieuXuat ct WHERE ct.MaPX=px.MaPX),0) AS SoTien
                 FROM PhieuXuat px JOIN NhanVien nv ON nv.MaNV=px.MaNV
                 WHERE px.TrangThai=N'Chờ duyệt'
                 UNION ALL
                 SELECT N'Điều chỉnh kiểm kê',kk.MaKK,kk.NgayKiemKe,nv.TenNV,
-                       COALESCE(kk.GhiChu,N'Đề nghị điều chỉnh chênh lệch tồn kho'),kk.TrangThai
+                       COALESCE(kk.GhiChu,N'Đề nghị điều chỉnh chênh lệch tồn kho'),kk.TrangThai,
+                       ISNULL((
+                           SELECT SUM(
+                               CASE
+                                   WHEN ct.TinhTrangHang IN (N'Hỏng', N'Hết hạn') AND ct.SLThucTe < ct.SLHeThong
+                                       THEN (ct.SLHeThong - ct.SLThucTe) * ISNULL(tk.DonGiaBinhQuan,0)
+                                   WHEN ct.TinhTrangHang IN (N'Hỏng', N'Hết hạn')
+                                       THEN ct.SLThucTe * ISNULL(tk.DonGiaBinhQuan,0)
+                                   ELSE 0
+                               END
+                           )
+                           FROM ChiTietKiemKe ct
+                           LEFT JOIN TonKho tk ON tk.MaKho=kk.MaKho AND tk.MaSP=ct.MaSP
+                           WHERE ct.MaKK=kk.MaKK
+                       ),0) AS SoTien
                 FROM KiemKe kk JOIN NhanVien nv ON nv.MaNV=kk.MaNV
                 WHERE kk.TrangThai=N'Chờ duyệt điều chỉnh'
-                ORDER BY NgayLap DESC`),
-            pool.request().query(`
+                ORDER BY NgayLap DESC`);
+        const finance = await pool.request().query(`
                 SELECT N'Phiếu chi Nhà cung cấp' AS LoaiHoSo,pc.MaPhieu AS MaHoSo,pc.NgayChungTu AS NgayLap,
                        nv.TenNV AS NguoiLap,pc.NoiDung,pc.SoTien,pc.TrangThai
                 FROM PhieuChi pc JOIN NhanVien nv ON nv.MaNV=pc.MaNV
@@ -107,16 +121,15 @@ const getApprovalQueues = async (req, res) => {
                        COALESCE(dt.LyDo,N'Đề nghị đổi trả'),dt.SoTienHoan,dt.TrangThai
                 FROM PhieuDoiTra dt JOIN NhanVien nv ON nv.MaNV=dt.MaNV_Lap
                 WHERE dt.TrangThai=N'Chờ duyệt'
-                ORDER BY NgayLap DESC`),
-            pool.request().query(`
+                ORDER BY NgayLap DESC`);
+        const payroll = await pool.request().query(`
                     SELECT pcl.MaPhieu,pcl.MaKy,nv.TenNV,pcl.SoTien,pcl.PhuongThuc,pcl.NgayLap,lap.TenNV AS NguoiLap,
                            N'Phiếu chi lương' AS LoaiHoSo, pcl.MaPhieu AS MaHoSo, nv.TenNV AS NoiDung
                     FROM PhieuChiLuong pcl
                     JOIN NhanVien nv ON nv.MaNV=pcl.MaNV
                     JOIN NhanVien lap ON lap.MaNV=pcl.MaNV_Lap
                     WHERE pcl.TrangThai=N'Chờ duyệt'
-                    ORDER BY pcl.NgayLap DESC`)
-        ]);
+                    ORDER BY pcl.NgayLap DESC`);
         res.json({ warehouse: warehouse.recordset, finance: finance.recordset, payroll: payroll.recordset });
     } catch (error) {
         console.error(error);

@@ -113,10 +113,14 @@ startHttp(HOST, () => {
             const { ensureStoreProfitLossSchema } = require('./services/storeProfitLoss');
             const { ensureReturnHandoverSchema, healParkedReturns } = require('./services/returnHandover');
             const { ensureTelegramSchema } = require('./services/telegramSchema');
+            const { ensureCountSuccessorSchema } = require('./services/countSuccessorSchema');
+            const { syncRejectedCountSuccessors } = require('./services/countLifecycle');
             await ensureStoreProfitLossSchema(pool);
             await ensureReturnHandoverSchema(pool);
             await healParkedReturns(pool);
             await ensureTelegramSchema(pool);
+            await ensureCountSuccessorSchema(pool);
+            await syncRejectedCountSuccessors(pool);
         } catch (error) {
             console.error('Không thể bổ sung schema thông báo / bàn giao / Telegram:', error.message);
         }

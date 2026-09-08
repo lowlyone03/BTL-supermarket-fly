@@ -5,6 +5,17 @@
   };
   const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
   const money = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
+  const impactBanner = (impact, extra = '') => {
+    if (!impact?.title && !extra) return '';
+    const noCut = impact?.willDecrease === false || impact?.KhongTruTon;
+    return `<div class="stock-issue-impact ${noCut ? 'no-cut' : 'will-cut'}"><svg><use href="#i-warning"></use></svg><div><strong>${esc(impact?.title || (noCut ? 'Không giảm tồn khi xác nhận' : 'Xác nhận xuất sẽ giảm tồn'))}</strong><span>${esc(impact?.detail || extra || '')}</span></div></div>`;
+  };
+  const sourceLabel = item => {
+    if (item.MaKK) return `Kiểm kê ${item.MaKK}`;
+    if (item.MaDT) return `Đổi trả ${item.MaDT}`;
+    if (item.MaPN) return `${item.MaPN}${item.TenNCC ? ` · ${item.TenNCC}` : ''}`;
+    return 'Không dùng Phiếu nhập nguồn';
+  };
   const fmtDate = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
   const statusClass = status => ({ 'Nháp': 'draft', 'Chờ duyệt': 'sent', 'Đã duyệt': 'processing', 'Từ chối': 'cancelled', 'Đã xác nhận': 'ok' }[status] || 'draft');
   const api = async (context, path, options = {}) => {
@@ -28,6 +39,7 @@
       fields: [
         { label: 'Loại xuất', value: issue.LoaiXuat }, { label: 'Kho', value: issue.TenKho },
         { label: 'Đợt kiểm kê', value: issue.MaKK || 'Không liên kết' },
+        { label: 'Phiếu đổi trả', value: issue.MaDT || 'Không liên kết' },
         { label: 'Người lập', value: issue.NguoiLap }, { label: 'Phiếu nhập nguồn', value: issue.MaPN || 'Không áp dụng' },
         { label: 'Nhà cung cấp', value: issue.TenNCC || 'Không áp dụng' }, { label: 'Người duyệt', value: issue.NguoiDuyet || 'Chưa duyệt' }
       ],
@@ -39,7 +51,7 @@
       rows: lines,
       totals: [
         { label: 'Tổng số lượng xuất', value: lines.reduce((sum, line) => sum + Number(line.SoLuong || 0), 0) },
-        { label: 'Giá trị tham chiếu', value: issue.TongGiaTriThamChieu, format: 'money' }
+        { label: 'Giá trị tham chiếu', value: issue.TongGiaTriThamChieu ?? lines.reduce((sum, line) => sum + Number(line.SoLuong || 0) * Number(line.DonGia || 0), 0), format: 'money' }
       ],
       note: issue.GhiChu || 'Tồn kho chỉ giảm sau khi Quản lý duyệt và Thủ kho xác nhận đã xuất hàng.',
       signatures: ['Thủ kho lập phiếu', 'Quản lý phê duyệt']
@@ -73,15 +85,17 @@
             <div><span>NGƯỜI XÁC NHẬN</span><strong>${esc(issue.NguoiXacNhan || (issue.TrangThai === 'Đã xác nhận' ? issue.NguoiLap : 'Chưa xác nhận'))}</strong><small>${issue.NgayXacNhan ? fmtDate(issue.NgayXacNhan) : ''}</small></div>
             <div><span>PHIẾU ĐỔI TRẢ NGUỒN</span><strong>${related?.MaDT ? `<button type="button" class="stock-issue-related-link open-related-return" data-return="${esc(related.MaDT)}">${esc(related.MaDT)}</button>` : 'Không liên kết'}</strong><small>${related?.MaHD ? `Hóa đơn ${esc(related.MaHD)}` : ''}</small></div>
             <div><span>LÝ DO THU NGÂN</span><strong>${esc(issue.LyDoThuNgan || related?.LyDo || '—')}</strong></div>
+            <div><span>GIÁ TRỊ THAM CHIẾU</span><strong>${money(issue.TongGiaTriThamChieu ?? (data.lines || []).reduce((sum, line) => sum + Number(line.SoLuong || 0) * Number(line.DonGia || 0), 0))}</strong></div>
           </div>
           ${issue.LyDoTuChoi ? `<div class="manager-readonly-note"><svg><use href="#i-warning"></use></svg><div><strong>Lý do từ chối</strong><span>${esc(issue.LyDoTuChoi)}</span></div></div>` : ''}
           <div class="manager-readonly-note"><svg><use href="#i-request"></use></svg><div><strong>Lý do/Ghi chú xuất kho</strong><span>${esc(issue.GhiChu || '—')}</span></div></div>
+          ${impactBanner(issue.stockImpact)}
           <div class="warehouse-table-wrap"><table class="warehouse-table stock-issue-line-table"><thead><tr><th>SẢN PHẨM</th><th>TỒN HIỆN TẠI</th><th>SL XUẤT</th><th>GIÁ VỐN THAM CHIẾU</th><th>GHI CHÚ DÒNG</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="warehouse-empty">Không có dòng hàng.</td></tr>'}</tbody></table></div>
           ${moves ? `<div class="warehouse-history-moves"><p>SỔ KHO</p><ul>${moves}</ul></div>` : ''}
           ${logs ? `<p class="return-dossier-section">NHẬT KÝ PHIẾU</p><ul class="warehouse-history-audit">${logs}</ul>` : ''}
-          ${issue.TrangThai === 'Đã duyệt' ? '<div class="receipt-rule"><svg><use href="#i-warning"></use></svg><span>Quản lý đã duyệt nhưng tồn kho chưa giảm. Chỉ khi Thủ kho xác nhận đã xuất hàng, hệ thống mới giảm tồn và ghi Giao dịch kho loại Xuất.</span></div>' : ''}
+          ${issue.TrangThai === 'Đã duyệt' ? `<div class="receipt-rule"><svg><use href="#i-warning"></use></svg><span>${issue.stockImpact?.willDecrease === false || issue.KhongTruTon ? 'Quản lý đã duyệt phiếu thông tin. Xác nhận khóa hồ sơ; tồn kho không đổi.' : 'Quản lý đã duyệt nhưng tồn kho chưa giảm. Chỉ khi Thủ kho xác nhận đã xuất hàng, hệ thống mới giảm tồn và ghi Giao dịch kho loại Xuất.'}</span></div>` : ''}
         </div>
-        <div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Đóng</button><button class="warehouse-secondary print-stock-issue" type="button"><svg><use href="#i-report"></use></svg>Xem bản in</button>${issue.TrangThai === 'Đã duyệt' ? '<button class="warehouse-primary confirm-stock-issue" type="button">Xác nhận đã xuất hàng</button>' : ''}</div>
+        <div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Đóng</button><button class="warehouse-secondary print-stock-issue" type="button"><svg><use href="#i-report"></use></svg>Xem bản in</button>${issue.TrangThai === 'Đã duyệt' ? `<button class="warehouse-primary confirm-stock-issue" type="button">${issue.KhongTruTon || issue.stockImpact?.willDecrease === false ? 'Xác nhận phiếu thông tin' : 'Xác nhận đã xuất hàng'}</button>` : ''}</div>
       </div>`;
       document.body.appendChild(overlay);
       const close = () => overlay.remove();
@@ -92,7 +106,9 @@
         window.FLY_WAREHOUSE?.openReturn?.(context, maDT, onDone, 'view');
       });
       overlay.querySelector('.confirm-stock-issue')?.addEventListener('click', async () => {
-        if (!window.confirm(`Xác nhận đã xuất hàng theo ${issue.MaPX}? Thao tác này sẽ giảm tồn kho và không thể sửa phiếu.`)) return;
+        if (!window.confirm(issue.KhongTruTon || issue.stockImpact?.willDecrease === false
+          ? `Xác nhận phiếu thông tin ${issue.MaPX}? Tồn kho không đổi.`
+          : `Xác nhận đã xuất hàng theo ${issue.MaPX}? Thao tác này sẽ giảm tồn kho và không thể sửa phiếu.`)) return;
         try {
           const result = await api(context, `/warehouse/stock-issues/${id}/confirm`, { method: 'POST', body: '{}' });
           context.showToast(result.message, 'success'); close(); await onDone();
@@ -117,15 +133,39 @@
       const issue = detail?.issue || { LoaiXuat: prefill?.LoaiXuat || 'Hủy hàng', MaPN: '', GhiChu: prefill?.GhiChu || '' };
       let catalog = options.products;
       let sourceReceipt = null;
-      let lines = (detail?.lines || []).map(line => ({ MaSP: line.MaSP, SoLuong: Number(line.SoLuong), GhiChu: line.GhiChu || '' }));
+      let lines = (detail?.lines || []).map(line => ({ MaSP: line.MaSP, SoLuong: Number(line.SoLuong), GhiChu: line.GhiChu || '', DonGia: Number(line.DonGia || 0) }));
       if (!id && Array.isArray(prefill?.lines) && prefill.lines.length) {
-        lines = prefill.lines.map(line => ({ MaSP: line.MaSP, SoLuong: Number(line.SoLuong) || 1, GhiChu: line.GhiChu || '' }));
+        lines = prefill.lines.map(line => ({ MaSP: line.MaSP, TenSP: line.TenSP, SoLuong: Number(line.SoLuong) || 1, GhiChu: line.GhiChu || '', DonGia: Number(line.DonGia || 0) }));
       }
+      const linkedMaKK = detail?.issue?.MaKK || prefill?.MaKK || null;
+      const linkedMaDT = detail?.issue?.MaDT || prefill?.MaDT || null;
+      const linkedImpact = detail?.issue?.stockImpact || prefill?.stockImpact || null;
+      const lockedSource = Boolean(linkedMaKK || linkedMaDT);
       const overlay = document.createElement('div');
       overlay.className = 'warehouse-modal-backdrop';
       overlay.innerHTML = `<div class="warehouse-modal stock-issue-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">${id ? `CẬP NHẬT ${esc(id)}` : 'LẬP PHIẾU XUẤT KHO THỦ CÔNG'}</p><h2>${esc(options.warehouse.TenKho)}</h2><span>Nháp → Chờ duyệt → Đã duyệt → Thủ kho xác nhận xuất</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body"><div class="receipt-rule"><svg><use href="#i-warning"></use></svg><span>Phê duyệt chưa làm giảm tồn. Trả Nhà cung cấp bắt buộc chọn Phiếu nhập nguồn; không có nghiệp vụ điều chuyển kho.</span></div><div class="stock-issue-fields"><div class="warehouse-field"><label>Loại xuất *</label><select id="stockIssueType"><option ${issue.LoaiXuat === 'Trả NCC' ? 'selected' : ''}>Trả NCC</option><option ${issue.LoaiXuat === 'Hủy hàng' ? 'selected' : ''}>Hủy hàng</option><option ${issue.LoaiXuat === 'Sử dụng nội bộ' ? 'selected' : ''}>Sử dụng nội bộ</option></select></div><div class="warehouse-field source-receipt-field"><label>Phiếu nhập nguồn *</label><select id="stockIssueReceipt"><option value="">Chọn Phiếu nhập đã xác nhận</option>${options.receipts.map(receipt => `<option value="${esc(receipt.MaPN)}" ${receipt.MaPN === issue.MaPN ? 'selected' : ''}>${esc(receipt.MaPN)} · ${esc(receipt.TenNCC)} · ${receipt.TongChapNhan} đơn vị</option>`).join('')}</select><small class="source-receipt-note"></small></div><div class="warehouse-field stock-issue-note"><label>Lý do/Ghi chú xuất kho *</label><textarea id="stockIssueNote" maxlength="500" placeholder="Ghi rõ lý do xuất hủy, trả NCC hoặc sử dụng nội bộ...">${esc(issue.GhiChu || '')}</textarea></div></div><div class="stock-issue-add-row"><div class="warehouse-field"><label>Sản phẩm</label><select id="stockIssueProduct"></select></div><div class="warehouse-field"><label>Số lượng</label><input id="stockIssueQuantity" type="number" min="1" step="1" value="1"></div><button class="warehouse-secondary" id="addStockIssueLine" type="button"><svg><use href="#i-plus"></use></svg>Thêm dòng</button></div><div class="warehouse-table-wrap"><table class="warehouse-table stock-issue-line-table"><thead><tr><th>SẢN PHẨM</th><th>TỒN HIỆN TẠI</th><th>GIỚI HẠN NGUỒN</th><th>SỐ LƯỢNG XUẤT</th><th>GHI CHÚ DÒNG</th><th></th></tr></thead><tbody id="stockIssueLines"></tbody></table></div></div><div class="warehouse-modal-actions"><div class="stock-issue-action-note"><strong>Tồn kho chưa thay đổi khi lưu hoặc gửi duyệt.</strong><span>Chỉ bước “Xác nhận đã xuất hàng” sau phê duyệt mới trừ tồn.</span></div><button class="warehouse-secondary close" type="button">Hủy</button><button class="warehouse-secondary print-stock-issue-draft" type="button">Lưu và xem bản in</button><button class="warehouse-secondary save-draft" type="button">Lưu Nháp</button><button class="warehouse-primary save-submit" type="button">Lưu và gửi duyệt</button></div></div>`;
       document.body.appendChild(overlay);
       const typeSelect = overlay.querySelector('#stockIssueType');
+      if (lockedSource) {
+        typeSelect.value = 'Hủy hàng';
+        typeSelect.disabled = true;
+        overlay.querySelector('.warehouse-kicker').textContent = linkedMaKK
+          ? `XUẤT HỦY TỪ KIỂM KÊ / ${linkedMaKK}`
+          : `XUẤT HỦY TỪ ĐỔI TRẢ / ${linkedMaDT}`;
+        const addRow = overlay.querySelector('.stock-issue-add-row');
+        if (addRow) addRow.hidden = true;
+      }
+      const rule = overlay.querySelector('.receipt-rule');
+      if (rule && (linkedImpact || lockedSource || (!id && !prefill))) {
+        const hint = !id && !lockedSource
+          ? impactBanner(null, 'Hàng hỏng từ kiểm kê hoặc đổi trả loại bỏ: mở từ đợt kiểm kê / phiếu đổi trả, hoặc chọn nguồn khi bấm Lập Phiếu xuất.')
+          : impactBanner(linkedImpact, lockedSource ? (prefill?.sourceLabel || '') : '');
+        if (hint) rule.insertAdjacentHTML('afterend', hint + (lockedSource ? `<p class="count-followup-status">Nguồn: <strong>${esc(prefill?.sourceLabel || (linkedMaKK ? `Kiểm kê ${linkedMaKK}` : `Đổi trả ${linkedMaDT}`))}</strong></p>` : ''));
+      }
+      const actionNote = overlay.querySelector('.stock-issue-action-note');
+      if (actionNote && linkedImpact) {
+        actionNote.innerHTML = `<strong>${esc(linkedImpact.title)}</strong><span>${esc(linkedImpact.detail)}</span>`;
+      }
       const receiptField = overlay.querySelector('.source-receipt-field');
       const receiptSelect = overlay.querySelector('#stockIssueReceipt');
       const productSelect = overlay.querySelector('#stockIssueProduct');
@@ -133,7 +173,7 @@
       const close = () => overlay.remove();
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
 
-      const productInfo = maSP => catalog.find(product => product.MaSP === maSP) || options.products.find(product => product.MaSP === maSP) || detail?.lines.find(product => product.MaSP === maSP);
+      const productInfo = maSP => catalog.find(product => product.MaSP === maSP) || options.products.find(product => product.MaSP === maSP) || detail?.lines.find(product => product.MaSP === maSP) || (prefill?.lines || []).find(product => product.MaSP === maSP) || lines.find(product => product.MaSP === maSP);
       const sourceLimit = product => product ? Number(product.SoLuongChapNhan || 0) - Number(product.SoLuongDaTra || 0) : null;
       const renderProductOptions = () => {
         const available = catalog.filter(product => !lines.some(line => line.MaSP === product.MaSP));
@@ -143,16 +183,21 @@
         body.innerHTML = lines.length ? lines.map(line => {
           const product = productInfo(line.MaSP) || {};
           const limit = typeSelect.value === 'Trả NCC' ? sourceLimit(product) : null;
-          return `<tr data-product="${esc(line.MaSP)}"><td><strong>${esc(product.TenSP || line.MaSP)}</strong><small>${esc(line.MaSP)} · ${esc(product.DonViTinh || '')}</small></td><td class="num">${Number(product.SLTon ?? product.SLTonHienTai ?? 0)}</td><td class="num">${limit === null ? 'Không áp dụng' : limit}</td><td><input class="stock-issue-quantity" type="number" min="1" step="1" ${limit === null ? '' : `max="${limit}"`} value="${line.SoLuong}"></td><td><input class="stock-issue-line-note" maxlength="200" value="${esc(line.GhiChu || '')}" placeholder="Tùy chọn"></td><td><button class="warehouse-icon-button remove-stock-issue-line" type="button" title="Xóa dòng">×</button></td></tr>`;
+          const unit = Number(line.DonGia ?? product.DonGiaBinhQuan ?? 0);
+          return `<tr data-product="${esc(line.MaSP)}"><td><strong>${esc(product.TenSP || line.TenSP || line.MaSP)}</strong><small>${esc(line.MaSP)} · ${esc(product.DonViTinh || line.DonViTinh || '')}${unit ? ` · ${money(unit)}` : ''}</small></td><td class="num">${Number(product.SLTon ?? product.SLTonHienTai ?? line.SLTon ?? 0)}</td><td class="num">${limit === null ? 'Không áp dụng' : limit}</td><td><input class="stock-issue-quantity" type="number" min="1" step="1" ${limit === null ? '' : `max="${limit}"`} value="${line.SoLuong}"></td><td><input class="stock-issue-line-note" maxlength="200" value="${esc(line.GhiChu || '')}" placeholder="Tùy chọn"></td><td><button class="warehouse-icon-button remove-stock-issue-line" type="button" title="Xóa dòng">×</button></td></tr>`;
         }).join('') : '<tr><td colspan="6" class="warehouse-empty">Chưa có mặt hàng trong Phiếu xuất.</td></tr>';
         renderProductOptions();
       };
       const readLines = () => {
-        lines = Array.from(body.querySelectorAll('tr[data-product]')).map(row => ({
-          MaSP: row.dataset.product,
-          SoLuong: Number(row.querySelector('.stock-issue-quantity').value),
-          GhiChu: row.querySelector('.stock-issue-line-note').value.trim()
-        }));
+        lines = Array.from(body.querySelectorAll('tr[data-product]')).map(row => {
+          const previous = lines.find(line => line.MaSP === row.dataset.product) || {};
+          return {
+            MaSP: row.dataset.product,
+            SoLuong: Number(row.querySelector('.stock-issue-quantity').value),
+            GhiChu: row.querySelector('.stock-issue-line-note').value.trim(),
+            DonGia: previous.DonGia
+          };
+        });
         return lines;
       };
       const loadReceipt = async (maPN, preserveLines = false) => {
@@ -172,7 +217,7 @@
         const isReturn = typeSelect.value === 'Trả NCC';
         receiptField.hidden = !isReturn;
         if (isReturn) await loadReceipt(receiptSelect.value, preserveLines);
-        else { sourceReceipt = null; catalog = options.products; if (!preserveLines) lines = []; renderLines(); }
+        else { sourceReceipt = null; catalog = options.products; if (!preserveLines && !lockedSource) lines = []; renderLines(); }
       };
       typeSelect.addEventListener('change', () => syncType(false).catch(error => context.showToast(error.message, 'error')));
       receiptSelect.addEventListener('change', () => loadReceipt(receiptSelect.value, false).catch(error => context.showToast(error.message, 'error')));
@@ -194,6 +239,8 @@
       const payload = () => ({
         LoaiXuat: typeSelect.value,
         MaPN: typeSelect.value === 'Trả NCC' ? receiptSelect.value : null,
+        MaKK: linkedMaKK,
+        MaDT: linkedMaDT,
         GhiChu: overlay.querySelector('#stockIssueNote').value.trim(),
         lines: readLines()
       });
@@ -241,6 +288,50 @@
     } catch (error) { context.showToast(error.message, 'error'); }
   };
 
+  const showPendingSourcePicker = (context, pending, { onBlank, onDone } = {}) => {
+    const counts = pending.counts || [];
+    const returns = pending.returns || [];
+    const overlay = document.createElement('div');
+    overlay.className = 'warehouse-modal-backdrop';
+    const row = (item, kind) => `<button type="button" class="stock-issue-source-choice" data-kind="${kind}" data-id="${esc(item.id)}">
+      <strong>${esc(item.title)}</strong>
+      <small>${esc(item.subtitle)}${item.value ? ` · ${money(item.value)}` : ''}</small>
+      ${item.existing ? `<span class="status-pill sent">${esc(item.existing.MaPX)} · ${esc(item.existing.TrangThai)}</span>` : '<span class="status-pill draft">Chưa lập phiếu</span>'}
+    </button>`;
+    overlay.innerHTML = `<div class="warehouse-modal count-followup-modal" role="dialog" aria-modal="true">
+      <div class="warehouse-modal-heading"><div><p class="warehouse-kicker">LẬP PHIẾU XUẤT</p><h2>Chọn hàng hỏng chờ xuất</h2></div><button class="warehouse-icon-button close" type="button">×</button></div>
+      <div class="warehouse-modal-body">
+        <div class="receipt-rule"><svg><use href="#i-warning"></use></svg><span>Hàng hỏng kiểm kê hoặc đổi trả loại bỏ sẽ điền sẵn phiếu xuất loại Hủy hàng. Có thể lập phiếu trống nếu xuất trả NCC hoặc sử dụng nội bộ.</span></div>
+        ${counts.length ? `<p class="return-dossier-section">KIỂM KÊ — HÀNG HỎNG / HẾT HẠN</p><div class="stock-issue-source-list">${counts.map(item => row(item, 'count')).join('')}</div>` : ''}
+        ${returns.length ? `<p class="return-dossier-section">ĐỔI TRẢ — LOẠI BỎ / VỨT</p><div class="stock-issue-source-list">${returns.map(item => row(item, 'return')).join('')}</div>` : ''}
+      </div>
+      <div class="warehouse-modal-actions">
+        <button class="warehouse-secondary close" type="button">Hủy</button>
+        <button class="warehouse-primary open-blank-issue" type="button">Lập phiếu xuất trống</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+    overlay.querySelector('.open-blank-issue').addEventListener('click', () => { close(); onBlank?.(); });
+    overlay.querySelectorAll('.stock-issue-source-choice').forEach(button => button.addEventListener('click', async () => {
+      try {
+        close();
+        const path = button.dataset.kind === 'count'
+          ? `/warehouse/stock-issues/from-count/${encodeURIComponent(button.dataset.id)}`
+          : `/warehouse/stock-issues/from-return/${encodeURIComponent(button.dataset.id)}`;
+        const data = await api(context, path);
+        if (data.existing?.MaPX) {
+          context.showToast(data.message, 'success');
+          await issueEditorModal(context, data.existing.MaPX, onDone);
+          return;
+        }
+        sessionStorage.setItem('fly_stock_issue_prefill', JSON.stringify(data.prefill));
+        await issueEditorModal(context, null, onDone);
+      } catch (error) { context.showToast(error.message, 'error'); }
+    }));
+  };
+
   const initStockIssues = async (root, context) => {
     const load = async () => {
       try {
@@ -253,7 +344,18 @@
           root.querySelector('#stockIssueSearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250); });
           root.querySelector('#stockIssueStatus').addEventListener('change', load);
           root.querySelector('#refreshStockIssues').addEventListener('click', load);
-          root.querySelector('#newStockIssue').addEventListener('click', () => issueEditorModal(context, null, load));
+          root.querySelector('#newStockIssue').addEventListener('click', async () => {
+            try {
+              const pending = await api(context, '/warehouse/stock-issues/pending-sources');
+              if ((pending.counts || []).length || (pending.returns || []).length) {
+                return showPendingSourcePicker(context, pending, {
+                  onBlank: () => issueEditorModal(context, null, load),
+                  onDone: load
+                });
+              }
+            } catch { /* lập phiếu trống nếu không tải được nguồn */ }
+            issueEditorModal(context, null, load);
+          });
           root.addEventListener('click', event => {
             const button = event.target.closest('[data-stock-issue]');
             if (!button) return;
@@ -264,7 +366,7 @@
         root.querySelector('#stockIssueBody').innerHTML = data.items.length ? data.items.map(item => {
           const mode = item.TrangThai === 'Nháp' ? 'edit' : 'view';
           const action = item.TrangThai === 'Nháp' ? 'Sửa / gửi duyệt' : item.TrangThai === 'Đã duyệt' ? 'Xác nhận xuất' : 'Xem chi tiết';
-          return `<tr><td><strong>${esc(item.MaPX)}</strong><small>${fmtDate(item.NgayXuat)} · ${esc(item.TenKho)}</small></td><td><strong>${esc(item.LoaiXuat)}</strong><small>${item.MaPN ? `${esc(item.MaPN)} · ${esc(item.TenNCC || '')}` : 'Không dùng Phiếu nhập nguồn'}</small></td><td><strong>${item.SoMatHang || 0} mặt hàng</strong><small>${item.TongSoLuong || 0} đơn vị xuất</small></td><td class="num"><strong>${money(item.TongGiaTriThamChieu)}</strong></td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span>${item.LyDoTuChoi ? `<small>${esc(item.LyDoTuChoi)}</small>` : ''}</td><td><button class="${item.TrangThai === 'Đã duyệt' ? 'warehouse-primary' : 'warehouse-secondary'}" data-stock-issue="${esc(item.MaPX)}" data-mode="${mode}">${action}</button></td></tr>`;
+          return `<tr><td><strong>${esc(item.MaPX)}</strong><small>${fmtDate(item.NgayXuat)} · ${esc(item.TenKho)}</small></td><td><strong>${esc(item.LoaiXuat)}</strong><small>${esc(sourceLabel(item))}${item.KhongTruTon ? ' · không trừ tồn' : ''}</small></td><td><strong>${item.SoMatHang || 0} mặt hàng</strong><small>${item.TongSoLuong || 0} đơn vị xuất</small></td><td class="num"><strong>${money(item.TongGiaTriThamChieu)}</strong></td><td><span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span>${item.LyDoTuChoi ? `<small>${esc(item.LyDoTuChoi)}</small>` : ''}</td><td><button class="${item.TrangThai === 'Đã duyệt' ? 'warehouse-primary' : 'warehouse-secondary'}" data-stock-issue="${esc(item.MaPX)}" data-mode="${mode}">${action}</button></td></tr>`;
         }).join('') : `<tr><td colspan="6" class="warehouse-empty">${esc(window.FLY_SEARCH?.emptyMessage?.(search, 'phiếu xuất', 'Chưa có Phiếu xuất kho phù hợp.') || 'Chưa có Phiếu xuất kho phù hợp.')}</td></tr>`;
       } catch (error) { context.showToast(error.message, 'error'); }
     };

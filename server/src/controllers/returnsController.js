@@ -65,7 +65,7 @@ const loadDetail = async (pool, maDT) => {
     if (!header.recordset.length) return null;
     const ticket = header.recordset[0];
     const bind = () => pool.request().input('MaDT', sql.VarChar, maDT).input('MaHD', sql.VarChar, ticket.MaHD);
-    const [lines, payments, audit, stockMoves] = await Promise.all([
+    const [lines, payments, audit, stockMoves, linkedIssue] = await Promise.all([
         bind().query(`
             SELECT ct.*, sp.TenSP, sp.DonViTinh, sp.MaVach, hdct.SoLuong SLBan
             FROM ChiTietDoiTra ct
@@ -91,12 +91,29 @@ const loadDetail = async (pool, maDT) => {
             JOIN SanPham sp ON sp.MaSP=gd.MaSP
             JOIN NhanVien nv ON nv.MaNV=gd.MaNV
             WHERE gd.LoaiChungTu=N'DoiTra' AND gd.MaChungTu=@MaDT
-            ORDER BY gd.NgayGD`)
+            ORDER BY gd.NgayGD`),
+        pool.request().input('MaDT', sql.VarChar, maDT).input('Mau', sql.NVarChar, `%Nguồn đổi trả ${maDT}.%`).query(`
+            SELECT TOP 1 MaPX, TrangThai, KhongTruTon
+            FROM PhieuXuat
+            WHERE TrangThai IN (N'Nháp', N'Chờ duyệt', N'Đã duyệt', N'Đã xác nhận')
+              AND (MaDT=@MaDT OR GhiChu LIKE @Mau)
+            ORDER BY CASE TrangThai
+                WHEN N'Nháp' THEN 1 WHEN N'Chờ duyệt' THEN 2 WHEN N'Đã duyệt' THEN 3 ELSE 4 END,
+                NgayXuat DESC`).catch(error => {
+            if (!/Invalid column name|MaDT|KhongTruTon/i.test(error.message || '')) throw error;
+            return pool.request().input('Mau', sql.NVarChar, `%Nguồn đổi trả ${maDT}.%`).query(`
+                SELECT TOP 1 MaPX, TrangThai FROM PhieuXuat
+                WHERE GhiChu LIKE @Mau AND TrangThai IN (N'Nháp', N'Chờ duyệt', N'Đã duyệt', N'Đã xác nhận')
+                ORDER BY NgayXuat DESC`);
+        })
     ]);
+    const scrapIssue = linkedIssue.recordset[0] || null;
     return {
         ticket: {
             ...ticket,
-            LichSuBanGiao: ticket.MaNV_XuLy || ticket.NgayBanGiao ? historyOf(ticket) : ''
+            LichSuBanGiao: ticket.MaNV_XuLy || ticket.NgayBanGiao ? historyOf(ticket) : '',
+            MaPXHuy: scrapIssue?.MaPX || null,
+            TrangThaiPXHuy: scrapIssue?.TrangThai || null
         },
         lines: lines.recordset,
         payments: payments.recordset,
@@ -472,7 +489,7 @@ const inspectReturn = async (req, res) => {
         if (restock && looksUnsellable(ticket.LyDo)) {
             message += ' Lưu ý: lý do thu ngân là hàng hỏng/hết hạn nhưng Thủ kho chọn nhập lại kho bán.';
         } else if (!restock) {
-            message += ' Hàng loại bỏ/vứt: không cộng tồn (đã trừ lúc bán).';
+            message += ' Hàng loại bỏ/vứt: không cộng tồn (đã trừ lúc bán). Có thể lập phiếu xuất hủy để kiểm soát SL, tiền và hàng.';
         }
         res.json({ message, revised: revising });
     } catch (error) {
@@ -510,10 +527,20 @@ const flagInspectMistake = async (req, res) => {
         if (already.recordset.length) throw new Error('Đã trừ tồn cho tích nhầm trên phiếu này.');
 
         const marker = `Nguồn đổi trả ${maDT}.`;
-        const confirmedIssue = await new sql.Request(transaction)
-            .input('Mau', sql.NVarChar, `%${marker}%`).query(`
-            SELECT TOP 1 MaPX FROM PhieuXuat WITH (UPDLOCK, HOLDLOCK)
-            WHERE GhiChu LIKE @Mau AND TrangThai=N'Đã xác nhận'`);
+        let confirmedIssue;
+        try {
+            confirmedIssue = await new sql.Request(transaction)
+                .input('MaDT', sql.VarChar, maDT)
+                .input('Mau', sql.NVarChar, `%${marker}%`).query(`
+                SELECT TOP 1 MaPX FROM PhieuXuat WITH (UPDLOCK, HOLDLOCK)
+                WHERE (MaDT=@MaDT OR GhiChu LIKE @Mau) AND TrangThai=N'Đã xác nhận'`);
+        } catch (error) {
+            if (!/Invalid column name|MaDT/i.test(error.message || '')) throw error;
+            confirmedIssue = await new sql.Request(transaction)
+                .input('Mau', sql.NVarChar, `%${marker}%`).query(`
+                SELECT TOP 1 MaPX FROM PhieuXuat WITH (UPDLOCK, HOLDLOCK)
+                WHERE GhiChu LIKE @Mau AND TrangThai=N'Đã xác nhận'`);
+        }
         const stockAlreadyCut = Boolean(confirmedIssue.recordset.length);
         const completed = ticket.TrangThai === 'Hoàn thành';
         const lines = completed && !stockAlreadyCut
@@ -561,12 +588,24 @@ const flagInspectMistake = async (req, res) => {
             }
         }
 
-        const openIssues = await new sql.Request(transaction)
-            .input('MaNV', sql.VarChar, req.user.MaNV)
-            .input('Mau', sql.NVarChar, `%${marker}%`).query(`
-            SELECT MaPX, TrangThai FROM PhieuXuat WITH (UPDLOCK, HOLDLOCK)
-            WHERE MaNV=@MaNV AND GhiChu LIKE @Mau
-              AND TrangThai IN (N'Nháp', N'Chờ duyệt', N'Đã duyệt')`);
+        let openIssues;
+        try {
+            openIssues = await new sql.Request(transaction)
+                .input('MaNV', sql.VarChar, req.user.MaNV)
+                .input('MaDT', sql.VarChar, maDT)
+                .input('Mau', sql.NVarChar, `%${marker}%`).query(`
+                SELECT MaPX, TrangThai FROM PhieuXuat WITH (UPDLOCK, HOLDLOCK)
+                WHERE MaNV=@MaNV AND (MaDT=@MaDT OR GhiChu LIKE @Mau)
+                  AND TrangThai IN (N'Nháp', N'Chờ duyệt', N'Đã duyệt')`);
+        } catch (error) {
+            if (!/Invalid column name|MaDT/i.test(error.message || '')) throw error;
+            openIssues = await new sql.Request(transaction)
+                .input('MaNV', sql.VarChar, req.user.MaNV)
+                .input('Mau', sql.NVarChar, `%${marker}%`).query(`
+                SELECT MaPX, TrangThai FROM PhieuXuat WITH (UPDLOCK, HOLDLOCK)
+                WHERE MaNV=@MaNV AND GhiChu LIKE @Mau
+                  AND TrangThai IN (N'Nháp', N'Chờ duyệt', N'Đã duyệt')`);
+        }
         for (const issue of openIssues.recordset) {
             if (issue.TrangThai === 'Nháp') {
                 await new sql.Request(transaction).input('MaPX', sql.VarChar, issue.MaPX)

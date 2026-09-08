@@ -143,10 +143,8 @@ const loadCountScrapByProduct = async (sql, db, { MaKK, MaSPList }) => {
 };
 
 const loadChangeContext = async (sql, db, { MaKho, MaKK, MaSPList, since }) => {
-    const [moves, scraps] = await Promise.all([
-        loadLatestMoves(sql, db, { MaKho, MaSPList, since }),
-        loadCountScrapByProduct(sql, db, { MaKK, MaSPList })
-    ]);
+    const moves = await loadLatestMoves(sql, db, { MaKho, MaSPList, since });
+    const scraps = await loadCountScrapByProduct(sql, db, { MaKK, MaSPList });
     return { moves, scraps };
 };
 

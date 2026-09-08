@@ -1,6 +1,7 @@
 const {
     escapeHtml, formatMoney, formatVnDateTime, formatTelegramDate,
-    formatTelegramValue, prettyShiftName, headerBlock, splitTelegramText, t, RULE
+    formatTelegramValue, prettyShiftName, headerBlock, splitTelegramText, t, RULE,
+    statusBadge, sectionTitle
 } = require('./telegramMessages');
 
 const MAX_RELATED = 8;
@@ -113,7 +114,7 @@ const buildDocumentSheet = (doc = {}, lang = 'vi') => {
     const totals = Array.isArray(doc.totals) ? doc.totals : [];
     const header = [
         headerBlock(`📄 <b>${escapeHtml(title)}</b>`),
-        `Số <b>${escapeHtml(String(number))}</b>${when ? ` · ${escapeHtml(when)}` : ''}${status ? ` · ${escapeHtml(status)}` : ''}${approved ? ' · ✓' : ''}`
+        `<blockquote>🔖 <b>${escapeHtml(String(number))}</b>${when ? `  ·  ${escapeHtml(when)}` : ''}\n${status ? statusBadge(status) : '⚪ <b>Chưa xác định</b>'}${approved ? '  ✓' : ''}</blockquote>`
     ];
     const body = [];
     for (const field of fields) {
@@ -128,7 +129,7 @@ const buildDocumentSheet = (doc = {}, lang = 'vi') => {
         }
     }
     if (totals.length) {
-        body.push('', `<b>💰 Tổng hợp</b>`);
+        body.push('', '<b>💰 Tổng hợp</b>');
         for (const item of totals) {
             const money = item.money !== false && (typeof item.value === 'number' || item.format === 'money');
             const shown = money ? formatMoney(item.value) : formatTelegramValue(item.value, lang);
@@ -494,10 +495,13 @@ const sheetPc = (header, lines) => ({
         { label: 'Số HĐ NCC', value: header.SoHoaDon },
         { label: 'Đơn mua', value: header.MaPO },
         { label: 'Phiếu nhập', value: header.MaPN },
-        { label: 'Đối chiếu 3 bên', value: header.TrangThaiDoiChieu }
+        { label: 'Đối chiếu 3 bên', value: header.TrangThaiDoiChieu },
+        { label: 'Hạn thanh toán', value: header.HanThanhToan }
     ],
     totals: [
         { label: 'Số tiền phiếu', value: header.SoTien, format: 'money' },
+        header.TienThue != null ? { label: 'Thuế mua', value: header.TienThue, format: 'money' } : null,
+        header.TongCong != null ? { label: 'Tổng cộng HĐ', value: header.TongCong, format: 'money' } : null,
         header.SoTienConLai != null ? { label: 'Còn phải trả', value: header.SoTienConLai, format: 'money' } : null
     ].filter(Boolean),
     note: header.NoiDung || header.GhiChu || 'Không chi NCC từ Telegram. Duyệt ghi nhật ký như Fly.'
@@ -799,7 +803,7 @@ const buildDocsTypeList = (kind, rows = [], lang = 'vi') => {
     }
     for (const row of rows.slice(0, 15)) {
         const ngay = formatTelegramDate(row.ngay, lang) || '';
-        lines.push(`• <b>${escapeHtml(row.id)}</b> · ${escapeHtml(ngay || '—')} · ${escapeHtml(row.trangThai || '—')} · ${escapeHtml(row.doiTuong || '—')}`);
+        lines.push(`${statusBadge(row.trangThai || '—')}  <b>${escapeHtml(row.id)}</b>\n   ${escapeHtml(ngay || '—')} · ${escapeHtml(row.doiTuong || '—')}`);
     }
     return lines.filter(Boolean).join('\n');
 };
@@ -809,7 +813,10 @@ const docsTypeListKeyboard = (kind, rows = [], lang = 'vi') => {
         text: `📄 ${row.id}`,
         callback_data: String(`docs:${kind}:${row.id}`).slice(0, 64)
     }]));
-    buttons.push([{ text: t(lang, 'docsBackTypes'), callback_data: 'cmd:docs' }]);
+    buttons.push([
+        { text: t(lang, 'docsBackTypes'), callback_data: 'cmd:docs' },
+        { text: '🏠 Tổng quan', callback_data: 'cmd:fly' }
+    ]);
     return { inline_keyboard: buttons };
 };
 

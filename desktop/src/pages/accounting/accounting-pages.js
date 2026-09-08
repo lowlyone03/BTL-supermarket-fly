@@ -12,8 +12,30 @@
   };
   const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
   const money = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
-  const fmtDate = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
-  const fmtDateTime = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
+  const calendarDate = value => {
+    if (!value) return null;
+    const iso = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (iso) return { y: Number(iso[1]), m: Number(iso[2]), d: Number(iso[3]) };
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return null;
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(dt);
+    const get = type => Number(parts.find(part => part.type === type)?.value);
+    return { y: get('year'), m: get('month'), d: get('day') };
+  };
+  const fmtDate = value => {
+    const part = calendarDate(value);
+    return part ? `${part.d}/${part.m}/${part.y}` : '—';
+  };
+  const fmtDateTime = value => value ? new Intl.DateTimeFormat('vi-VN', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
+  const dueTone = (daysLeft, settled = false) => {
+    if (settled) return 'is-due-safe';
+    const days = Number(daysLeft);
+    if (!Number.isFinite(days)) return 'is-due-safe';
+    if (days < 0) return 'is-overdue';
+    if (days === 0) return 'is-due-today';
+    if (days <= 5) return 'is-due-soon';
+    return 'is-due-safe';
+  };
   const reportDefaults = () => window.FLY_REPORT_PERIOD?.defaults?.() || (() => {
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
     const get = type => parts.find(part => part.type === type)?.value;
@@ -760,6 +782,45 @@
     } catch (error) { context.showToast(error.message, 'error'); }
   };
 
+  const canCreatePayableVoucher = item => !item.MaPhieu && Number(item.SoTienConLai) > 0;
+
+  const bulkPaymentVoucherForm = async (context, debts, onDone) => {
+    const selected = (debts || []).filter(canCreatePayableVoucher);
+    if (!selected.length) return context.showToast('Chọn ít nhất một khoản chưa lập Phiếu chi.', 'error');
+    const suppliers = [...new Set(selected.map(item => item.MaNCC))];
+    if (suppliers.length > 1) {
+      return context.showToast('Chỉ lập hàng loạt cho cùng một Nhà cung cấp. Bỏ chọn các khoản của NCC khác.', 'error');
+    }
+    const supplier = selected[0];
+    const total = selected.reduce((sum, item) => sum + Number(item.SoTienConLai || 0), 0);
+    const defaultContent = `Thanh toán hàng loạt ${selected.length} khoản công nợ ${supplier.TenNCC}`;
+    const overlay = document.createElement('div');
+    overlay.className = 'warehouse-modal-backdrop';
+    overlay.innerHTML = `<div class="warehouse-modal payment-voucher-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">PHIẾU CHI HÀNG LOẠT</p><h2>Lập ${selected.length} Phiếu chi · ${esc(supplier.TenNCC)}</h2><span>${esc(supplier.MaNCC)} · ${money(total)}</span></div><button class="warehouse-icon-button close" type="button">×</button></div><div class="warehouse-modal-body">${settlementFlow('Chờ Quản lý giao tiền')}<div class="manager-readonly-note"><svg><use href="#i-shield"></use></svg><div><strong>Mỗi công nợ một Phiếu chi — không gộp số tiền</strong><span>Cùng Nhà cung cấp ${esc(supplier.TenNCC)}. Vẫn bắt đối chiếu ba bên, một phiếu/khoản, gửi Quản lý duyệt + giao tiền. Công nợ chưa giảm ở bước này.</span></div></div><div class="payable-bulk-group"><strong>${selected.length} khoản · ${money(total)}</strong><ul>${selected.map(item => `<li><span>${esc(item.MaCNPTra)} · HĐ ${esc(item.SoHoaDon)} · hạn ${fmtDate(item.HanThanhToan)}</span><strong>${money(item.SoTienConLai)}</strong></li>`).join('')}</ul></div><div class="warehouse-form-grid payment-voucher-fields"><div class="warehouse-field"><label>Phương thức *</label><select id="bulkVoucherMethod"><option>Chuyển khoản</option><option>Tiền mặt</option></select></div><div class="warehouse-field"><label>Nội dung chi *</label><input id="bulkVoucherContent" maxlength="500" value="${esc(defaultContent)}"></div><div class="warehouse-field full"><label>Ghi chú</label><textarea id="bulkVoucherNote" maxlength="500" rows="3" placeholder="Thông tin bổ sung cho Quản lý kiểm tra"></textarea></div></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close" type="button">Hủy</button><button class="warehouse-primary submit-bulk-voucher" type="button">Lập ${selected.length} Phiếu chi và gửi duyệt</button></div></div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+    overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+    overlay.querySelector('.submit-bulk-voucher').addEventListener('click', async event => {
+      const payload = {
+        MaCNPTra: selected.map(item => item.MaCNPTra),
+        PhuongThuc: overlay.querySelector('#bulkVoucherMethod').value,
+        NoiDung: overlay.querySelector('#bulkVoucherContent').value.trim(),
+        GhiChu: overlay.querySelector('#bulkVoucherNote').value.trim()
+      };
+      if (!payload.NoiDung) return context.showToast('Vui lòng nhập nội dung chi.', 'error');
+      event.currentTarget.disabled = true;
+      try {
+        const result = await api(context, '/accounting/payment-vouchers/bulk', {
+          method: 'POST', body: JSON.stringify(payload)
+        });
+        context.showToast(result.message, result.errors?.length ? 'error' : 'success');
+        close();
+        await onDone();
+      } catch (error) { context.showToast(error.message, 'error'); event.currentTarget.disabled = false; }
+    });
+  };
+
   const paymentResultForm = async (context, debtId, onDone) => {
     try {
       const data = await api(context, `/accounting/payables/${debtId}`);
@@ -798,11 +859,28 @@
 
   const initPayables = async (root, context) => {
     let items = [];
+    const selectedIds = new Set();
+    const syncBulkBar = () => {
+      const eligible = items.filter(canCreatePayableVoucher);
+      const chosen = eligible.filter(item => selectedIds.has(item.MaCNPTra));
+      const hint = root.querySelector('#payableSelectedHint');
+      const bulk = root.querySelector('#bulkCreateVouchers');
+      const selectAll = root.querySelector('#payableSelectAll');
+      if (hint) hint.textContent = chosen.length ? `Đã chọn ${chosen.length} khoản chưa lập phiếu` : 'Chọn cùng một NCC để lập phiếu chi hàng loạt';
+      if (bulk) bulk.disabled = !chosen.length;
+      if (selectAll) {
+        const ncc = chosen[0]?.MaNCC;
+        const same = ncc ? eligible.filter(item => item.MaNCC === ncc) : eligible;
+        selectAll.checked = same.length > 0 && chosen.length === same.length && chosen.every(item => item.MaNCC === ncc);
+        selectAll.indeterminate = chosen.length > 0 && !selectAll.checked;
+      }
+    };
     const render = () => {
       root.querySelector('#accountingPayableBody').innerHTML = items.length ? items.map(item => {
         const due = Number(item.SoNgayConLai) <= 0;
+        const eligible = canCreatePayableVoucher(item);
         let action = `<span class="payment-voucher-wait">Còn ${item.SoNgayConLai} ngày</span>`;
-        if (!item.MaPhieu && Number(item.SoTienConLai) > 0) {
+        if (eligible) {
           action = `<button class="warehouse-primary" data-create-voucher="${esc(item.MaCNPTra)}">${due ? 'Lập Phiếu chi' : 'Lập Phiếu chi sớm'}</button>`;
         }
         else if (item.TrangThaiPhieuChi === 'Từ chối') action = `<button class="warehouse-secondary" data-resubmit-voucher="${esc(item.MaCNPTra)}">Sửa &amp; gửi lại</button>`;
@@ -810,30 +888,71 @@
         else if (item.TrangThaiPhieuChi === 'Chờ duyệt') action = '<span class="payment-voucher-wait">Chờ Quản lý giao tiền</span>';
         else if (item.TrangThaiPhieuChi === 'Thanh toán thành công') action = '<span class="status-pill ok">Đã tất toán</span>';
         const daysLeft = Number(item.SoNgayConLai);
-        const rowClass = item.TrangThaiPhieuChi === 'Thanh toán thành công' ? '' : daysLeft < 0 ? 'overdue-row' : daysLeft <= 3 ? 'due-soon-row' : '';
+        const settled = item.TrangThaiPhieuChi === 'Thanh toán thành công';
+        const rowClass = settled ? '' : daysLeft < 0 ? 'overdue-row' : daysLeft <= 3 ? 'due-soon-row' : '';
         const daysBadgeClass = daysLeft < 0 ? 'overdue' : daysLeft === 0 ? 'due-today' : daysLeft <= 5 ? 'due-soon' : 'safe';
         const daysText = daysLeft < 0 ? `Quá ${Math.abs(daysLeft)} ngày` : daysLeft === 0 ? 'Đến hạn hôm nay' : `Còn ${daysLeft} ngày`;
-        return `<tr class="${rowClass}" data-debt="${esc(item.MaCNPTra)}" tabindex="0" role="button" aria-label="Mở hồ sơ công nợ ${esc(item.MaCNPTra)}"><td>${docChip('cn', item.MaCNPTra, item.MaCNPTra)}<small>Phát sinh ${fmtDate(item.NgayPhatSinh)}</small></td><td><strong>${esc(item.TenNCC)}</strong><small>${esc(item.MaNCC)}</small></td><td><div class="doc-chip-set">${docChip('invoice', item.MaHDMH, `HĐ ${item.SoHoaDon}`)}<small>${docChip('po', item.MaPO, item.MaPO)} · ${docChip('pn', item.MaPN, item.MaPN || '—')}</small></div></td><td><strong>${fmtDate(item.HanThanhToan)}</strong><small><span class="days-badge ${daysBadgeClass}">${daysText}</span></small></td><td class="num"><strong>${money(item.SoTienConLai)}</strong><small>Gốc ${money(item.SoTienNo)}</small></td><td>${item.MaPhieu ? `${docChip('pc', item.MaPhieu, item.MaPhieu)}<small>${esc(item.PhuongThuc)}</small><span class="status-pill ${voucherClass(item.TrangThaiPhieuChi)}">${esc(item.TrangThaiPhieuChi)}</span>` : '<span class="status-pill draft">Chưa lập Phiếu chi</span>'}</td><td>${action}</td></tr>`;
-      }).join('') : `<tr><td colspan="7" class="warehouse-empty">${esc(window.FLY_SEARCH?.emptyMessage?.(root.querySelector('#accountingPayableSearch')?.value, 'công nợ', 'Chưa có công nợ phù hợp.') || 'Chưa có công nợ phù hợp.')}</td></tr>`;
+        const tone = dueTone(daysLeft, settled);
+        const check = eligible
+          ? `<input type="checkbox" class="payable-select" value="${esc(item.MaCNPTra)}" ${selectedIds.has(item.MaCNPTra) ? 'checked' : ''} aria-label="Chọn ${esc(item.MaCNPTra)}">`
+          : '';
+        return `<tr class="${rowClass}" data-debt="${esc(item.MaCNPTra)}" tabindex="0" role="button" aria-label="Mở hồ sơ công nợ ${esc(item.MaCNPTra)}"><td class="payable-check-col">${check}</td><td>${docChip('cn', item.MaCNPTra, item.MaCNPTra)}<small>Phát sinh <span class="payable-origin-date">${fmtDate(item.NgayPhatSinh)}</span></small></td><td><strong>${esc(item.TenNCC)}</strong><small>${esc(item.MaNCC)}</small></td><td><div class="doc-chip-set">${docChip('invoice', item.MaHDMH, `HĐ ${item.SoHoaDon}`)}<small>${docChip('po', item.MaPO, item.MaPO)} · ${docChip('pn', item.MaPN, item.MaPN || '—')}</small></div></td><td><strong class="payable-due-date ${tone}">${fmtDate(item.HanThanhToan)}</strong><small><span class="days-badge ${daysBadgeClass}">${daysText}</span></small></td><td class="num"><strong>${money(item.SoTienConLai)}</strong><small>Gốc ${money(item.SoTienNo)}</small></td><td>${item.MaPhieu ? `${docChip('pc', item.MaPhieu, item.MaPhieu)}<small>${esc(item.PhuongThuc)}</small><span class="status-pill ${voucherClass(item.TrangThaiPhieuChi)}">${esc(item.TrangThaiPhieuChi)}</span>` : '<span class="status-pill draft">Chưa lập Phiếu chi</span>'}</td><td>${action}</td></tr>`;
+      }).join('') : `<tr><td colspan="8" class="warehouse-empty">${esc(window.FLY_SEARCH?.emptyMessage?.(root.querySelector('#accountingPayableSearch')?.value, 'công nợ', 'Chưa có công nợ phù hợp.') || 'Chưa có công nợ phù hợp.')}</td></tr>`;
+      syncBulkBar();
     };
     const load = async () => {
       try {
         const search = root.querySelector('#accountingPayableSearch').value;
         const status = root.querySelector('#accountingVoucherStatus').value;
         const data = await api(context, `/accounting/payables?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}`);
-        items = data.items; render();
+        items = data.items;
+        const visible = new Set(items.map(item => item.MaCNPTra));
+        [...selectedIds].forEach(id => { if (!visible.has(id) || !canCreatePayableVoucher(items.find(item => item.MaCNPTra === id) || {})) selectedIds.delete(id); });
+        render();
         root.querySelector('#payableRemaining').textContent = money(data.summary.TongConLai);
         root.querySelector('#payableCount').textContent = `${data.summary.TongKhoan} khoản`;
         root.querySelector('#voucherWaiting').textContent = data.summary.ChoDuyet;
         root.querySelector('#voucherReady').textContent = data.summary.ChoThanhToan;
       } catch (error) { context.showToast(error.message, 'error'); }
     };
-    root.innerHTML = `${heading('KẾ TOÁN / CÔNG NỢ', 'Công nợ và Phiếu chi Nhà cung cấp', 'Lập đúng một Phiếu chi cho toàn bộ công nợ đến hạn. Sau khi Quản lý giao tiền, bạn thanh toán cho Nhà cung cấp; chỉ thành công mới giảm công nợ.', '<button class="warehouse-secondary" id="backInvoices">Mở hồ sơ đối chiếu</button>')}${settlementFlow()}<div class="warehouse-stats payment-voucher-stats"><article><span>CÒN PHẢI TRẢ</span><strong id="payableRemaining">0 đ</strong><small id="payableCount">0 khoản</small></article><article><span>CHỜ QUẢN LÝ GIAO TIỀN</span><strong id="voucherWaiting">0</strong><small>Duyệt Phiếu chi = giao quỹ</small></article><article><span>ĐÃ NHẬN TIỀN, CẦN CHI NCC</span><strong id="voucherReady">0</strong><small>Đã duyệt hoặc thanh toán thất bại</small></article></div><article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"></use></svg><input id="accountingPayableSearch" placeholder="Tìm công nợ, Nhà cung cấp, hóa đơn hoặc Phiếu chi..."></label><div class="warehouse-toolbar-actions"><select id="accountingVoucherStatus"><option value="">Tất cả Phiếu chi</option><option>Chưa lập Phiếu chi</option><option>Chờ duyệt</option><option>Đã duyệt</option><option>Thanh toán thất bại</option><option>Thanh toán thành công</option><option>Từ chối</option></select><button class="warehouse-icon-button" id="refreshPayables"><svg><use href="#i-refresh"></use></svg></button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table payment-voucher-table"><thead><tr><th>CÔNG NỢ</th><th>NHÀ CUNG CẤP</th><th>BỘ CHỨNG TỪ</th><th>HẠN THANH TOÁN</th><th>CÒN LẠI</th><th>PHIẾU CHI</th><th>THAO TÁC</th></tr></thead><tbody id="accountingPayableBody"></tbody></table></div></article>`;
+    root.innerHTML = `${heading('KẾ TOÁN / CÔNG NỢ', 'Công nợ và Phiếu chi Nhà cung cấp', 'Lập đúng một Phiếu chi cho từng khoản công nợ. Có thể chọn nhiều khoản cùng Nhà cung cấp để lập hàng loạt. Sau khi Quản lý giao tiền, bạn thanh toán cho Nhà cung cấp; chỉ thành công mới giảm công nợ.', '<button class="warehouse-secondary" id="backInvoices">Mở hồ sơ đối chiếu</button>')}${settlementFlow()}<div class="warehouse-stats payment-voucher-stats"><article><span>CÒN PHẢI TRẢ</span><strong id="payableRemaining">0 đ</strong><small id="payableCount">0 khoản</small></article><article><span>CHỜ QUẢN LÝ GIAO TIỀN</span><strong id="voucherWaiting">0</strong><small>Duyệt Phiếu chi = giao quỹ</small></article><article><span>ĐÃ NHẬN TIỀN, CẦN CHI NCC</span><strong id="voucherReady">0</strong><small>Đã duyệt hoặc thanh toán thất bại</small></article></div><article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"></use></svg><input id="accountingPayableSearch" placeholder="Tìm công nợ, Nhà cung cấp, hóa đơn hoặc Phiếu chi..."></label><div class="warehouse-toolbar-actions"><span class="payable-selected-hint" id="payableSelectedHint">Chọn cùng một NCC để lập phiếu chi hàng loạt</span><button class="warehouse-primary" id="bulkCreateVouchers" type="button" disabled>Lập phiếu chi hàng loạt</button><select id="accountingVoucherStatus"><option value="">Tất cả Phiếu chi</option><option>Chưa lập Phiếu chi</option><option>Chờ duyệt</option><option>Đã duyệt</option><option>Thanh toán thất bại</option><option>Thanh toán thành công</option><option>Từ chối</option></select><button class="warehouse-icon-button" id="refreshPayables"><svg><use href="#i-refresh"></use></svg></button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table payment-voucher-table"><thead><tr><th class="payable-check-col"><input type="checkbox" id="payableSelectAll" aria-label="Chọn tất cả khoản chưa lập phiếu"></th><th>CÔNG NỢ</th><th>NHÀ CUNG CẤP</th><th>BỘ CHỨNG TỪ</th><th>HẠN THANH TOÁN</th><th>CÒN LẠI</th><th>PHIẾU CHI</th><th>THAO TÁC</th></tr></thead><tbody id="accountingPayableBody"></tbody></table></div></article>`;
     let timer;
     root.querySelector('#accountingPayableSearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250); });
     root.querySelector('#accountingVoucherStatus').addEventListener('change', load);
     root.querySelector('#refreshPayables').addEventListener('click', load);
     root.querySelector('#backInvoices').addEventListener('click', () => context.navigate('accounting-invoices'));
+    root.querySelector('#bulkCreateVouchers').addEventListener('click', () => {
+      const chosen = items.filter(item => selectedIds.has(item.MaCNPTra) && canCreatePayableVoucher(item));
+      return bulkPaymentVoucherForm(context, chosen, load);
+    });
+    root.querySelector('#payableSelectAll').addEventListener('change', event => {
+      const eligible = items.filter(canCreatePayableVoucher);
+      if (!event.currentTarget.checked) {
+        eligible.forEach(item => selectedIds.delete(item.MaCNPTra));
+        render();
+        return;
+      }
+      const anchor = items.find(item => selectedIds.has(item.MaCNPTra))?.MaNCC || eligible[0]?.MaNCC;
+      eligible.forEach(item => {
+        if (item.MaNCC === anchor) selectedIds.add(item.MaCNPTra);
+        else selectedIds.delete(item.MaCNPTra);
+      });
+      render();
+    });
+    root.addEventListener('change', event => {
+      const box = event.target.closest('.payable-select');
+      if (!box || !root.contains(box)) return;
+      if (box.checked) {
+        const next = items.find(item => item.MaCNPTra === box.value);
+        const currentNcc = [...selectedIds].map(id => items.find(item => item.MaCNPTra === id)).find(item => item && item.MaCNPTra !== box.value)?.MaNCC;
+        if (currentNcc && next && next.MaNCC !== currentNcc) selectedIds.clear();
+        selectedIds.add(box.value);
+        render();
+        return;
+      }
+      selectedIds.delete(box.value);
+      syncBulkBar();
+    });
     root.addEventListener('click', event => {
       const chip = event.target.closest('[data-open-doc]');
       if (chip) {
@@ -871,10 +990,10 @@
         const dCls = item.TrangThaiHienTai === 'Đã thanh toán' ? 'safe' : dLeft < 0 ? 'overdue' : dLeft === 0 ? 'due-today' : dLeft <= 5 ? 'due-soon' : 'safe';
         return `
         <tr class="${rCls}">
-          <td><strong>${esc(item.MaCNPTra)}</strong><small>Phát sinh ${fmtDate(item.NgayPhatSinh)}</small></td>
+          <td><strong>${esc(item.MaCNPTra)}</strong><small>Phát sinh <span class="payable-origin-date">${fmtDate(item.NgayPhatSinh)}</span></small></td>
           <td><strong>${esc(item.TenNCC)}</strong><small>${esc(item.MaNCC)}</small></td>
           <td><strong>HĐ ${esc(item.SoHoaDon)}</strong><small>${esc(item.MaPO)} · ${esc(item.MaPN || 'Chưa có Phiếu nhập')}</small></td>
-          <td><strong>${fmtDate(item.HanThanhToan)}</strong><small><span class="days-badge ${dCls}">${dBadge}</span></small></td>
+          <td><strong class="payable-due-date ${dueTone(dLeft, item.TrangThaiHienTai === 'Đã thanh toán')}">${fmtDate(item.HanThanhToan)}</strong><small><span class="days-badge ${dCls}">${dBadge}</span></small></td>
           <td class="num"><strong>${money(item.SoTienNo)}</strong><small>Đã trả ${money(item.SoTienDaTra)}</small></td>
           <td class="num"><strong>${money(item.SoTienConLai)}</strong></td>
           <td><span class="status-pill ${debtClass(item.TrangThaiHienTai)}">${esc(item.TrangThaiHienTai)}</span><small>${esc(item.BuocTatToan || (item.MaPhieu ? item.TrangThaiPhieuChi : 'Chưa lập Phiếu chi'))}</small></td>
@@ -1711,11 +1830,11 @@
         <label class="warehouse-field"><span>Từ ngày</span><input type="date" id="accHistFrom" data-keep-native value="${esc(fromKey)}"></label>
         <label class="warehouse-field"><span>Đến ngày</span><input type="date" id="accHistTo" data-keep-native value="${esc(today)}"></label>
         <label class="warehouse-field"><span>Loại việc</span><select id="accHistKind">
-          <option value="nghiep-vu">Việc nghiệp vụ</option>
+          <option value="nghiep-vu" selected>Việc nghiệp vụ</option>
           <option value="">Tất cả</option>
-          <option value="quy-luong" selected>Chi lương / quỹ chung</option>
-          <option value="luong">Lương, công, ca</option>
           <option value="cong-no">Công nợ / phiếu chi NCC</option>
+          <option value="quy-luong">Chi lương / quỹ chung</option>
+          <option value="luong">Lương, công, ca</option>
           <option value="tien-ton">Tiền và tồn</option>
         </select></label>
         <label class="warehouse-field"><span>Tìm</span><input id="accHistSearch" placeholder="Chứng từ, nội dung..."></label>

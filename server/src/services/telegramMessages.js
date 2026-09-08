@@ -1,9 +1,55 @@
 const {
     formatVnDate, formatVnDateTime: formatClockDateTime, looksLikeJsDateString, operatingDayOf
 } = require('./telegramClock');
+const { currentPeriodDefaults } = require('./reportingPeriod');
 
 const RULE = '────────────────────';
 const RULE_TOP = '━━━━━━━━━━━━━━━━━━━━';
+const BAR_ON = '▰';
+const BAR_OFF = '▱';
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const progressBar = (value, max, width = 8) => {
+    const total = Number(max);
+    const current = Number(value);
+    const ratio = total > 0 && Number.isFinite(current) ? clamp(current / total, 0, 1) : 0;
+    const filled = Math.round(ratio * width);
+    return `${BAR_ON.repeat(filled)}${BAR_OFF.repeat(width - filled)} ${Math.round(ratio * 100)}%`;
+};
+
+const statusBadge = (status) => {
+    const raw = String(status || 'Chưa xác định').trim();
+    const key = raw.toLocaleLowerCase('vi-VN');
+    let icon = '⚪';
+    if (/thành công|đã duyệt|đã xác nhận|đã thanh toán|đã tất toán|hoàn thành|đã đối chiếu|đã chốt/.test(key)) icon = '🟢';
+    else if (/chờ|đang|nháp|mở/.test(key)) icon = '🟡';
+    else if (/quá hạn|thất bại|từ chối|bị khóa|hủy|lệch/.test(key)) icon = '🔴';
+    return `${icon} <b>${escapeHtml(raw)}</b>`;
+};
+
+const channelIcon = (name) => {
+    const key = String(name || '').toLocaleLowerCase('vi-VN');
+    if (key.includes('tiền mặt')) return '💵';
+    if (key.includes('qr')) return '📱';
+    if (key.includes('thẻ')) return '💳';
+    if (key.includes('chuyển khoản')) return '🏦';
+    return '💠';
+};
+
+const sectionTitle = (icon, title) => `${icon} <b>${escapeHtml(title)}</b>`;
+
+const tidyLines = (lines = []) => {
+    const out = [];
+    for (const value of lines) {
+        if (value == null || value === false) continue;
+        const line = String(value);
+        if (!line && (!out.length || out[out.length - 1] === '')) continue;
+        out.push(line);
+    }
+    while (out[out.length - 1] === '') out.pop();
+    return out.join('\n');
+};
 
 const formatMoney = value => {
     const number = Number(value);
@@ -88,6 +134,17 @@ const maskChatId = value => {
 };
 
 const isManagerRole = (role) => String(role || '').toLocaleLowerCase('vi-VN').includes('quản lý');
+
+const telegramAudience = (person = {}) => {
+    const role = String(person.TenVaiTro || person.role || '').toLocaleLowerCase('vi-VN');
+    const login = String(person.TenDangNhap || person.username || '').trim().toLowerCase();
+    if (role.includes('kế toán') || /\bketoan\b/.test(role)) return 'admin';
+    if (login === 'admin' || role.includes('quản trị')) return 'admin';
+    if (role.includes('quản lý') || role.includes('manager')) {
+        return login && login !== 'admin' ? 'ql' : 'admin';
+    }
+    return 'ql';
+};
 
 const LANGS = ['vi', 'en', 'zh'];
 const DEFAULT_LANG = 'vi';
@@ -341,6 +398,9 @@ const I18N = {
         rptShifts: 'Ca & quỹ',
         rptLowstock: 'Tồn thấp',
         rptPnl: 'P&L điều hành (khác lãi gộp)',
+        rptMonth: '📅 Báo cáo tháng',
+        rptQuarter: '🗓 Báo cáo quý',
+        rptYear: '📆 Báo cáo năm',
         reportsPnlEmpty: 'Chưa có P&L điều hành cho ngày này. Lãi gộp không trừ chi NCC / lương.',
         helpHeader: 'Lệnh (English) — chú thích tiếng Việt',
         helpIntro: 'Chỉ đọc nghiệp vụ; lệnh không có quyền không liệt kê.',
@@ -672,6 +732,9 @@ const I18N = {
         rptShifts: 'Shifts & cash',
         rptLowstock: 'Low stock',
         rptPnl: 'Operating P&L (not gross profit)',
+        rptMonth: '📅 Monthly report',
+        rptQuarter: '🗓 Quarterly report',
+        rptYear: '📆 Annual report',
         reportsPnlEmpty: 'No operating P&L for this day. Gross profit does not deduct supplier payouts / payroll.',
         helpHeader: 'Commands (English) — descriptions',
         helpIntro: 'Read-only operations; commands without permission are omitted.',
@@ -920,6 +983,9 @@ const I18N = {
         rptShifts: '班次与钱箱',
         rptLowstock: '低库存',
         rptPnl: '经营 P&L（不是毛利）',
+        rptMonth: '📅 月报',
+        rptQuarter: '🗓 季报',
+        rptYear: '📆 年报',
         reportsPnlEmpty: '当日暂无经营 P&L。毛利不扣除供应商付款 / 工资。',
         helpHeader: '命令（英语）— 中文说明',
         helpIntro: '只读业务；无权限的命令不列出。',
@@ -1049,7 +1115,7 @@ const langKeyboardRow = () => LANG_BUTTONS.map(btn => ({
     callback_data: `lang:${btn.lang}`
 }));
 
-const headerBlock = (title) => [RULE_TOP, title, RULE].join('\n');
+const headerBlock = (title) => [`╭${RULE_TOP}`, title, `╰${RULE}`].join('\n');
 
 const hintLine = (lang) => `<i>${escapeHtml(t(lang, 'flyHint'))}</i>`;
 
@@ -1095,12 +1161,19 @@ const buildStartWelcomeBound = (user, lang = DEFAULT_LANG, dash = {}) => {
     const revenue = summary.DoanhThuThuan ?? summary.DoanhThuHoaDon;
     const cogs = summary.GiaVonHangBanThuan ?? summary.GiaVon;
     const gross = summary.LoiNhuanGop;
+    const urgentCount = Number(summary.congNoDenHan || 0)
+        + Number(summary.choXacNhan || 0)
+        + Number(summary.spCanBoSung || 0)
+        + Number((summary.caLech || []).length)
+        + inbox.filter(item => item?.tone === 'urgent').length;
+    const health = urgentCount > 4 ? '🔴 Cần ưu tiên xử lý' : (urgentCount ? '🟡 Có việc cần theo dõi' : '🟢 Vận hành ổn định');
     const dashLines = [
-        `<b>${escapeHtml(t(lang, 'welcomeDashTitle'))}</b>`,
+        sectionTitle('⚡', t(lang, 'welcomeDashTitle')),
         dayText ? `<i>${escapeHtml(t(lang, 'todayDay', { day: dayText }))}</i>` : '',
-        hasMoney(revenue) ? `💰 ${escapeHtml(t(lang, 'todayRevenue'))}: ${moneyCode(revenue)}` : '',
-        hasMoney(cogs) ? `📦 ${escapeHtml(t(lang, 'todayCogs'))}: ${moneyCode(cogs)}` : '',
-        hasMoney(gross) ? `📈 ${escapeHtml(t(lang, 'todayGross'))}: ${moneyCode(gross)}` : '',
+        `<blockquote>${health}</blockquote>`,
+        hasMoney(revenue) ? `💰 <b>${escapeHtml(t(lang, 'todayRevenue'))}</b>  ${moneyCode(revenue)}` : '',
+        hasMoney(cogs) ? `📦 <b>${escapeHtml(t(lang, 'todayCogs'))}</b>  ${moneyCode(cogs)}` : '',
+        hasMoney(gross) ? `${Number(gross) >= 0 ? '📈' : '📉'} <b>${escapeHtml(t(lang, 'todayGross'))}</b>  ${moneyCode(gross)}` : '',
         hasMoney(gross) ? `<i>${escapeHtml(t(lang, 'reportsGrossNote'))}</i>` : '',
         `⏳ ${escapeHtml(t(lang, 'welcomeDashPending'))}: ${textCode(String(inbox.length))}`,
         `🕐 ${escapeHtml(t(lang, 'welcomeDashGap'))}: ${textCode(lech)}`,
@@ -1252,17 +1325,23 @@ const buildA3Message = (summary, { sentAt } = {}) => {
 };
 
 const moneyBlock = (summary, lang) => [
-    `${t(lang, 'todayRevenue')}: ${moneyCode(summary.DoanhThuThuan ?? summary.DoanhThuHoaDon)}`,
-    `${t(lang, 'todayCogs')}: ${moneyCode(summary.GiaVonHangBanThuan ?? summary.GiaVon)}`,
-    `${t(lang, 'todayGross')}: ${moneyCode(summary.LoiNhuanGop)}`
+    `💰 <b>${escapeHtml(t(lang, 'todayRevenue'))}</b>  ${moneyCode(summary.DoanhThuThuan ?? summary.DoanhThuHoaDon)}`,
+    `📦 <b>${escapeHtml(t(lang, 'todayCogs'))}</b>  ${moneyCode(summary.GiaVonHangBanThuan ?? summary.GiaVon)}`,
+    `${Number(summary.LoiNhuanGop || 0) >= 0 ? '📈' : '📉'} <b>${escapeHtml(t(lang, 'todayGross'))}</b>  ${moneyCode(summary.LoiNhuanGop)}`
 ];
 
-const channelBlock = (summary, lang) => [
-    `💵 ${t(lang, 'todayCash')}: ${moneyCode(summary.TienMat)}`,
-    `📱 ${t(lang, 'todayQr')}: ${moneyCode(summary.TienQR)}`,
-    `💳 ${t(lang, 'todayCard')}: ${moneyCode(summary.TienThe)}`,
-    `🏦 ${t(lang, 'todayTransfer')}: ${moneyCode(summary.TienCK)}`
-];
+const channelBlock = (summary, lang) => {
+    const channels = [
+        ['💵', t(lang, 'todayCash'), Number(summary.TienMat || 0)],
+        ['📱', t(lang, 'todayQr'), Number(summary.TienQR || 0)],
+        ['💳', t(lang, 'todayCard'), Number(summary.TienThe || 0)],
+        ['🏦', t(lang, 'todayTransfer'), Number(summary.TienCK || 0)]
+    ];
+    const total = channels.reduce((sum, row) => sum + row[2], 0);
+    return channels.map(([icon, label, value]) => (
+        `${icon} ${escapeHtml(label)}  ${moneyCode(value)}  <code>${progressBar(value, total, 5)}</code>`
+    ));
+};
 
 const alertBlock = (summary, lang) => {
     const none = t(lang, 'todayNone');
@@ -1303,10 +1382,10 @@ const buildTodayMessage = (summary, lang = DEFAULT_LANG) => {
         lines.push(...summary.restock.slice(0, 8).map(row =>
             `• ${escapeHtml(row.TenSP)}: ${textCode(`${row.SLTon}/${row.TonKhoToiThieu}`)}`));
     }
-    return lines.filter(line => line !== '').join('\n');
+    return tidyLines(lines);
 };
 
-const buildRevenueMessage = (summary, lang = DEFAULT_LANG) => [
+const buildRevenueMessage = (summary, lang = DEFAULT_LANG) => tidyLines([
     headerBlock(`💰 <b>${escapeHtml(t(lang, 'revenueTitle'))}</b>`),
     `<i>${escapeHtml(t(lang, 'todayDay', { day: formatVnDate(summary.operatingDay) }))}</i>`,
     '',
@@ -1320,7 +1399,7 @@ const buildRevenueMessage = (summary, lang = DEFAULT_LANG) => [
         `<b>${escapeHtml(t(lang, 'todayTopHd'))}</b>`,
         ...summary.invoices.slice(0, 8).map(row => `• ${textCode(row.MaHD)} · ${moneyCode(row.TongThanhToan)}`)
     ] : [])
-].filter(line => line !== '').join('\n');
+]);
 
 const inboxLine = (item, lang = DEFAULT_LANG) => {
     const title = escapeHtml(item.title || '');
@@ -1345,18 +1424,24 @@ const buildFlyDashboard = ({ summary = {}, inbox = [] } = {}, lang = DEFAULT_LAN
     const none = t(lang, 'todayNone');
     const lech = (summary.caLech || []).slice(0, 5).join(', ') || none;
     const latest = inbox.slice(0, 5);
-    return [
+    const alertCount = Number(summary.congNoDenHan || 0)
+        + Number(summary.choXacNhan || 0)
+        + Number(summary.spCanBoSung || 0)
+        + Number((summary.caLech || []).length);
+    const pulse = alertCount > 4 ? '🔴 Ưu tiên xử lý' : (alertCount ? '🟡 Cần theo dõi' : '🟢 Ổn định');
+    return tidyLines([
         headerBlock(`🏪 <b>${escapeHtml(t(lang, 'dashBrand'))}</b>`),
         `<i>${escapeHtml(t(lang, 'todayDay', { day: formatVnDate(summary.operatingDay) }))}</i>`,
         '',
-        `<b>${escapeHtml(t(lang, 'dashOps'))}</b>`,
+        `<blockquote>⚡ <b>Trạng thái vận hành</b>  ${pulse}</blockquote>`,
+        sectionTitle('📊', t(lang, 'dashOps')),
         ...moneyBlock(summary, lang),
         summary.SoHoaDon != null ? `${t(lang, 'todayInvoices')}: ${textCode(String(summary.SoHoaDon))}` : '',
         '',
-        `<b>${escapeHtml(t(lang, 'dashPay'))}</b>`,
+        sectionTitle('💠', t(lang, 'dashPay')),
         ...channelBlock(summary, lang),
         '',
-        `<b>${escapeHtml(t(lang, 'dashWatch'))}</b>`,
+        sectionTitle('🛰', t(lang, 'dashWatch')),
         `⏳ ${t(lang, 'dashPending')}: ${textCode(String(inbox.length))}`,
         `🧾 ${t(lang, 'dashDebtDue')}: ${textCode(String(summary.congNoDenHan ?? 0))}`,
         `🕐 ${t(lang, 'dashOpenShift')}: ${textCode(String(summary.caDangMo ?? 0))} · ${t(lang, 'dashGapShift')}: ${textCode(lech)}`,
@@ -1367,22 +1452,26 @@ const buildFlyDashboard = ({ summary = {}, inbox = [] } = {}, lang = DEFAULT_LAN
         latest.some(isAttendanceInbox) ? `<i>${escapeHtml(t(lang, 'attendanceFlyPath'))}</i>` : '',
         '',
         hintLine(lang)
-    ].filter(line => line !== '').join('\n');
+    ]);
 };
 
 const buildDebtMessage = ({ summary = {}, rows = [] } = {}, lang = DEFAULT_LANG) => {
+    const total = Number(summary.TongKhoan || 0);
+    const overdue = Number(summary.QuaHan || 0);
     const lines = [
         headerBlock(`🧾 <b>${escapeHtml(t(lang, 'debtTitle'))}</b>`),
-        `${t(lang, 'debtCount')}: ${textCode(String(summary.TongKhoan || 0))}`,
-        `${t(lang, 'debtRemain')}: ${moneyCode(summary.TongConLai)}`,
-        `${t(lang, 'debtSoon')}: ${textCode(String(summary.SapHan || 0))}`,
-        `${t(lang, 'debtOverdue')}: ${textCode(String(summary.QuaHan || 0))}`,
+        `<blockquote>${overdue ? '🔴' : '🟢'} <b>${escapeHtml(t(lang, 'debtRemain'))}</b>  ${moneyCode(summary.TongConLai)}\n${escapeHtml(t(lang, 'debtOverdue'))}: ${textCode(String(overdue))} · ${escapeHtml(t(lang, 'debtSoon'))}: ${textCode(String(summary.SapHan || 0))}</blockquote>`,
+        `${t(lang, 'debtCount')}: ${textCode(String(total))}  <code>${progressBar(total - overdue, total, 7)}</code>`,
         '',
         `<b>${escapeHtml(t(lang, 'debtTop'))}</b>`
     ];
     if (!rows.length) lines.push(t(lang, 'debtEmpty'));
     for (const row of rows.slice(0, 8)) {
-        lines.push(`• ${textCode(row.MaCNPTra)} · ${escapeHtml(row.TenNCC)} · ${moneyCode(row.SoTienConLai)} · ${t(lang, 'debtDue')} ${textCode(formatTelegramDate(row.HanThanhToan, lang))}`);
+        const due = row.HanThanhToan ? new Date(row.HanThanhToan).getTime() : NaN;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tone = Number.isFinite(due) && due < today.getTime() ? '🔴' : '🟡';
+        lines.push(`${tone} ${textCode(row.MaCNPTra)} · <b>${escapeHtml(row.TenNCC)}</b>\n   ${moneyCode(row.SoTienConLai)} · ${t(lang, 'debtDue')} ${textCode(formatTelegramDate(row.HanThanhToan, lang))}`);
     }
     return lines.join('\n');
 };
@@ -1392,8 +1481,12 @@ const buildLowstockMessage = (rows, lang = DEFAULT_LANG) => {
     return [
         headerBlock(`📦 <b>${escapeHtml(t(lang, 'lowstockTitle'))}</b>`),
         `<i>${escapeHtml(t(lang, 'lowstockHead'))}</i>`,
-        ...rows.slice(0, 8).map(row =>
-            `• ${escapeHtml(row.TenSP)}: ${textCode(`${row.SLTon}/${row.TonKhoToiThieu}`)}`)
+        ...rows.slice(0, 8).map(row => {
+            const current = Number(row.SLTon || 0);
+            const minimum = Number(row.TonKhoToiThieu || 0);
+            const tone = current <= 0 ? '🔴' : (current < minimum / 2 ? '🟠' : '🟡');
+            return `${tone} <b>${escapeHtml(row.TenSP)}</b>  ${textCode(`${current}/${minimum}`)}\n   <code>${progressBar(current, minimum, 8)}</code>`;
+        })
     ].join('\n');
 };
 
@@ -1405,7 +1498,7 @@ const buildShiftsMessage = (rows, lang = DEFAULT_LANG) => {
         const gap = lech ? ` · ${t(lang, 'shiftsGap')} ${moneyCode(lech)}` : '';
         const quay = row.MaQuay ? ` · ${t(lang, 'shiftsCounter')} ${textCode(row.MaQuay)}` : '';
         const recon = row.TrangThaiDoiSoat ? ` · ${escapeHtml(row.TrangThaiDoiSoat)}` : '';
-        lines.push(`• ${textCode(row.MaCa)} · ${escapeHtml(row.TenNV)} · ${escapeHtml(row.TrangThai)}${quay}${gap}${recon}`);
+        lines.push(`${statusBadge(row.TrangThai)}  ${textCode(row.MaCa)}\n   👤 ${escapeHtml(row.TenNV)}${quay}${gap}${recon}`);
     }
     return lines.join('\n');
 };
@@ -1417,12 +1510,13 @@ const buildPaymentsMessage = ({ day, channels = [], recent = [] } = {}, lang = D
     ];
     if (!channels.length) lines.push(t(lang, 'payEmpty'));
     for (const row of channels) {
-        lines.push(`• ${escapeHtml(row.PhuongThuc)}: ${textCode(String(row.SoLuong))} GD · ${moneyCode(row.Tong)} · ${t(lang, 'payPending')} ${textCode(String(row.ChoXacNhan))}`);
+        const waiting = Number(row.ChoXacNhan || 0);
+        lines.push(`${channelIcon(row.PhuongThuc)} <b>${escapeHtml(row.PhuongThuc)}</b>  ${moneyCode(row.Tong)}\n   ${textCode(String(row.SoLuong))} GD · ${waiting ? '🟡' : '🟢'} ${t(lang, 'payPending')} ${textCode(String(waiting))}`);
     }
     if (recent.length) {
         lines.push('', `<b>${escapeHtml(t(lang, 'payRecent'))}</b>`);
         for (const row of recent.slice(0, 8)) {
-            lines.push(`• ${escapeHtml(row.PhuongThuc)} · ${moneyCode(row.SoTien)} · ${escapeHtml(formatVnDateTime(row.NgayTT, lang))}`);
+            lines.push(`${channelIcon(row.PhuongThuc)} ${escapeHtml(row.PhuongThuc)} · ${moneyCode(row.SoTien)} · <i>${escapeHtml(formatVnDateTime(row.NgayTT, lang))}</i>`);
         }
     }
     return lines.join('\n');
@@ -1430,25 +1524,26 @@ const buildPaymentsMessage = ({ day, channels = [], recent = [] } = {}, lang = D
 
 const buildPendingMessage = (items, lang = DEFAULT_LANG) => {
     if (!items?.length) {
-        return [
+        return tidyLines([
             headerBlock(`⏳ <b>${escapeHtml(t(lang, 'pendingTitle'))}</b>`),
             t(lang, 'pendingEmpty'),
             '',
             `<i>${escapeHtml(t(lang, 'hideAfterRead'))}</i>`
-        ].join('\n');
+        ]);
     }
     const rows = items.slice(0, 8);
     const hasAttendance = rows.some(isAttendanceInbox);
-    return [
+    return tidyLines([
         headerBlock(`⏳ <b>${escapeHtml(t(lang, 'pendingTitle'))}</b>`),
-        ...rows.map(item => inboxLine(item, lang)),
+        `<blockquote>📌 <b>${rows.length}</b> mục đang hiển thị · ưu tiên mục có dấu 🔴</blockquote>`,
+        ...rows.map((item, index) => `${item.tone === 'urgent' ? '🔴' : '🟡'} <b>${String(index + 1).padStart(2, '0')}</b>  ${inboxLine(item, lang).replace(/^•\s*/, '')}`),
         hasAttendance ? '' : '',
         hasAttendance ? `<i>${escapeHtml(ATTENDANCE_NOTE_VI)}</i>` : '',
         hasAttendance ? `<i>${escapeHtml(t(lang, 'pendingAttendanceHint'))}</i>` : '',
         '',
         hintLine(lang),
         `<i>${escapeHtml(t(lang, 'hideAfterRead'))}</i>`
-    ].filter(line => line !== '').join('\n');
+    ]);
 };
 
 const buildReportsMessages = ({ summary = {}, debt = {}, inbox = [], pnl = null, shifts = [], restock = [] } = {}, lang = DEFAULT_LANG) => {
@@ -1575,10 +1670,11 @@ const buildAlertsMessage = (items, lang = DEFAULT_LANG) => {
 
 const buildPayrollSummaryMessage = (summary, month, lang = DEFAULT_LANG) => [
     headerBlock(`💼 <b>${escapeHtml(t(lang, 'payrollTitle', { month }))}</b>`),
+    `<blockquote>💰 <b>${t(lang, 'payrollTotal')}</b>  ${moneyCode(summary.Tong)}</blockquote>`,
     `${t(lang, 'payrollStaff')}: ${textCode(String(summary.SoNV || 0))}`,
-    `${t(lang, 'payrollTotal')}: ${moneyCode(summary.Tong)}`,
-    `${t(lang, 'payrollPaid')}: ${textCode(String(summary.DaChi || 0))}`,
-    `${t(lang, 'payrollUnpaid')}: ${textCode(String(summary.ChuaChi || 0))}`
+    `✅ ${t(lang, 'payrollPaid')}: ${textCode(String(summary.DaChi || 0))}`,
+    `⏳ ${t(lang, 'payrollUnpaid')}: ${textCode(String(summary.ChuaChi || 0))}`,
+    `<code>${progressBar(summary.DaChi, summary.SoNV, 10)}</code>`
 ].join('\n');
 
 const buildPayrollOneMessage = (row, maNV, month, lang = DEFAULT_LANG) => [
@@ -1781,12 +1877,22 @@ const REPORT_MENU_ITEMS = [
     { id: 'pnl', key: 'rptPnl' }
 ];
 
-const reportsMenuKeyboard = (lang = DEFAULT_LANG) => ({
-    inline_keyboard: REPORT_MENU_ITEMS.map(item => ([{
+const reportsMenuKeyboard = (lang = DEFAULT_LANG, now = new Date()) => {
+    const current = currentPeriodDefaults(now);
+    const periodRows = [[
+        { text: t(lang, 'rptMonth'), callback_data: `period:month:${current.month}` },
+        { text: t(lang, 'rptQuarter'), callback_data: `period:quarter:${current.quarter}` }
+    ], [
+        { text: t(lang, 'rptYear'), callback_data: `period:year:${current.year}` }
+    ]];
+    return { inline_keyboard: periodRows.concat(REPORT_MENU_ITEMS.map(item => ([{
         text: t(lang, item.key),
         callback_data: `rpt:${item.id}`
-    }]))
-});
+    }])).concat([[
+        { text: '🏠 Tổng quan', callback_data: 'cmd:fly' },
+        { text: '📄 Chứng từ', callback_data: 'cmd:docs' }
+    ]])) };
+};
 
 const buildReportsMenu = (lang = DEFAULT_LANG) => [
     headerBlock(`📊 <b>${escapeHtml(t(lang, 'reportsPickTitle'))}</b>`),
@@ -1812,6 +1918,141 @@ const buildPnlOnlyMessage = (pnl, lang = DEFAULT_LANG) => {
     return lines.join('\n');
 };
 
+const reportNumber = value => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const reportPercent = (value, total) => {
+    const denominator = reportNumber(total);
+    if (!denominator) return 0;
+    return reportNumber(value) / denominator * 100;
+};
+
+const percentText = value => `${reportNumber(value).toLocaleString('vi-VN', { maximumFractionDigits: 1 })}%`;
+
+const reportDeltaLine = (label, current, previous, { money = true } = {}) => {
+    const now = reportNumber(current);
+    const before = reportNumber(previous);
+    const diff = now - before;
+    const icon = diff > 0 ? '↗️' : (diff < 0 ? '↘️' : '➡️');
+    const value = money ? moneyCode(Math.abs(diff)) : textCode(String(Math.abs(Math.round(diff))));
+    if (!before) {
+        return `${icon} ${escapeHtml(label)}: ${now ? '<i>mới phát sinh</i>' : '<i>không đổi</i>'}`;
+    }
+    const pct = Math.abs(diff / before * 100);
+    const sign = diff > 0 ? '+' : (diff < 0 ? '−' : '');
+    return `${icon} ${escapeHtml(label)}: ${sign}${value} · ${sign}${percentText(pct)}`;
+};
+
+const buildManagementReportMessage = ({ report, previousReport } = {}, lang = DEFAULT_LANG) => {
+    if (!report?.hoatDong || !report?.period) {
+        return headerBlock('📊 <b>BÁO CÁO QUẢN TRỊ</b>') + '\n<i>Chưa có dữ liệu cho kỳ đã chọn.</i>';
+    }
+    const period = report.period;
+    const op = report.hoatDong;
+    const sales = op.banHang || {};
+    const cogs = op.giaVon || {};
+    const partner = op.benThu3 || {};
+    const staff = op.nhanVien || {};
+    const cash = report.tienMat || {};
+    const previous = previousReport?.hoatDong || {};
+    const previousSales = previous.banHang || {};
+    const revenue = reportNumber(op.doanhThuThuan);
+    const gross = reportNumber(op.loiNhuanGop);
+    const net = reportNumber(op.laiLoSauChiPhi);
+    const grossMargin = reportPercent(gross, revenue);
+    const netMargin = reportPercent(net, revenue);
+    const cogsRate = reportPercent(cogs.giaVonThuan, revenue);
+    const returnRate = reportPercent(sales.tienHoan, sales.doanhThuHoaDon);
+    const invoiceCount = reportNumber(sales.soHoaDon);
+    const averageInvoice = invoiceCount ? revenue / invoiceCount : 0;
+    const statusIcon = net > 0 ? '🟢' : (net < 0 ? '🔴' : '🟡');
+    const previousLabel = previousReport?.period?.label || 'kỳ trước';
+    const notes = [];
+    if (staff.kyChuaKhoa?.length) notes.push(`Lương chưa khóa: ${staff.kyChuaKhoa.join(', ')} — chưa được trừ.`);
+    for (const item of (partner.ghiChu || []).slice(0, 3)) {
+        notes.push(`${item.ten}: ${item.ghiChu}`);
+    }
+    const topSuppliers = (partner.nhaCungCap || []).slice(0, 3);
+    const lines = [
+        headerBlock(`📊 <b>BÁO CÁO QUẢN TRỊ · ${escapeHtml(period.label)}</b>`),
+        `📅 ${textCode(formatTelegramDate(period.from, lang))} → ${textCode(formatTelegramDate(period.to, lang))}`,
+        report.telegramMeta?.isCurrent
+            ? `<i>Tạm tính đến ${escapeHtml(formatTelegramDate(report.telegramMeta.asOf, lang))}; kỳ trước được so theo cùng số ngày.</i>`
+            : '',
+        `<blockquote>${statusIcon} <b>${escapeHtml(op.trangThai || 'CHƯA XÁC ĐỊNH')}</b>  ${moneyCode(net)}\nBiên lãi gộp ${textCode(percentText(grossMargin))} · Biên sau chi phí ${textCode(percentText(netMargin))}</blockquote>`,
+        '',
+        sectionTitle('💰', 'KẾT QUẢ KINH DOANH'),
+        `Doanh thu hóa đơn: ${moneyCode(sales.doanhThuHoaDon)}`,
+        `Trừ hoàn tiền: −${moneyCode(sales.tienHoan)}`,
+        `<b>Doanh thu thuần:</b> ${moneyCode(revenue)}`,
+        `Giá vốn thuần: −${moneyCode(cogs.giaVonThuan)}`,
+        `<b>Lãi gộp:</b> ${moneyCode(gross)}`,
+        `Chi NCC + cước: −${moneyCode(op.chiPhiBenThu3)}`,
+        `Lương đã khóa: −${moneyCode(op.chiPhiNhanVien)}`,
+        `<b>= Lãi/lỗ sau chi phí:</b> ${moneyCode(net)}`,
+        '',
+        sectionTitle('📈', 'TỶ LỆ DỄ NHÌN'),
+        `Giá vốn  <code>${progressBar(cogsRate, 100, 8)}</code>`,
+        `Lãi gộp  <code>${progressBar(Math.max(0, grossMargin), 100, 8)}</code>`,
+        `${netMargin < 0 ? 'Mức lỗ ' : 'Sau chi phí'} <code>${progressBar(Math.abs(netMargin), 100, 8)}</code>`,
+        '',
+        sectionTitle('🔄', `SO VỚI ${previousLabel.toLocaleUpperCase('vi-VN')}`),
+        reportDeltaLine('Doanh thu thuần', revenue, previous.doanhThuThuan),
+        reportDeltaLine('Lãi gộp', gross, previous.loiNhuanGop),
+        reportDeltaLine('Lãi/lỗ sau chi phí', net, previous.laiLoSauChiPhi),
+        reportDeltaLine('Số hóa đơn', invoiceCount, previousSales.soHoaDon, { money: false }),
+        '',
+        sectionTitle('🧾', 'BÁN HÀNG & ĐỔI TRẢ'),
+        `Hóa đơn hoàn thành: ${textCode(String(invoiceCount))} · Bình quân: ${moneyCode(averageInvoice)}/HĐ`,
+        `Đổi trả: ${textCode(String(reportNumber(sales.soPhieuDoiTra)))} phiếu · Hoàn ${moneyCode(sales.tienHoan)} (${textCode(percentText(returnRate))})`,
+        '',
+        sectionTitle('💳', 'TIỀN ĐÃ THU'),
+        `Tổng thu ghi nhận: ${moneyCode(cash.tongTienThu)}`,
+        `Tiền mặt: ${moneyCode(cash.tienMatPhieuThu)} · QR: ${moneyCode(cash.qr)}`,
+        `Thẻ: ${moneyCode(cash.the)} · Chuyển khoản: ${moneyCode(cash.chuyenKhoan)}`
+    ];
+    if (topSuppliers.length) {
+        lines.push('', sectionTitle('🏭', 'CHI NCC LỚN NHẤT'));
+        topSuppliers.forEach((item, index) => lines.push(`${index + 1}. ${escapeHtml(item.TenNCC)} · ${moneyCode(item.SoTien)}`));
+    }
+    if (report.nguyenNhan?.length) {
+        lines.push('', sectionTitle('🔎', 'ĐIỂM CẦN CHÚ Ý'));
+        report.nguyenNhan.slice(0, 3).forEach(item => {
+            lines.push(`• <b>${escapeHtml(item.tieuDe)}</b>`);
+            if (item.soLieu) lines.push(`  ${escapeHtml(item.soLieu)}`);
+        });
+    }
+    lines.push('', sectionTitle('ℹ️', 'CÁCH HIỂU SỐ'));
+    lines.push('<i>Lãi gộp = doanh thu thuần − giá vốn thuần.</i>');
+    lines.push('<i>Lãi/lỗ sau chi phí còn trừ khoản chi NCC, cước có chứng từ và lương đã khóa.</i>');
+    if (notes.length) {
+        lines.push('', sectionTitle('⚠️', 'DỮ LIỆU CHƯA TÍNH'));
+        notes.forEach(note => lines.push(`• ${escapeHtml(note)}`));
+    }
+    return tidyLines(lines);
+};
+
+const managementReportKeyboard = ({ periodType, period, previous, next, canNext, current } = {}, lang = DEFAULT_LANG) => {
+    const type = String(periodType || 'month');
+    const rows = [[
+        { text: '◀ Kỳ trước', callback_data: `period:${type}:${previous}` },
+        { text: '🔄 Làm mới', callback_data: `period:${type}:${period}` }
+    ]];
+    if (canNext && next) rows[0].push({ text: 'Kỳ sau ▶', callback_data: `period:${type}:${next}` });
+    rows.push([
+        { text: t(lang, 'rptMonth'), callback_data: `period:month:${current.month}` },
+        { text: t(lang, 'rptQuarter'), callback_data: `period:quarter:${current.quarter}` },
+        { text: t(lang, 'rptYear'), callback_data: `period:year:${current.year}` }
+    ]);
+    rows.push([
+        { text: '‹ Danh sách báo cáo', callback_data: 'cmd:reports' },
+        { text: '🏠 Tổng quan', callback_data: 'cmd:fly' }
+    ]);
+    return { inline_keyboard: rows };
+};
+
 const removeKeyboardMarkup = () => ({ remove_keyboard: true });
 
 const showMenuInlineKeyboard = (lang = DEFAULT_LANG) => ({
@@ -1834,7 +2075,9 @@ const replyKeyboard = (lang = DEFAULT_LANG, { bound = false } = {}) => {
             ['kbHide']
         ];
     return {
-        keyboard: rows.map(row => row.map(key => ({ text: t(lang, key) }))),
+        keyboard: rows.map(row => row.map(key => ({
+            text: t(lang, key)
+        }))),
         resize_keyboard: true,
         is_persistent: true,
         one_time_keyboard: false
@@ -1846,6 +2089,10 @@ module.exports = {
     escapeHtml,
     moneyCode,
     textCode,
+    progressBar,
+    statusBadge,
+    sectionTitle,
+    channelIcon,
     headerBlock,
     kv,
     splitTelegramText,
@@ -1861,6 +2108,7 @@ module.exports = {
     maskOtp,
     maskChatId,
     isManagerRole,
+    telegramAudience,
     LANGS,
     DEFAULT_LANG,
     normalizeLang,
@@ -1918,6 +2166,8 @@ module.exports = {
     reportsMenuKeyboard,
     buildReportsMenu,
     buildPnlOnlyMessage,
+    buildManagementReportMessage,
+    managementReportKeyboard,
     REPORT_MENU_ITEMS,
     REPLY_CMD_KEYS,
     RULE,

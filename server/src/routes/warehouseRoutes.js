@@ -21,6 +21,9 @@ router.post('/inventory-counts/:id/submit', requirePermission('UC20'), inventory
 router.post('/inventory-counts/:id/scrap-issue', requirePermission('UC19'), stockIssueController.createIssueFromCount);
 router.get('/stock-issues/options', requirePermission('UC19'), stockIssueController.getOptions);
 router.get('/stock-issues/source-receipts/:id', requirePermission('UC19'), stockIssueController.getSourceReceipt);
+router.get('/stock-issues/pending-sources', requirePermission('UC19'), stockIssueController.getPendingSources);
+router.get('/stock-issues/from-count/:id', requirePermission('UC19'), stockIssueController.previewFromCount);
+router.get('/stock-issues/from-return/:id', requirePermission('UC19'), stockIssueController.previewFromReturn);
 router.get('/stock-issues', requirePermission('UC19'), stockIssueController.listIssues);
 router.post('/stock-issues', requirePermission('UC19'), stockIssueController.createIssue);
 router.post('/stock-issues/from-return/:id', requirePermission('UC19'), stockIssueController.createIssueFromReturn);

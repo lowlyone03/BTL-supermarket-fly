@@ -35,6 +35,8 @@ const delay = milliseconds => new Promise(resolve => setTimeout(resolve, millise
     assert.match(cashierPages, /invoiceQuery/);
     assert.match(cashierPages, /Không tìm thấy/);
     assert.match(cashierPages, /invoiceSearchHint/);
+    assert.match(cashierPages, /cashier-cart-qty-input/);
+    assert.match(cashierPages, /stockExceededMessage/);
 
     assert.equal(search.emptyMessage('KJvhjva842889', 'hóa đơn', 'Chưa có hóa đơn.'), 'Không tìm thấy hóa đơn khớp “KJvhjva842889”.');
     assert.equal(search.emptyMessage('', 'hóa đơn', 'Chưa có hóa đơn.'), 'Chưa có hóa đơn.');

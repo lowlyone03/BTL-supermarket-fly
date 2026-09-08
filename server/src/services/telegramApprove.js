@@ -3,7 +3,8 @@ const fs = require('node:fs');
 const { ROLE_PERMISSION_CODES } = require('../constants/permissions');
 const {
     escapeHtml, textCode, moneyCode, formatMoney, formatVnDateTime, formatTelegramDate,
-    prettyShiftName, isManagerRole, t, headerBlock, kv, splitTelegramText
+    prettyShiftName, isManagerRole, telegramAudience, t, headerBlock, kv, splitTelegramText,
+    statusBadge, sectionTitle
 } = require('./telegramMessages');
 
 const DECISION_TTL_MS = 15 * 60 * 1000;
@@ -33,6 +34,28 @@ const KIND_META = {
     dt: { uc: 'UC08', label: 'Đổi trả', rejectReason: true },
     pc: { uc: 'UC09', label: 'Phiếu chi NCC', rejectReason: true },
     cc: { uc: 'UC32', label: 'Chấm công', rejectReason: false }
+};
+
+const KIND_TABLE = {
+    po: 'DonMuaHang',
+    px: 'PhieuXuat',
+    kk: 'KiemKe',
+    dt: 'PhieuDoiTra',
+    pc: 'PhieuChi',
+    cc: 'ChamCong'
+};
+
+const pingInboxAfterDecision = (kind, action, id) => {
+    const meta = KIND_META[kind];
+    const table = KIND_TABLE[kind];
+    if (!meta || !table || !id) return;
+    try {
+        require('./notificationHub').notifyInboxChanged({
+            action: action === 'no' ? `Từ chối ${meta.label}` : `Phê duyệt ${meta.label}`,
+            table,
+            recordId: String(id)
+        });
+    } catch { /* chuông desktop lỗi không chặn duyệt Telegram */ }
 };
 
 const requestOf = (pool, sqlMod) => (pool.request ? pool.request() : new sqlMod.Request(pool));
@@ -260,7 +283,9 @@ const runFlyDecision = async ({ user, kind, action, id, reason, pool, chatId } =
             params: { id: String(id) },
             body: ctx.body
         });
-        return mapDecisionResult(result, action);
+        const mapped = mapDecisionResult(result, action);
+        if (mapped.ok) pingInboxAfterDecision(kind, action, id);
+        return mapped;
     } finally {
         inFlight.delete(token);
     }
@@ -415,10 +440,13 @@ const loadPc = async (pool, id) => {
     const sql = sqlTypes();
     const header = await oneRow(pool, `
         SELECT pc.MaPhieu, pc.TrangThai, pc.NgayChungTu, pc.SoTien, pc.PhuongThuc, pc.NoiDung, pc.GhiChu,
-               pc.MaCongNo, nv.TenNV NguoiLap, ncc.TenNCC, cn.HanThanhToan, cn.SoTienConLai,
+               pc.MaCongNo, pc.MaGiaoDichNganHang, pc.HinhThucCapQuy, pc.NgayCapQuy,
+               nv.TenNV NguoiLap, nvd.TenNV NguoiDuyet, ncc.TenNCC,
+               cn.HanThanhToan, cn.SoTienConLai, cn.SoTienNo, cn.SoTienDaTra, cn.TrangThai TrangThaiCongNo,
                hd.SoHoaDon, hd.MaPO, hd.MaPN, hd.TienThue, hd.TongCong, hd.TrangThaiDoiChieu, hd.MaHDMH
         FROM PhieuChi pc
         JOIN NhanVien nv ON nv.MaNV=pc.MaNV
+        LEFT JOIN NhanVien nvd ON nvd.MaNV=pc.MaNV_Duyet
         LEFT JOIN CongNoPhaiTra cn ON cn.MaCNPTra=pc.MaCongNo
         LEFT JOIN NhaCungCap ncc ON ncc.MaNCC=COALESCE(pc.MaNCC, cn.MaNCC)
         LEFT JOIN HoaDonMuaHang hd ON hd.MaHDMH=cn.MaHDMH
@@ -430,11 +458,25 @@ const loadPc = async (pool, id) => {
             FROM ChiTietHoaDonMuaHang ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
             WHERE ct.MaHDMH=@Hd ORDER BY sp.TenSP`, { Hd: { type: sql?.VarChar, value: header.MaHDMH } })
         : [];
+    const tong = header.TongCong != null ? header.TongCong : header.SoTien;
     return {
         kind: 'pc', id, title: 'PHIẾU CHI CHỜ DUYỆT',
         status: header.TrangThai, createdBy: header.NguoiLap, createdAt: header.NgayChungTu,
-        party: header.TenNCC, extra: { PhuongThuc: header.PhuongThuc, CongNo: header.MaCongNo },
-        lines, totals: { tong: header.SoTien, thue: header.TienThue, hanNo: header.HanThanhToan },
+        approvedBy: header.NguoiDuyet, party: header.TenNCC,
+        extra: {
+            PhuongThuc: header.PhuongThuc,
+            CongNo: header.MaCongNo,
+            MaGD: header.MaGiaoDichNganHang,
+            HinhThucCapQuy: header.HinhThucCapQuy
+        },
+        lines,
+        totals: {
+            tong,
+            soTienPhieu: header.SoTien,
+            thue: header.TienThue,
+            hanNo: header.HanThanhToan,
+            conLai: header.SoTienConLai
+        },
         docs: [
             { label: 'Phiếu chi', value: header.MaPhieu },
             { label: 'Công nợ', value: header.MaCongNo },
@@ -445,7 +487,8 @@ const loadPc = async (pool, id) => {
         ].filter(row => row.value),
         photos: collectPhotos(lines),
         pending: /chờ duyệt/i.test(header.TrangThai || ''),
-        note: header.NoiDung || header.GhiChu
+        note: header.NoiDung || header.GhiChu,
+        debtStatus: header.TrangThaiCongNo
     };
 };
 
@@ -504,16 +547,17 @@ const loadDossier = async (pool, kind, id) => {
     }
 };
 
-const formatLineRow = (row, index, { countMode } = {}) => {
+const formatLineRow = (row, index, { countMode, nameLen = 28 } = {}) => {
     const code = row.MaSP || `#${index + 1}`;
-    const name = String(row.TenSP || '').slice(0, 28);
+    const name = String(row.TenSP || '').slice(0, nameLen);
     if (countMode) {
-        return `• ${textCode(code)} ${escapeHtml(name)} · HT ${textCode(String(row.SLHeThong ?? '—'))} / TT ${textCode(String(row.SLThucTe ?? '—'))} · lệch ${textCode(String(row.ChenhLech ?? '—'))}`;
+        const difference = Number(row.ChenhLech || 0);
+        return `${difference ? '🟠' : '🟢'} <b>${String(index + 1).padStart(2, '0')}</b>  ${textCode(code)} ${escapeHtml(name)}\n   Hệ thống ${textCode(String(row.SLHeThong ?? '—'))} · Thực tế ${textCode(String(row.SLThucTe ?? '—'))} · Lệch ${textCode(String(row.ChenhLech ?? '—'))}`;
     }
     const qty = lineQty(row);
     const price = linePrice(row);
     const amount = lineAmount(row);
-    return `• ${textCode(code)} ${escapeHtml(name)} · SL ${textCode(String(qty ?? '—'))} × ${moneyCode(price)} = ${moneyCode(amount)}`;
+    return `▫️ <b>${String(index + 1).padStart(2, '0')}</b>  ${textCode(code)} ${escapeHtml(name)}\n   ${textCode(String(qty ?? '—'))} × ${moneyCode(price)}  →  <b>${moneyCode(amount)}</b>`;
 };
 
 const buildApprovalCard = (dossier = {}, lang = 'vi') => {
@@ -522,10 +566,12 @@ const buildApprovalCard = (dossier = {}, lang = 'vi') => {
     const lines = Array.isArray(dossier.lines) ? dossier.lines.slice(0, MAX_LINES) : [];
     const extras = dossier.extra || {};
     const rows = [
-        headerBlock(`📋 <b>${escapeHtml(title)}</b>`),
+        headerBlock(`${pending ? '⚡' : '📋'} <b>${escapeHtml(title)}</b>`),
+        `<blockquote>${statusBadge(dossier.status || (pending ? 'Chờ duyệt' : '—'))}\n🔖 ${escapeHtml(dossier.id || '—')}</blockquote>`,
+        sectionTitle('👤', 'Thông tin chứng từ'),
         kv('Mã chứng từ', textCode(dossier.id || '—')),
-        kv('Trạng thái', textCode(dossier.status || (pending ? 'Chờ duyệt' : '—'))),
         kv('Người lập', textCode(dossier.createdBy || '—')),
+        dossier.approvedBy ? kv('Người duyệt', textCode(dossier.approvedBy)) : '',
         dossier.createdAt ? kv('Lúc lập', textCode(formatVnDateTime(dossier.createdAt, lang) || '—')) : '',
         dossier.party ? kv('NCC / NV / KH', textCode(dossier.party)) : ''
     ];
@@ -546,28 +592,184 @@ const buildApprovalCard = (dossier = {}, lang = 'vi') => {
         if (extras.NhiemVu) rows.push(kv('Nhiệm vụ', textCode(extras.NhiemVu)));
     }
     if (lines.length) {
-        rows.push('', `<b>Dòng hàng (${lines.length}${dossier.lines?.length > MAX_LINES ? '+' : ''})</b>`);
+        rows.push('', sectionTitle('📦', `Dòng hàng (${lines.length}${dossier.lines?.length > MAX_LINES ? '+' : ''})`));
         rows.push(...lines.map((row, index) => formatLineRow(row, index, { countMode: dossier.countMode })));
         if ((dossier.lines || []).length > MAX_LINES) {
             rows.push(`<i>… và ${(dossier.lines.length - MAX_LINES)} dòng nữa — xem đủ trên Fly.</i>`);
         }
     }
     if (dossier.totals && (dossier.totals.tong != null || dossier.totals.thue != null)) {
-        rows.push('', `<b>Tổng hợp</b>`);
+        rows.push('', sectionTitle('💰', 'Tổng hợp'));
         if (dossier.totals.tong != null) rows.push(kv('Tổng tiền', moneyCode(dossier.totals.tong)));
         if (dossier.totals.thue != null) rows.push(kv('Thuế mua', moneyCode(dossier.totals.thue)));
         if (dossier.totals.hanNo) rows.push(kv('Hạn nợ', textCode(formatTelegramDate(dossier.totals.hanNo, lang) || '—')));
         if (dossier.totals.hanNoNgay != null) rows.push(kv('Điều khoản nợ', textCode(`${dossier.totals.hanNoNgay} ngày`)));
     }
     if (dossier.docs?.length) {
-        rows.push('', '<b>Chứng từ liên quan</b>');
+        rows.push('', sectionTitle('🗂', 'Chứng từ liên quan'));
         for (const doc of dossier.docs) {
             rows.push(kv(doc.label, textCode(doc.value || '—')));
         }
     }
     if (dossier.note) rows.push('', `<i>${escapeHtml(String(dossier.note).slice(0, 400))}</i>`);
+    rows.push('', pending
+        ? '<blockquote>🛡 <b>Xác nhận an toàn</b>\nDuyệt hoặc từ chối sẽ gọi đúng nghiệp vụ Fly và ghi Nhật ký hệ thống.</blockquote>'
+        : `<i>${escapeHtml(t(lang, 'flyHint'))}</i>`);
+    return rows.filter(line => line !== '').join('\n');
+};
+
+const PAYMENT_LABELS = {
+    admin: {
+        party: 'NCC',
+        debt: 'Công nợ',
+        invoice: 'Số HĐ NCC',
+        po: 'Đơn mua',
+        pn: 'Phiếu nhập',
+        match: 'Đối chiếu 3 bên',
+        tax: 'Thuế mua',
+        total: 'Tổng tiền',
+        voucherAmount: 'Số tiền phiếu chi',
+        due: 'Hạn nợ',
+        method: 'Phương thức',
+        bank: 'Mã GD ngân hàng',
+        remaining: 'Còn phải trả',
+        items: 'Dòng hàng',
+        related: 'Chứng từ liên quan',
+        totals: 'Tổng hợp',
+        paidBy: 'Người thanh toán',
+        approvedBy: 'Người duyệt',
+        createdBy: 'Người lập',
+        fund: 'Hình thức giao quỹ',
+        debtStatus: 'Trạng thái công nợ'
+    },
+    ql: {
+        party: 'Nhà cung cấp',
+        debt: 'Khoản nợ NCC',
+        invoice: 'Hóa đơn nhà cung cấp',
+        po: 'Đơn đặt hàng',
+        pn: 'Phiếu nhập kho',
+        match: 'Khớp đơn / nhập / hóa đơn',
+        tax: 'Thuế trên hóa đơn',
+        total: 'Số tiền đã chi',
+        voucherAmount: 'Số tiền phiếu',
+        due: 'Hạn thanh toán',
+        method: 'Cách chi',
+        bank: 'Mã giao dịch',
+        remaining: 'Còn phải trả',
+        items: 'Hàng đã thanh toán',
+        related: 'Chứng từ liên quan',
+        totals: 'Tổng hợp',
+        paidBy: 'Kế toán chi',
+        approvedBy: 'Người duyệt quỹ',
+        createdBy: 'Người lập phiếu',
+        fund: 'Cách giao tiền',
+        debtStatus: 'Tình trạng nợ'
+    }
+};
+
+const paymentIntro = (audience, outcome) => {
+    const ok = outcome !== 'fail';
+    if (audience === 'ql') {
+        return ok
+            ? 'Kế toán đã thanh toán cho nhà cung cấp. Bạn chỉ xem kết quả — không cần lập hay chi phiếu.'
+            : 'Kế toán ghi nhận chi tiền không thành công. Công nợ nhà cung cấp giữ nguyên. Bạn chỉ xem thông tin.';
+    }
+    return ok
+        ? 'Kế toán đã ghi nhận thanh toán thành công trên Fly. Công nợ đã tất toán (chỉ thông tin).'
+        : 'Kế toán ghi nhận thanh toán thất bại. Công nợ không đổi — thực hiện lại trên Fly.';
+};
+
+const relabelPaymentDoc = (doc, labels) => {
+    const raw = String(doc.label || '');
+    if (/phiếu chi/i.test(raw)) return { ...doc, label: 'Phiếu chi' };
+    if (/công nợ/i.test(raw)) return { ...doc, label: labels.debt };
+    if (/số hđ|hóa đơn/i.test(raw)) return { ...doc, label: labels.invoice };
+    if (/đơn mua/i.test(raw)) return { ...doc, label: labels.po };
+    if (/phiếu nhập/i.test(raw)) return { ...doc, label: labels.pn };
+    if (/đối chiếu|3 bên/i.test(raw)) return { ...doc, label: labels.match };
+    return doc;
+};
+
+const buildPaymentResultCard = (dossier = {}, { audience = 'admin', lang = 'vi' } = {}) => {
+    const mode = audience === 'ql' ? 'ql' : 'admin';
+    const labels = PAYMENT_LABELS[mode];
+    const outcome = dossier.paymentOutcome === 'fail' ? 'fail' : 'success';
+    const title = dossier.title || (outcome === 'fail'
+        ? 'THANH TOÁN PHIẾU CHI THẤT BẠI'
+        : 'THANH TOÁN PHIẾU CHI THÀNH CÔNG');
+    const lines = Array.isArray(dossier.lines) ? dossier.lines.slice(0, MAX_LINES) : [];
+    const extras = dossier.extra || {};
+    const totals = dossier.totals || {};
+    const rows = [
+        headerBlock(`${outcome === 'fail' ? '🔴' : '🔔'} <b>${escapeHtml(title)}</b>`),
+        `<blockquote>${statusBadge(dossier.status || (outcome === 'fail' ? 'Thanh toán thất bại' : 'Thanh toán thành công'))}\n🔖 ${escapeHtml(dossier.id || '—')}</blockquote>`,
+        `<i>${escapeHtml(paymentIntro(mode, outcome))}</i>`,
+        '',
+        sectionTitle('👤', 'Thông tin chứng từ'),
+        kv('Mã chứng từ', textCode(dossier.id || '—')),
+        dossier.party ? kv(labels.party, textCode(dossier.party)) : '',
+        kv(labels.createdBy, textCode(dossier.createdBy || '—')),
+        dossier.approvedBy ? kv(labels.approvedBy, textCode(dossier.approvedBy)) : '',
+        dossier.paidBy ? kv(labels.paidBy, textCode(dossier.paidBy)) : '',
+        extras.PhuongThuc ? kv(labels.method, textCode(extras.PhuongThuc === 'Chuyển khoản' ? 'Chuyển khoản' : extras.PhuongThuc)) : '',
+        extras.HinhThucCapQuy ? kv(labels.fund, textCode(extras.HinhThucCapQuy)) : '',
+        extras.MaGD ? kv(labels.bank, textCode(extras.MaGD)) : '',
+        extras.CongNo ? kv(labels.debt, textCode(extras.CongNo)) : '',
+        dossier.debtStatus ? kv(labels.debtStatus, textCode(dossier.debtStatus)) : ''
+    ];
+    if (lines.length) {
+        rows.push('', sectionTitle('📦', `${labels.items} (${lines.length}${dossier.lines?.length > MAX_LINES ? '+' : ''})`));
+        rows.push(...lines.map((row, index) => formatLineRow(row, index, { nameLen: 36 })));
+        if ((dossier.lines || []).length > MAX_LINES) {
+            rows.push(`<i>… và ${(dossier.lines.length - MAX_LINES)} dòng nữa — xem đủ trên Fly.</i>`);
+        }
+    }
+    if (totals.tong != null || totals.soTienPhieu != null || totals.thue != null) {
+        rows.push('', sectionTitle('💰', labels.totals));
+        if (totals.tong != null) rows.push(kv(labels.total, moneyCode(totals.tong)));
+        if (totals.soTienPhieu != null && Number(totals.soTienPhieu) !== Number(totals.tong)) {
+            rows.push(kv(labels.voucherAmount, moneyCode(totals.soTienPhieu)));
+        }
+        if (totals.thue != null) rows.push(kv(labels.tax, moneyCode(totals.thue)));
+        if (totals.hanNo) rows.push(kv(labels.due, textCode(formatTelegramDate(totals.hanNo, lang) || '—')));
+        if (totals.conLai != null) rows.push(kv(labels.remaining, moneyCode(totals.conLai)));
+    }
+    if (dossier.docs?.length) {
+        rows.push('', sectionTitle('🗂', labels.related));
+        for (const doc of dossier.docs) {
+            const shown = relabelPaymentDoc(doc, labels);
+            rows.push(kv(shown.label, textCode(shown.value || '—')));
+        }
+    }
+    const note = dossier.auditNote || dossier.note;
+    if (note) rows.push('', `<i>${escapeHtml(String(note).slice(0, 400))}</i>`);
     rows.push('', `<i>${escapeHtml(t(lang, 'flyHint'))}</i>`);
     return rows.filter(line => line !== '').join('\n');
+};
+
+const viewDocumentKeyboard = (dossier = {}) => {
+    const kind = dossier.kind || 'pc';
+    const id = dossier.id;
+    if (!id) {
+        return {
+            inline_keyboard: [[
+                { text: '🏠 Tổng quan', callback_data: 'cmd:fly' },
+                { text: '⏳ Việc chờ', callback_data: 'cmd:pending' }
+            ]]
+        };
+    }
+    return {
+        inline_keyboard: [
+            [
+                { text: '🔄 Cập nhật', callback_data: decisionCallbackData('dt', kind, id) },
+                { text: '📄 Chứng từ', callback_data: decisionCallbackData('docs', kind, id) }
+            ],
+            [
+                { text: '🏠 Tổng quan', callback_data: 'cmd:fly' },
+                { text: '⏳ Việc chờ', callback_data: 'cmd:pending' }
+            ]
+        ]
+    };
 };
 
 const approvalKeyboard = (dossier = {}) => {
@@ -585,8 +787,12 @@ const approvalKeyboard = (dossier = {}) => {
         rows.push(actions);
     }
     rows.push([
-        { text: '📄 Chứng từ', callback_data: decisionCallbackData('docs', kind, id) },
-        { text: '📊 Báo cáo', callback_data: 'cmd:reports' }
+        { text: '🔄 Cập nhật', callback_data: decisionCallbackData('dt', kind, id) },
+        { text: '📄 Chứng từ', callback_data: decisionCallbackData('docs', kind, id) }
+    ]);
+    rows.push([
+        { text: '📊 Báo cáo', callback_data: 'cmd:reports' },
+        { text: '🏠 Tổng quan', callback_data: 'cmd:fly' }
     ]);
     return { inline_keyboard: rows };
 };
@@ -597,6 +803,34 @@ const composePendingPush = async (pool, kind, id, lang = 'vi') => {
         text: buildApprovalCard(dossier, lang),
         extra: { reply_markup: approvalKeyboard(dossier), disable_notification: false },
         dossier
+    };
+};
+
+const composePaymentPush = async (pool, id, { outcome = 'success', actor, content, lang = 'vi' } = {}) => {
+    const dossier = await loadDossier(pool, 'pc', id);
+    const paid = {
+        ...(dossier || { kind: 'pc', id, lines: [], docs: [], totals: {}, extra: {} }),
+        kind: 'pc',
+        id: (dossier && dossier.id) || id,
+        pending: false,
+        paymentOutcome: outcome === 'fail' ? 'fail' : 'success',
+        title: outcome === 'fail' ? 'THANH TOÁN PHIẾU CHI THẤT BẠI' : 'THANH TOÁN PHIẾU CHI THÀNH CÔNG',
+        paidBy: actor?.TenNV || actor?.HoTen || actor?.TenDangNhap || '',
+        auditNote: content || dossier?.note
+    };
+    if (outcome !== 'fail' && !/thành công|tất toán|đã thanh toán/i.test(paid.status || '')) {
+        paid.status = paid.debtStatus || 'Thanh toán thành công';
+    }
+    if (outcome === 'fail' && !/thất bại/i.test(paid.status || '')) {
+        paid.status = 'Thanh toán thất bại';
+    }
+    return {
+        dossier: paid,
+        extra: { reply_markup: viewDocumentKeyboard(paid), disable_notification: false },
+        textFor(person, personLang = lang) {
+            const audience = telegramAudience(person);
+            return buildPaymentResultCard(paid, { audience, lang: personLang });
+        }
     };
 };
 
@@ -645,14 +879,16 @@ const pendingListKeyboard = (items = []) => {
     if (!cards.length) return null;
     return {
         inline_keyboard: cards.map(item => ([{
-            text: `📄 ${item.id}`,
-            callback_data: decisionCallbackData('docs', item.kind, item.id)
+            text: `${item.tone === 'urgent' ? '🔴' : '🟡'} Xem ${item.id}`,
+            callback_data: decisionCallbackData('dt', item.kind, item.id)
         }]))
     };
 };
 
 module.exports = {
     KIND_META,
+    KIND_TABLE,
+    pingInboxAfterDecision,
     DENY_403,
     OK_APPROVE,
     OK_REJECT,
@@ -673,8 +909,12 @@ module.exports = {
     resetDecisionState,
     loadDossier,
     buildApprovalCard,
+    buildPaymentResultCard,
     approvalKeyboard,
+    viewDocumentKeyboard,
     composePendingPush,
+    composePaymentPush,
+    telegramAudience,
     formatLineRow,
     isPublicHttpUrl,
     localUploadPath,
