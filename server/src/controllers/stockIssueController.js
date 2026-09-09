@@ -771,7 +771,12 @@ const confirmIssue = async (req, res) => {
         const lines = normalizeLines(details.recordset);
         await validateIssue(transaction, header, lines);
 
+        if (header.LoaiXuat === 'Trả NCC') {
+            const { assertSupplierReturnAllowed } = require('../services/accountingHooks');
+            await assertSupplierReturnAllowed(transaction, header.MaPN);
+        }
         const skipAllStock = Boolean(header.KhongTruTon) || Boolean(header.MaDT);
+        const priced = [];
         let decreased = 0;
         let documented = 0;
         for (const line of lines) {
@@ -791,6 +796,7 @@ const confirmIssue = async (req, res) => {
                 .input('MaSP', sql.VarChar, line.MaSP)
                 .input('DonGia', sql.Decimal(18, 2), cost)
                 .query('UPDATE ChiTietPhieuXuat SET DonGia=@DonGia WHERE MaPX=@MaPX AND MaSP=@MaSP');
+            priced.push({ ...line, DonGia: cost, SoLuong: line.SoLuong });
             if (!documentary) {
                 await new sql.Request(transaction)
                     .input('MaKho', sql.VarChar, header.MaKho)
@@ -828,6 +834,10 @@ const confirmIssue = async (req, res) => {
             documented ? `ghi nhận ${documented} mặt hàng không trừ tồn` : ''
         ].filter(Boolean).join('; ');
         await writeAudit(transaction, req.user, 'Xác nhận xuất kho', req.params.id, auditParts);
+        const { postStockIssueJournals } = require('../services/accountingHooks');
+        await postStockIssueJournals(transaction, {
+            maPX: req.params.id, maNV: req.user.MaNV, user: req.user, header, lines: priced
+        });
         await transaction.commit();
         const message = decreased
             ? `Đã xác nhận xuất. Giảm tồn ${decreased} mặt hàng.${documented ? ` ${documented} mã ghi nhận thông tin, không trừ trùng.` : ''}`

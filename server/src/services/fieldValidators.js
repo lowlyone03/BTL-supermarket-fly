@@ -228,6 +228,32 @@ const validateClosingCash = (value) => {
     return base;
 };
 
+const CLOSE_SHIFT_CONFIRM_PHRASE = 'DONG CA';
+const CHECK_OUT_CONFIRM_PHRASE = 'RA CA';
+
+const normalizeConfirmPhrase = (value) => String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/gi, 'd')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+
+const validateTypedConfirm = (value, expected, label) => {
+    const want = normalizeConfirmPhrase(expected);
+    const got = normalizeConfirmPhrase(value);
+    if (!got) {
+        return { ok: false, message: `Hãy gõ ${expected} để xác nhận ${label}.` };
+    }
+    if (got !== want) {
+        return { ok: false, message: `Chưa khớp. Gõ đúng ${expected} (không dấu) để xác nhận ${label}.` };
+    }
+    return { ok: true, value: want };
+};
+
+const validateCloseShiftConfirm = (value) => validateTypedConfirm(value, CLOSE_SHIFT_CONFIRM_PHRASE, 'đóng ca');
+const validateCheckOutConfirm = (value) => validateTypedConfirm(value, CHECK_OUT_CONFIRM_PHRASE, 'chấm công ra');
+
 const validateRequiredNonNegativeInteger = (value, label) => {
     const base = validateRequiredNonNegativeNumber(value, label);
     if (!base.ok) return base;
@@ -548,6 +574,12 @@ module.exports = {
     validateOptionalGender,
     validateOptionalBarcode,
     CASH_AMOUNT_LIMIT,
+    CLOSE_SHIFT_CONFIRM_PHRASE,
+    CHECK_OUT_CONFIRM_PHRASE,
+    normalizeConfirmPhrase,
+    validateTypedConfirm,
+    validateCloseShiftConfirm,
+    validateCheckOutConfirm,
     validateRequiredNonNegativeNumber,
     validateClosingCash,
     validateRequiredNonNegativeInteger,

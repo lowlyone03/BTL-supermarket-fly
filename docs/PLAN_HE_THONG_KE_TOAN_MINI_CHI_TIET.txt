@@ -5,21 +5,22 @@ SUPERMARKET FLY  —  HE THONG QUAN LY NOI BO MOT CUA HANG
 
 Ten tai lieu     : PLAN_HE_THONG_KE_TOAN_MINI_CHI_TIET.txt
 Ngay soan        : 08/09/2026
-Ngay cap nhat    : 08/09/2026  (phien ban 1.4 — 4 logic + 2 scope)
-Phien ban        : 1.4
+Ngay cap nhat    : 09/09/2026  (phien ban 1.5 FINAL — 2 cho nho enforce)
+Phien ban        : 1.5 FINAL
 Vi tri           : supermarket-fly/docs/
 Muc dich         : Ban dac ta de TRIEN KHAI (schema + engine + API + UI + test),
                    khong phai outline so sai. Nguoi nhan chi viec code theo file nay.
 Mon hoc          : Ung dung he thong thong tin ke toan (AIS) — bai tap lon.
 Pham vi code     : supermarket-fly (Electron + Express :3000 + SQL Server)
 Trang thai code  : P0 UC01-UC33 DANG CHAY. Telegram companion (#3) DA XONG.
-                   Ke toan tong hop (KT loi + KT mo rong, UC34+) CHUA CODE.
+                   Ke toan tong hop (KT loi + KT mo rong, UC34+) CHUA CODE
+                   tai thoi diem chot plan. Ban 1.5 FINAL — SAN SANG TRIEN KHAI.
 
 Cach dung file nay
-  1. Doc muc 0 (luat bat bien), CHANGELOG 1.4 (va 1.3, 1.2, 1.1), va muc 15
-     (D1-D38) TRUOC khi code.
+  1. Doc muc 0 (luat bat bien), CHANGELOG 1.5 (va 1.4, 1.3, 1.2, 1.1), va muc 15
+     (D1-D40) TRUOC khi code.
   2. Khong pha 3 cot tien P0. Khong tu sinh cong no. Khong ban chiu.
-  3. Neu tai lieu cu / phien ban 1.0 / 1.1 / 1.2 / 1.3 mau thuan: dung COT
+  3. Neu tai lieu cu / phien ban 1.0 / 1.1 / 1.2 / 1.3 / 1.4 mau thuan: dung COT
      QUYET DINH o muc 15. D13-D21 = 9 chinh 1.1; D22-D27 = 1.2 (filtered
      index ButToan, KQKD thuan, VAT NULL vs 0, tra NCC vs Phieu chi, bo
      DaKetChuyen, bo bang DoiChieuNganHang); D28-D32 = 1.3 (ChoGhiSo unique
@@ -27,7 +28,9 @@ Cach dung file nay
      MaChungTu server, THU_CONG khong thanh ly TSCD); D33-D38 = 1.4 (VAT
      dau vao tru TRA_NCC_HANG, BCDKT J truoc KC = 421+LN KQKD 8.4 khong +911,
      khoa lai duoc ghi de SoDuDauKy ky sau, LCTT nhan THU_CONG 111/112,
-     1 TKNH mini, UC42 CSV only). Ly do da ghi.
+     1 TKNH mini, UC42 CSV only); D39-D40 = 1.5 FINAL (enforce 1 TKNH
+     SuDung + CHECK MaTKKeToan='112'; TRA_NCC_HANG VAT tu snapshot
+     ChiTietHoaDonMuaHang da 3-way, khong SanPham.ThueSuat). Ly do da ghi.
   4. Khong dung TaiLieu_Du_An/99_Tam_Xu_Ly/.codex-tmp/ke-hoach-ke-toan.txt
      lam ban chot so UC (file do danh UC30-UC36 cho ke toan — DA TRUNG
      UC30-UC33 nhan su trong code).
@@ -39,6 +42,32 @@ Cach dung file nay
      mo lai ky gan nhat, THU_CONG MaChungTu server, THU_CONG khong thanh ly
      TSCD. 1.4 CHI them exception he thong ghi de SoDuDauKy khi khoa lai
      (D35) — khong mo them chuc nang sua so du da chot.
+  7. GIU NGUYEN 1.4: VAT vao tru TRA_NCC_HANG, BCDKT J, overwrite SoDuDauKy
+     khi khoa lai, LCTT THU_CONG, 1 TKNH (khong 1121/1122), UC42 CSV.
+     1.5 CHI 2 cho nho enforce scope da co — KHONG them module / TK / UC / bang.
+
+--------------------------------------------------------------------------------
+CHANGELOG 09/09/2026 — phien ban 1.5 FINAL (2 cho nho; de len 1.4 neu mau thuan)
+--------------------------------------------------------------------------------
+
+  F1. Enforce 1 TKNH Su dung — KHONG them bang / 1121 / 1122. Schema
+      TaiKhoanNganHang VAN UNIQUE(SoTaiKhoan) — DB van cho nhieu dong
+      (so TK khac nhau). CHOT service: neu da co 1 TKNH TrangThai=N'Su dung'
+      thi POST tai khoan thu hai -> 400. MaTKKeToan luon 112: them
+      CHECK (MaTKKeToan='112') va/hoac server luon ep 112 (bo qua payload
+      FE neu gui khac). Ghi ro o schema + API + service + test. Day CHI
+      la enforce scope 1.4 / D37 da chot — khong them module. Muc 6.3,
+      UC42, 10.4, 11, test KT-BK-04/05, D39.
+
+  F2. TRA_NCC_HANG — nguon VAT tra lai. Sua cau dinh khoan: thue tra NCC
+      lay theo snapshot/dong ChiTietHoaDonMuaHang da 3-way match, KHONG
+      lay SanPham.ThueSuat hien tai. Ly do giong hoan hang ban (5.11.1):
+      doi thue suat SP sau nay van dao dung VAT luc mua. Khong them
+      chuc nang. Sua UC19 / 5.10, engine, test KT-PX-05/07. D40.
+
+  (1.5 DE LEN 1.4 neu mau thuan o 2 diem tren. GIU NGUYEN 1.4: VAT vao
+   tru TRA_NCC_HANG, BCDKT J, overwrite SoDuDauKy, LCTT THU_CONG, 1 TKNH
+   khong 1121/1122, UC42 CSV. GIU NGUYEN 1.3 va 1.2.)
 
 --------------------------------------------------------------------------------
 CHANGELOG 08/09/2026 — phien ban 1.4 (4 logic + 2 scope; de len 1.3 neu mau thuan)
@@ -284,6 +313,10 @@ CHANGELOG 08/09/2026 — phien ban 1.1 (9 chinh + bo sung da thong nhat)
    TRA_NCC_HANG; BCDKT J truoc KC = 421+LN 8.4 khong +911; khoa lai ghi
    de SoDuDauKy; LCTT THU_CONG 111/112; 1 TKNH; UC42 CSV. GIU 1.3 va
    1.2 con lai. Xem CHANGELOG 1.4 va D33-D38.)
+  (1.5 FINAL DE LEN 1.4 neu mau thuan o F1-F2 / D39-D40: POST TKNH thu 2
+   dang Su dung = 400; CHECK/ep MaTKKeToan='112'; TRA_NCC_HANG VAT tu
+   snapshot ChiTietHoaDonMuaHang da 3-way, khong SanPham.ThueSuat.
+   KHONG them module/TK/UC/bang. Xem CHANGELOG 1.5 va D39-D40.)
 
 ================================================================================
 MUC LUC
@@ -305,12 +338,12 @@ MUC LUC
   12.  Thu tu trien khai theo tuan / pha
   13.  Quy tac mon hoc / khong duoc lam sai
   14.  Test plan / bo case
-  15.  Rui ro va quyet dinh da chot (trich nguon; D1-D38)
+  15.  Rui ro va quyet dinh da chot (trich nguon; D1-D40)
   Phu luc A. Ma tran chung tu -> LoaiButToan
   Phu luc B. File se sua / them
   Phu luc C. Vi du so (1 chuoi mua-ban-luong-chi phi)
   Phu luc D. Nguon tai lieu da doc
-  Changelog 08/09/2026 (dau file, phien ban 1.4; giu 1.3, 1.2 va 1.1 lich su)
+  Changelog 09/09/2026 (dau file, phien ban 1.5 FINAL; giu 1.4, 1.3, 1.2, 1.1)
 
 ================================================================================
 0. TOM TAT DIEU HANH + LUAT BAT BIEN
@@ -1177,7 +1210,9 @@ Ngoai le
   Trung dong import (hash dong + MaTKNH + Ngay).
   Khop 1 dong sao ke 2 lan -> CHAN unique.
   KHONG bang DoiChieuNganHang: moi dong khop/chenh luu tren DongSaoKe.
-  Them TKNH thu 2 Su dung = huong phat trien (mini 1 TKNH).
+  Them TKNH thu 2 dang Su dung: POST 400 (enforce service D39).
+  Schema van UNIQUE(SoTaiKhoan) — khong chan nhieu dong o DB.
+  MaTKKeToan luon 112 (CHECK + server ep). Khong them 1121/1122.
 
 --------------------------------------------------------------------------------
 3.10. UC43 — Bao cao KQKD, BCDKT, LCTT mini
@@ -1251,6 +1286,8 @@ UC19 Xac nhan Phieu xuat
     CHI khi CHUA ton tai Phieu chi cho cong no do (bat ky trang thai).
     Da co Phieu chi -> 400, phai tra hang TRUOC KHI lap Phieu chi
     (giu 1 cong no – 1 Phieu chi; khong sua SoTien PC).
+    Thue / 1331 lay snapshot dong ChiTietHoaDonMuaHang da 3-way
+    (KHONG lay SanPham.ThueSuat hien tai — D40).
     Neu CHUA khop: khong but toan 156 (kho vat ly da giam).
 
 UC07 / UC20 Duyet kiem ke
@@ -1664,9 +1701,13 @@ But toan GIA_VON (LoaiButToan='GIA_VON', LoaiChungTu='HoaDon')
       Mini KHONG them workflow sua/huy PC de tra hang sau.
       Neu CHUA co Phieu chi:
         Engine TRA_NCC_HANG
-        No  331     hang + thue tuong ung SL tra
+        Thue / 1331 lay snapshot dong ChiTietHoaDonMuaHang da 3-way
+        match (cung MaSP tren PX). KHONG lay SanPham.ThueSuat hien tai
+        (ly do giong 5.11.1 hoan hang ban: doi suat SP sau nay van dao
+        dung VAT luc mua — D40).
+        No  331     hang + thue tuong ung SL tra (thue = snapshot HD mua)
             Co 156      hang
-            Co 1331     thue
+            Co 1331     thue (tu ChiTietHoaDonMuaHang, khong SanPham)
         DONG THOI giam CongNo (SoTienConLai -= tong) neu con no.
     Neu CHUA khop: khong but toan (156 chua tang). Chi giam TonKho.
 
@@ -1996,8 +2037,12 @@ Dieu kien
 
 ----- TaiKhoanNganHang -----
   -- Mini: 1 tai khoan ngan hang doanh nghiep (doi chieu sao ke UC42).
-  -- Nhieu NH = huong phat trien. Khong seed 2 TK. Khong 1121/1122.
-  -- MaTKKeToan luon 112. Khong luu MaTKNH tren ChiTietButToan (D37).
+  -- Schema VAN UNIQUE(SoTaiKhoan) — DB cho nhieu dong (so TK khac).
+  -- KHONG them UNIQUE(TrangThai) / khong them bang / khong 1121/1122.
+  -- CHOT service (D39): neu da co 1 dong TrangThai=N'Su dung' thi
+  --   POST TKNH thu hai -> 400. Day la enforce scope 1.4, khong them module.
+  -- MaTKKeToan luon 112: CHECK + server luon ep 112 (bo qua payload FE).
+  -- Khong luu MaTKNH tren ChiTietButToan (D37).
   MaTKNH         VARCHAR(20)    PK
   SoTaiKhoan     VARCHAR(30)    NOT NULL
   TenNH          NVARCHAR(100)  NOT NULL
@@ -2006,6 +2051,7 @@ Dieu kien
   MaTKKeToan     VARCHAR(8)     NOT NULL  DEFAULT '112'
   TrangThai      NVARCHAR(20)   NOT NULL  DEFAULT N'Su dung'
   CONSTRAINT UQ_TKNH_So UNIQUE (SoTaiKhoan)
+  CONSTRAINT CK_TKNH_MaTK CHECK (MaTKKeToan = '112')
 
 ----- TaiSanCoDinh -----
   MaTSCD         VARCHAR(20)    PK
@@ -2170,8 +2216,9 @@ Dieu kien
        SupermarketFly_Migration_20260920_FixedAssets.sql
        SupermarketFly_Migration_20260921_BankStatement.sql
          (SaoKeNganHang + DongSaoKe; KHONG tao DoiChieuNganHang;
-          TaiKhoanNganHang 1 TKNH mini; KHONG cot MaTKNH tren CTBT;
-          import CSV — D37/D38)
+          TaiKhoanNganHang UNIQUE(SoTaiKhoan) + CHECK MaTKKeToan='112';
+          service POST thu 2 Su dung = 400 — D37/D38/D39;
+          KHONG cot MaTKNH tren CTBT; import CSV)
 
   P1 (khong lan voi 1-2 neu 2 nhanh):
        SupermarketFly_Migration_202609xx_PaymentGateway.sql
@@ -3034,7 +3081,10 @@ qua nhieu — KT nghiep vu P0 giu /api/accounting.
   # UC42
   GET    /api/ledger/bank-accounts
   POST   /api/ledger/bank-accounts
-         Mini: 1 TKNH Su dung. Them TK thu 2 = huong phat trien (D37).
+         Mini: 1 TKNH Su dung. Neu da co 1 dong TrangThai=N'Su dung'
+         thi POST thu hai -> 400 (D39). Server luon ep MaTKKeToan='112'
+         (bo qua payload FE neu gui khac). Schema van UNIQUE(SoTaiKhoan)
+         — khong them bang / 1121 / 1122.
   POST   /api/ledger/bank-statements                  multer CSV
          accept .csv; KHONG Excel; khong parser xls/xlsx (D38).
          400 neu khong phai CSV.
@@ -3298,6 +3348,10 @@ cung luc HoaDon/ChiTietHoaDon (PLAN_12 3.1).
   39. LCTT gom THU_CONG dung 111/112 vao I "Thu/chi khac" (D36).
   40. 1 TKNH mini; CTBT khong MaTKNH; khong 1121/1122 (D37).
   41. Import sao ke CSV; khong Excel / khong parser xls-xlsx (D38).
+  42. POST TKNH thu 2 dang Su dung -> 400; MaTKKeToan luon 112
+      (CHECK + server ep). Schema van UNIQUE(SoTaiKhoan) (D39).
+  43. TRA_NCC_HANG: VAT/1331 tu snapshot ChiTietHoaDonMuaHang da
+      3-way, khong SanPham.ThueSuat hien tai (D40).
 
 
 ================================================================================
@@ -3399,7 +3453,11 @@ thukho / muahang, mat khau 123. Chay tren 1 CSDL.
   KT-PX-04   Tra NCC khi DA CO Phieu chi (ke ca CHUA thanh toan): 400,
              CN khong giam, 0 TRA_NCC_HANG
   KT-PX-05   Tra NCC da khop, CHUA co Phieu chi: TRA_NCC_HANG + giam CN
+             VAT/1331 lay ChiTietHoaDonMuaHang (snapshot 3-way), KHONG
+             SanPham.ThueSuat
   KT-PX-06   Tra NCC sau khi PC thanh cong (tat toan): 400 (cung rule da co PC)
+  KT-PX-07   Tra NCC: doi SanPham.ThueSuat sau khi 3-way; Co 1331 van dung
+             suat/tien thue dong ChiTietHoaDonMuaHang (giong KT-RET-04)
 
 14.7. Bao cao
 
@@ -3474,6 +3532,10 @@ thukho / muahang, mat khau 123. Chay tren 1 CSDL.
              (khong parser Excel)
   KT-BK-04   ChiTietButToan khong cot MaTKNH; moi BT ngan hang MaTK=112;
              khong 1121/1122; mini 1 TKNH (khong tach VCB vs MB)
+  KT-BK-05   POST TKNH thu 2 khi da co 1 dong Su dung -> 400.
+             Schema van UNIQUE(SoTaiKhoan) (nhieu dong DB duoc neu
+             khong Su dung). MaTKKeToan CHECK='112'; server ep 112
+             (payload FE MaTKKeToan=111 van luu 112)
 
 14.9. Quyen / hoi quy
 
@@ -3752,6 +3814,21 @@ D38. UC42 import sao ke CSV only  (1.4 / E6)
   CHON: import sao ke CSV. Bo Excel khoi nghiep vu/API. Multer CSV,
   khong parser Excel. Upload khong phai CSV -> 400.
 
+D39. Enforce 1 TKNH Su dung  (1.5 FINAL / F1)
+  CHON: KHONG them bang / 1121 / 1122. Schema TaiKhoanNganHang VAN
+  UNIQUE(SoTaiKhoan) — DB cho nhieu dong (so TK khac). CHOT service:
+  neu da co 1 TKNH TrangThai=N'Su dung' thi POST tai khoan thu hai
+  -> 400. MaTKKeToan luon 112: CHECK (MaTKKeToan='112') va server
+  luon ep 112 (bo qua payload FE). Ghi ro schema + API + service +
+  test KT-BK-05. Day chi enforce scope D37 — khong them module.
+
+D40. TRA_NCC_HANG VAT tu snapshot HD mua  (1.5 FINAL / F2)
+  CHON: thue tra NCC / Co 1331 lay theo snapshot dong
+  ChiTietHoaDonMuaHang da 3-way match (cung MaSP tren PX). KHONG lay
+  SanPham.ThueSuat hien tai. Ly do giong 5.11.1 hoan hang ban: doi
+  thue suat SP sau nay van dao dung VAT luc mua. Khong them chuc nang.
+  Sua UC19 / 5.10, engine, test KT-PX-05/07.
+
 15.2. Rui ro
 
   R1  Idempotent fail -> tru ton / BT 2 lan     Mitigation: unique + test ENG-01
@@ -3778,6 +3855,9 @@ D38. UC42 import sao ke CSV only  (1.4 / E6)
   R17 BCDKT chua KC lech LN (J=421+911=421)     Mitigation: D34, test RPT-09/10
   R18 Khoa lai khong ghi de SoDuDauKy DaChot    Mitigation: D35, test CLS-07/09
   R19 LCTT lech vi THU_CONG 111/112             Mitigation: D36, test RPT-11/12
+  R20 POST TKNH 2 Su dung / MaTK != 112         Mitigation: D39, test BK-05
+  R21 TRA_NCC_HANG VAT theo SanPham.ThueSuat    Mitigation: D40, test PX-07
+                                                hien tai -> dao sai sau doi suat
 
 15.3. Cau bao ve ngan (hoc thuoc)
 
@@ -3795,6 +3875,8 @@ D38. UC42 import sao ke CSV only  (1.4 / E6)
   "BCDKT chua KC: J = 421 + LN KQKD 8.4, khong cong 911."
   "SoDuDauKy DaChot: user khong sua; khoa lai ky truoc duoc ghi de."
   "LCTT gom THU_CONG dung 111/112. Mini 1 TKNH. Sao ke CSV."
+  "POST TKNH thu 2 dang Su dung = 400. MaTKKeToan luon 112."
+  "TRA_NCC_HANG: VAT tu snapshot ChiTietHoaDonMuaHang, khong SanPham."
 
 
 ================================================================================
@@ -4015,12 +4097,13 @@ DONG FILE
 ================================================================================
 
 Ngay soan        : 08/09/2026
-Ngay cap nhat    : 08/09/2026
+Ngay cap nhat    : 09/09/2026
 Nguoi soan       : ke hoach KT mini — doi chieu tai lieu da chot + code P0
-Phien ban        : 1.4  (4 logic + 2 scope: VAT vao tru TRA_NCC_HANG,
-                   BCDKT J chua KC = 421+LN 8.4 khong +911, khoa lai ghi
-                   de SoDuDauKy DaChot, LCTT nhan THU_CONG 111/112,
-                   1 TKNH mini, UC42 CSV only;
+Phien ban        : 1.5 FINAL  (2 cho nho: enforce 1 TKNH Su dung + CHECK 112;
+                   TRA_NCC_HANG VAT tu snapshot ChiTietHoaDonMuaHang;
+                   giu 1.4: VAT vao tru TRA_NCC_HANG, BCDKT J chua KC =
+                   421+LN 8.4 khong +911, khoa lai ghi de SoDuDauKy,
+                   LCTT THU_CONG 111/112, 1 TKNH khong 1121/1122, UC42 CSV;
                    giu 1.3: ChoGhiSo unique chi DaXuLy=0, khoa BLOCK
                    vs WARN, mo lai ky gan nhat + copy lai so du, THU_CONG
                    MaChungTu server, THU_CONG khong thanh ly TSCD;
@@ -4030,13 +4113,13 @@ Phien ban        : 1.4  (4 logic + 2 scope: VAT vao tru TRA_NCC_HANG,
                    giu 1.1: dao DaBiDao, TSCD/UC36 khong 331, ghi so tre,
                    bo MaBT chung tu, bo CauHinhDinhKhoan, doi chieu 331,
                    18 TK gom 138, chu thich 421)
-Trang thai       : SAN SANG TRIỂN KHAI (chua code UC34+)
+Trang thai       : FINAL — SAN SANG TRIEN KHAI
 Buoc ke tiep     : Tuan 0 smoke P0 -> Tuan 1 schema COA 18 TK + ky
                    (UX_ButToan_*, UX_ChoGhiSo_Active, khong DaKetChuyen,
                    khong DoiChieuNganHang)
                    -> Tuan 2 VAT POS (DEFAULT NULL) -> Tuan 3 engine + sua P&L
                    -> Tuan 4 KQKD thuan muc 8.4
-Xem              : CHANGELOG 08/09/2026 o dau file + muc 15.D13-D38
+Xem              : CHANGELOG 09/09/2026 o dau file + muc 15.D13-D40
 
 HET TAI LIEU.
 ================================================================================

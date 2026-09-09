@@ -3,6 +3,8 @@ const { calculateGrossProfit, roundMoney, RESTOCK_ACCEPTED_SQL, RESTOCK_REJECTED
 const { resolveReportingPeriod, activityFromStamp, currentPeriodDefaults } = require('../services/reportingPeriod');
 const { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS } = require('../services/invoiceReturnSql');
 const storeProfitLoss = require('../services/storeProfitLoss');
+const { mergeWrittenOffLines, summarizeWrittenOffLines } = require('../services/writtenOffGoods');
+const warehouseReportSubmit = require('../services/warehouseReportSubmit');
 
 const bindPeriod = (pool, period) => pool.request()
     .input('From', sql.NVarChar(10), period.from)
@@ -498,11 +500,99 @@ const getStoreOperationsReport = async (req, res) => {
     }
 };
 
+const queryConfirmedWriteoffIssues = async (pool, period) => {
+    const issueSql = (linkCols) => `
+        SELECT px.MaPX, px.NgayXuat, px.LoaiXuat, ${linkCols}
+               px.GhiChu, ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SoLuong,
+               ISNULL(ct.DonGia, 0) DonGia, ct.SoLuong * ISNULL(ct.DonGia, 0) GiaTri,
+               ct.GhiChu GhiChuDong
+        FROM PhieuXuat px
+        JOIN ChiTietPhieuXuat ct ON ct.MaPX=px.MaPX
+        JOIN SanPham sp ON sp.MaSP=ct.MaSP
+        WHERE px.TrangThai=N'Đã xác nhận'
+          AND px.LoaiXuat IN (N'Hủy hàng', N'Sử dụng nội bộ')
+          AND CONVERT(date, px.NgayXuat) >= CONVERT(date, @From)
+          AND CONVERT(date, px.NgayXuat) < CONVERT(date, @ToExclusive)
+        ORDER BY px.NgayXuat DESC, px.MaPX, sp.TenSP`;
+    try {
+        return await bindPeriod(pool, period).query(issueSql('px.MaKK, px.MaDT, px.KhongTruTon,'));
+    } catch (error) {
+        if (!/Invalid column name|MaKK|MaDT|KhongTruTon/i.test(error.message || '')) throw error;
+        try {
+            return await bindPeriod(pool, period).query(issueSql('px.MaKK, CAST(NULL AS varchar(20)) MaDT, CAST(0 AS bit) KhongTruTon,'));
+        } catch (inner) {
+            if (!/Invalid column name|MaKK/i.test(inner.message || '')) throw inner;
+            return bindPeriod(pool, period).query(issueSql('CAST(NULL AS varchar(20)) MaKK, CAST(NULL AS varchar(20)) MaDT, CAST(0 AS bit) KhongTruTon,'));
+        }
+    }
+};
+
+const queryRejectedReturnWriteoffs = async (pool, period) => {
+    const returnSql = (costCols) => `
+        SELECT CAST(NULL AS varchar(20)) MaPX,
+               COALESCE(dt.NgayHoan, dt.NgayLap) NgayXuat,
+               N'Hủy hàng' LoaiXuat,
+               CAST(NULL AS varchar(20)) MaKK,
+               dt.MaDT,
+               CAST(1 AS bit) KhongTruTon,
+               COALESCE(ct.LyDo, dt.KetQuaKiemTra, dt.LyDo) GhiChu,
+               ct.MaSP, sp.TenSP, sp.DonViTinh, ct.SoLuong,
+               ct.DonGia, ct.ThanhTien, ${costCols}
+        FROM ChiTietDoiTra ct
+        JOIN PhieuDoiTra dt ON dt.MaDT=ct.MaDT
+        JOIN SanPham sp ON sp.MaSP=ct.MaSP
+        WHERE ct.LoaiDong=N'Hàng khách trả'
+          AND ct.SoLuong>0
+          AND dt.TrangThai NOT IN (N'Đã hủy', N'Từ chối')
+          AND ${RESTOCK_REJECTED_SQL}
+          AND (
+            (dt.NgayLap>=@From AND dt.NgayLap<@ToExclusive)
+            OR (dt.NgayHoan IS NOT NULL AND dt.NgayHoan>=@From AND dt.NgayHoan<@ToExclusive)
+          )`;
+    try {
+        return await bindPeriod(pool, period).query(returnSql('ct.DonGiaVon, ct.ThanhTienVon'));
+    } catch (error) {
+        if (!/Invalid column name|DonGiaVon|ThanhTienVon/i.test(error.message || '')) throw error;
+        return bindPeriod(pool, period).query(returnSql('CAST(NULL AS decimal(18,2)) DonGiaVon, CAST(NULL AS decimal(18,2)) ThanhTienVon'));
+    }
+};
+
+const queryWrittenOffGoods = async (pool, period) => {
+    let issueRows = [];
+    let returnRows = [];
+    try {
+        issueRows = (await queryConfirmedWriteoffIssues(pool, period)).recordset || [];
+    } catch (error) {
+        console.error('queryConfirmedWriteoffIssues', error.message);
+        if (!/Invalid column name/i.test(error.message || '')) throw error;
+    }
+    try {
+        returnRows = (await queryRejectedReturnWriteoffs(pool, period)).recordset || [];
+    } catch (error) {
+        console.error('queryRejectedReturnWriteoffs', error.message);
+        if (!/Invalid column name/i.test(error.message || '')) throw error;
+    }
+    const lines = mergeWrittenOffLines(issueRows, returnRows);
+    return { summary: summarizeWrittenOffLines(lines), lines };
+};
+
+const getWrittenOffGoodsReport = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const { period } = await resolveReportPeriod(pool, { ...req.query, lockPeriod: '1' });
+        const hangRoiKhoBan = await queryWrittenOffGoods(pool, period);
+        res.json({ period, hangRoiKhoBan });
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không thể lập danh sách hàng đã xuất khỏi kho bán.' });
+    }
+};
+
 const getWarehouseReport = async (req, res) => {
     try {
         const pool = await poolPromise;
         const { period, latestActivity, fallbackFrom } = await resolveReportPeriod(pool, req.query);
-        const [movement, stock, low, docs, daily, laterMovement, inventoryByCategory, recentDocuments, dailyDocuments, topProductsByCategory] = await Promise.all([
+        const [movement, stock, low, docs, daily, laterMovement, inventoryByCategory, recentDocuments, dailyDocuments, topProductsByCategory, hangRoiKhoBan] = await Promise.all([
             bindPeriod(pool, period).query(`
                 SELECT COALESCE(SUM(CASE WHEN LoaiGD=N'Nhập' THEN SoLuong ELSE 0 END),0) SoLuongNhap,
                        COALESCE(SUM(CASE WHEN LoaiGD=N'Xuất' THEN ABS(SoLuong) ELSE 0 END),0) SoLuongXuat,
@@ -593,7 +683,8 @@ const getWarehouseReport = async (req, res) => {
                     LEFT JOIN TonKho tk ON tk.MaSP=sp.MaSP
                     WHERE sp.TrangThai IN (N'Đang bán',N'Đang kinh doanh') AND ISNULL(tk.SLTon,0) > 0
                 ) x WHERE Hang <= 3
-                ORDER BY MaDM, GiaTriTon DESC`)
+                ORDER BY MaDM, GiaTriTon DESC`),
+            queryWrittenOffGoods(pool, period)
         ]);
         const m = movement.recordset[0];
         const currentQuantity = Number(stock.recordset[0].TongTon || 0);
@@ -617,6 +708,7 @@ const getWarehouseReport = async (req, res) => {
             recentDocuments: recentDocuments.recordset,
             dailyDocuments: dailyDocuments.recordset,
             topProductsByCategory: topProductsByCategory.recordset,
+            hangRoiKhoBan,
             doiTra: await queryReturnDiagnostics(pool, period)
         });
     } catch (error) {
@@ -936,13 +1028,75 @@ const getReportDocuments = async (req, res) => {
     }
 };
 
+const submitWarehouseReport = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const result = await warehouseReportSubmit.submitWarehouseReport(pool, req.user, req.body?.report, req.body?.note);
+        res.json(result);
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không gửi được báo cáo kho.' });
+    }
+};
+
+const withdrawWarehouseReport = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const result = await warehouseReportSubmit.withdrawWarehouseReport(pool, req.user, req.params.id);
+        res.json(result);
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không thu hồi được báo cáo kho.' });
+    }
+};
+
+const listMyWarehouseReports = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const items = await warehouseReportSubmit.listWarehouseReports(pool, { mine: req.user.MaNV });
+        res.json({ items });
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không tải được danh sách báo cáo đã gửi.' });
+    }
+};
+
+const listAdminWarehouseReports = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const items = await warehouseReportSubmit.listWarehouseReports(pool, {});
+        res.json({ items });
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không tải được báo cáo Thủ kho.' });
+    }
+};
+
+const getAdminWarehouseReport = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const data = await warehouseReportSubmit.getWarehouseReportSubmission(pool, req.params.id);
+        res.json(data);
+    } catch (error) {
+        console.error(error);
+        const missing = /không tìm thấy/i.test(error.message || '');
+        res.status(missing ? 404 : 400).json({ message: error.message || 'Không mở được báo cáo Thủ kho.' });
+    }
+};
+
 module.exports = {
     getFinancialReport,
     getStoreOperationsReport,
     getWarehouseReport,
+    getWrittenOffGoodsReport,
     getSalesReport,
     getPurchasingReport,
     getStoreProfitLossReport,
     postStoreProfitLossPlan,
-    getReportDocuments
+    getReportDocuments,
+    submitWarehouseReport,
+    withdrawWarehouseReport,
+    listMyWarehouseReports,
+    listAdminWarehouseReports,
+    getAdminWarehouseReport
 };

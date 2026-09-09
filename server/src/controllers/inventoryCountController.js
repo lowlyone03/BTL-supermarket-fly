@@ -483,6 +483,7 @@ const approveCount = async (req, res) => {
         });
         const written = [];
         const skipped = [];
+        const journalLines = [];
         // Chỉ khóa dòng chênh lệch. Dòng khớp (như BK001 = 0/0) có thể đã bán/nhập sau lúc đếm — không chặn duyệt.
         // Hàng hỏng/hết hạn: điều chỉnh về SLThucTe. Xuất hủy trừ SLThucTe lúc xác nhận phiếu xuất — không trừ trùng.
         for (const line of adjusted) {
@@ -542,6 +543,7 @@ const approveCount = async (req, res) => {
                 .query(`INSERT GiaoDichKho(MaGD,MaKho,MaSP,MaNV,LoaiGD,SoLuong,DonGiaVon,ThanhTienVon,LoaiChungTu,MaChungTu,NgayGD,GhiChu)
                         VALUES(@MaGD,@MaKho,@MaSP,@MaNV,N'Điều chỉnh',@SoLuong,@DonGiaVon,@ThanhTienVon,N'Kiểm kê',@MaKK,GETDATE(),@GhiChu)`);
             written.push(line.MaSP);
+            journalLines.push({ MaSP: line.MaSP, delta, DonGiaBinhQuan: cost, ChenhLech: delta });
         }
         await new sql.Request(transaction)
             .input('MaKK', sql.VarChar, req.params.id)
@@ -553,6 +555,11 @@ const approveCount = async (req, res) => {
             skipped.length ? skipped.join('; ') : ''
         ].filter(Boolean).join('. ');
         await writeAudit(transaction, req.user, 'Phê duyệt điều chỉnh tồn', req.params.id, auditNote);
+        const { postCountJournals } = require('../services/accountingHooks');
+        await postCountJournals(transaction, {
+            maKK: req.params.id, maNV: req.user.MaNV, user: req.user,
+            ngay: count.NgayKiemKe || new Date(), lines: journalLines
+        });
         const closed = await markRejectedRecounted(transaction, {
             MaKK: req.params.id,
             MaKho: count.MaKho,

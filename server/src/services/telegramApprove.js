@@ -97,7 +97,7 @@ const resetDecisionState = () => {
 const parseDecisionCallback = (data) => {
     const raw = String(data || '').trim();
     if (raw === 'rp' || raw === 'cmd:reports') return { action: 'reports' };
-    const match = raw.match(/^(ok|no|dt|docs):(po|px|kk|dt|pc|cc|hd|pn|hdm|gh):(.{1,40})$/i);
+    const match = raw.match(/^(ok|no|dt|docs):(po|px|kk|dt|pc|cc|hd|pn|hdm|gh|bck):(.{1,40})$/i);
     if (!match) return null;
     return { action: match[1].toLowerCase(), kind: match[2].toLowerCase(), id: match[3] };
 };

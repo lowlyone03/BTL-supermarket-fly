@@ -353,6 +353,8 @@
 .fly-chart-hit.is-active { fill: rgba(37, 132, 95, .12); }
 .fly-chart-track { fill: #edf2ef; }
 .fly-chart-value { fill: #253e32 !important; font-weight: 800; }
+.fly-chart-canvas.is-stacked .fly-chart-value { fill: #fff !important; font-size: 11px; }
+.fly-chart-stack-total { fill: #174a37; font-size: 12px; font-weight: 800; }
 .fly-chart-canvas.horizontal text { font-size: 12px; }
 
 .fly-metric-bars {
@@ -2171,10 +2173,80 @@
   .financial-reports .report-card-open-hint { display: none !important; }
 }
 
-.financial-reports .report-return-block {
+.financial-reports .report-return-block,
+.financial-reports .report-writeoff-block {
   width: 100%;
   min-width: 0;
   grid-column: 1 / -1;
+}
+
+.financial-reports.report-warehouse .report-writeoff-block {
+  margin: 4px 0 22px;
+  padding: 18px 18px 8px;
+  border: 1px solid color-mix(in srgb, var(--report-accent), white 72%);
+  border-radius: 20px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--report-accent-soft), white 42%) 0%, #fff 28px);
+}
+
+.financial-reports.report-warehouse .report-writeoff-block .report-return-heading {
+  border-left-color: var(--report-accent);
+}
+
+.financial-reports.report-warehouse .report-writeoff-kpis > article:nth-child(1) {
+  border-left-color: #b05b43;
+}
+.financial-reports.report-warehouse .report-writeoff-kpis > article:nth-child(1)::before {
+  content: '⊘';
+  background: rgba(176, 91, 67, .12);
+}
+.financial-reports.report-warehouse .report-writeoff-kpis > article:nth-child(2) {
+  border-left-color: #197678;
+}
+.financial-reports.report-warehouse .report-writeoff-kpis > article:nth-child(2)::before {
+  content: '↻';
+  background: rgba(25, 118, 120, .12);
+}
+.financial-reports.report-warehouse .report-writeoff-kpis > article:nth-child(3) {
+  border-left-color: #8a5a2b;
+}
+.financial-reports.report-warehouse .report-writeoff-kpis > article:nth-child(3)::before {
+  content: '✕';
+  background: rgba(138, 90, 43, .12);
+}
+.financial-reports.report-warehouse .report-writeoff-kpis > article:nth-child(4)::before {
+  content: '₫';
+  background: rgba(25, 118, 120, .12);
+}
+
+.financial-reports.report-warehouse .report-writeoff-doc {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--report-accent);
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.financial-reports.report-warehouse .report-writeoff-doc:hover {
+  color: #125c5e;
+}
+.financial-reports.report-warehouse .report-writeoff-docs small {
+  display: block;
+  margin-top: 3px;
+}
+.financial-reports.report-warehouse .report-writeoff-stock {
+  max-width: 28ch;
+  color: #5d7169;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.financial-reports.report-warehouse .report-writeoff-lines .warehouse-table th,
+.financial-reports.report-warehouse .report-writeoff-lines .warehouse-table td {
+  white-space: normal;
 }
 
 .financial-reports .report-return-grid {
@@ -2189,18 +2261,22 @@
 .financial-reports .report-return-grid::before { content: none; }
 
 .financial-reports .report-return-tickets,
-.financial-reports .report-return-products {
+.financial-reports .report-return-products,
+.financial-reports .report-writeoff-lines {
   width: 100%;
   min-width: 0;
   min-height: 0 !important;
 }
 
-.financial-reports .report-return-block .warehouse-table {
+.financial-reports .report-return-block .warehouse-table,
+.financial-reports .report-writeoff-block .warehouse-table {
   min-width: 0 !important;
 }
 
 .financial-reports .report-return-block .warehouse-table th,
-.financial-reports .report-return-block .warehouse-table td {
+.financial-reports .report-return-block .warehouse-table td,
+.financial-reports .report-writeoff-block .warehouse-table th,
+.financial-reports .report-writeoff-block .warehouse-table td {
   white-space: normal;
 }
 
@@ -2712,6 +2788,309 @@
 }
 @media (max-width: 720px) {
   .financial-reports.report-warehouse .fly-donut-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.financial-reports.report-warehouse .report-scope-card {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 16px 22px;
+  align-items: center;
+  margin: 0 0 16px;
+  padding: 16px 18px;
+  border: 1px solid #d5e4dc;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f3faf6, #fff 55%);
+}
+.financial-reports.report-warehouse .report-scope-card p:first-child {
+  margin: 0;
+  color: #2b7a5c;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.financial-reports.report-warehouse .report-scope-card h3 {
+  margin: 4px 0 2px;
+  font-size: 20px;
+}
+.financial-reports.report-warehouse .report-scope-card span,
+.financial-reports.report-warehouse .report-scope-card > p:last-child {
+  color: #5b6f66;
+  line-height: 1.5;
+}
+.financial-reports.report-warehouse .warehouse-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.financial-reports.report-warehouse .report-writeoff-visuals {
+  margin: 4px 0 16px;
+}
+.financial-reports.report-warehouse .report-writeoff-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin: 0 0 12px;
+}
+.financial-reports.report-warehouse .report-writeoff-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.financial-reports.report-warehouse .report-writeoff-chips button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #d3dfd8;
+  border-radius: 999px;
+  background: #fff;
+  color: #2a3d34;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.financial-reports.report-warehouse .report-writeoff-chips button b {
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #eef4f0;
+  font-size: 12px;
+}
+.financial-reports.report-warehouse .report-writeoff-chips button.is-active {
+  background: #1d7656;
+  border-color: #1d7656;
+  color: #fff;
+}
+.financial-reports.report-warehouse .report-writeoff-chips button.is-active b {
+  background: #ffffff2e;
+  color: #fff;
+}
+.financial-reports.report-warehouse .report-writeoff-search {
+  display: grid;
+  gap: 4px;
+  min-width: min(100%, 280px);
+}
+.financial-reports.report-warehouse .report-writeoff-search span {
+  color: #6a7c73;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .04em;
+}
+.financial-reports.report-warehouse .report-writeoff-search input {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid #d3dfd8;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+}
+.financial-reports.report-warehouse .report-writeoff-kind {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 750;
+}
+.financial-reports.report-warehouse .report-writeoff-kind.is-scrap { background: #f8e8e3; color: #8a4030; }
+.financial-reports.report-warehouse .report-writeoff-kind.is-reuse { background: #ddf3f1; color: #146266; }
+.financial-reports.report-warehouse .report-writeoff-kind.is-return { background: #f4eadf; color: #7a4a22; }
+.financial-reports.report-warehouse .report-writeoff-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 4px 4px;
+}
+.financial-reports.report-warehouse .report-writeoff-range { color: #5b6f66; }
+.financial-reports.report-warehouse .report-writeoff-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.financial-reports.report-warehouse .report-writeoff-pages button {
+  min-width: 34px;
+  height: 34px;
+  border: 1px solid #d3dfd8;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+.financial-reports.report-warehouse .report-writeoff-pages button.is-active,
+.financial-reports.report-warehouse .report-writeoff-pages button:hover:not(:disabled) {
+  background: #1d7656;
+  border-color: #1d7656;
+  color: #fff;
+}
+.financial-reports.report-warehouse .report-writeoff-pages button:disabled {
+  opacity: .45;
+  cursor: default;
+}
+.financial-reports.report-warehouse .report-submit-strip,
+.financial-reports.report-warehouse-admin .report-submit-strip {
+  margin: 18px 0 8px;
+  padding: 14px 16px 10px;
+  border: 1px dashed #c7d8cf;
+  border-radius: 16px;
+  background: #f7faf8;
+}
+.financial-reports.report-warehouse .report-submit-head p,
+.financial-reports.report-warehouse-admin .report-submit-head p {
+  margin: 0;
+  color: #2b7a5c;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.financial-reports.report-warehouse .report-submit-head h3,
+.financial-reports.report-warehouse-admin .report-submit-head h3 {
+  margin: 4px 0 10px;
+  font-size: 16px;
+}
+.financial-reports.report-warehouse .report-submit-list,
+.financial-reports.report-warehouse-admin .report-submit-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+.financial-reports.report-warehouse .report-submit-item,
+.financial-reports.report-warehouse-admin .report-submit-item {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid #d5e0da;
+  border-radius: 12px;
+  background: #fff;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.financial-reports.report-warehouse-admin .report-submit-item.is-active {
+  border-color: #1d7656;
+  box-shadow: 0 0 0 2px #1d765633;
+}
+.financial-reports.report-warehouse .report-submit-item strong,
+.financial-reports.report-warehouse-admin .report-submit-item strong { color: #174a37; }
+.financial-reports.report-warehouse .report-submit-item small,
+.financial-reports.report-warehouse-admin .report-submit-item small { color: #6a7c73; }
+.financial-reports.report-warehouse-admin .report-admin-banner,
+.financial-reports.report-warehouse-admin .report-admin-meta {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #eef6f2;
+  border: 1px solid #d3e5db;
+}
+.financial-reports.report-warehouse-admin .report-admin-meta {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  background: #fff;
+}
+.financial-reports.report-warehouse-admin .report-admin-meta p {
+  margin: 0;
+  color: #6a7c73;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .06em;
+}
+.financial-reports.report-warehouse-admin .report-admin-toolbar {
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+.report-submit-modal textarea {
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px;
+  border: 1px solid #d3dfd8;
+  border-radius: 10px;
+  font: inherit;
+  resize: vertical;
+}
+.report-submit-warn { color: #8a4b2b; }
+.financial-reports.report-warehouse .report-writeoff-daytable {
+  margin: 12px 4px 4px;
+  padding: 12px 12px 4px;
+  border: 1px solid #dce6e1;
+  border-radius: 12px;
+  background: #f7faf8;
+}
+.financial-reports.report-warehouse .report-writeoff-daytable p {
+  margin: 0 0 8px;
+  color: #315343;
+  font-size: 12px;
+  font-weight: 750;
+}
+.financial-reports.report-warehouse .report-writeoff-daytable table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.financial-reports.report-warehouse .report-writeoff-daytable th,
+.financial-reports.report-warehouse .report-writeoff-daytable td {
+  padding: 7px 8px;
+  border-bottom: 1px solid #e1e8e4;
+  text-align: left;
+}
+.financial-reports.report-warehouse .report-writeoff-daytable td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.financial-reports.report-warehouse .report-writeoff-qtychart .fly-chart-canvas.columns {
+  min-height: 280px;
+}
+.financial-reports.report-warehouse .report-writeoff-extra {
+  margin: 0 0 12px;
+}
+.financial-reports.report-warehouse .report-submit-withdraw {
+  margin-top: 8px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #d3b4a8;
+  border-radius: 8px;
+  background: #fff8f5;
+  color: #8a4030;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.financial-reports.report-warehouse .report-submit-withdraw:hover {
+  background: #f8e8e3;
+}
+.financial-reports.report-warehouse .report-submit-strip.is-empty p {
+  margin: 0;
+  color: #4a6156;
+  line-height: 1.55;
+}
+.financial-reports.report-warehouse .report-writeoff-daytable th {
+  color: #4a6156;
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+.financial-reports.report-warehouse .report-submit-help {
+  display: block;
+  margin: 0 0 10px;
+  color: #5b6f66;
+  line-height: 1.5;
+}
+.financial-reports.report-warehouse .report-submit-item {
+  cursor: default;
+}
+.financial-reports.report-warehouse-admin .report-submit-item {
+  cursor: pointer;
+}
+
+@media (max-width: 820px) {
+  .financial-reports.report-warehouse .report-scope-card {
     grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -892,6 +892,31 @@ handlers['Phê duyệt đổi trả'] = async (ctx) => {
     }));
 };
 
+const notifyWarehouseReportSubmitted = async (pool, maBC) => {
+    const id = String(maBC || '').trim();
+    if (!id || !pool) return { sent: 0 };
+    const { composeWarehouseReportView } = require('./warehouseReportTelegram');
+    const pack = await composeWarehouseReportView(pool, id, { mode: 'push', lang: 'vi' });
+    if (!pack.texts.length) return { sent: 0 };
+    const ql = await boundRecipients(pool, { roles: ['Quản lý'], ucAny: ['UC10'] });
+    if (!ql.length) return { sent: 0 };
+    const first = await pushTo(pool, ql, 'BCK_NOP', id, pack.texts[0], { extra: pack.extra });
+    if (first.sent && pack.texts.length > 1) {
+        for (const person of ql) {
+            for (const text of pack.texts.slice(1)) {
+                try { await sendMessage(person.ChatId, text, pack.extra); } catch (error) {
+                    runtime.log('Telegram BCK:', error.message);
+                }
+            }
+        }
+    }
+    return first;
+};
+
+handlers['Gửi báo cáo kho'] = async (ctx) => {
+    await notifyWarehouseReportSubmitted(ctx.pool, ctx.recordId);
+};
+
 handlers['Gửi kế hoạch điều chỉnh lãi lỗ'] = async (ctx) => {
     const all = await boundRecipients(ctx.pool, {});
     await pushTo(ctx.pool, all, 'KE_HOACH_LO', ctx.recordId || operatingDayOf(runtime.now()), eventCard('KẾ HOẠCH ĐIỀU CHỈNH LÃI LỖ', {
@@ -922,6 +947,7 @@ const pickInboxToPush = (items, { recordId, now }) => {
         if (!item?.id) return false;
         const blob = `${item.id} ${item.title || ''} ${item.detail || ''}`;
         if (/hóa đơn bán|hoàn thành hóa đơn|^hd:|^hoadon:/i.test(blob)) return false;
+        if (/báo cáo thủ kho|gửi báo cáo kho|BCK\d{8}/i.test(blob)) return false;
         if (id && (String(item.id).includes(id) || String(item.detail || '').includes(id))) return true;
         if (id) return false;
         const at = item.at ? new Date(item.at).getTime() : 0;
@@ -1101,6 +1127,7 @@ module.exports = {
     pickInboxToPush,
     notifyShiftClosed,
     notifyAttendancePending,
+    notifyWarehouseReportSubmitted,
     onAudit,
     sendOperatingReport,
     sendMorningSchedule,

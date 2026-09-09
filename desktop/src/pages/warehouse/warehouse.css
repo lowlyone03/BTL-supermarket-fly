@@ -611,6 +611,14 @@
 .cashier-next-step p { color:#6f7e76; font-size:11px; line-height:1.55; }
 .cashier-next-step button { width:100%; margin-top:8px; }
 .cashier-next-step small { margin-top:9px; color:#8a9690; text-align:center; }
+.cashier-shift-side { display:flex; flex-direction:column; gap:18px; min-width:0; }
+.cashier-close-zone { margin-top:auto; padding:16px 18px 18px; border:1px solid #efc4ba; border-radius:17px; background:#fff7f4; }
+.cashier-close-warning { margin:0 0 12px; color:#9b3b32; font-size:12px; font-weight:700; line-height:1.5; }
+.cashier-close-zone .warehouse-danger { width:100%; }
+.cashier-close-alert { display:flex; align-items:flex-start; gap:12px; margin-bottom:16px; padding:14px 16px; border:1px solid #e8b3aa; border-radius:14px; background:#fff1ee; color:#8a2f28; }
+.cashier-close-alert > svg { width:22px; height:22px; flex:0 0 auto; fill:none; stroke:currentColor; stroke-width:1.8; }
+.cashier-close-alert p { margin:6px 0 0; color:#a44935; font-size:12px; font-weight:600; line-height:1.5; }
+.cashier-close-step-hint { margin:10px 0 0; color:#7a5a54; font-size:11px; }
 .cashier-history { margin-top:0; }
 .cashier-opening-rule { display:flex; align-items:flex-start; gap:12px; margin-bottom:19px; padding:15px; border:1px solid #d4e6dc; border-radius:15px; color:#315f4d; background:#edf7f1; }
 .cashier-opening-rule > svg { width:22px; height:22px; flex:0 0 auto; fill:none; stroke:currentColor; stroke-width:1.8; }

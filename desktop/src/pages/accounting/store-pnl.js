@@ -72,11 +72,14 @@
     const cash = data.tienMat || {};
     const reasons = data.nguyenNhan || [];
     const plans = data.keHoach || [];
-    const tone = op.trangThai === 'LỖ' ? 'loss' : op.trangThai === 'LÃI' ? 'profit' : 'even';
-    const remainLabel = op.trangThai === 'LỖ' ? 'Cửa hàng lỗ sau chi phí' : op.trangThai === 'LÃI' ? 'Cửa hàng lãi sau chi phí' : 'Hòa vốn sau chi phí';
+    const kqkd = data.kqkd || {};
+    const kqkdStatus = kqkd.trangThai || op.kqkdTrangThai || op.trangThai;
+    const kqkdAmount = kqkd.loiNhuan != null ? kqkd.loiNhuan : op.kqkdLoiNhuan;
+    const tone = kqkdStatus === 'LỖ' ? 'loss' : kqkdStatus === 'LÃI' ? 'profit' : 'even';
+    const remainLabel = kqkdStatus === 'LỖ' ? 'Cửa hàng lỗ kế toán (KQKD)' : kqkdStatus === 'LÃI' ? 'Cửa hàng lãi kế toán (KQKD)' : 'Hòa vốn kế toán';
     const alerts = [];
-    if (op.trangThai === 'LỖ') {
-      alerts.push(`Kỳ này lỗ ${money(Math.abs(op.laiLoSauChiPhi))}. Cần ghi kế hoạch điều chỉnh và gửi thông báo toàn cửa hàng.`);
+    if (kqkdStatus === 'LỖ') {
+      alerts.push(`Kỳ này lỗ kế toán ${money(Math.abs(kqkdAmount))}. Tiền trả NCC không trừ vào lãi/lỗ. Cần ghi kế hoạch điều chỉnh.`);
     }
     if (op.khongDuTraLuong) {
       alerts.push(`Doanh thu thuần ${money(op.doanhThuThuan)} thấp hơn lương đã khóa ${money(staff.tongLuongKhoa)} — tiền bán kỳ này chưa đủ trả lương.`);
@@ -109,7 +112,7 @@
           </label>
           <button type="submit" class="warehouse-primary" id="pnlSendPlan">Lưu và gửi thông báo toàn cửa hàng</button>
         </form>`
-      : `<div class="store-pnl-ok-note"><strong>Kỳ này đang ${esc(op.trangThai || 'LÃI')}</strong><span>Không bắt buộc gửi kế hoạch điều chỉnh. Có thể xem lại khi kỳ sau lỗ hoặc tiền bán không đủ trả lương.</span></div>`;
+      : `<div class="store-pnl-ok-note"><strong>Kỳ này đang ${esc(kqkdStatus || 'LÃI')} (KQKD)</strong><span>Không bắt buộc gửi kế hoạch điều chỉnh. Có thể xem lại khi kỳ sau lỗ hoặc tiền bán không đủ trả lương. Chi NCC là dòng tiền, không trừ lãi kế toán.</span></div>`;
     const historyRows = plans.length
       ? plans.map(item => `<tr><td>${fmtDateTime(item.NgayGui)}</td><td><strong>${esc(item.TenNV_Gui)}</strong><small>${esc(item.TrangThaiLaiLo)} · ${money(item.SoTienLaiLo)}</small></td><td>${esc(item.KeHoach)}</td><td>${fmtDate(item.HanXemLai)}<small>${item.SoNguoiNhan || 0} người nhận</small></td></tr>`).join('')
       : '<tr><td colspan="4" class="warehouse-empty">Chưa gửi kế hoạch nào cho kỳ này. Các lần gửi được giữ lại, không xóa.</td></tr>';
@@ -138,9 +141,9 @@
           <small>${esc(staff.ghiChu || 'Đã khóa theo kỳ lương')}</small>
         </article>
         <article class="store-pnl-kpi-card">
-          <p>Lãi/Lỗ quản trị</p>
-          <strong>${money(op.laiLoSauChiPhi)}</strong>
-          <small>Hậu quả sau: chi NCC + vận chuyển + lương</small>
+          <p>Lãi/Lỗ KQKD</p>
+          <strong>${money(kqkdAmount)}</strong>
+          <small>Lãi gộp − cước − lương. Không trừ chi NCC (dòng tiền ${money(data.dongTien?.chiNcc || third.tongChiNcc || 0)})</small>
         </article>
       </section>`;
 

@@ -254,9 +254,221 @@
     </section>`;
   };
 
+  const writeoffDocLabel = row => [row.MaPX, row.MaKK, row.MaDT].filter(Boolean).join(' · ') || 'Chưa có phiếu xuất';
+  const writeoffCsvRows = data => {
+    const summary = data?.summary || {};
+    const lines = data?.lines || [];
+    return [
+      [],
+      ['HÀNG ĐÃ XUẤT — KHÔNG CÒN BÁN'],
+      ['Số phiếu', summary.SoPhieu || 0],
+      ['Số mặt hàng', summary.SoMatHang || 0],
+      ['SL hủy', summary.SLHuy || 0],
+      ['Giá trị hủy', summary.GiaTriHuy || 0],
+      ['SL tận dụng NV', summary.SLTanDung || 0],
+      ['Giá trị tận dụng', summary.GiaTriTanDung || 0],
+      ['SL đổi trả loại bỏ', summary.SLDoiTraLoaiBo || 0],
+      ['Giá trị đổi trả loại bỏ', summary.GiaTriDoiTraLoaiBo || 0],
+      ['Tổng số lượng', summary.TongSoLuong || 0],
+      ['Tổng giá trị', summary.TongGiaTri || 0],
+      [],
+      ['Mã PX', 'Ngày', 'Loại xuất', 'Mã KK', 'Mã DT', 'Mã SP', 'Sản phẩm', 'ĐVT', 'SL', 'Đơn giá vốn', 'Thành tiền', 'Phân loại', 'Nguồn', 'Ảnh hưởng tồn', 'Ghi chú'],
+      ...lines.map(row => [row.MaPX, fmtDate(row.NgayXuat), row.LoaiXuat, row.MaKK, row.MaDT, row.MaSP, row.TenSP, row.DonViTinh, row.SoLuong, row.DonGia, row.GiaTri, row.PhanLoai, row.Nguon, row.AnhHuongTon, row.GhiChu])
+    ];
+  };
+  const hangRoiKhoBanPanel = (data) => {
+    const summary = data?.summary || {};
+    const lines = data?.lines || [];
+    const slHuy = Math.max(0, Number(summary.SLHuy || 0) - Number(summary.SLDoiTraLoaiBo || 0));
+    const gtHuy = Math.max(0, Number(summary.GiaTriHuy || 0) - Number(summary.GiaTriDoiTraLoaiBo || 0));
+    const docCell = row => {
+      const main = row.MaPX
+        ? `<button type="button" class="report-writeoff-doc" data-nav="warehouse-stock-issues" data-id="${esc(row.MaPX)}">${esc(row.MaPX)}</button>`
+        : '<span>Chưa có phiếu xuất</span>';
+      const extras = [];
+      if (row.MaKK) extras.push(`<button type="button" class="report-writeoff-doc" data-open="count" data-id="${esc(row.MaKK)}">${esc(row.MaKK)}</button>`);
+      if (row.MaDT) extras.push(`<button type="button" class="report-writeoff-doc" data-open="return" data-id="${esc(row.MaDT)}">${esc(row.MaDT)}</button>`);
+      return `<strong>${main}</strong>${extras.length ? `<small>${extras.join(' · ')}</small>` : ''}`;
+    };
+    const rows = lines.length
+      ? lines.map(row => `<tr><td><strong>${esc(row.TenSP)}</strong><small>${esc(row.MaSP)}${row.DonViTinh ? ` · ${esc(row.DonViTinh)}` : ''}</small></td><td class="num">${qty(row.SoLuong)}</td><td class="num">${money(row.DonGia)}</td><td class="num"><strong>${money(row.GiaTri)}</strong></td><td>${esc(row.PhanLoai)}<small>${esc(row.Nguon || '')}</small></td><td class="report-writeoff-docs">${docCell(row)}</td><td>${fmtDate(row.NgayXuat)}</td><td class="report-writeoff-stock">${esc(row.AnhHuongTon)}</td></tr>`).join('')
+      : '<tr><td colspan="8" class="warehouse-empty">Kỳ này chưa có hàng hủy, tận dụng hoặc đổi trả loại bỏ.</td></tr>';
+    return `<section class="report-writeoff-block">
+      <div class="report-return-heading"><div><p>HÀNG RỜI KHO BÁN</p><h2>Hàng đã xuất — không còn bán</h2><span>Hàng hỏng/hết hạn hủy, đổi trả loại bỏ không nhập lại kho bán, hoặc tận dụng cho nhân viên. Số lượng và giá trị vốn giảm theo hàng; phiếu thông tin (đổi trả/thiếu kiểm kê) không trừ trùng.</span></div><b>${lines.length} dòng</b></div>
+      <div class="report-return-kpis report-writeoff-kpis">
+        <article><span>HỦY HÀNG</span><strong>${qty(slHuy)}</strong><small>${money(gtHuy)} · kiểm kê hoặc phiếu hủy</small></article>
+        <article><span>TẬN DỤNG NV</span><strong>${qty(summary.SLTanDung)}</strong><small>${money(summary.GiaTriTanDung)} · sử dụng nội bộ</small></article>
+        <article><span>ĐỔI TRẢ LOẠI BỎ</span><strong>${qty(summary.SLDoiTraLoaiBo)}</strong><small>${money(summary.GiaTriDoiTraLoaiBo)} · không nhập lại kho bán</small></article>
+        <article><span>TỔNG GIÁ TRỊ</span><strong>${money(summary.TongGiaTri)}</strong><small>${qty(summary.TongSoLuong)} đơn vị · ${summary.SoPhieu || 0} phiếu</small></article>
+      </div>
+      <div class="report-return-grid">
+        <article class="warehouse-table-card report-writeoff-lines"><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>SẢN PHẨM</th><th>SL</th><th>ĐƠN GIÁ VỐN</th><th>THÀNH TIỀN</th><th>PHÂN LOẠI</th><th>CHỨNG TỪ</th><th>NGÀY</th><th>ẢNH HƯỞNG TỒN</th></tr></thead><tbody>${rows}</tbody></table></div></article>
+      </div>
+    </section>`;
+  };
+  const classifyClientWriteoff = (row = {}) => {
+    const loai = String(row.LoaiXuat || '').trim();
+    const maDT = row.MaDT || null;
+    const maKK = row.MaKK || null;
+    let PhanLoai = 'Hủy hàng';
+    let Nguon = 'Phiếu xuất hủy';
+    if (loai === 'Sử dụng nội bộ') {
+      PhanLoai = 'Tận dụng — nhân viên sử dụng';
+      Nguon = 'Sử dụng nội bộ';
+    } else if (maDT) {
+      PhanLoai = 'Đổi trả loại bỏ — không nhập lại kho bán';
+      Nguon = 'Đổi trả';
+    } else if (maKK) {
+      PhanLoai = 'Hủy từ kiểm kê';
+      Nguon = 'Kiểm kê';
+    }
+    return {
+      PhanLoai,
+      Nguon,
+      AnhHuongTon: row.KhongTruTon
+        ? 'Không trừ tồn lần nữa (đã trừ lúc bán hoặc đã khớp kiểm kê)'
+        : 'Đã giảm tồn và giá trị khi xác nhận xuất'
+    };
+  };
+  const summarizeClientWriteoff = (lines = []) => {
+    const tickets = new Set();
+    const products = new Set();
+    const summary = { SLHuy: 0, GiaTriHuy: 0, SLTanDung: 0, GiaTriTanDung: 0, SLDoiTraLoaiBo: 0, GiaTriDoiTraLoaiBo: 0, TongSoLuong: 0, TongGiaTri: 0 };
+    for (const line of lines) {
+      if (line.MaPX) tickets.add(`PX:${line.MaPX}`);
+      else if (line.MaDT) tickets.add(`DT:${line.MaDT}`);
+      if (line.MaSP) products.add(line.MaSP);
+      const qty = Number(line.SoLuong || 0);
+      const value = Number(line.GiaTri || 0);
+      summary.TongSoLuong += qty;
+      summary.TongGiaTri += value;
+      if (String(line.LoaiXuat || '') === 'Sử dụng nội bộ') {
+        summary.SLTanDung += qty;
+        summary.GiaTriTanDung += value;
+      } else {
+        summary.SLHuy += qty;
+        summary.GiaTriHuy += value;
+      }
+      if (line.MaDT) {
+        summary.SLDoiTraLoaiBo += qty;
+        summary.GiaTriDoiTraLoaiBo += value;
+      }
+    }
+    return { ...summary, SoPhieu: tickets.size, SoMatHang: products.size };
+  };
+  const loadWriteoffFromStockIssues = async (context, period = {}) => {
+    try {
+      const list = await api(context, '/warehouse/stock-issues?status=' + encodeURIComponent('Đã xác nhận'));
+      const from = period.from || '';
+      const to = period.to || '9999-12-31';
+      const items = (list.items || []).filter(item => {
+        if (!['Hủy hàng', 'Sử dụng nội bộ'].includes(item.LoaiXuat)) return false;
+        const day = vnYmd(item.NgayXuat);
+        return (!from || day >= from) && (!to || day <= to);
+      });
+      const lines = [];
+      for (const item of items.slice(0, 40)) {
+        const detail = await api(context, `/warehouse/stock-issues/${encodeURIComponent(item.MaPX)}`);
+        const issue = detail.issue || item;
+        for (const line of detail.lines || []) {
+          const qty = Number(line.SoLuong || 0);
+          const donGia = Number(line.DonGia || 0);
+          const classified = classifyClientWriteoff({ ...issue, ...line });
+          lines.push({
+            MaPX: issue.MaPX,
+            NgayXuat: issue.NgayXuat,
+            LoaiXuat: issue.LoaiXuat,
+            MaKK: issue.MaKK || null,
+            MaDT: issue.MaDT || null,
+            KhongTruTon: Boolean(issue.KhongTruTon),
+            MaSP: line.MaSP,
+            TenSP: line.TenSP,
+            DonViTinh: line.DonViTinh,
+            SoLuong: qty,
+            DonGia: donGia,
+            GiaTri: qty * donGia,
+            GhiChu: line.GhiChu || issue.GhiChu || '',
+            ...classified
+          });
+        }
+      }
+      return { summary: summarizeClientWriteoff(lines), lines };
+    } catch (error) {
+      console.warn(error);
+      return { summary: summarizeClientWriteoff([]), lines: [] };
+    }
+  };
+  const bindWriteoffActions = (root, context) => {
+    root.querySelectorAll('.report-writeoff-doc').forEach(button => {
+      button.addEventListener('click', event => {
+        event.preventDefault();
+        const id = button.dataset.id;
+        const open = button.dataset.open;
+        const nav = button.dataset.nav;
+        if (!id) return;
+        if (open === 'count' && window.FLY_WAREHOUSE?.openCount) {
+          window.FLY_WAREHOUSE.openCount(context, id, () => {});
+          return;
+        }
+        if (open === 'return' && window.FLY_WAREHOUSE?.openReturn) {
+          window.FLY_WAREHOUSE.openReturn(context, id, () => {}, 'view');
+          return;
+        }
+        if (nav === 'warehouse-stock-issues') {
+          sessionStorage.setItem('fly_open_stock_issue', id);
+          context.navigate(nav);
+        }
+      });
+    });
+  };
+
   const initWarehouseReport = async (root, context) => {
     let currentReport = null;
-    root.innerHTML = `${heading('THỦ KHO / BÁO CÁO', 'Báo cáo nhập – xuất – tồn', 'Số lượng nhập xuất trong kỳ, tồn hiện tại, mặt hàng sắp hết, phiếu nhập/xuất/kiểm kê và đổi trả chờ kiểm.')}${periodCard()}`;
+    let currentSubmissions = [];
+    const wh = () => window.FLY_WAREHOUSE_REPORT || {};
+    root.innerHTML = `${heading('THỦ KHO / BÁO CÁO TỔNG KHO', 'Báo cáo kho theo ngày, tháng, quý, năm', 'Tổng hợp nhập–xuất–tồn cả kho trong kỳ đã chọn. In bản hệ thống hoặc giấy trắng mực đen, xuất Excel/CSV chuẩn doanh nghiệp, rồi gửi cho Quản lý xem riêng — không phải báo cáo tổng cửa hàng.')}${periodCard(wh().warehouseButtons?.() || reportActionButtons)}`;
+    root.querySelector('.report-idle p')?.replaceChildren();
+    const idle = root.querySelector('.report-idle p');
+    if (idle) idle.innerHTML = 'Chọn <strong>ngày / tháng / quý / năm</strong> rồi bấm <strong>Lập báo cáo</strong>. Đây là báo cáo tổng kho. Sau khi kiểm tra số, bấm <strong>Gửi báo cáo kho</strong> để Quản lý xem ở menu Báo cáo Thủ kho.';
+    const refreshSubmissions = async () => {
+      try {
+        const data = await api(context, '/warehouse/reports/submissions');
+        currentSubmissions = data.items || [];
+      } catch { currentSubmissions = []; }
+    };
+    const paintSubmitStrip = () => {
+      const host = root.querySelector('#warehouseSubmitHost');
+      if (!host) return;
+      host.innerHTML = wh().submittedStrip?.(currentSubmissions) || '';
+      wh().bindSubmittedStrip?.(host, {
+        onWithdraw: async id => {
+          const response = await fetch(`${context.apiBase}/warehouse/reports/submissions/${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${context.token}` }
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data.message || 'Không thu hồi được báo cáo.');
+          if (currentReport?.submittedNumber === id) delete currentReport.submittedNumber;
+          context.showToast?.(data.message, 'success');
+          await refreshSubmissions();
+          paintSubmitStrip();
+        }
+      });
+    };
+    const actions = wh().bindWarehouseReportActions?.(root, {
+      getReport: () => currentReport,
+      context,
+      mode: 'keeper',
+      getMeta: report => {
+        const number = report?.submittedNumber || currentSubmissions.find(item => item.GiaTriKy === report?.period?.period)?.MaBC;
+        return number ? { number } : {};
+      },
+      onSubmitted: async (result) => {
+        if (currentReport) currentReport.submittedNumber = result.MaBC;
+        await refreshSubmissions();
+        paintSubmitStrip();
+      }
+    });
     let loadReport = async () => {};
     const selected = bindPeriod(root, () => { loadReport(); });
     loadReport = async () => {
@@ -267,6 +479,15 @@
         const data = await api(context, `/warehouse/reports/inventory?periodType=${encodeURIComponent(type)}&period=${encodeURIComponent(period)}${root.dataset.reportLock === '1' ? '&lockPeriod=1' : ''}`);
         window.FLY_REPORT_PERIOD?.syncFromReport(root, data);
         root.dataset.reportLock = '1';
+        if (!data.hangRoiKhoBan || !Array.isArray(data.hangRoiKhoBan.lines)) {
+          try {
+            const extra = await api(context, `/warehouse/reports/written-off?periodType=${encodeURIComponent(data.period?.periodType || type)}&period=${encodeURIComponent(data.period?.period || period)}`);
+            if (extra.hangRoiKhoBan) data.hangRoiKhoBan = extra.hangRoiKhoBan;
+          } catch (writeoffError) {
+            console.warn(writeoffError);
+            data.hangRoiKhoBan = await loadWriteoffFromStockIssues(context, data.period || {});
+          }
+        }
         currentReport = data;
         const m = data.movement || {}; const stock = data.stock || {}; const docs = data.documents || {};
         const lowStock = data.lowStock || [];
@@ -331,6 +552,7 @@
           });
           return { notes, actions };
         };
+        const movementChart = wh().movementTrend?.(daily, data.period) || { grain: 'ngày', labels: daily.map(row => fmtDate(row.Ngay)), nhap: daily.map(row => row.SoLuongNhap), xuat: daily.map(row => row.SoLuongXuat), ton: daily.map(row => row.TonCuoiNgay), rows: daily };
         const donutItems = categories.map((row, index) => {
           const extra = categoryExtras(row.TenDM, index) || {};
           return {
@@ -342,17 +564,18 @@
             actions: extra.actions || []
           };
         });
-        root.querySelector('#roleReportBody').innerHTML = `${titleBlock(root, data.period, 'Báo cáo kho')}
+        root.querySelector('#roleReportBody').innerHTML = `${titleBlock(root, data.period, `Tổng kho · ${wh().periodTypeLabel?.(data.period.periodType) || 'Kỳ'}`)}
+          ${wh().scopeCard?.(data.period, ' Khi số đã khớp, gửi cho Quản lý bằng nút Gửi báo cáo kho.') || ''}
           ${visuals.kpiGrid([
             { icon: 'i-cash', label: 'GIÁ TRỊ TỒN KHO', value: money(stock.GiaTriTon), hint: `${qty(stock.TongTon)} đơn vị đang tồn` },
             { icon: 'i-warning', label: 'DƯỚI TỒN TỐI THIỂU', value: `${stock.TonThap || 0} mặt hàng`, hint: `${stock.HetHang || 0} mặt hàng đã hết`, tone: Number(stock.TonThap) ? 'attention' : '' },
             { icon: 'i-truck', label: 'PHIẾU NHẬP TRONG KỲ', value: String(docs.SoPhieuNhap || 0), hint: `${qty(m.SoLuongNhap)} đơn vị đã nhập` },
-            { icon: 'i-inventory', label: 'PHIẾU XUẤT TRONG KỲ', value: String(docs.SoPhieuXuat || 0), hint: `${qty(m.SoLuongXuat)} đơn vị đã xuất` },
+            { icon: 'i-inventory', label: 'PHIẾU XUẤT TRONG KỲ', value: String(docs.SoPhieuXuat || 0), hint: `${qty(m.SoLuongXuat)} đơn vị đã xuất · ${qty((data.hangRoiKhoBan?.summary || {}).TongSoLuong)} hủy/tận dụng/loại bỏ` },
             { icon: 'i-approve', label: 'ĐỢT KIỂM KÊ', value: String(docs.SoKiemKe || 0), hint: `${docs.ChoDuyetKiemKe || 0} đợt chờ duyệt` },
             { icon: 'i-alert', label: 'CHÊNH LỆCH KIỂM KÊ', value: money(docs.GiaTriChenhLechKiemKe), hint: `${qty(m.DieuChinhRong)} điều chỉnh ròng`, tone: Number(docs.GiaTriChenhLechKiemKe) ? 'attention' : '' }
           ], 'primary')}
           <div class="fly-dashboard-grid report-chart-pair report-warehouse-visuals">
-            ${charts.card({ kicker: 'NHẬP – XUẤT – TỒN', title: 'Biến động kho theo ngày', subtitle: 'Tồn cuối ngày đọc trục phải, được tái lập từ sổ giao dịch kho', badge: `${netMovement >= 0 ? '+' : ''}${qty(netMovement)} ròng`, className: 'executive', chart: charts.line({ labels: daily.map(row => fmtDate(row.Ngay)), series: [{ name: 'Nhập', values: daily.map(row => row.SoLuongNhap), color: '#2c8b66', dash: false }, { name: 'Xuất', values: daily.map(row => row.SoLuongXuat), color: '#e1a536', dash: true }, { name: 'Tồn cuối ngày', values: daily.map(row => row.TonCuoiNgay), color: '#5376c6', dash: true, axis: 'right' }], formatter: qty, axisFormatter: charts.compact, emptyText: 'Kỳ này chưa phát sinh giao dịch kho.', dualAxis: true, alwaysHit: true, emphasis: true, pointExtras: dayExtras, markerNote: 'Nhập/Xuất đọc trục trái · Tồn cuối đọc trục phải. Bấm ngày để xem số và phiếu; bấm ra ngoài hoặc Esc để đóng.' }) })}
+            ${charts.card({ kicker: 'NHẬP – XUẤT – TỒN', title: `Biến động kho theo ${movementChart.grain}`, subtitle: movementChart.grain === 'tháng' ? 'Quý/năm được gộp theo tháng cho dễ đọc' : 'Tồn cuối ngày đọc trục phải, được tái lập từ sổ giao dịch kho', badge: `${netMovement >= 0 ? '+' : ''}${qty(netMovement)} ròng`, className: 'executive', chart: charts.line({ labels: movementChart.labels, series: [{ name: 'Nhập', values: movementChart.nhap, color: '#2c8b66', dash: false }, { name: 'Xuất', values: movementChart.xuat, color: '#e1a536', dash: true }, { name: 'Tồn cuối', values: movementChart.ton, color: '#5376c6', dash: true, axis: 'right' }], formatter: qty, axisFormatter: charts.compact, emptyText: 'Kỳ này chưa phát sinh giao dịch kho.', dualAxis: true, alwaysHit: true, emphasis: true, pointExtras: movementChart.grain === 'ngày' ? dayExtras : null, markerNote: `Nhập/Xuất đọc trục trái · Tồn cuối đọc trục phải. Đang xem theo ${movementChart.grain}.` }) })}
             ${charts.card({ kicker: 'DANH MỤC', title: 'Giá trị tồn theo danh mục', subtitle: 'Giá trị tồn hiện tại theo nhóm hàng', badge: money(stock.GiaTriTon), className: 'operations', chart: charts.columns({ labels: categories.map(row => row.TenDM), series: [{ name: 'Giá trị tồn', values: categories.map(row => row.GiaTriTon), color: '#2c8b66' }], formatter: money, axisFormatter: charts.compact, emptyText: 'Chưa có dữ liệu tồn kho theo danh mục.', labelWrap: true, emphasizeBars: true, alwaysHit: true, pointExtras: categoryExtras, markerNote: 'Bấm cột để xem tỷ trọng, số lượng và mặt hàng chiếm vốn lớn nhất.' }) })}
           </div>
           <div class="fly-dashboard-grid report-chart-composition">
@@ -368,10 +591,19 @@
               { icon: 'i-approve', tone: Number(docs.ChoDuyetKiemKe) ? 'warning' : 'ok', title: `${docs.ChoDuyetKiemKe || 0} kiểm kê chờ duyệt`, detail: 'Tồn chưa thay đổi trước khi duyệt', value: 'Kiểm kê' }
             ])}</article>
           </div>
-          ${doiTraPanel(data.doiTra, { title: 'Hàng khách trả đã/đang kiểm', subtitle: 'Nhập lại = cộng tồn bán. Loại bỏ/vứt = không cộng tồn vì đã trừ lúc bán — không trừ lần nữa. Chờ kiểm tra là việc của Thủ kho.', productTitle: 'Mặt hàng trả về kho' })}`;
+          ${wh().writeoffSection?.(data.hangRoiKhoBan, data.period) || hangRoiKhoBanPanel(data.hangRoiKhoBan)}
+          ${doiTraPanel(data.doiTra, { title: 'Hàng khách trả đã/đang kiểm', subtitle: 'Nhập lại = cộng tồn bán. Loại bỏ/vứt = không cộng tồn vì đã trừ lúc bán — không trừ lần nữa. Chờ kiểm tra là việc của Thủ kho.', productTitle: 'Mặt hàng trả về kho' })}
+          <div id="warehouseSubmitHost">${wh().submittedStrip?.(currentSubmissions) || ''}</div>`;
         window.FLY_REPORT_LAYOUT?.enhance(root.querySelector('#roleReportBody'), { actor: 'Thủ kho', analysisTitle: 'Biến động và sức khỏe tồn kho', detailTitle: 'Mặt hàng cần bổ sung' });
-        bindWarehouseChartActions(charts, context);
-        enableReportActions(root);
+        (wh().bindWarehouseChartActions || bindWarehouseChartActions)(charts, context);
+        if (wh().bindWriteoffWorkbench) {
+          wh().bindWriteoffWorkbench(root.querySelector('#warehouseWriteoffBlock') || root.querySelector('#roleReportBody'), data.hangRoiKhoBan?.lines || [], context);
+        } else {
+          bindWriteoffActions(root.querySelector('#roleReportBody'), context);
+        }
+        if (actions?.enable) actions.enable();
+        else enableReportActions(root);
+        paintSubmitStrip();
       } catch (error) {
         context.showToast(error.message, 'error');
         const body = root.querySelector('#roleReportBody');
@@ -379,26 +611,17 @@
       }
       finally { const live = root.querySelector('#loadRoleReport'); if (live) live.disabled = false; }
     };
-    root.querySelector('#printRoleReport')?.addEventListener('click', () => {
-      if (!currentReport) return;
-      const m = currentReport.movement || {}; const stock = currentReport.stock || {}; const lowStock = currentReport.lowStock || [];
-      window.FLY_PRINT.show({
-        variant: 'report', title: 'BÁO CÁO NHẬP – XUẤT – TỒN', number: currentReport.period.period,
-        documentDate: new Date(), status: currentReport.period.label,
-        fields: [{ label: 'Từ ngày', value: currentReport.period.from }, { label: 'Đến ngày', value: currentReport.period.to }],
-        columns: [{ label: 'Mã SP', key: 'MaSP' }, { label: 'Sản phẩm', key: 'TenSP' }, { label: 'ĐVT', key: 'DonViTinh' }, { label: 'Tồn hiện tại', key: 'SLTon', align: 'right' }, { label: 'Tồn tối thiểu', key: 'TonKhoToiThieu', align: 'right' }, { label: 'Thiếu', value: row => Math.max(0, Number(row.TonKhoToiThieu) - Number(row.SLTon)), align: 'right' }],
-        rows: lowStock,
-        summary: [{ label: 'Nhập trong kỳ', value: m.SoLuongNhap }, { label: 'Xuất trong kỳ', value: m.SoLuongXuat }, { label: 'Tồn hiện tại', value: stock.TongTon }, { label: 'Giá trị tồn', value: stock.GiaTriTon, format: 'money' }],
-        chart: { title: 'Nhập – xuất – điều chỉnh theo ngày', rows: currentReport.daily || [], labelKey: 'Ngay', labelFormat: 'date', series: [{ name: 'Nhập', key: 'SoLuongNhap', color: '#267b5b' }, { name: 'Xuất', key: 'SoLuongXuat', color: '#d89f32' }, { name: 'Điều chỉnh', value: row => Math.abs(Number(row.DieuChinhRong || 0)), color: '#4f72bb' }] },
-        note: 'Mức thiếu = tồn tối thiểu − tồn hiện tại. Danh sách chỉ gồm mặt hàng chạm hoặc dưới ngưỡng tồn tối thiểu.',
-        signatures: ['Thủ kho lập báo cáo', 'Quản lý cửa hàng']
+    if (!actions) {
+      root.querySelector('#printRoleReport')?.addEventListener('click', () => {
+        if (!currentReport || !wh().buildPrintConfig) return;
+        window.FLY_PRINT.show(wh().buildPrintConfig(currentReport, wh().exportMeta?.(currentReport, context) || {}));
       });
-    });
-    root.querySelector('#exportRoleReportCsv')?.addEventListener('click', () => {
-      if (!currentReport) return;
-      const m = currentReport.movement || {}; const stock = currentReport.stock || {};
-      downloadCsv(`bao-cao-kho-${currentReport.period.period}.csv`, [['BÁO CÁO NHẬP – XUẤT – TỒN', currentReport.period.label], ['Nhập trong kỳ', m.SoLuongNhap], ['Xuất trong kỳ', m.SoLuongXuat], ['Tồn hiện tại', stock.TongTon], ['Giá trị tồn', stock.GiaTriTon], [], ['Mã SP', 'Sản phẩm', 'ĐVT', 'Tồn', 'Tối thiểu', 'Thiếu'], ...(currentReport.lowStock || []).map(row => [row.MaSP, row.TenSP, row.DonViTinh, row.SLTon, row.TonKhoToiThieu, Math.max(0, Number(row.TonKhoToiThieu) - Number(row.SLTon))]), ...returnCsvRows(currentReport.doiTra)]);
-    });
+      root.querySelector('#exportRoleReportCsv')?.addEventListener('click', () => {
+        if (!currentReport) return;
+        window.FLY_WAREHOUSE_EXPORT?.downloadCsv?.(currentReport, wh().exportMeta?.(currentReport, context) || {});
+      });
+    }
+    await refreshSubmissions();
   };
 
   const initSalesReport = async (root, context) => {

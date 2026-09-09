@@ -65,9 +65,9 @@ async function run() {
     const summary = await request('/cashier/shifts/current/summary', {}, token);
     const close = await request('/cashier/shifts/close', {
         method: 'POST',
-        body: JSON.stringify({ TienCuoiCa: Number(summary.TienDauCa) + Number(summary.TienMatHeThong) })
+        body: JSON.stringify({ TienCuoiCa: Number(summary.TienDauCa) + Number(summary.TienMatHeThong), XacNhan: 'DONG CA' })
     }, token);
-    await request('/cashier/attendance/check-out', { method: 'POST' }, token);
+    await request('/cashier/attendance/check-out', { method: 'POST', body: JSON.stringify({ XacNhan: 'RA CA' }) }, token);
     console.log(JSON.stringify({
         status: 'SALES FLOW PASS',
         invoice: invoice.MaHD,

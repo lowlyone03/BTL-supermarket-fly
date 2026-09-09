@@ -320,6 +320,8 @@ const payVoucher = async (req, res) => {
             MaPhieu,
             success ? `Công nợ ${voucher.MaCongNo} đã tất toán toàn bộ ${Number(voucher.SoTien)}`
                 : `Công nợ ${voucher.MaCongNo} giữ nguyên; lý do: ${paymentNote}`);
+        const { postSupplierPayment } = require('../services/accountingHooks');
+        await postSupplierPayment(transaction, { maPhieu: MaPhieu, maNV: req.user.MaNV, user: req.user, success });
         await transaction.commit();
         res.json({
             message: success

@@ -563,6 +563,9 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         assert.equal(bot.parseCommand('🧾 Chứng từ').name, 'docs');
         assert.deepEqual(bot.parseCommand('/docs po:PO00001'), { name: 'docs', arg: 'po:PO00001' });
         assert.deepEqual(bot.parseDocsArg('po:PO00001'), { kind: 'po', id: 'PO00001' });
+        assert.deepEqual(bot.parseDocsArg('BCK20260909001'), { kind: 'bck', id: 'BCK20260909001' });
+        assert.deepEqual(bot.parseDocsArg('bck:BCK20260909001'), { kind: 'bck', id: 'BCK20260909001' });
+        assert.deepEqual(bot.parseDecisionCallback('docs:bck:BCK20260909001'), { action: 'docs', kind: 'bck', id: 'BCK20260909001' });
         assert.equal(bot.parseCommand('🧾 Công nợ NCC').name, 'debt');
         assert.equal(bot.parseCommand('Công nợ').name, 'debt');
         assert.equal(bot.parseCommand('📋 Công nợ').name, 'debt');
@@ -1657,6 +1660,47 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
             () => notify.telegramApi('getUpdates', { timeout: 0 }),
             /409 Conflict|process bot khác/
         );
+    });
+
+    await test('Không fork companion nếu chưa bind cổng 3000 độc quyền', () => {
+        const companion = require('./src/services/telegramCompanionProcess');
+        assert.equal(companion.startTelegramCompanion({ boundExclusivePort: false }), null);
+        assert.equal(companion.startTelegramCompanion({}), null);
+    });
+
+    await test('getUpdates 409 dừng polling, không retry spam', async () => {
+        bot.stopTelegramBot();
+        let getUpdates = 0;
+        const fetchFn = async (url) => {
+            const method = String(url).split('/').pop();
+            if (method === 'getUpdates') {
+                getUpdates += 1;
+                return {
+                    json: async () => ({
+                        ok: false,
+                        error_code: 409,
+                        description: 'Conflict: terminated by other getUpdates request'
+                    })
+                };
+            }
+            return { json: async () => ({ ok: true, result: [] }) };
+        };
+        const prevUrl = process.env.TELEGRAM_WEBHOOK_URL;
+        process.env.TELEGRAM_WEBHOOK_URL = '';
+        await bot.startTelegramBot({
+            fetchFn, skipCron: true, webhookUrl: '', skipSchema: true
+        });
+        process.env.TELEGRAM_WEBHOOK_URL = prevUrl;
+        const waitUntil = Date.now() + 1000;
+        while (bot.isTelegramPolling() && Date.now() < waitUntil) {
+            await new Promise(resolve => setTimeout(resolve, 20));
+        }
+        assert.equal(bot.isTelegramPolling(), false);
+        const n = getUpdates;
+        assert.ok(n >= 1, 'phải gọi getUpdates ít nhất một lần');
+        await new Promise(resolve => setTimeout(resolve, 120));
+        assert.equal(getUpdates, n, '409 không được retry / spam');
+        bot.stopTelegramBot();
     });
 
     await test('Ẩn menu gửi ReplyKeyboardRemove; Hiện menu /fly hiện lại', async () => {

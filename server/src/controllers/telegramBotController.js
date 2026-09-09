@@ -80,7 +80,7 @@ const BOT_NATIVE_COMMANDS = [
     { command: 'payments', description: 'Thanh toán' },
     { command: 'pending', description: 'Việc chờ duyệt' },
     { command: 'docs', description: 'Chứng từ / giấy tờ' },
-    { command: 'reports', description: 'Báo cáo cửa hàng' },
+    { command: 'reports', description: 'Báo cáo cửa hàng / Thủ kho' },
     { command: 'guide', description: 'Tài liệu / quy tắc kế toán' },
     { command: 'rules', description: 'Quy tắc hệ thống (alias /guide)' },
     { command: 'payroll', description: 'Lương (tóm tắt)' },
@@ -749,6 +749,10 @@ const cmdReportPick = async (pool, user, which, lang = 'vi') => {
     if (key === 'shifts') return cmdShifts(pool, user, lang);
     if (key === 'lowstock') return cmdLowstock(pool, user, lang);
     if (key === 'pnl') return buildPnlOnlyMessage(await loadPnlDay(pool), lang);
+    if (key === 'wh') {
+        const warehouseTg = require('../services/warehouseReportTelegram');
+        return warehouseTg.composeWarehouseReportList(pool, lang);
+    }
     return cmdReports(pool, user, lang);
 };
 
@@ -1184,8 +1188,8 @@ const handleCallback = async (query) => {
     }
     const lang = langOf(chatId);
     const decision = teleDecision.parseDecisionCallback(data);
-    const dkindMatch = data.match(/^dkind:(po|px|kk|dt|pc|cc|hd|pn|hdm)$/i);
-    const rptMatch = data.match(/^rpt:(today|debt|pending|shifts|lowstock|pnl)$/i);
+    const dkindMatch = data.match(/^dkind:(po|px|kk|dt|pc|cc|hd|pn|hdm|bck)$/i);
+    const rptMatch = data.match(/^rpt:(today|debt|pending|shifts|lowstock|pnl|wh)$/i);
     const periodMatch = data.match(/^period:(month|quarter|year):(\d{4}(?:-\d{2}|-Q[1-4])?)$/i);
     const guideMatch = data.match(/^guide:(revenue|gross|pnl|vat|debt|cash|payroll)$/i);
     if (/\/(pay|complete)\b/i.test(data)) {
@@ -1505,10 +1509,15 @@ const startTelegramBot = async (options = {}) => {
                     } catch (error) {
                         const hint = unauthorizedHint(error);
                         if (/409|Conflict|process bot khác/i.test(String(error?.message || hint))) {
-                            console.error(`Telegram getUpdates 409 Conflict (PID ${process.pid}) — còn process bot khác, tắt npm start cũ.`);
-                        } else {
-                            console.error('Telegram polling:', hint);
+                            pollState.running = false;
+                            pollAbort = true;
+                            notify.stopCompanionJobs();
+                            notify.setTelegramStatus('off');
+                            console.error(`Telegram getUpdates 409 (PID ${process.pid}) — dừng polling.`);
+                            if (process.env.TELEGRAM_BOT_CHILD === '1') process.exit(0);
+                            return;
                         }
+                        console.error('Telegram polling:', hint);
                         await new Promise(resolve => setTimeout(resolve, 2500));
                     }
                 }
@@ -1528,6 +1537,8 @@ const stopTelegramBot = () => {
     pollAbort = true;
     notify.stopCompanionJobs();
 };
+
+const isTelegramPolling = () => pollState.running && !pollAbort;
 
 module.exports = {
     OTP_TTL_MIN,
@@ -1578,6 +1589,7 @@ module.exports = {
     setChannel,
     startTelegramBot,
     stopTelegramBot,
+    isTelegramPolling,
     READ_CALLBACK,
     runFlyDecision: teleDecision.runFlyDecision,
     setFlyHandlerOverride: teleDecision.setFlyHandlerOverride,

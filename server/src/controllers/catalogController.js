@@ -1,5 +1,7 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
+const { hasVatColumns } = require('../services/journalEngine');
+const { assertChosenRate } = require('../services/vatSales');
 const { storedPathFor, deleteUploadedProductImage } = require('../middlewares/productImageUpload');
 const {
     validateRequiredCode, validateRequiredText, validateRequiredNonNegativeNumber,
@@ -105,6 +107,7 @@ const getProducts = async (req, res) => {
         const category = text(req.query.category, 20, '');
         const status = text(req.query.status, 30, '');
         const pool = await poolPromise;
+        const vatOn = await hasVatColumns(pool);
         const result = await pool.request()
             .input('TuKhoa', sql.NVarChar, keyword)
             .input('Mau', sql.NVarChar, `%${keyword}%`)
@@ -113,6 +116,7 @@ const getProducts = async (req, res) => {
             .query(`
                 SELECT sp.MaSP,sp.MaDM,sp.TenSP,sp.DonViTinh,sp.MaVach,sp.GiaNhap,sp.GiaBan,
                        sp.DuongDanAnh,
+                       ${vatOn ? 'sp.ThueSuat,' : ''}
                        sp.TonKhoToiThieu,sp.TrangThai,dm.TenDM,
                        ISNULL(SUM(tk.SLTon),0) AS SLTon,ISNULL(SUM(tk.SLDatMua),0) AS SLDatMua,
                        CASE WHEN EXISTS (SELECT 1 FROM GiaoDichKho gd WHERE gd.MaSP=sp.MaSP AND gd.LoaiGD=N'Nhập')
@@ -124,6 +128,7 @@ const getProducts = async (req, res) => {
                   AND (@MaDM='' OR sp.MaDM=@MaDM)
                   AND (@TrangThai=N'' OR sp.TrangThai=@TrangThai)
                 GROUP BY sp.MaSP,sp.MaDM,sp.TenSP,sp.DonViTinh,sp.MaVach,sp.GiaNhap,sp.GiaBan,sp.DuongDanAnh,
+                         ${vatOn ? 'sp.ThueSuat,' : ''}
                          sp.TonKhoToiThieu,sp.TrangThai,dm.TenDM
                 ORDER BY CASE WHEN sp.TrangThai=N'Đang bán' THEN 0 ELSE 1 END,dm.TenDM,sp.TenSP`);
         const items = result.recordset;
@@ -169,7 +174,8 @@ const normalizeProduct = body => {
         GiaBan: giaBan.value,
         TonKhoToiThieu: tonMin.value,
         DuongDanAnh: text(body.DuongDanAnh, 500),
-        TrangThai: body.TrangThai === 'Ngừng bán' ? 'Ngừng bán' : 'Đang bán'
+        TrangThai: body.TrangThai === 'Ngừng bán' ? 'Ngừng bán' : 'Đang bán',
+        ThueSuat: body.ThueSuat
     };
 };
 
@@ -196,9 +202,19 @@ const createProduct = async (req, res) => {
         const product = normalizeProduct({ ...req.body, DuongDanAnh: uploadedPath });
         await transaction.begin();
         transactionStarted = true;
-        await bindProduct(new sql.Request(transaction), product).query(`
+        const vatOn = await hasVatColumns(transaction);
+        if (vatOn) product.ThueSuat = assertChosenRate(product.ThueSuat, 'Thuế suất');
+        const insertReq = bindProduct(new sql.Request(transaction), product);
+        if (vatOn) {
+            insertReq.input('ThueSuat', sql.Decimal(5, 2), product.ThueSuat);
+            await insertReq.query(`
+            INSERT INTO SanPham (MaSP,MaDM,TenSP,DonViTinh,MaVach,GiaNhap,GiaBan,TonKhoToiThieu,DuongDanAnh,TrangThai,ThueSuat)
+            VALUES (@MaSP,@MaDM,@TenSP,@DonViTinh,@MaVach,@GiaNhap,@GiaBan,@TonKhoToiThieu,@DuongDanAnh,@TrangThai,@ThueSuat)`);
+        } else {
+            await insertReq.query(`
             INSERT INTO SanPham (MaSP,MaDM,TenSP,DonViTinh,MaVach,GiaNhap,GiaBan,TonKhoToiThieu,DuongDanAnh,TrangThai)
             VALUES (@MaSP,@MaDM,@TenSP,@DonViTinh,@MaVach,@GiaNhap,@GiaBan,@TonKhoToiThieu,@DuongDanAnh,@TrangThai)`);
+        }
         await new sql.Request(transaction).input('MaSP', sql.VarChar, product.MaSP).query(`
             INSERT INTO TonKho (MaKho,MaSP,SLTon,SLDatMua,DonGiaBinhQuan,GiaTriTon,NgayCapNhat)
             SELECT MaKho,@MaSP,0,0,0,0,GETDATE() FROM Kho WHERE TrangThai=1`);
@@ -231,7 +247,16 @@ const updateProduct = async (req, res) => {
             MaSP: req.params.id,
             DuongDanAnh: uploadedPath || existing.DuongDanAnh
         });
-        const result = await bindProduct(pool.request(), product).query(`
+        const vatOn = await hasVatColumns(pool);
+        if (vatOn) product.ThueSuat = assertChosenRate(product.ThueSuat, 'Thuế suất');
+        const updateReq = bindProduct(pool.request(), product);
+        const result = vatOn
+            ? await updateReq.input('ThueSuat', sql.Decimal(5, 2), product.ThueSuat).query(`
+            UPDATE SanPham SET MaDM=@MaDM,TenSP=@TenSP,DonViTinh=@DonViTinh,MaVach=@MaVach,
+                   GiaNhap=@GiaNhap,GiaBan=@GiaBan,TonKhoToiThieu=@TonKhoToiThieu,
+                   DuongDanAnh=@DuongDanAnh,TrangThai=@TrangThai,ThueSuat=@ThueSuat
+            OUTPUT inserted.MaSP WHERE MaSP=@MaSP`)
+            : await updateReq.query(`
             UPDATE SanPham SET MaDM=@MaDM,TenSP=@TenSP,DonViTinh=@DonViTinh,MaVach=@MaVach,
                    GiaNhap=@GiaNhap,GiaBan=@GiaBan,TonKhoToiThieu=@TonKhoToiThieu,
                    DuongDanAnh=@DuongDanAnh,TrangThai=@TrangThai

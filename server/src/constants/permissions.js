@@ -31,17 +31,27 @@ const FUNCTION_CATALOG = [
     { MaChucNang: 'UC30', TenChucNang: 'Phân công ca và giám sát chấm công', Nhom: 'Nhân sự mở rộng' },
     { MaChucNang: 'UC31', TenChucNang: 'Xem lịch và chấm công cá nhân', Nhom: 'Nhân sự mở rộng' },
     { MaChucNang: 'UC32', TenChucNang: 'Duyệt công và tổng hợp lương tạm tính', Nhom: 'Nhân sự mở rộng' },
-    { MaChucNang: 'UC33', TenChucNang: 'Lập, khóa và thanh toán bảng lương', Nhom: 'Nhân sự mở rộng' }
+    { MaChucNang: 'UC33', TenChucNang: 'Lập, khóa và thanh toán bảng lương', Nhom: 'Nhân sự mở rộng' },
+    { MaChucNang: 'UC34', TenChucNang: 'Quản lý hệ thống tài khoản kế toán', Nhom: 'Kế toán tổng hợp' },
+    { MaChucNang: 'UC35', TenChucNang: 'Mở kỳ và nhập số dư đầu kỳ', Nhom: 'Kế toán tổng hợp' },
+    { MaChucNang: 'UC36', TenChucNang: 'Ghi nhận chi phí vận hành', Nhom: 'Kế toán tổng hợp' },
+    { MaChucNang: 'UC37', TenChucNang: 'Xem và ghi sổ bút toán', Nhom: 'Kế toán tổng hợp' },
+    { MaChucNang: 'UC38', TenChucNang: 'Xem sổ kế toán (NKC, sổ cái, CĐPS)', Nhom: 'Kế toán tổng hợp' },
+    { MaChucNang: 'UC39', TenChucNang: 'Khóa kỳ, kết chuyển và mở lại kỳ', Nhom: 'Kế toán tổng hợp' },
+    { MaChucNang: 'UC40', TenChucNang: 'Bảng kê thuế GTGT', Nhom: 'Kế toán tổng hợp' },
+    { MaChucNang: 'UC41', TenChucNang: 'Quản lý tài sản cố định', Nhom: 'Kế toán mở rộng' },
+    { MaChucNang: 'UC42', TenChucNang: 'Tài khoản ngân hàng và sao kê CSV', Nhom: 'Kế toán mở rộng' },
+    { MaChucNang: 'UC43', TenChucNang: 'Xem báo cáo tài chính (KQKD, LCTT, BCĐKT)', Nhom: 'Báo cáo' }
 ];
 
-const MANAGER_FIXED_PERMISSION_CODES = ['UC01', 'UC02', 'UC03', 'UC04', 'UC05', 'UC06', 'UC07', 'UC08', 'UC09', 'UC10', 'UC30', 'UC32'];
+const MANAGER_FIXED_PERMISSION_CODES = ['UC01', 'UC02', 'UC03', 'UC04', 'UC05', 'UC06', 'UC07', 'UC08', 'UC09', 'UC10', 'UC30', 'UC32', 'UC38', 'UC39', 'UC43'];
 
 const ROLE_PERMISSION_CODES = {
     'quản lý': MANAGER_FIXED_PERMISSION_CODES,
     'nhân viên mua hàng': ['UC01', 'UC11', 'UC12', 'UC13', 'UC14', 'UC31'],
     'thủ kho': ['UC01', 'UC15', 'UC16', 'UC17', 'UC18', 'UC19', 'UC20', 'UC21', 'UC31'],
     'thu ngân': ['UC01', 'UC22', 'UC23', 'UC24', 'UC25', 'UC26', 'UC31'],
-    'kế toán': ['UC01', 'UC27', 'UC28', 'UC29', 'UC31', 'UC33']
+    'kế toán': ['UC01', 'UC27', 'UC28', 'UC29', 'UC31', 'UC33', 'UC34', 'UC35', 'UC36', 'UC37', 'UC38', 'UC39', 'UC40', 'UC41', 'UC42', 'UC43']
 };
 
 module.exports = {

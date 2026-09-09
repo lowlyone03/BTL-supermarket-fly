@@ -1,10 +1,11 @@
 const { sql, poolPromise } = require('../config/db');
 const { closeOpenAttendance } = require('../services/attendanceSync');
 const { calculateGrossProfit, RESTOCK_ACCEPTED_SQL, expectedDrawerCash, cashHandoverExcludingOpening } = require('../services/financialRules');
-const { validateClosingCash } = require('../services/fieldValidators');
+const { validateClosingCash, validateCloseShiftConfirm, validateCheckOutConfirm } = require('../services/fieldValidators');
 const { logAudit } = require('../services/auditLog');
 const { snapshotDuty, assertCashierDuty, assertOwnerCloseShift, CashierDutyError, GRACE_AFTER_MINUTES, isBoostDuty, isOfficeShift } = require('../services/cashierDuty');
 const { loadUnfinishedReturns, loadLeftoverReturns, healParkedReturns, handoverApprovedReturns, handoverAuditMessage, claimLeftoverReturnsForShift, describeReturnHandover, ensureReturnHandoverSchema } = require('../services/returnHandover');
+const { reopenShift: reopenClosedShift, ShiftReopenError } = require('../services/shiftReopen');
 
 const publicDuty = (duty) => {
     if (!duty) return null;
@@ -166,6 +167,8 @@ const checkIn = async (req, res) => {
 
 const checkOut = async (req, res) => {
     try {
+        const confirmed = validateCheckOutConfirm(req.body?.XacNhan);
+        if (!confirmed.ok) throw new Error(confirmed.message);
         const pool = await poolPromise;
         await assertCashierDuty(pool, req.user.MaNV, 'check-out');
         const result = await pool.request().input('MaNV', sql.VarChar, req.user.MaNV).query(`
@@ -409,6 +412,8 @@ const closeShift = async (req, res) => {
     try {
         const counted = validateClosingCash(req.body.TienCuoiCa);
         if (!counted.ok) throw new Error(counted.message);
+        const confirmed = validateCloseShiftConfirm(req.body.XacNhan);
+        if (!confirmed.ok) throw new Error(confirmed.message);
         const TienCuoiCa = counted.value;
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         const lookup = await new sql.Request(transaction).input('MaNV', sql.VarChar, req.user.MaNV)
@@ -476,8 +481,8 @@ const closeShift = async (req, res) => {
         const warning = handover.warning;
         res.json({
             message: warning
-                ? `Đã đóng ca ${maCa}. ${warning} Đã chấm công ra theo giờ chốt ca. Ca đang chờ Kế toán đối soát.`
-                : `Đã đóng ca ${maCa}. Đã chấm công ra theo giờ chốt ca. Ca đang chờ Kế toán đối soát.`,
+                ? `Đã đóng ca ${maCa}. Không thể bán hàng cho đến khi mở ca mới. ${warning} Đã chấm công ra theo giờ chốt ca. Ca đang chờ Kế toán đối soát.`
+                : `Đã đóng ca ${maCa}. Không thể bán hàng cho đến khi mở ca mới. Đã chấm công ra theo giờ chốt ca. Ca đang chờ Kế toán đối soát.`,
             MaCa: maCa,
             TienMatHeThong: summary.TienMatHeThong,
             TienThucNop: tienThucNop,
@@ -494,7 +499,33 @@ const closeShift = async (req, res) => {
     }
 };
 
+const reopenShift = async (req, res) => {
+    const transaction = new sql.Transaction(await poolPromise);
+    try {
+        await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        const result = await reopenClosedShift(transaction, {
+            maCa: req.params.id,
+            user: req.user,
+            req,
+            silent: false,
+            lyDo: req.body?.LyDo
+        });
+        await transaction.commit();
+        res.json({
+            message: result.alreadyOpen
+                ? `Ca ${result.MaCa} vẫn đang mở.`
+                : `Đã mở lại ca ${result.MaCa}. Thu ngân có thể vào bán hàng trên đúng ca này.`,
+            ...result
+        });
+    } catch (error) {
+        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        console.error(error);
+        const status = error instanceof ShiftReopenError ? (error.status || 400) : 400;
+        res.status(status).json({ message: error.message, fundLocked: Boolean(error.fundLocked), MaPT: error.MaPT });
+    }
+};
+
 module.exports = {
     getShifts, getMySchedule, checkIn, checkOut, openShift,
-    getCurrentShiftSummary, closeShift
+    getCurrentShiftSummary, closeShift, reopenShift
 };

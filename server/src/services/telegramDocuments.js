@@ -46,11 +46,12 @@ const idInput = (id) => {
     return { Id: { type: sql?.VarChar, value: String(id) } };
 };
 
-const DOC_KIND_RE = 'po|px|kk|dt|pc|cc|hd|pn|hdm|gh';
+const DOC_KIND_RE = 'po|px|kk|dt|pc|cc|hd|pn|hdm|gh|bck';
 
 const inferKindFromId = (raw) => {
     const id = String(raw || '').trim();
     if (!id) return null;
+    if (/^BCK/i.test(id)) return 'bck';
     if (/^PO/i.test(id)) return 'po';
     if (/^PX/i.test(id)) return 'px';
     if (/^KK/i.test(id)) return 'kk';
@@ -585,6 +586,15 @@ const loadDocumentPack = async (pool, kind, id, lang = 'vi') => {
     const ma = String(id || '').trim();
     const messages = [];
     try {
+        if (key === 'bck') {
+            const warehouseTg = require('./warehouseReportTelegram');
+            const pack = await warehouseTg.composeWarehouseReportView(pool, ma, { mode: 'view', lang });
+            return {
+                messages: pack.documents?.length
+                    ? pack.documents
+                    : [{ text: pack.text, kind: 'bck', number: ma }]
+            };
+        }
         if (key === 'po') {
             const loaded = await loadPoCore(pool, ma);
             if (!loaded) return { messages: missingSheet(key, ma, lang) };
@@ -712,7 +722,8 @@ const DOC_TYPE_KEYS = [
     { kind: 'kk', key: 'docsTypeKk' },
     { kind: 'dt', key: 'docsTypeDt' },
     { kind: 'pc', key: 'docsTypePc' },
-    { kind: 'cc', key: 'docsTypeCc' }
+    { kind: 'cc', key: 'docsTypeCc' },
+    { kind: 'bck', key: 'docsTypeBck' }
 ];
 
 const DOC_LIST_LIMIT = 12;
@@ -749,6 +760,10 @@ const DOC_LIST_SQL = {
                 ISNULL(ncc.TenNCC, pc.NoiDung) AS doiTuong
          FROM PhieuChi pc LEFT JOIN NhaCungCap ncc ON ncc.MaNCC=pc.MaNCC
          ORDER BY pc.NgayChungTu DESC, pc.MaPhieu DESC`,
+    bck: `SELECT TOP ${DOC_LIST_LIMIT} bc.MaBC AS id, bc.NgayNop AS ngay, bc.TrangThai AS trangThai,
+                ISNULL(bc.NhanKy, bc.TenNV_Lap) AS doiTuong
+         FROM BaoCaoKhoNop bc
+         ORDER BY bc.NgayNop DESC, bc.MaBC DESC`,
     cc: `SELECT TOP ${DOC_LIST_LIMIT} CAST(cc.MaChamCong AS varchar(20)) AS id, l.NgayLam AS ngay,
                 cc.TrangThai AS trangThai, nv.TenNV AS doiTuong
          FROM ChamCong cc

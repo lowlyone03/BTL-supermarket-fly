@@ -182,6 +182,13 @@ const confirmReceipt = async (req, res) => {
             severity: 'Quan trọng',
             content: `Đã đối soát tiền mặt cuối ca ${receipt.recordset[0].MaCa}`
         });
+        const { postCashVariance } = require('../services/accountingHooks');
+        await postCashVariance(transaction, {
+            maPT, maNV: req.user.MaNV, user: req.user,
+            heThong: receipt.recordset[0].SoTienTheoHeThong,
+            thucNop: receipt.recordset[0].SoTienThucNop,
+            ngay: receipt.recordset[0].NgayLap
+        });
         await transaction.commit();
         res.json({ message: `Đã xác nhận Phiếu thu ${maPT}.` });
     } catch (error) {

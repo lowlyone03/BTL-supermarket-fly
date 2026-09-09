@@ -1,6 +1,7 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
 const { roundMoney, evaluateThreeWayMatch } = require('../services/financialRules');
+const { postPurchaseMatch } = require('../services/accountingHooks');
 
 const clean = (value, max, fallback = null) => String(value ?? '').trim().slice(0, max) || fallback;
 
@@ -328,6 +329,9 @@ const reconcileInvoice = async (req, res) => {
         await writeAudit(transaction, req.user, 'Đối chiếu hóa đơn ba bên', 'HoaDonMuaHang', MaHDMH,
             matched ? `Hồ sơ khớp Phiếu nhập ${MaPN}; phát sinh công nợ ${MaCNPTra}`
                 : `Chênh lệch với Phiếu nhập ${MaPN}: ${differences.join('; ')}`);
+        if (matched) {
+            await postPurchaseMatch(transaction, { maHDMH: MaHDMH, maNV: req.user.MaNV, user: req.user, matched: true });
+        }
         await transaction.commit();
         res.json({
             message: matched ? 'Đối chiếu thành công. Công nợ phải trả đã được ghi nhận.' : 'Hồ sơ còn chênh lệch, chưa phát sinh công nợ.',

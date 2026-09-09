@@ -77,11 +77,12 @@
       ]
     },
     'Thủ kho': {
-      intro: 'Báo cáo cho biết hàng đang nằm ở đâu, biến động thế nào và chứng từ nào còn phải xử lý. Cần phân biệt số phiếu, số đơn vị hàng và giá trị tiền.',
+      intro: 'Đây là báo cáo tổng kho theo ngày, tháng, quý hoặc năm. Đọc cảnh báo tồn trước, rồi biến động nhập–xuất, sau đó hàng đã rời kho bán. Có thể in hai bản (hệ thống / giấy trắng mực đen), xuất Excel/CSV và gửi cho Quản lý xem riêng.',
       steps: [
+        ['Chọn đúng kỳ tổng kho', 'Loại kỳ ngày / tháng / quý / năm ở phía trên là báo cáo cả kho, không phải từng phiếu. Đổi kỳ rồi bấm Lập báo cáo.'],
         ['Ưu tiên nguy cơ thiếu hàng', 'Mở danh sách dưới tồn tối thiểu để biết mã hàng cụ thể và số lượng thiếu. Một mặt hàng cảnh báo có thể thiếu nhiều đơn vị.'],
-        ['Đọc dòng vận động', 'So lượng nhập, xuất và điều chỉnh ròng. Chênh lệch bất thường phải được truy về Phiếu nhập, Phiếu xuất hoặc đợt kiểm kê tương ứng.'],
-        ['Kiểm tra hồ sơ chờ', 'Phiếu xuất chờ duyệt chưa làm giảm tồn; hàng đổi trả chỉ được nhập lại khi Thủ kho kiểm tra đạt và nghiệp vụ được hoàn tất.']
+        ['Đọc dòng vận động và hàng rời kho bán', 'So nhập, xuất, điều chỉnh. Bảng hàng đã xuất phân trang 10 dòng; lọc hủy / tận dụng / đổi trả và tìm mã phiếu thay vì lướt dài.'],
+        ['In, xuất file rồi gửi Quản lý', 'Xuất Excel/CSV đủ mục như chứng từ doanh nghiệp. In bản hệ thống hoặc giấy trắng mực đen. Gửi báo cáo kho để Quản lý xem ở menu Báo cáo Thủ kho — không phải Báo cáo cửa hàng.']
       ],
       metrics: [
         ['GIÁ TRỊ TỒN KHO', 'Giá trị theo giá vốn của toàn bộ lượng hàng còn tồn tại thời điểm lập báo cáo; dòng phụ là tổng số đơn vị đang tồn.'],
@@ -122,7 +123,7 @@
         <span class="report-guide-state" aria-hidden="true"></span>
       </summary>
       <div class="report-guide-content">
-        <section class="report-guide-flow" aria-label="Ba bước đọc báo cáo">
+        <section class="report-guide-flow" aria-label="Các bước đọc báo cáo">
           ${guide.steps.map((step, index) => `<article><b>${index + 1}</b><div><strong>${esc(step[0])}</strong><p>${esc(step[1])}</p></div></article>`).join('')}
         </section>
         <section class="report-metric-dictionary" aria-label="Chú giải các chỉ số">
@@ -181,6 +182,18 @@
       if (value) {
         formula.insertAdjacentHTML('afterend', `<p class="report-formula-result">Lãi gộp kỳ này là <strong>${esc(value)}</strong> — phần còn lại sau khi lấy doanh thu thuần trừ giá vốn thuần.</p>`);
       }
+    }
+    const writeoff = root.querySelector('.report-writeoff-block');
+    if (writeoff && !writeoff.querySelector('.report-writeoff-hint')) {
+      const heading = writeoff.querySelector('.report-return-heading');
+      heading?.insertAdjacentHTML('afterend', `<div class="report-inline-hint report-writeoff-hint">
+        <p><strong>Cách đọc hàng đã xuất</strong> — đây là hàng không còn để bán, không phải hóa đơn bán thường.</p>
+        <ul>
+          <li><b>Hủy hàng</b> từ kiểm kê hoặc phiếu hủy: tồn và giá trị vốn giảm khi Thủ kho xác nhận xuất.</li>
+          <li><b>Tận dụng NV</b> là phiếu <b>Sử dụng nội bộ</b>: hàng còn dùng được cho nhân viên, vẫn giảm tồn và tiền theo giá vốn.</li>
+          <li><b>Đổi trả loại bỏ</b> không nhập lại kho bán. Đã trừ lúc bán nên phiếu xuất chỉ khóa hồ sơ, không trừ lần nữa.</li>
+        </ul>
+      </div>`);
     }
     const returns = root.querySelector('.report-return-block');
     if (returns && !returns.querySelector('.report-return-hint')) {

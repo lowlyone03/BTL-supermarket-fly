@@ -3,7 +3,7 @@ const controller = require('../controllers/cashierController');
 const sales = require('../controllers/salesController');
 const returns = require('../controllers/returnsController');
 const reportController = require('../controllers/reportController');
-const { verifyToken, requirePermission } = require('../middlewares/authMiddleware');
+const { verifyToken, requirePermission, requireAnyPermission } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
 router.use(verifyToken);
@@ -15,6 +15,7 @@ router.get('/reports/sales', requirePermission('UC22'), reportController.getSale
 router.post('/shifts/open', requirePermission('UC22'), controller.openShift);
 router.get('/shifts/current/summary', requirePermission('UC22'), controller.getCurrentShiftSummary);
 router.post('/shifts/close', requirePermission('UC22'), controller.closeShift);
+router.post('/shifts/:id/reopen', requireAnyPermission(['UC10', 'UC29']), controller.reopenShift);
 router.get('/customers', requirePermission('UC23'), sales.listCustomers);
 router.post('/customers', requirePermission('UC23'), sales.saveCustomer);
 router.put('/customers/:id', requirePermission('UC23'), sales.updateCustomer);

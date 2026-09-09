@@ -114,19 +114,31 @@
       const search = document.getElementById('productSearch')?.value || '';
       const category = document.getElementById('productCategory')?.value || '';
       const status = document.getElementById('productStatus')?.value || '';
+      const taxFilter = document.getElementById('productTaxFilter')?.value || '';
       const data = await api(`/products?search=${encodeURIComponent(search)}&category=${encodeURIComponent(category)}&status=${encodeURIComponent(status)}`);
-      products = data.items || [];
-      if (!search && !category && !status) allProducts = [...products];
+      const fetched = data.items || [];
+      if (!search && !category && !status) allProducts = [...fetched];
+      const missingTax = (allProducts.length ? allProducts : fetched).filter(item => item.ThueSuat == null).length;
+      const taxAlert = document.getElementById('productTaxAlert');
+      if (taxAlert) {
+        taxAlert.hidden = missingTax === 0;
+        taxAlert.innerHTML = `Có <strong>${missingTax}</strong> sản phẩm chưa chọn thuế suất. Gán 0 / 5 / 8 / 10 — nếu để trống (NULL) thì POS chặn bán.`;
+      }
+      products = taxFilter === 'missing'
+        ? fetched.filter(item => item.ThueSuat == null)
+        : taxFilter === ''
+          ? fetched
+          : fetched.filter(item => Number(item.ThueSuat) === Number(taxFilter));
       document.getElementById('productCount').textContent = `${data.summary.total} sản phẩm`;
       document.getElementById('productActiveCount').textContent = data.summary.active;
       document.getElementById('productUnopenedCount').textContent = data.summary.unopened;
       document.getElementById('productInactiveCount').textContent = data.summary.inactive;
       document.getElementById('productTableBody').innerHTML = products.length ? products.map(item => `<tr>
         <td><div class="product-table-main">${productPhoto(item, 'table-product-photo')}<div><strong>${esc(item.TenSP)}</strong><small>${esc(item.MaSP)} · ${esc(item.DonViTinh)} · ${esc(item.MaVach || 'Chưa có mã vạch')}</small></div></div></td>
-        <td>${esc(item.TenDM)}<small>${esc(item.MaDM)}</small></td><td><strong>${money(item.GiaNhap)}</strong><small>Giá bán ${money(item.GiaBan)}</small></td><td>${item.TonKhoToiThieu}</td>
+        <td>${esc(item.TenDM)}<small>${esc(item.MaDM)}</small></td><td><strong>${money(item.GiaNhap)}</strong><small>Giá bán ${money(item.GiaBan)}</small></td><td>${item.ThueSuat == null ? '<span class="product-tax-badge is-missing">Chưa chọn</span>' : `<span class="product-tax-badge">${esc(item.ThueSuat)}%</span>`}</td><td>${item.TonKhoToiThieu}</td>
         <td><strong>${item.SLTon}</strong><small>${Number(item.ChuaNhapLanDau) === 1 ? 'Chưa nhập lần đầu' : `Đang đặt ${item.SLDatMua}`}</small></td>
         <td><span class="status-badge ${item.TrangThai === 'Đang bán' ? 'active' : 'locked'}"><i></i>${esc(item.TrangThai)}</span></td>
-        <td class="align-right"><div class="action-group"><button class="btn-outline" data-edit-product="${esc(item.MaSP)}">Chỉnh sửa</button><button class="btn-outline ${item.TrangThai === 'Đang bán' ? 'danger-text' : ''}" data-toggle-product="${esc(item.MaSP)}">${item.TrangThai === 'Đang bán' ? 'Ngừng bán' : 'Kích hoạt'}</button></div></td></tr>`).join('') : `<tr><td colspan="7" class="empty-state">${esc(window.FLY_SEARCH?.emptyMessage?.(search, 'sản phẩm', 'Không có sản phẩm phù hợp.') || 'Không có sản phẩm phù hợp.')}</td></tr>`;
+        <td class="align-right"><div class="action-group"><button class="btn-outline" data-edit-product="${esc(item.MaSP)}">Chỉnh sửa</button><button class="btn-outline ${item.TrangThai === 'Đang bán' ? 'danger-text' : ''}" data-toggle-product="${esc(item.MaSP)}">${item.TrangThai === 'Đang bán' ? 'Ngừng bán' : 'Kích hoạt'}</button></div></td></tr>`).join('') : `<tr><td colspan="8" class="empty-state">${esc(window.FLY_SEARCH?.emptyMessage?.(search, 'sản phẩm', 'Không có sản phẩm phù hợp.') || 'Không có sản phẩm phù hợp.')}</td></tr>`;
     } catch (error) { window.showToast(error.message, 'error'); }
   };
 
@@ -175,6 +187,8 @@
     document.getElementById('productBarcode').value = item?.MaVach || '';
     document.getElementById('productCost').value = item?.GiaNhap ?? 0;
     document.getElementById('productPrice').value = item?.GiaBan ?? 0;
+    const taxSelect = document.getElementById('productTaxRate');
+    if (taxSelect) taxSelect.value = item?.ThueSuat == null || item?.ThueSuat === '' ? '' : String(Number(item.ThueSuat));
     document.getElementById('productMinimum').value = item?.TonKhoToiThieu ?? 0;
     document.getElementById('productStatusInput').value = item?.TrangThai || 'Đang bán';
     document.getElementById('productCodeHelp').textContent = isEditing ? 'Mã sản phẩm không thể đổi sau khi tạo.' : 'Mã duy nhất, không thể đổi sau khi tạo.';
@@ -256,6 +270,8 @@
     const price = money(document.getElementById('productPrice').value);
     const minimum = document.getElementById('productMinimum').value || 0;
     const status = document.getElementById('productStatusInput').value;
+    const taxRaw = document.getElementById('productTaxRate')?.value;
+    const taxLabel = taxRaw === '' || taxRaw == null ? 'Chưa chọn' : `${taxRaw}%`;
     const imgSrc = imagePreviewUrl || (editingCode ? window.FLY_PRODUCT_IMAGES?.resolve(allProducts.find(p => p.MaSP === editingCode) || {}) : '') || '';
     const imgTag = imgSrc ? `<img src="${esc(imgSrc)}" style="max-width:120px;max-height:120px;border-radius:12px;object-fit:contain;border:1px solid #dce7e0">` : '<span style="display:inline-block;width:100px;height:80px;background:#eef3f0;border-radius:12px;text-align:center;line-height:80px;color:#7a8a82;font-size:11px">Chưa có ảnh</span>';
     const previewHtml = `
@@ -269,6 +285,7 @@
         <div><small style="color:#839087;font-size:9px;font-weight:800;text-transform:uppercase">Giá nhập</small><p style="margin:4px 0 0;font-size:14px;font-weight:600">${cost}</p></div>
         <div><small style="color:#839087;font-size:9px;font-weight:800;text-transform:uppercase">Giá bán</small><p style="margin:4px 0 0;font-size:14px;font-weight:600;color:#26704f">${price}</p></div>
         <div><small style="color:#839087;font-size:9px;font-weight:800;text-transform:uppercase">Tồn tối thiểu</small><p style="margin:4px 0 0;font-size:13px">${minimum}</p></div>
+        <div><small style="color:#839087;font-size:9px;font-weight:800;text-transform:uppercase">Thuế suất</small><p style="margin:4px 0 0;font-size:13px">${esc(taxLabel)}</p></div>
       </div>`;
     const modal = document.getElementById('productPreviewModal');
     if (!modal) {
@@ -345,8 +362,11 @@
       GiaNhap: costResult.value ?? Number(document.getElementById('productCost').value),
       GiaBan: priceResult.value ?? Number(document.getElementById('productPrice').value),
       TonKhoToiThieu: minResult.value ?? Number(document.getElementById('productMinimum').value),
-      TrangThai: document.getElementById('productStatusInput').value
+      TrangThai: document.getElementById('productStatusInput').value,
+      ThueSuat: document.getElementById('productTaxRate')?.value === '' ? null : Number(document.getElementById('productTaxRate')?.value)
     };
+    if (payload.ThueSuat == null) return window.showToast('Chọn thuế suất 0 / 5 / 8 / 10. 0% là mức hợp lệ.', 'error');
+    if (payload.ThueSuat === 0 && !window.confirm('Xác nhận thuế suất 0% theo cấu hình sản phẩm?')) return;
     const formData = new FormData();
     Object.entries(payload).forEach(([key, value]) => formData.append(key, String(value ?? '')));
     if (imageInput.files?.[0]) formData.append('AnhSanPham', imageInput.files[0]);
@@ -433,6 +453,7 @@
   document.getElementById('productSearch')?.addEventListener('input', (() => { let timer; return () => { clearTimeout(timer); timer = setTimeout(window.loadProducts, 250); }; })());
   document.getElementById('productCategory')?.addEventListener('change', window.loadProducts);
   document.getElementById('productStatus')?.addEventListener('change', window.loadProducts);
+  document.getElementById('productTaxFilter')?.addEventListener('change', window.loadProducts);
   document.getElementById('productTableBody')?.addEventListener('click', async event => {
     const edit = event.target.closest('[data-edit-product]');
     if (edit) return window.openProductModal(edit.dataset.editProduct);

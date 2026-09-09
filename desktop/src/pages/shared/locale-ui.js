@@ -1,10 +1,11 @@
 (() => {
   const MONTHS = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
+  const VN_TZ = 'Asia/Ho_Chi_Minh';
   const pad = value => String(value).padStart(2, '0');
   const daysInMonth = (year, month) => new Date(year, month, 0).getDate();
   const vietnamNow = () => {
     const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit'
+      timeZone: VN_TZ, year: 'numeric', month: '2-digit', day: '2-digit'
     }).formatToParts(new Date());
     const get = type => parts.find(part => part.type === type)?.value;
     return { year: get('year'), month: get('month'), day: get('day') };
@@ -15,10 +16,33 @@
     const years = new Set([selectedYear, ...Array.from({ length: 16 }, (_, index) => currentYear() - 8 + index)]);
     return [...years].filter(year => year >= 2000 && year <= 2100).sort((a, b) => a - b);
   };
+  const calendarKeyFromDate = date => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: VN_TZ, year: 'numeric', month: '2-digit', day: '2-digit'
+    }).format(date);
+  };
+  /** YYYY-MM-DD theo lịch VN. Không new Date('2026-09-09') / không cắt UTC từ ISO. */
+  const dateKeyVN = value => {
+    if (value == null || value === '') return null;
+    if (value instanceof Date) return calendarKeyFromDate(value);
+    const text = String(value).trim();
+    if (!text || text === '—') return null;
+    const exact = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (exact) return `${exact[1]}-${exact[2]}-${exact[3]}`;
+    return calendarKeyFromDate(new Date(text));
+  };
+  const formatDateVN = value => {
+    const key = dateKeyVN(value);
+    if (!key) return '—';
+    const [year, month, day] = key.split('-');
+    return `${day}/${month}/${year}`;
+  };
   const parseIsoDate = value => {
-    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (!match) return null;
-    return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
+    const key = dateKeyVN(value);
+    if (!key) return null;
+    const [year, month, day] = key.split('-');
+    return { year: Number(year), month: Number(month), day: Number(day) };
   };
   const parseIsoMonth = value => {
     const match = String(value || '').match(/^(\d{4})-(\d{2})$/);
@@ -26,7 +50,19 @@
     return { year: Number(match[1]), month: Number(match[2]) };
   };
   const parseIsoDateTime = value => {
-    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+    const text = String(value || '').trim();
+    if (!text) return null;
+    if (value instanceof Date || /Z|[+-]\d{2}:\d{2}$/.test(text)) {
+      const dt = value instanceof Date ? value : new Date(text);
+      if (Number.isNaN(dt.getTime())) return null;
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: VN_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+      }).formatToParts(dt);
+      const get = type => Number(parts.find(part => part.type === type)?.value);
+      return { year: get('year'), month: get('month'), day: get('day'), hour: get('hour'), minute: get('minute') };
+    }
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
     if (!match) return null;
     return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]), hour: Number(match[4]), minute: Number(match[5]) };
   };
@@ -294,7 +330,7 @@
     });
   };
 
-  window.FLY_VI_DATE = { MONTHS, dateField, monthField, datetimeField, mount, refresh, hydrate: hydrateNative, periodToolbar };
+  window.FLY_VI_DATE = { MONTHS, dateField, monthField, datetimeField, mount, refresh, hydrate: hydrateNative, periodToolbar, formatDateVN, dateKeyVN };
   window.FLY_REPORT_PERIOD = { defaults: reportPeriodDefaults, set: setReportPeriod, syncFromReport, activeFallbackBanner };
   window.FLY_UI = { avatar, person, kpi, kpiGrid, bars, hue };
   window.FLY_QTY = { parsePositiveInteger, stockLeftText, stockExceededMessage, stepperMarkup, bind: bindStepper };

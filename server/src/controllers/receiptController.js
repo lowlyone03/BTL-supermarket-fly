@@ -301,6 +301,8 @@ const confirmReceipt = async (req, res) => {
             }
         }
         await writeAudit(new sql.Request(transaction), req.user, 'Xác nhận nhập kho', MaPN, `Cộng số lượng đạt yêu cầu vào kho và cập nhật tiến độ Đơn mua ${MaPO}`);
+        const { postReceiptUnmatched } = require('../services/accountingHooks');
+        await postReceiptUnmatched(transaction, { maPN: MaPN });
         await transaction.commit();
         res.json({ message: 'Đã xác nhận nhập kho. Tồn kho chỉ tăng theo số lượng đạt yêu cầu.', TrangThaiDonMua: poStatus });
     } catch (error) {

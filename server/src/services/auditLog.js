@@ -33,7 +33,17 @@ const TABLE_LABELS = {
     NgayLeNam: 'Lịch ngày lễ năm',
     HeSoLuongNgay: 'Hệ số lương ngày',
     KeHoachDieuChinhLaiLo: 'Kế hoạch điều chỉnh lãi lỗ',
-    ThongBaoCuaHang: 'Thông báo cửa hàng'
+    ThongBaoCuaHang: 'Thông báo cửa hàng',
+    BaoCaoKhoNop: 'Báo cáo kho đã gửi',
+    KyKeToan: 'Kỳ kế toán',
+    SoDuDauKy: 'Số dư đầu kỳ',
+    ChiPhiVanHanh: 'Phiếu chi phí vận hành',
+    ButToan: 'Bút toán',
+    TaiSanCoDinh: 'Tài sản cố định',
+    TaiKhoanNganHang: 'Tài khoản ngân hàng',
+    SaoKeNganHang: 'Sao kê ngân hàng',
+    TaiKhoanKeToan: 'Tài khoản kế toán',
+    ChoGhiSo: 'Chờ ghi sổ'
 };
 
 const TARGET_BY_TABLE = {
@@ -58,6 +68,16 @@ const TARGET_BY_TABLE = {
     HeSoLuongNgay: 'manager-holidays',
     KeHoachDieuChinhLaiLo: 'manager-reports',
     ThongBaoCuaHang: 'manager-reports',
+    BaoCaoKhoNop: 'admin-warehouse-reports',
+    KyKeToan: 'ledger-periods',
+    SoDuDauKy: 'ledger-periods',
+    ChiPhiVanHanh: 'ledger-expenses',
+    ButToan: 'ledger-journals',
+    ChoGhiSo: 'ledger-journals',
+    TaiSanCoDinh: 'ledger-assets',
+    TaiKhoanNganHang: 'ledger-bank',
+    SaoKeNganHang: 'ledger-bank',
+    TaiKhoanKeToan: 'ledger-coa',
     SanPham: '../admin/products.html',
     DanhMuc: '../admin/products.html',
     KhuyenMai: '../admin/promotions.html',
@@ -67,6 +87,16 @@ const TARGET_BY_TABLE = {
 };
 
 const ACTION_META = {
+    'Gửi báo cáo kho': {
+        viecLam: 'Thủ kho gửi báo cáo kho cho Quản lý',
+        giaiThich: 'Lưu bản chụp báo cáo Thủ kho theo kỳ ngày/tháng/quý/năm và thông báo cho Quản lý. Không phải báo cáo tổng cửa hàng. Không sửa tồn kho.',
+        mucDo: 'Thông tin', nhom: 'kho', target: 'admin-warehouse-reports'
+    },
+    'Thu hồi báo cáo kho': {
+        viecLam: 'Thủ kho thu hồi báo cáo kho đã gửi',
+        giaiThich: 'Xóa bản đã nộp khỏi danh sách Quản lý xem. Không sửa tồn kho. Có thể lập và gửi lại sau.',
+        mucDo: 'Cảnh báo', nhom: 'kho', target: 'admin-warehouse-reports'
+    },
     'Gửi kế hoạch điều chỉnh lãi lỗ': {
         viecLam: 'Gửi kế hoạch điều chỉnh khi cửa hàng lỗ',
         giaiThich: 'Quản lý ghi nguyên nhân, việc sẽ làm và hạn xem lại, rồi gửi thông báo tới mọi nhân viên đang làm việc. Không chi tiền, không sửa lãi gộp.',
@@ -111,6 +141,11 @@ const ACTION_META = {
         viecLam: 'Mở ca bán hàng',
         giaiThich: 'Thu ngân bắt đầu ca và khai báo tiền quỹ đầu ca. Doanh thu ca được cộng từ đây.',
         mucDo: 'Quan trọng', nhom: 'ca'
+    },
+    'Mở lại ca bán hàng': {
+        viecLam: 'Mở lại ca bán hàng đóng nhầm',
+        giaiThich: 'Hoàn tác đóng ca khi chưa lập/xác nhận phiếu thu. POS bán tiếp trên đúng ca cũ, không mở ca thứ hai.',
+        mucDo: 'Cảnh báo', nhom: 'ca'
     },
     'Đóng ca bán hàng': {
         viecLam: 'Đóng ca bán hàng',
@@ -531,6 +566,131 @@ const ACTION_META = {
         viecLam: 'Tạo mã liên kết Telegram',
         giaiThich: 'Nhân viên tạo OTP 6 số trên Fly. Nhật ký không lưu đủ 6 số.',
         mucDo: 'Thông tin', nhom: 'he-thong'
+    },
+    'Tạo kỳ kế toán': {
+        viecLam: 'Tạo kỳ kế toán',
+        giaiThich: 'Lập kỳ tháng (từ ngày 01 đến cuối tháng). Chưa mở, chưa nhập số dư.',
+        mucDo: 'Thông tin', nhom: 'so-cai', target: 'ledger-periods'
+    },
+    'Mở kỳ kế toán': {
+        viecLam: 'Mở kỳ kế toán',
+        giaiThich: 'Kỳ chuyển sang trạng thái Mở để ghi sổ nghiệp vụ.',
+        mucDo: 'Quan trọng', nhom: 'so-cai', target: 'ledger-periods'
+    },
+    'Lưu số dư đầu kỳ': {
+        viecLam: 'Lưu số dư đầu kỳ',
+        giaiThich: 'Ghi nháp dư Nợ/Có các tài khoản. Chưa chốt thì còn sửa được.',
+        mucDo: 'Thông tin', nhom: 'so-cai', target: 'ledger-periods'
+    },
+    'Chốt số dư đầu kỳ': {
+        viecLam: 'Chốt số dư đầu kỳ',
+        giaiThich: 'Khóa số dư đầu khi tổng Nợ = tổng Có. Sau đó chỉ điều chỉnh bằng bút toán.',
+        mucDo: 'Quan trọng', nhom: 'so-cai', target: 'ledger-periods'
+    },
+    'Lập phiếu chi phí': {
+        viecLam: 'Lập phiếu chi phí vận hành',
+        giaiThich: 'Lưu nháp chi phí điện, nước, thuê mặt bằng… Chưa sinh bút toán cho đến khi xác nhận.',
+        mucDo: 'Thông tin', nhom: 'so-cai', target: 'ledger-expenses'
+    },
+    'Xác nhận chi phí vận hành': {
+        viecLam: 'Xác nhận chi phí vận hành',
+        giaiThich: 'Xác nhận phiếu chi phí và ghi sổ (hoặc đưa vào hàng chờ nếu kỳ đã khóa).',
+        mucDo: 'Quan trọng', nhom: 'so-cai', target: 'ledger-expenses'
+    },
+    'Hủy phiếu chi phí nháp': {
+        viecLam: 'Hủy phiếu chi phí nháp',
+        giaiThich: 'Hủy phiếu chi phí còn nháp. Tiền và sổ cái không đổi.',
+        mucDo: 'Cảnh báo', nhom: 'so-cai', target: 'ledger-expenses'
+    },
+    'Lập bút toán thủ công': {
+        viecLam: 'Lập bút toán thủ công',
+        giaiThich: 'Kế toán nhập Nợ/Có. Máy chủ sinh mã chứng từ TC. Không dùng để thanh lý TSCĐ.',
+        mucDo: 'Quan trọng', nhom: 'so-cai', target: 'ledger-journals'
+    },
+    'Đảo bút toán thủ công': {
+        viecLam: 'Đảo bút toán thủ công',
+        giaiThich: 'Đảo bút toán thủ công đã ghi sổ. Chỉ khi kỳ gốc đang mở.',
+        mucDo: 'Cảnh báo', nhom: 'so-cai', target: 'ledger-journals'
+    },
+    'Ghi sổ bút toán': {
+        viecLam: 'Ghi sổ bút toán',
+        giaiThich: 'Sinh bút toán cân Nợ = Có và ghi vào sổ cái kỳ đang mở.',
+        mucDo: 'Quan trọng', nhom: 'so-cai', target: 'ledger-journals'
+    },
+    'Đảo bút toán': {
+        viecLam: 'Đảo bút toán',
+        giaiThich: 'Sinh bút toán đảo, đánh dấu bản gốc đã đảo. Không xóa dòng gốc.',
+        mucDo: 'Cảnh báo', nhom: 'so-cai', target: 'ledger-journals'
+    },
+    'Ghi sổ trễ': {
+        viecLam: 'Ghi sổ trễ',
+        giaiThich: 'Ghi sổ chứng từ đang nằm hàng chờ (thường vì kỳ đã khóa). Ngày chứng từ gốc được giữ.',
+        mucDo: 'Quan trọng', nhom: 'so-cai', target: 'ledger-journals'
+    },
+    'Kết chuyển kỳ kế toán': {
+        viecLam: 'Kết chuyển kỳ kế toán',
+        giaiThich: 'Kết chuyển 511/5212/632/642/711 → 911 → 421.',
+        mucDo: 'Quan trọng', nhom: 'so-cai', target: 'ledger-close'
+    },
+    'Khóa kỳ kế toán': {
+        viecLam: 'Khóa kỳ kế toán',
+        giaiThich: 'Khóa kỳ sau checklist BLOCK/WARN. Số dư cuối chuyển thành số dư đầu kỳ sau.',
+        mucDo: 'Cảnh báo', nhom: 'so-cai', target: 'ledger-close'
+    },
+    'Mở lại kỳ kế toán': {
+        viecLam: 'Mở lại kỳ kế toán',
+        giaiThich: 'Chỉ kỳ khóa gần nhất, kỳ sau chưa có bút toán nghiệp vụ. Đảo kết chuyển nếu có.',
+        mucDo: 'Cảnh báo', nhom: 'so-cai', target: 'ledger-close'
+    },
+    'Lập thẻ TSCĐ': {
+        viecLam: 'Lập thẻ tài sản cố định',
+        giaiThich: 'Tạo thẻ TSCĐ. Chưa ghi sổ mua cho đến khi xác nhận.',
+        mucDo: 'Thông tin', nhom: 'so-cai', target: 'ledger-assets'
+    },
+    'Ghi sổ mua TSCĐ': {
+        viecLam: 'Ghi sổ mua TSCĐ',
+        giaiThich: 'Ghi Nợ 211 (+1331) / Có 111 hoặc 112. Không ghi nợ 331.',
+        mucDo: 'Quan trọng', nhom: 'so-cai', target: 'ledger-assets'
+    },
+    'Chạy khấu hao TSCĐ': {
+        viecLam: 'Chạy khấu hao TSCĐ',
+        giaiThich: 'Khấu hao tháng: Nợ 642 / Có 214. Mỗi kỳ một lần.',
+        mucDo: 'Quan trọng', nhom: 'so-cai', target: 'ledger-assets'
+    },
+    'Thêm tài khoản ngân hàng': {
+        viecLam: 'Thêm tài khoản ngân hàng',
+        giaiThich: 'Mini chỉ một tài khoản đang sử dụng, luôn map TK 112.',
+        mucDo: 'Thông tin', nhom: 'so-cai', target: 'ledger-bank'
+    },
+    'Nhập sao kê CSV': {
+        viecLam: 'Nhập sao kê CSV',
+        giaiThich: 'Nhập tệp CSV sao kê. Không nhận Excel.',
+        mucDo: 'Quan trọng', nhom: 'so-cai', target: 'ledger-bank'
+    },
+    'Khớp sao kê tự động': {
+        viecLam: 'Khớp sao kê tự động',
+        giaiThich: 'Khớp dòng sao kê theo mã giao dịch với thanh toán / phiếu chi.',
+        mucDo: 'Thông tin', nhom: 'so-cai', target: 'ledger-bank'
+    },
+    'Khớp sao kê thủ công': {
+        viecLam: 'Khớp sao kê thủ công',
+        giaiThich: 'Kế toán gắn dòng sao kê với chứng từ đã chọn.',
+        mucDo: 'Thông tin', nhom: 'so-cai', target: 'ledger-bank'
+    },
+    'Đánh chênh lệch sao kê': {
+        viecLam: 'Đánh chênh lệch sao kê',
+        giaiThich: 'Đánh dấu dòng sao kê lệch, không tự sinh bút toán.',
+        mucDo: 'Cảnh báo', nhom: 'so-cai', target: 'ledger-bank'
+    },
+    'Thêm tài khoản kế toán': {
+        viecLam: 'Thêm tài khoản kế toán',
+        giaiThich: 'Thêm tài khoản không phải hệ thống vào danh mục.',
+        mucDo: 'Thông tin', nhom: 'so-cai', target: 'ledger-coa'
+    },
+    'Cập nhật tài khoản kế toán': {
+        viecLam: 'Cập nhật tài khoản kế toán',
+        giaiThich: 'Sửa tên / trạng thái / ghi chú tài khoản. Không xóa tài khoản hệ thống.',
+        mucDo: 'Thông tin', nhom: 'so-cai', target: 'ledger-coa'
     }
 };
 
@@ -759,7 +919,8 @@ const ACTION_FILTERS = [
     { value: 'tien-ton', label: 'Tiền và tồn kho' },
     { value: 'cong-no', label: 'Công nợ / phiếu chi' },
     { value: 'luong', label: 'Ca, công, lương' },
-    { value: 'he-thong', label: 'Tài khoản / phân quyền' }
+    { value: 'he-thong', label: 'Tài khoản / phân quyền' },
+    { value: 'so-cai', label: 'Kế toán tổng hợp' }
 ];
 
 const ROLE_FILTERS = [
@@ -816,6 +977,8 @@ const listAuditLogs = async (query = {}) => {
                                 ? `AND (nk.BangLienQuan IN (N'QuyLuongKy',N'LichSuChiLuong',N'PhieuChiLuong') OR nk.HanhDong LIKE N'%quỹ lương%' OR nk.HanhDong LIKE N'%Chi lương%' OR nk.HanhDong LIKE N'%Phiếu chi lương%')`
                             : kind === 'he-thong'
                                 ? `AND nk.BangLienQuan IN (N'TaiKhoan',N'NhanVien',N'VaiTro_ChucNang')`
+                                : kind === 'so-cai'
+                                    ? `AND (nk.BangLienQuan IN (N'KyKeToan',N'SoDuDauKy',N'ChiPhiVanHanh',N'ButToan',N'TaiSanCoDinh',N'TaiKhoanNganHang',N'SaoKeNganHang',N'TaiKhoanKeToan',N'ChoGhiSo') OR nk.HanhDong LIKE N'%kỳ kế toán%' OR nk.HanhDong LIKE N'%bút toán%' OR nk.HanhDong LIKE N'%chi phí%' OR nk.HanhDong LIKE N'%TSCĐ%' OR nk.HanhDong LIKE N'%sao kê%')`
                                 : '';
     const where = `
         WHERE CONVERT(date, nk.ThoiGian) BETWEEN @TuNgay AND @DenNgay

@@ -346,6 +346,12 @@ const lock = async (req, res) => {
             severity: 'Cảnh báo',
             content: `Đã khóa kỳ lương ${month}. Lịch lễ các ngày trong kỳ bị khóa. Chưa chi lương — Kế toán lập phiếu, Quản lý duyệt rồi giao quỹ chung một lần.`
         });
+        const tong = await new sql.Request(transaction).input('MaKy', sql.VarChar, month)
+            .query(`SELECT COALESCE(SUM(TongLuong),0) Tong FROM BangLuong WHERE MaKy=@MaKy`);
+        const { postPayrollLock } = require('../services/accountingHooks');
+        await postPayrollLock(transaction, {
+            maKy: month, soTien: tong.recordset[0]?.Tong, maNV: req.user.MaNV, user: req.user
+        });
         await transaction.commit();
         res.json({ message: `Đã khóa kỳ lương ${month}. Kế toán lập phiếu chi (TM hoặc CK), Quản lý duyệt từng người (hoặc duyệt tất cả), rồi giao quỹ chung một lần. Kế toán chi từng người từ quỹ đó.` });
     } catch (error) {

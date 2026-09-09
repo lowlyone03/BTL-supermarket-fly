@@ -23,8 +23,9 @@
     return { y: get('year'), m: get('month'), d: get('day') };
   };
   const fmtDate = value => {
+    if (window.FLY_VI_DATE?.formatDateVN) return window.FLY_VI_DATE.formatDateVN(value);
     const part = calendarDate(value);
-    return part ? `${part.d}/${part.m}/${part.y}` : '—';
+    return part ? `${String(part.d).padStart(2, '0')}/${String(part.m).padStart(2, '0')}/${part.y}` : '—';
   };
   const fmtDateTime = value => value ? new Intl.DateTimeFormat('vi-VN', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
   const dueTone = (daysLeft, settled = false) => {
@@ -486,17 +487,24 @@
     const map = {
       HoaDonMuaHang: 'invoice', CongNoNCC: 'cn', PhieuChi: 'pc', PhieuNhap: 'pn', DonMuaHang: 'po',
       PhieuThu: 'pt', CaLamViec: 'ca', PhieuChiLuong: 'pcl', LichSuChiLuong: 'pcl',
-      KyLuong: 'payroll', BangLuong: 'payroll', QuyLuongKy: 'payroll'
+      KyLuong: 'payroll', BangLuong: 'payroll', QuyLuongKy: 'payroll',
+      HoaDon: 'sale', ChiPhiVanHanh: 'expense', TaiSanCoDinh: 'asset',
+      KyKeToan: 'period', SoDuDauKy: 'period', ButToan: 'journal', ChoGhiSo: 'journal',
+      TaiKhoanNganHang: 'bank', SaoKeNganHang: 'bank', TaiKhoanKeToan: 'coa'
     };
     if (map[table]) return map[table];
     if (/^PCL/i.test(ma)) return 'pcl';
     if (/^PC\d/i.test(ma)) return 'pc';
     if (/^CN/i.test(ma)) return 'cn';
     if (/^HDM/i.test(ma)) return 'invoice';
+    if (/^HD/i.test(ma)) return 'sale';
     if (/^PO/i.test(ma)) return 'po';
     if (/^PN/i.test(ma)) return 'pn';
     if (/^PT/i.test(ma)) return 'pt';
-    if (/^\d{4}-\d{2}$/.test(ma)) return 'payroll';
+    if (/^CP/i.test(ma)) return 'expense';
+    if (/^TS/i.test(ma)) return 'asset';
+    if (/^BT/i.test(ma)) return 'journal';
+    if (/^\d{4}-\d{2}$/.test(ma)) return table === 'KyKeToan' || table === 'SoDuDauKy' ? 'period' : 'payroll';
     return '';
   };
   const activityOpenId = item => {
@@ -516,7 +524,11 @@
     const key = String(kind || '').trim();
     const ma = String(id || '').trim();
     if (!ma) return context.showToast('Chưa có mã chứng từ để mở.', 'error');
-    if (/^(invoice|hd|hoadonmuahang)$/i.test(key)) return invoiceDetail(context, ma);
+    if (/^(invoice|hoadonmuahang)$/i.test(key) || (/^hd$/i.test(key) && /^HDM/i.test(ma))) return invoiceDetail(context, ma);
+    if (/^(sale|hoadon)$/i.test(key) || (/^hd$/i.test(key) && /^HD/i.test(ma))) {
+      if (!window.FLY_LEDGER_DOCS?.open) return context.showToast('Chưa tải được xem hóa đơn bán.', 'error');
+      return window.FLY_LEDGER_DOCS.open(context, 'HoaDon', ma);
+    }
     if (/^(po|donmuahang)$/i.test(key)) return purchaseOrderFileDetail(context, ma);
     if (/^(pn|phieunhap)$/i.test(key)) return receiptFileDetail(context, ma);
     if (/^(cn|congno|congnoncc)$/i.test(key)) return payableDetail(context, ma, onDone);
@@ -524,6 +536,15 @@
     if (/^(pt|phieuthu|ca|calamviec)$/i.test(key)) return openSettlementDetail(context, ma, onDone || (async () => {}));
     if (/^(pcl|phieuchiluong|lichsuchiluong)$/i.test(key)) return payrollVoucherDetail(context, ma);
     if (/^(kyluong|bangluong|quyluongky|payroll)$/i.test(key)) return payrollPeriodDetail(context, ma);
+    if (/^(expense|chiphi|asset|tscd|period|journal|bank|coa)$/i.test(key)) {
+      if (!window.FLY_LEDGER_DOCS?.open) return context.showToast('Chưa tải được chứng từ kế toán tổng hợp.', 'error');
+      const loai = {
+        expense: 'ChiPhiVanHanh', chiphi: 'ChiPhiVanHanh',
+        asset: 'TaiSanCoDinh', tscd: 'TaiSanCoDinh',
+        period: 'KyKeToan', journal: 'ButToan', bank: 'TaiKhoanNganHang', coa: 'TaiKhoanKeToan'
+      }[key.toLowerCase()];
+      return window.FLY_LEDGER_DOCS.open(context, loai, ma);
+    }
     return context.showToast('Chưa có hồ sơ chi tiết cho loại chứng từ này.', 'error');
   }
 
@@ -1774,7 +1795,9 @@
     'Thanh toán': 'i-pay', 'Đối chiếu': 'i-reconcile', 'Giao quỹ': 'i-fund',
     'Lập phiếu thu': 'i-income', 'Phiếu thu': 'i-income', 'Lập phiếu chi lương': 'i-payroll',
     'Khóa lương': 'i-lock', 'Lập bảng lương': 'i-payroll', 'Chi từ quỹ': 'i-fund',
-    'Nhập kho': 'i-warehouse', 'Xuất kho': 'i-warehouse'
+    'Nhập kho': 'i-warehouse', 'Xuất kho': 'i-warehouse',
+    'kỳ kế toán': 'i-calendar', 'bút toán': 'i-log', 'chi phí': 'i-approve',
+    'TSCĐ': 'i-box', 'sao kê': 'i-store', 'khấu hao': 'i-lock'
   };
   const activityIcon = label => {
     for (const [key, icon] of Object.entries(ACTIVITY_ICONS)) { if ((label || '').includes(key)) return icon; }
@@ -1786,7 +1809,8 @@
     'Duyệt': '✅', 'Đã duyệt': '✅',
     'Thanh toán': '💰', 'Chi từ quỹ': '💰',
     'Giao quỹ': '🔄', 'Khóa lương': '🔒',
-    'Đối chiếu': '📊', 'Nhập kho': '📦', 'Xuất kho': '📦'
+    'Đối chiếu': '📊', 'Nhập kho': '📦', 'Xuất kho': '📦',
+    'kỳ kế toán': '📅', 'bút toán': '📒', 'chi phí': '💡', 'TSCĐ': '🏬', 'sao kê': '🏦'
   };
   const activityEmoji = label => {
     for (const [key, emoji] of Object.entries(ACTIVITY_EMOJI)) { if ((label || '').includes(key)) return emoji; }
@@ -1798,7 +1822,8 @@
     'Duyệt': 'green', 'Đã duyệt': 'green',
     'Thanh toán': 'emerald', 'Chi từ quỹ': 'emerald',
     'Giao quỹ': 'amber', 'Khóa lương': 'slate',
-    'Đối chiếu': 'teal', 'Nhập kho': 'brown', 'Xuất kho': 'brown'
+    'Đối chiếu': 'teal', 'Nhập kho': 'brown', 'Xuất kho': 'brown',
+    'kỳ kế toán': 'slate', 'bút toán': 'teal', 'chi phí': 'amber', 'TSCĐ': 'brown', 'sao kê': 'blue'
   };
   const activityColor = label => {
     for (const [key, color] of Object.entries(ACTIVITY_COLOR)) { if ((label || '').includes(key)) return color; }
@@ -1825,7 +1850,7 @@
     const PAGE_SIZE = 40;
     let lastLogData = null;
 
-    root.innerHTML = `${heading('KẾ TOÁN / NHẬT KÝ', 'Lịch sử hoạt động', 'Mọi việc bạn đã làm: đối chiếu hóa đơn, phiếu chi NCC, phiếu thu, lập/khóa lương, lập phiếu lương, chi từ quỹ chung. Không xóa được nhật ký.')}
+    root.innerHTML = `${heading('KẾ TOÁN / NHẬT KÝ', 'Lịch sử hoạt động', 'Mọi việc bạn đã làm: đối chiếu hóa đơn, phiếu chi NCC, phiếu thu, lập/khóa lương, lập phiếu lương, chi từ quỹ chung, kỳ kế toán, chi phí, bút toán, TSCĐ, sao kê. Không xóa được nhật ký.')}
       <article class="warehouse-table-card"><div class="warehouse-toolbar accounting-history-filters" data-keep-native>
         <label class="warehouse-field"><span>Từ ngày</span><input type="date" id="accHistFrom" data-keep-native value="${esc(fromKey)}"></label>
         <label class="warehouse-field"><span>Đến ngày</span><input type="date" id="accHistTo" data-keep-native value="${esc(today)}"></label>
@@ -1836,6 +1861,7 @@
           <option value="quy-luong">Chi lương / quỹ chung</option>
           <option value="luong">Lương, công, ca</option>
           <option value="tien-ton">Tiền và tồn</option>
+          <option value="so-cai">Kế toán tổng hợp</option>
         </select></label>
         <label class="warehouse-field"><span>Tìm</span><input id="accHistSearch" placeholder="Chứng từ, nội dung..."></label>
         <div class="warehouse-toolbar-actions"><button class="warehouse-primary" id="accHistLoad" type="button">Xem lịch sử</button></div>
@@ -2105,6 +2131,7 @@
     await load();
   };
 
+  window.FLY_ACC_DOCS = { open: openAccountingDoc, invoiceDetail, payableDetail };
   window.FLY_ROLE_PAGES = {
     templates: { ...(previous?.templates || {}), ...templates },
     init: async (pageName, context) => {

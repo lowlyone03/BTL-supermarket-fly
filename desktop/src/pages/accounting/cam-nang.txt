@@ -1,0 +1,2014 @@
+================================================================================
+CẨM NANG KẾ TOÁN MINI
+HỆ THỐNG QUẢN LÝ NỘI BỘ — SUPERMARKET FLY
+Dành cho Kế toán cửa hàng (không phải lập trình viên)
+================================================================================
+
+Phiên bản nghiệp vụ khớp    : PLAN kế toán mini 1.5 FINAL (09/09/2026)
+Cách bấm trên màn hình      : đúng nhãn nút / menu trên app Electron đang chạy
+Cửa hàng                    : 1 siêu thị, 1 kỳ kế toán đang Mở (khuyến nghị)
+Không dùng file này cho     : MISA, FAST, Bravo, SAP, tờ khai thuế nhà nước
+
+Cách đọc
+  - Làm lần lượt mục 1 → 5 (ngày đầu tiên) rồi mới vào nghiệp vụ hằng ngày.
+  - Định khoản Nợ/Có: nhảy mục 3A (HẠCH TOÁN) trên mục lục — ngay sau 18 tài khoản.
+  - Gặp lỗi: nhảy mục 17 (FAQ).
+  - Số tiền ví dụ là VNĐ, dấu chấm ngăn cách hàng nghìn.
+  - Chữ IN HOA trong ngoặc là mã nội bộ hệ thống (BAN_HANG, 111…).
+    Trên màn hình bạn thấy nhãn tiếng Việt có dấu.
+  - Trong app, trang này tô màu có chủ đích (không phải cầu vồng):
+      Ý chính / chốt = đậm xanh lá.
+      Cảnh báo / BLOCK / cấm = hộp đỏ-cam.
+      Ví dụ số / định khoản = hộp kem, số tiền đậm, mã TK dạng badge.
+      Bước bấm trên màn = viên số (Bước 1, 2, 3…).
+      Thuật ngữ chốt / chờ ghi sổ / tạm tính / NULL / 0% được tô nền.
+
+[CHOT] Mở cẩm nang trong hệ thống: đăng nhập Kế toán → nhóm KẾ TOÁN TỔNG HỢP → Cẩm nang kế toán. Quản lý cũng thấy cùng mục trên menu điều hành. Đây không chỉ là file TXT cạnh máy.
+
+--------------------------------------------------------------------------------
+MỤC LỤC
+--------------------------------------------------------------------------------
+
+  1.  Cẩm nang này là gì / phạm vi mini / không phải MISA
+  2.  Ai dùng màn nào (Kế toán / Quản lý / Thu ngân / Thủ kho / Mua hàng)
+  3.  18 tài khoản kế toán — dùng khi nào, ví dụ 1 dòng
+  3A. HẠCH TOÁN / định khoản từng nghiệp vụ  ← đọc khi cần Nợ/Có
+  4.  Từ điển thuật ngữ trên màn hình
+  5.  Luồng ngày đầu tiên (wizard kỳ: Tạo → Mở → Nhập số dư → Chốt)
+  6.  Map từng mục menu → làm gì, khi nào vào, nút chính
+  7.  Định khoản từng nghiệp vụ bằng tiếng người + ví dụ tiền
+  8.  Chờ ghi sổ: vì sao hóa đơn cũ thiếu Bán hàng; thiếu thuế thì sao
+  9.  Ghi sổ trễ / khóa kỳ không làm chết POS
+  10. Báo cáo: Nhật ký chung, Sổ cái, Cân đối phát sinh, KQKD, LCTT, Bảng cân đối
+  11. VAT: bảng kê vào/ra, NULL vs 0%, trả NCC dòng âm, gán thuế sản phẩm
+  12. Khóa kỳ: checklist BLOCK vs WARN; kết chuyển 911 → 421
+  13. Mở lại kỳ: chỉ kỳ gần nhất; hệ thống ghi đè số dư đầu kỳ sau
+  14. Một tài khoản ngân hàng + nhập sao kê CSV
+  15. Lịch sử hoạt động — lọc Kế toán tổng hợp
+  16. Việc KHÔNG làm trong mô hình mini
+  17. FAQ / lỗi thường gặp
+  18. Phụ lục: sơ đồ 1 tuần làm việc của kế toán trong app
+
+================================================================================
+1. CẨM NANG NÀY LÀ GÌ / PHẠM VI MINI / KHÔNG PHẢI MISA
+================================================================================
+
+1.1. Cẩm nang dùng để làm gì
+
+  Đây là sổ tay nghiệp vụ cho người kế toán cửa hàng Supermarket Fly.
+  Mục đích: biết mình đang đứng ở màn nào, bấm nút nào, tiền đi vào tài khoản
+  nào, và vì sao báo cáo ra số đó.
+
+  Hệ thống đã số hóa chứng từ mua — bán — kho — ca — công nợ — lương.
+  Lớp kế toán mini biến chứng từ HỢP LỆ thành bút toán Nợ / Có, rồi ra:
+    Nhật ký chung, Sổ cái, Cân đối phát sinh, Kết quả kinh doanh,
+    (mở rộng) Bảng cân đối kế toán, Lưu chuyển tiền tệ, TSCĐ, sao kê 112,
+    bảng kê VAT nội bộ.
+
+  Bạn không phải tự nghĩ định khoản từng hóa đơn bán. Máy tự ghi khi
+  chứng từ đạt trạng thái hợp lệ (ví dụ hóa đơn Hoàn thành, đối chiếu 3 bên
+  Đã khớp, phiếu chi Thanh toán thành công…).
+
+1.2. Phạm vi: 1 cửa hàng, mô hình mini
+
+  - Một siêu thị, không chuỗi nhiều chi nhánh.
+  - Không bán chịu khách lẻ (không tài khoản 131).
+  - Không trả trước nhà cung cấp, không trả từng phần: 1 công nợ = 1 Phiếu chi
+    = trả hết.
+  - Chi phí vận hành (điện, nước, thuê mặt bằng…) trả ngay trong kỳ bằng
+    tiền mặt hoặc chuyển khoản — không ghi nợ nhà cung cấp chi phí.
+  - Mua tài sản cố định cũng trả ngay bằng 111 hoặc 112 — không ghi nợ 331.
+  - Chưa tính thuế thu nhập doanh nghiệp. Số 421 trên báo cáo là
+    “kết quả kinh doanh lũy kế mô hình mini, CHƯA xử lý thuế TNDN”.
+  - Bảng kê VAT là số liệu nội bộ để đối chiếu sổ. Nhãn trên màn:
+    “Không phải số phải nộp tờ khai.”
+
+1.3. Ba cột tiền — đừng trộn
+
+  Cột A — Doanh thu / giá vốn
+    Khi thu ngân hoàn thành hóa đơn: trừ tồn, ghi doanh thu và giá vốn.
+    Phiếu thu cuối ca KHÔNG cộng doanh thu lần hai.
+    In lại hóa đơn / lưu PDF KHÔNG sinh bút toán thuế lần 2.
+    Tiền trả nhà cung cấp KHÔNG trừ vào lãi gộp / Kết quả kinh doanh.
+
+  Cột B — Kết ca / Phiếu thu
+    Tiền mặt hệ thống = tiền mặt thu thành công − tiền hoàn mặt.
+    QR / Thẻ / Chuyển khoản KHÔNG vào két.
+    Một ca đúng một Phiếu thu.
+    Chênh lệch = Thực nộp − Tiền mặt hệ thống; lệch thì bắt buộc lý do.
+    Phiếu thu được phép số âm (ca chỉ hoàn tiền mặt).
+
+  Cột C — Công nợ nhà cung cấp
+    Chỉ sinh công nợ khi đối chiếu 3 bên KHỚP
+    (Đơn mua + Phiếu nhập số lượng chấp nhận + Hóa đơn GTGT).
+    Lập Phiếu chi / Quản lý duyệt và giao quỹ / chi thất bại:
+      số còn phải trả KHÔNG ĐỔI.
+    Chỉ giảm nợ khi bạn ghi thanh toán THÀNH CÔNG.
+    Trả hàng nhà cung cấp giảm công nợ: CHỈ TRƯỚC KHI lập Phiếu chi.
+    Đã có Phiếu chi (bất kỳ trạng thái) → không cho phiếu xuất trả NCC giảm nợ.
+
+1.4. Đây KHÔNG phải phần mềm kế toán nhà nước
+
+  So với MISA / FAST / ERP đầy đủ, mô hình mini:
+    - Chỉ 18 tài khoản (không cây tài khoản hàng trăm mã).
+    - Không kê khai thuế GTGT / TNDN lên cơ quan thuế.
+    - Không nhiều ngân hàng, không 1121 / 1122.
+    - Không thanh lý / đánh giá lại TSCĐ.
+    - Không BHXH trên bảng lương.
+    - Không n8n, không tự động hóa ngoài hệ thống.
+    - Telegram (nếu cửa hàng bật) chỉ ĐỌC số liệu, không ghi sổ.
+
+  Nếu hội đồng hỏi “sao không giống thông tư 200 đủ chương”: trả lời
+  đây là bài tập lớn AIS — kế toán tổng hợp thu gọn 1 cửa hàng, đã chốt
+  phạm vi. Đừng tự thêm tài khoản hay tự hạch toán 331 cho tiền điện.
+
+================================================================================
+2. AI DÙNG MÀN NÀO
+================================================================================
+
+Đăng nhập tài khoản vai trò đúng. Thu ngân không thấy nhóm Kế toán tổng hợp.
+
+2.1. Kế toán (bạn) — menu đầy đủ
+
+  Nhóm trên thanh trái (đúng chữ trên app):
+
+  Lịch làm việc
+
+  Đối chiếu hóa đơn
+
+  KẾ TOÁN MUA HÀNG
+    Công nợ Nhà cung cấp
+
+  ĐỐI SOÁT BÁN HÀNG
+    Ca & Phiếu thu
+    Báo cáo nội bộ
+
+  NHÂN SỰ MỞ RỘNG
+    Bảng lương tháng
+    Lịch sử hoạt động
+
+  KẾ TOÁN TỔNG HỢP
+    Hệ thống tài khoản
+    Kỳ kế toán
+    Chi phí vận hành
+    Bút toán & chờ ghi sổ
+    Nhật ký chung
+    Sổ cái
+    Cân đối phát sinh
+    Bảng kê VAT
+    Khóa kỳ / kết chuyển
+    Kết quả kinh doanh
+    Lưu chuyển tiền tệ
+    Bảng cân đối kế toán
+
+  KẾ TOÁN MỞ RỘNG
+    Tài sản cố định
+    Ngân hàng & sao kê CSV
+
+  Việc của bạn (tóm tắt):
+    - Ngày đầu: tạo / mở / nhập / chốt số dư kỳ.
+    - Hằng ngày: đối chiếu hóa đơn mua → công nợ → phiếu chi (sau khi QL giao tiền).
+    - Đối soát ca: lập / xác nhận Phiếu thu (không cộng doanh thu lần 2).
+    - Lương: lập bảng → khóa kỳ lương → lập phiếu chi → chi từ quỹ chung
+      (sau khi QL duyệt và giao quỹ).
+    - Chi phí vận hành: lưu nháp → xác nhận (sinh Nợ 642).
+    - Cuối tháng: kiểm tra chờ ghi sổ → kết chuyển → khóa kỳ.
+    - Xem báo cáo sổ cái; lọc lịch sử “Kế toán tổng hợp”.
+
+2.2. Quản lý
+
+  Menu điều hành (không phải menu kế toán đầy đủ):
+    Tổng quan, Trung tâm phê duyệt, Theo dõi công nợ, Phân ca, Duyệt công,
+    Ngày lễ năm, Báo cáo cửa hàng, Báo cáo Thủ kho,
+    Kết quả kinh doanh, Lưu chuyển tiền tệ, Bảng cân đối kế toán.
+
+  Việc của Quản lý chạm kế toán:
+    - Duyệt Phiếu chi nhà cung cấp = giao tiền cho bạn (nút kiểu
+      “Duyệt và giao tiền”). Công nợ chưa giảm ở bước này.
+    - Duyệt phiếu chi lương rồi giao quỹ chung cho kế toán.
+    - Gán thuế suất sản phẩm 0 / 5 / 8 / 10 (màn Sản phẩm & giá).
+      Để trống (NULL) thì POS chặn bán.
+    - Xem KQKD / LCTT / Bảng cân đối (cùng mẫu với bạn, chủ yếu xem).
+    - Báo cáo cửa hàng: lãi gộp điều hành (có thể gồm VAT, có nhắc chi NCC
+      như dòng TIỀN) — KHÁC Kết quả kinh doanh sổ cái. Đừng so hai số
+      rồi bảo hệ thống sai.
+
+  Quản lý không:
+    - Lập / khóa bảng lương (nếu bấm sẽ báo không đủ quyền).
+    - Tự đối chiếu 3 bên thay bạn (theo dõi công nợ là giám sát).
+
+2.3. Thu ngân
+
+  Menu: Lịch làm việc, Ca bán hàng, Bán hàng, Khách hàng, Hóa đơn, Đổi trả,
+  Báo cáo bán hàng.
+
+  Việc chạm kế toán:
+    - Mở ca → bán → thu đủ → hoàn thành hóa đơn.
+      Hệ thống tự ghi Bán hàng + Giá vốn (nếu kỳ đang Mở).
+    - Không nhập ô thuế. Giá niêm yết đã gồm VAT.
+    - Sản phẩm chưa chọn thuế: toast
+      “Sản phẩm chưa chọn thuế suất. Quản lý chọn 0 / 5 / 8 / 10 trước khi bán.”
+    - Đóng ca. Bạn lập Phiếu thu trên Ca & Phiếu thu.
+    - Đổi trả: hoàn tiền / đổi hàng theo luồng P0.
+
+  Thu ngân KHÔNG thấy Kế toán tổng hợp. Gọi API sổ cái sẽ bị từ chối quyền.
+
+2.4. Thủ kho
+
+  Nhận hàng, phiếu nhập, phiếu xuất, kiểm kê.
+  Xác nhận phiếu nhập: TỒN TĂNG, NHƯNG CHƯA ghi sổ 156.
+  156 chỉ tăng khi bạn đối chiếu 3 bên khớp.
+  Xuất hủy / xuất nội bộ / trả NCC: khi thủ kho xác nhận xuất, máy mới ghi
+  giá vốn hoặc giảm công nợ (nếu đã khớp và CHƯA có Phiếu chi).
+
+2.5. Nhân viên mua hàng
+
+  Đơn mua, nhà cung cấp. Không vào sổ cái.
+  Đơn mua đã duyệt là đầu vào để thủ kho nhập và bạn tiếp nhận hóa đơn.
+
+================================================================================
+3. 18 TÀI KHOẢN — DÙNG KHI NÀO, VÍ DỤ 1 DÒNG
+================================================================================
+
+Vào: KẾ TOÁN TỔNG HỢP → Hệ thống tài khoản.
+
+Màn hình
+  Tiêu đề: Hệ thống tài khoản
+  Dòng dẫn: 18 tài khoản hệ thống (có 138). Không xóa được tài khoản hệ thống.
+  Cột: Mã TK | Tên tài khoản | Tính chất | Báo cáo | Ghi sổ | Trạng thái
+  Tính chất hiện: Nợ / Có / Lưỡng tính
+  Loại báo cáo hiện: Tài sản / Nguồn vốn / Doanh thu / Chi phí / Trung gian
+  Trạng thái: Đang sử dụng
+  Không có nút xóa tài khoản hệ thống. Đây là danh mục xem, không phải form
+  tự thêm 1121.
+
+Bảng 18 tài khoản (đúng tên trên màn)
+
+----- 111  Tiền mặt -----  Tính chất Nợ, Báo cáo Tài sản
+  Dùng khi: thu tiền mặt POS; chi tiền mặt NCC / lương / chi phí;
+            lệch quỹ; hoàn tiền mặt.
+  Ví dụ: bán 1 món 110.000đ tiền mặt
+         → Nợ 111  110.000
+
+----- 112  Tiền gửi ngân hàng -----  Tính chất Nợ, Báo cáo Tài sản
+  Dùng khi: khách trả QR / Thẻ / Chuyển khoản; cửa hàng chi chuyển khoản;
+            đối chiếu sao kê CSV. Mọi ngân hàng đều vào 112, không tách VCB/MB.
+  Ví dụ: khách quét QR 110.000đ
+         → Nợ 112  110.000
+
+----- 1331  Thuế GTGT được khấu trừ -----  Tính chất Nợ, Báo cáo Tài sản
+  Dùng khi: hóa đơn mua đã khớp; chi phí / TSCĐ có VAT;
+            GIẢM khi trả hàng nhà cung cấp (đã ghi Trả hàng nhà cung cấp).
+  Ví dụ: mua hàng 2.000.000 + VAT 8% = 160.000
+         → Nợ 1331  160.000
+
+----- 138  Phải thu khác (thiếu quỹ ca) -----  Tính chất Nợ, Báo cáo Tài sản
+  Dùng khi: Phiếu thu thiếu tiền mặt: thu ngân còn nợ quỹ.
+  Ví dụ: hệ thống 500.000, thực nộp 480.000
+         → Nợ 138  20.000   /   Có 111  20.000
+
+----- 156  Hàng hóa -----  Tính chất Nợ, Báo cáo Tài sản
+  Dùng khi: mua sau đối chiếu 3 bên; xuất giá vốn lúc bán; đổi trả nhập lại;
+            kiểm kê; xuất hủy / nội bộ.
+  Ví dụ: giá vốn món vừa bán 70.000
+         → Có 156  70.000   (kèm Nợ 632  70.000)
+
+----- 211  TSCĐ hữu hình -----  Tính chất Nợ, Báo cáo Tài sản
+  Dùng khi: mua TSCĐ — nguyên giá CHƯA VAT, trả ngay 111 hoặc 112.
+  Ví dụ: tủ mát nguyên giá 10.000.000
+         → Nợ 211  10.000.000
+
+----- 214  Hao mòn TSCĐ -----  Tính chất Có, Báo cáo Tài sản
+  Dùng khi: chạy khấu hao tháng (số dư Có, trừ vào 211 khi nhìn ròng).
+  Ví dụ: khấu hao 36 tháng, 10.000.000 / 36 ≈ 277.778
+         → Có 214  277.778
+
+----- 331  Phải trả người bán -----  Tính chất Có, Báo cáo Nguồn vốn
+  Dùng khi: đối chiếu 3 bên khớp; trả NCC; trả hàng NCC giảm nợ.
+  KHÔNG dùng cho mua TSCĐ hay tiền điện.
+  Ví dụ: hóa đơn mua tổng 2.160.000 đã khớp
+         → Có 331  2.160.000
+
+----- 33311  Thuế GTGT đầu ra -----  Tính chất Có, Báo cáo Nguồn vốn
+  Dùng khi: bán hàng (tách từ giá niêm yết gồm VAT); đảo khi hoàn tiền.
+  Ví dụ: bán 110.000 gồm VAT 10%
+         → Có 33311  10.000
+
+----- 334  Phải trả người lao động -----  Tính chất Có, Báo cáo Nguồn vốn
+  Dùng khi: khóa kỳ lương (trích); chi lương thành công thì giảm.
+  Ví dụ: khóa bảng lương 8.800.000
+         → Có 334  8.800.000
+
+----- 411  Vốn chủ sở hữu -----  Tính chất Có, Báo cáo Nguồn vốn
+  Dùng khi: số dư đầu / minh họa vốn bỏ vào cửa hàng.
+  Ví dụ ngày đầu: tiền 50 triệu + hàng 80 triệu
+         → Có 411  130.000.000
+
+----- 421  Kết quả kinh doanh lũy kế (mini, chưa TNDN) -----
+           Tính chất Có, Báo cáo Nguồn vốn
+  Dùng khi: kết chuyển cuối kỳ từ 911; số dư đầu (lãi lỗ các kỳ trước).
+  Chú thích bắt buộc: đây là số dư kết quả lũy kế mô hình mini,
+  CHƯA xử lý thuế TNDN. Không gọi “lợi nhuận sau thuế chưa phân phối”
+  nếu thiếu chú thích đó.
+  Ví dụ: kỳ lãi 5.000.000, sau kết chuyển
+         → Có 421 tăng 5.000.000
+
+----- 511  Doanh thu bán hàng -----  Tính chất Có, Báo cáo Doanh thu
+  Dùng khi: hóa đơn hoàn thành, phần CHƯA VAT (sau KM và điểm).
+  Ví dụ: khách trả 110.000 gồm VAT 10%
+         → Có 511  100.000
+
+----- 5212  Chiết khấu / giảm giá -----  Tính chất Nợ, Báo cáo Doanh thu
+  Dùng khi: hoàn tiền đổi trả (giảm doanh thu), không dùng cho KM lúc bán.
+  KM / điểm trừ TRƯỚC khi vào 511, không hạch toán 5212 lúc bán.
+  Ví dụ: hoàn 110.000 gồm VAT 10%
+         → Nợ 5212  100.000   +   Nợ 33311  10.000
+
+----- 632  Giá vốn hàng bán -----  Tính chất Nợ, Báo cáo Chi phí
+  Dùng khi: xuất bán; kiểm kê thiếu; xuất hủy.
+  Ví dụ: vốn 70.000 lúc bán
+         → Nợ 632  70.000
+
+----- 642  Chi phí quản lý doanh nghiệp -----  Tính chất Nợ, Báo cáo Chi phí
+  Dùng khi: lương (khi khóa kỳ lương), điện nước thuê VP cước quảng cáo
+            sửa chữa, khấu hao TSCĐ, xuất nội bộ.
+  Cước vận chuyển LUÔN 642, không cộng vào giá vốn hàng.
+  Ví dụ: tiền điện chưa VAT 2.000.000
+         → Nợ 642  2.000.000
+
+----- 711  Thu nhập khác -----  Tính chất Có, Báo cáo Doanh thu
+  Dùng khi: phiếu thu thừa quỹ; kiểm kê thừa.
+  Ví dụ: thực nộp nhiều hơn hệ thống 15.000
+         → Có 711  15.000
+
+----- 911  Xác định kết quả kinh doanh -----  Tính chất Lưỡng tính, Trung gian
+  Dùng khi: kết chuyển cuối kỳ. Sau kết chuyển số dư 911 = 0.
+  Trước kết chuyển 911 thường = 0; lãi lỗ kỳ đang nằm ở 511/5212/632/642/711.
+  Đừng cộng 911 vào Bảng cân đối khi chưa kết chuyển — sẽ lệch đúng số lãi kỳ.
+
+3.1. Tài khoản cố tình không mở (để khỏi hỏi)
+
+  131     Bán chịu đã cắt.
+  151     Hàng đi đường: tồn kho thực tế có thể lệch 156 đến khi khớp 3 bên.
+  242     Trả trước 12 tháng đã cắt.
+  338     Thừa quỹ dùng 711, không mở 338.
+  641     Chi phí bán hàng gộp vào 642 (1 cửa hàng).
+  821     Không tính thuế TNDN.
+
+3.2. Tiền mặt hay ngân hàng?
+
+  Tiền mặt            → 111
+  QR / Thẻ / CK       → 112
+  Không tách 1121/1122.
+
+3.3. Loại chi phí vận hành (cùng TK 642)
+
+  Dropdown trên màn Chi phí vận hành (có dấu):
+    Tiền điện, Tiền nước, Thuê mặt bằng, Văn phòng phẩm,
+    Cước vận chuyển, Quảng cáo, Sửa chữa nhỏ, Chi phí khác.
+
+================================================================================
+3A. HẠCH TOÁN / ĐỊNH KHOẢN
+================================================================================
+
+Đọc mục này khi cần biết: ai bấm nút nào thì máy ghi Nợ / Có vào tài khoản nào,
+số tiền ví dụ bao nhiêu, và việc nào CẤM hạch toán.
+
+[CHOT] Bạn không tự nghĩ định khoản từng hóa đơn. Máy ghi khi chứng từ HỢP LỆ (HĐ Hoàn thành, 3-way Đã khớp, phiếu chi Thành công, chi phí Đã xác nhận…). Việc của bạn: đối chiếu Nhật ký chung / Sổ cái với bảng dưới. Mã IN HOA (BAN_HANG…) là loại bút toán trên cột Loại; trên màn hiện tiếng Việt có dấu (Bán hàng, Giá vốn…).
+
+Cách dùng bảng
+  Cột “Người + lúc nào” = vai trò và đúng nút / màn trên app.
+  Cột “Định khoản” = Nợ / Có + số TK (tên có dấu).
+  Cột “Không được” = hạch toán cấm trong mô hình mini.
+
+Nghiệp vụ | Người + lúc nào | Định khoản | Không được
+Bán TM / QR / hỗn hợp + VAT | Thu ngân — Bán hàng, hóa đơn Hoàn thành | BAN_HANG: Nợ 111 và/hoặc 112 Tiền mặt / Tiền gửi NH · Có 511 Doanh thu + 33311 VAT đầu ra. GIA_VON: Nợ 632 Giá vốn / Có 156 Hàng hóa | Không cộng DT từ Phiếu thu / in lại PDF. KM lúc bán không vào 5212
+Mua sau 3-way | Kế toán — Đối chiếu hóa đơn, “Xác nhận đối chiếu và ghi nhận công nợ” | MUA_HANG: Nợ 156 Hàng hóa + 1331 VAT được khấu trừ / Có 331 Phải trả người bán | Thủ kho xác nhận phiếu nhập không ghi 156. Lệch 3-way không ghi nợ
+Trả tiền NCC | Kế toán — Công nợ, “Thanh toán thành công” sau QL giao tiền | TRA_NCC: Nợ 331 / Có 111 hoặc 112 | Lập phiếu / QL duyệt / thất bại: 0 bút toán. Không trừ KQKD
+Trả hàng NCC | Thủ kho xác nhận phiếu xuất trả NCC, CHƯA có Phiếu chi | TRA_NCC_HANG: Nợ 331 / Có 156 + 1331 (VAT snapshot HĐMH) | Đã có Phiếu chi (mọi trạng thái) thì CẤM. Không lấy thuế SP đang sửa
+Chi phí điện nước thuê cước | Kế toán — Chi phí vận hành, “Xác nhận” | CHI_PHI: Nợ 642 (+ 1331 nếu có VAT) / Có 111 hoặc 112 | Cước không 632 / 156. Không Có 331
+Trích / chi lương | KT khóa kỳ lương; rồi “Chi từ quỹ chung” thành công | TRICH_LUONG: Nợ 642 / Có 334. CHI_LUONG: Nợ 334 / Có 111 hoặc 112 | QL duyệt / giao quỹ: 0 bút toán. Không BHXH
+Lệch quỹ ca | KT — Ca & Phiếu thu, xác nhận phiếu thu CÓ lệch | LECH_QUY thiếu: Nợ 138 / Có 111. Thừa: Nợ 111 / Có 711 | Phiếu thu không lệch: không ghi. Không cộng doanh thu
+Mua TSCĐ | KT — Tài sản cố định, “Ghi sổ mua” | MUA_TSCD: Nợ 211 + 1331 / Có 111 hoặc 112 | Không Có 331. Không ghi 211 đã gồm VAT
+Đổi trả / kiểm kê | Thu ngân hoàn thành phiếu đổi trả; QL duyệt kiểm kê | Hoàn: Nợ 5212+33311 / Có 111 hoặc 112. Nhập lại: Nợ 156 / Có 632. KK thiếu: Nợ 632 / Có 156 | Không lấy thuế SP lúc trả. Dòng KK đã xuất hủy: không ghi KK thiếu trùng
+Thủ công | KT — Bút toán & chờ ghi sổ, “Ghi sổ” | THU_CONG: Nợ / Có do bạn chọn (vd 111 / 138) | Không thanh lý TSCĐ. Nợ và Có phải khác TK. Bắt buộc kỳ Mở
+Kết chuyển | KT — Khóa kỳ / kết chuyển, nút “Kết chuyển” | KET_CHUYEN: 511 5212 632 642 711 → 911 → 421 | Không cộng 911 vào Bảng cân đối trước KC
+Số dư đầu kỳ | KT — Kỳ kế toán, “4. Chốt số dư” (Nợ = Có) | SODU_DAU_KY theo từng TK đã nhập | Không sửa ô sau chốt. Không nằm Nhật ký chung kỳ
+Đảo bút toán | KT — nút “Đảo” (thủ công) hoặc máy đảo kết chuyển khi mở lại kỳ | DAO_… đảo Nợ ↔ Có. Gốc + đảo cùng sổ, net = 0 | Gốc vẫn Đã ghi sổ (badge Đã đảo). Không xóa dòng gốc
+
+[LUU_Y] Giá niêm yết ĐÃ GỒM VAT. Máy tách trên từng dòng sau KM và điểm: thuế = làm tròn(thành tiền sau giảm × t / (100 + t)); 511 = thành tiền − thuế; t = 0 thì cả gói vào 511.
+
+--------------------------------------------------------------------------------
+3A.1. Bán tiền mặt / QR / hỗn hợp + VAT + giá vốn
+--------------------------------------------------------------------------------
+
+Người + lúc nào        : Thu ngân — màn Bán hàng (sau khi mở ca). Nút hoàn thành hóa đơn khi đã thu đủ. Bạn (KT) không bấm “ghi sổ bán hàng”.
+Loại trên sổ           : Bán hàng (BAN_HANG) và Giá vốn (GIA_VON) — hai mã bút toán, cùng một hóa đơn.
+Kỳ                     : Đang Mở thì ghi ngay. Kỳ Khóa → Chờ ghi sổ (không làm chết POS).
+
+[VI_DU] Bán TM — 1 sữa giá kệ 110.000đ gồm VAT 10%, vốn 70.000đ, khách đưa 110.000đ tiền mặt. Hóa đơn Hoàn thành.
+Nợ  111      110.000     Tiền mặt — tiền vào két
+    Có 511            100.000     Doanh thu bán hàng (chưa VAT)
+    Có 33311           10.000     Thuế GTGT đầu ra
+Nợ  632       70.000     Giá vốn hàng bán
+    Có 156             70.000     Hàng hóa
+Vì 110.000 × 10 / 110 = 10.000. Lãi gộp sổ cái = 100.000 − 70.000 = 30.000. Báo cáo bán hàng (gồm VAT) = 40.000 — hai số khác nhau là đúng.
+
+[VI_DU] Bán QR / Thẻ / Chuyển khoản — cùng món 110.000 gồm 10%, khách quét QR.
+Nợ  112      110.000     Tiền gửi ngân hàng
+    Có 511            100.000     Doanh thu bán hàng
+    Có 33311           10.000     Thuế GTGT đầu ra
+Giá vốn giống ví dụ TM. Tiền không vào két; đối soát qua sao kê 112.
+
+[VI_DU] Bán hỗn hợp — tổng 110.000 gồm 10%; khách 80.000 tiền mặt + 30.000 QR.
+Nợ  111       80.000     Tiền mặt
+Nợ  112       30.000     Tiền gửi ngân hàng
+    Có 511            100.000     Doanh thu bán hàng
+    Có 33311           10.000     Thuế GTGT đầu ra
+
+[VI_DU] VAT 8% hỗn hợp — tổng 100.000; 80.000 TM + 20.000 QR. Thuế = làm tròn(100.000 × 8 / 108) = 7.407; 511 = 92.593.
+Nợ  111       80.000     Tiền mặt
+Nợ  112       20.000     Tiền gửi ngân hàng
+    Có 511             92.593     Doanh thu bán hàng
+    Có 33311            7.407     Thuế GTGT đầu ra
+
+[VI_DU] KM + điểm (không hạch toán 5212 lúc bán) — hàng 200.000, KM 20.000, điểm 10.000, khách trả 170.000 TM, thuế 10%. Thuế = làm tròn(170.000 × 10 / 110) = 15.455; 511 = 154.545.
+Nợ  111      170.000     Tiền mặt
+    Có 511            154.545     Doanh thu bán hàng
+    Có 33311           15.455     Thuế GTGT đầu ra
+
+GIA_VON luôn đi cùng hóa đơn hoàn thành. Lấy đơn giá vốn đã chốt trên dòng hóa đơn (không lấy giá nhập “hiện tại”). Nếu sổ 156 âm vì phiếu nhập chưa 3-way: máy VẪN ghi, POS không chết — bạn đi đối chiếu để 156 đuổi kịp tồn.
+
+[KHONG] Không cộng doanh thu lần hai từ Phiếu thu cuối ca, in lại hóa đơn, lưu PDF. Không hạch toán 5212 Chiết khấu lúc bán (KM/điểm đã trừ trước khi vào 511). Không bịa thuế 10% cho dòng NULL — POS chặn, không Ghi sổ trễ.
+
+[CHOT] Một hóa đơn = một BAN_HANG + một GIA_VON. In lại không tăng 511, không tăng bảng kê VAT.
+
+--------------------------------------------------------------------------------
+3A.2. Mua hàng sau đối chiếu 3 bên (MUA_HANG)
+--------------------------------------------------------------------------------
+
+Người + lúc nào        : Kế toán — Đối chiếu hóa đơn. Nút “Xác nhận đối chiếu và ghi nhận công nợ” khi chữ “Ba chứng từ, thuế và tổng tiền đều khớp”.
+Trước đó               : Thủ kho xác nhận phiếu nhập → tồn tăng, CHƯA bút toán 156. Nhân viên mua: đơn đã duyệt. Bạn: Tiếp nhận hóa đơn → Lưu hồ sơ (chưa nợ).
+
+[VI_DU] Khớp — hàng 2.000.000, VAT 8% = 160.000, tổng 2.160.000.
+Nợ  156    2.000.000     Hàng hóa (chưa VAT)
+Nợ  1331     160.000     Thuế GTGT được khấu trừ
+    Có 331            2.160.000     Phải trả người bán
+
+[KHONG] Xác nhận phiếu nhập không ghi 156 / 331. Đối chiếu lệch: không công nợ, không bút toán. Không Ghi sổ trễ dòng “Phiếu nhập chưa đối chiếu 3 bên” — phải khớp 3-way.
+
+[CANH_BAO] 156 trên sổ có thể chậm hơn tồn kho đến khi bạn khớp. Đó là thiết kế, không phải bug thủ kho.
+
+--------------------------------------------------------------------------------
+3A.3. Trả tiền nhà cung cấp (TRA_NCC)
+--------------------------------------------------------------------------------
+
+Người + lúc nào        : Kế toán — Công nợ Nhà cung cấp. Chỉ khi bấm Thanh toán → “Thanh toán thành công” → “Ghi nhận kết quả” (sau khi Quản lý “Duyệt và giao tiền”).
+Loại trên sổ           : Trả nhà cung cấp (TRA_NCC). Chứng từ: Phiếu chi.
+
+[VI_DU] Trả CK đúng 2.160.000 sau khi QL đã giao quỹ.
+Nợ  331    2.160.000     Phải trả người bán
+    Có 112            2.160.000     Tiền gửi ngân hàng
+Nếu phiếu chi Tiền mặt: Có 111 Tiền mặt cùng số.
+
+[CHOT] Kết quả kinh doanh KHÔNG trừ 2.160.000. Lưu chuyển tiền tệ CÓ trừ (dòng Trả NCC).
+
+[KHONG] Lập Phiếu chi / “Lập và gửi Quản lý duyệt” / QL giao tiền / “Thanh toán thất bại”: công nợ không đổi, 0 bút toán. Không trả từng phần. Không 1 phiếu gộp nhiều nợ thành một số.
+
+--------------------------------------------------------------------------------
+3A.4. Trả hàng nhà cung cấp (TRA_NCC_HANG) — snapshot VAT HĐMH
+--------------------------------------------------------------------------------
+
+Người + lúc nào        : Thủ kho xác nhận phiếu xuất loại Trả NCC. Chỉ khi hóa đơn mua của phiếu nhập ĐÃ khớp 3-way VÀ chưa lập Phiếu chi.
+VAT                    : Lấy snapshot dòng Chi tiết hóa đơn mua lúc 3-way, KHÔNG lấy thuế suất sản phẩm đang sửa trên danh mục.
+
+[VI_DU] Trả một phần: lúc mua thuế 8%; sau QL đổi SP thành 10%. Vẫn dùng 8% trên HĐMH. Giả sử trả hàng 500.000 + VAT 40.000.
+Nợ  331      540.000     Phải trả người bán (hàng + thuế)
+    Có 156            500.000     Hàng hóa
+    Có 1331            40.000     Thuế GTGT được khấu trừ (snapshot)
+Đồng thời giảm số còn phải trả. Bảng kê VAT: dòng âm “Trả hàng nhà cung cấp”.
+
+[CANH_BAO] Đã lập Phiếu chi cho công nợ này (Chờ duyệt / Đã duyệt / Thành công / Thất bại… bất kỳ) → máy chặn, thông báo kiểu: “Đã lập Phiếu chi cho công nợ này. Trả hàng NCC phải xử lý TRƯỚC KHI lập Phiếu chi (1 công nợ – 1 Phiếu chi).” Mini không sửa phiếu chi để trả hàng sau.
+
+[KHONG] Phiếu nhập CHƯA khớp: chỉ giảm tồn, không bút toán 156 (156 chưa tăng). Không lấy SanPham.ThueSuat hiện tại.
+
+[CHOT] Việc đúng: trả hàng TRƯỚC, rồi mới lập phiếu chi phần còn lại.
+
+--------------------------------------------------------------------------------
+3A.5. Chi phí vận hành — điện, nước, thuê, cước (CHI_PHI)
+--------------------------------------------------------------------------------
+
+Người + lúc nào        : Kế toán — KẾ TOÁN TỔNG HỢP → Chi phí vận hành. Form “Lập phiếu chi phí”: Lưu nháp → bảng “Phiếu đã lập” → “Xác nhận” (trên dòng hoặc trong cửa sổ phiếu).
+Loại dropdown          : Tiền điện, Tiền nước, Thuê mặt bằng, Văn phòng phẩm, Cước vận chuyển, Quảng cáo, Sửa chữa nhỏ, Chi phí khác — cùng TK 642.
+Tiền                   : Dropdown chỉ 111 hoặc 112. Không có 331.
+
+[VI_DU] Case 14–15 — tiền điện: tiền hàng 2.000.000, thuế 10%, TK 112, ghi chú “HĐ điện tháng”. Lưu nháp (chưa BT) rồi Xác nhận.
+Nợ  642    2.000.000     Chi phí quản lý doanh nghiệp (tiền điện chưa VAT)
+Nợ  1331     200.000     Thuế GTGT được khấu trừ
+    Có 112            2.200.000     Tiền gửi ngân hàng
+KQKD trừ 2.000.000. Dòng tiền trừ 2.200.000. Bảng kê VAT vào +200.000. Không sinh công nợ.
+
+[VI_DU] Tiền nước — hàng 800.000, VAT 5%, trả tiền mặt 111.
+Nợ  642      800.000     Chi phí quản lý doanh nghiệp
+Nợ  1331      40.000     Thuế GTGT được khấu trừ
+    Có 111            840.000     Tiền mặt
+
+[VI_DU] Thuê mặt bằng — hàng 15.000.000, VAT 10%, CK 112.
+Nợ  642   15.000.000     Chi phí quản lý doanh nghiệp
+Nợ  1331   1.500.000     Thuế GTGT được khấu trừ
+    Có 112           16.500.000     Tiền gửi ngân hàng
+
+[VI_DU] Case 16 — cước vận chuyển 500.000, thuế 0%, TK 111. Xác nhận.
+Nợ  642      500.000     Chi phí quản lý doanh nghiệp (cước)
+    Có 111            500.000     Tiền mặt
+
+[KHONG] Cước KHÔNG vào 632 Giá vốn hàng bán, KHÔNG vào 156 Hàng hóa, không đổi đơn giá vốn sản phẩm. Form không có ô “cộng vào giá vốn”. Điện / nước / thuê / cước KHÔNG Có 331 Phải trả người bán — trả ngay trong kỳ.
+
+[CANH_BAO] Đừng Lưu nháp lần hai cho cùng hóa đơn điện rồi xác nhận cả hai — sổ chi tiền hai lần. Kỳ đã khóa: phiếu vẫn Đã xác nhận, bút toán vào chờ “Kỳ đã khóa — chờ ghi sổ trễ”.
+
+--------------------------------------------------------------------------------
+3A.6. Lương — trích (TRICH_LUONG) và chi (CHI_LUONG)
+--------------------------------------------------------------------------------
+
+Người + lúc nào        : Kế toán — Bảng lương tháng. “Lập / tính lại · chỉ kế toán” = chưa BT. “Khóa kỳ lương · chỉ kế toán” = TRICH_LUONG. Sau QL duyệt + giao quỹ: “Chi từ quỹ chung” → Chi thành công = CHI_LUONG.
+
+[VI_DU] Khóa bảng lương tổng 8.800.000.
+Nợ  642    8.800.000     Chi phí quản lý doanh nghiệp (lương)
+    Có 334            8.800.000     Phải trả người lao động
+
+[VI_DU] Chi thành công: 5.000.000 tiền mặt + 3.800.000 chuyển khoản (hai phiếu).
+Nợ  334    5.000.000     Phải trả người lao động
+    Có 111            5.000.000     Tiền mặt
+Nợ  334    3.800.000     Phải trả người lao động
+    Có 112            3.800.000     Tiền gửi ngân hàng
+
+[KHONG] Mini không BHXH trên 334. QL duyệt / giao quỹ: 0 bút toán (banner “QUỸ QUẢN LÝ ĐÃ GIAO CHO BẠN” chưa trừ 334). Chi thất bại: quỹ không trừ, chưa có CHI_LUONG — bấm “Thực hiện lại”. Quản lý không được lập / khóa bảng lương.
+
+--------------------------------------------------------------------------------
+3A.7. Lệch quỹ ca (LECH_QUY) — 138 / 711
+--------------------------------------------------------------------------------
+
+Người + lúc nào        : Kế toán — ĐỐI SOÁT BÁN HÀNG → Ca & Phiếu thu. Thu ngân đã đóng ca. “Xem thực thu” → “Lập Phiếu thu” → “Xác nhận Phiếu thu”. Có lệch: modal “CHÊNH LỆCH TIỀN MẶT”, ô “Lý do chênh lệch *” bắt buộc.
+
+[VI_DU] Thiếu quỹ — hệ thống 500.000, thực nộp 480.000.
+Nợ  138       20.000     Phải thu khác (thu ngân còn nợ quỹ)
+    Có 111             20.000     Tiền mặt
+
+[VI_DU] Thừa quỹ — nộp nhiều hơn 15.000.
+Nợ  111       15.000     Tiền mặt
+    Có 711             15.000     Thu nhập khác
+
+Không lệch: xác nhận, 0 bút toán (111 đã Nợ lúc BAN_HANG phần tiền mặt).
+
+Sau này thu ngân nộp bù: bút toán thủ công Nợ 111 / Có 138 (mục 3A.10). QL cho xóa: thủ công Nợ 642 / Có 138.
+
+[KHONG] Phiếu thu KHÔNG cộng doanh thu lần 2. QR / Thẻ / CK không vào két, không đụng lệch quỹ. Không mở TK 338 — thừa quỹ dùng 711.
+
+--------------------------------------------------------------------------------
+3A.8. Mua TSCĐ chỉ 111 / 112 (MUA_TSCD) và khấu hao
+--------------------------------------------------------------------------------
+
+Người + lúc nào        : Kế toán — KẾ TOÁN MỞ RỘNG → Tài sản cố định. Điền form → “Lập thẻ” (mã TSyyMM…) → trên dòng “Ghi sổ mua”. Khấu hao: “Chạy khấu hao” (chọn kỳ).
+Dropdown tiền          : chỉ 111 hoặc 112.
+
+[VI_DU] Tủ mát — nguyên giá 10.000.000 (CHƯA VAT), VAT 800.000, 36 tháng, TK 111. Ghi sổ mua.
+Nợ  211   10.000.000     TSCĐ hữu hình (nguyên giá chưa VAT)
+Nợ  1331     800.000     Thuế GTGT được khấu trừ
+    Có 111           10.800.000     Tiền mặt
+
+[VI_DU] Chạy khấu hao kỳ — làm tròn(10.000.000 / 36) ≈ 277.778.
+Nợ  642      277.778     Chi phí quản lý doanh nghiệp
+    Có 214            277.778     Hao mòn TSCĐ
+
+[KHONG] Không Có 331 Phải trả người bán — mini không mua TSCĐ chịu, không sinh công nợ. Không ghi 211 đã gồm VAT. Không thanh lý / đánh giá lại. Không dùng THU_CONG giả thanh lý. Bấm “Chạy khấu hao” lần 2 cùng kỳ: “Đã chạy khấu hao kỳ này”, không nhân đôi.
+
+--------------------------------------------------------------------------------
+3A.9. Đổi trả, kiểm kê, phiếu xuất thủ kho
+--------------------------------------------------------------------------------
+
+----- Đổi trả (thu ngân / kho hoàn thành phiếu) -----
+
+Người + lúc nào        : Thu ngân — Đổi trả, phiếu đến Hoàn thành. Máy tự ghi. Thuế theo DÒNG HÓA ĐƠN GỐC, không lấy thuế SP lúc trả.
+
+[VI_DU] Hoàn tiền đúng món 110.000 gồm VAT 10% (DOI_TRA_HOAN). Hoàn mặt → Có 111; hoàn QR/thẻ/CK → Có 112.
+Nợ  5212     100.000     Chiết khấu / giảm giá (doanh thu chưa VAT)
+Nợ  33311     10.000     Thuế GTGT đầu ra (đảo)
+    Có 111            110.000     Tiền mặt
+
+Nhập lại kho bán (DOI_TRA_NHAP_KHO):
+Nợ  156       (vốn)      Hàng hóa
+    Có 632      (vốn)      Giá vốn hàng bán
+
+Không nhập lại (vứt): KHÔNG đảo 632 — giá vốn giữ.
+
+Đổi hàng ngang giá: không hoàn tiền → không đảo 511. Nhập lại hàng cũ: Nợ 156 / Có 632 (DOI_TRA_NHAP_KHO). Xuất hàng mới: Nợ 632 / Có 156 (DOI_TRA_GIAO_DOI).
+
+[KHONG] Không lấy SanPham.ThueSuat lúc trả. Khác giá: P0 hoàn hàng cũ + hóa đơn mới (BAN_HANG + GIA_VON), không thêm tài khoản.
+
+----- Kiểm kê (QL duyệt phiếu kiểm kê) -----
+
+Người + lúc nào        : Quản lý duyệt phiếu kiểm kê (menu thủ kho / QL — không nằm nhóm Kế toán tổng hợp).
+
+[VI_DU] Thiếu 10 hộp, đơn giá bình quân 12.000 → 120.000 (KK_THIEU), không đi kèm phiếu xuất hủy.
+Nợ  632      120.000     Giá vốn hàng bán
+    Có 156            120.000     Hàng hóa
+
+[VI_DU] Thừa (KK_THUA).
+Nợ  156      (số tiền)   Hàng hóa
+    Có 711      (số tiền)   Thu nhập khác
+
+Không chênh: không bút toán.
+
+[KHONG] Dòng kiểm kê đã có phiếu xuất hủy xác nhận: chỉ XUAT_HUY (632/156), không ghi KK_THIEU trùng.
+
+----- Phiếu xuất thủ kho (khi thủ kho xác nhận xuất) -----
+
+Xuất hủy (XUAT_HUY):     Nợ 632 Giá vốn / Có 156 Hàng hóa
+Xuất nội bộ (XUAT_NOI_BO): Nợ 642 Chi phí QLDN / Có 156 Hàng hóa
+Trả NCC:                 xem 3A.4 (cấm nếu đã có Phiếu chi)
+
+--------------------------------------------------------------------------------
+3A.10. Bút toán thủ công (THU_CONG)
+--------------------------------------------------------------------------------
+
+Người + lúc nào        : Kế toán — Bút toán & chờ ghi sổ, khung “Bút toán thủ công”. Nút “Ghi sổ”. Mã chứng từ máy sinh TCyyMM + 5 số — không có ô nhập mã.
+Dòng dẫn trên form     : Điều chỉnh được phép (thu bù, xóa chênh lệch 138). Không dùng cho thanh lý TSCĐ.
+
+[VI_DU] Thu ngân nộp bù 50.000 (hoặc Case LCTT: 20.000).
+Nợ  111       50.000     Tiền mặt
+    Có 138             50.000     Phải thu khác
+LCTT nhóm I “Thu/chi khác (bút toán thủ công)” = +50.000. THU_CONG không đụng 111/112 (vd Nợ 138 / Có 711) thì không vào LCTT.
+
+[VI_DU] QL cho xóa thiếu quỹ.
+Nợ  642       (số)       Chi phí quản lý doanh nghiệp
+    Có 138      (số)       Phải thu khác
+
+[KHONG] Nợ và Có cùng TK: “Tài khoản Nợ và Có phải khác nhau.” Không ghi. Cấm thanh lý 211/214/tiền thu/lãi lỗ. Thủ công bắt buộc kỳ đang Mở — không đẩy vào chờ như hóa đơn bán.
+
+--------------------------------------------------------------------------------
+3A.11. Kết chuyển 911 → 421 (KET_CHUYEN)
+--------------------------------------------------------------------------------
+
+Người + lúc nào        : Kế toán — Khóa kỳ / kết chuyển, nút “Kết chuyển”. Làm sau khi hết BLOCK trên checklist.
+
+Máy, trong một lần:
+Nợ  511     (dư Có kỳ)   Doanh thu bán hàng
+    Có 911      (cùng số)   Xác định kết quả kinh doanh
+Nợ  711     (dư Có kỳ)   Thu nhập khác
+    Có 911      (cùng số)
+Nợ  911     (dư Nợ 5212) Xác định KQKD
+    Có 5212     (cùng số)   Chiết khấu / giảm giá
+Nợ  911     (dư Nợ 632)
+    Có 632                  Giá vốn hàng bán
+Nợ  911     (dư Nợ 642)
+    Có 642                  Chi phí quản lý doanh nghiệp
+
+Lãi (911 dư Có): Nợ 911 / Có 421 Kết quả kinh doanh lũy kế (mini, chưa TNDN).
+Lỗ  (911 dư Nợ): Nợ 421 / Có 911.
+
+[CHOT] Sau kết chuyển: 511, 5212, 632, 642, 711, 911 = 0. 421 đổi đúng dòng 8 KQKD. KQKD khi xem lại VẪN ra doanh thu thuần vì loại bút toán Kết chuyển. Bảng cân đối sau KC: J = chỉ 421 — không cộng dòng 8 lần 2.
+
+[VI_DU] Chuỗi mini (2 món 110.000 gồm 10% + lương 8.800.000 + điện 2.000.000 chưa VAT): 511 = 200.000; 632 = 140.000; 642 = 10.800.000 → lỗ mini −10.740.000. Kết chuyển đẩy lỗ đó sang 421. Trả NCC 2.160.000 không nằm ở đây.
+
+[KHONG] Đừng cộng 911 vào Bảng cân đối khi chưa kết chuyển (911 đang 0, lãi/lỗ nằm 511/632/642…) — bảng sẽ lệch đúng số lãi/lỗ kỳ.
+
+--------------------------------------------------------------------------------
+3A.12. Số dư đầu kỳ (SODU_DAU_KY)
+--------------------------------------------------------------------------------
+
+Người + lúc nào        : Kế toán — Kỳ kế toán. Bước “3. Lưu số dư” rồi “4. Chốt số dư” khi thanh cân xanh “Đã cân Nợ = Có, có thể chốt”. Hộp: “Chốt số dư đầu kỳ? Sau khi chốt không sửa trực tiếp…”
+
+[VI_DU] Ngày đầu — 50 triệu két + 80 triệu hàng = 130 triệu vốn.
+Nợ  111   50.000.000     Tiền mặt
+Nợ  156   80.000.000     Hàng hóa
+    Có 411          130.000.000     Vốn chủ sở hữu
+
+[VI_DU] Có nợ NCC (không bắt buộc ngày đầu) — 111 Nợ 5.000.000 + 112 Nợ 3.000.000 + 156 Nợ 20.000.000 / 331 Có 8.000.000 + 411 Có 20.000.000. Tổng hai bên 28.000.000.
+
+[KHONG] Không nhập cả Nợ lẫn Có trên cùng một TK. Không sửa ô sau khi chốt — dùng THU_CONG. Số dư đầu kỳ không nằm trong Nhật ký chung kỳ (tách riêng). Tháng sau: máy copy số dư cuối khi khóa (đã chốt) — bạn không gõ lại trừ lần triển khai đầu.
+
+[CANH_BAO] Sai sau chốt: Bút toán thủ công kỳ đang Mở, không gõ lại hàng số dư.
+
+--------------------------------------------------------------------------------
+3A.13. Đảo bút toán (gốc + đảo cùng sổ)
+--------------------------------------------------------------------------------
+
+Người + lúc nào        : Kế toán — Bút toán & chờ ghi sổ, nút “Đảo” trên dòng thủ công chưa đảo. Hộp “Lý do đảo bút toán thủ công”. Máy cũng đảo cả cụm KET_CHUYEN khi “Mở lại kỳ” (DAO_KET_CHUYEN).
+
+Quy tắc
+  Gốc vẫn Trạng thái “Đã ghi sổ”, bật badge “Đã đảo” (DaBiDao = 1).
+  Dòng mới loại DAO_… (ví dụ Đảo thủ công, Đảo kết chuyển): Nợ ↔ Có, cùng số tiền.
+  Nhật ký chung và Sổ cái hiện CẢ HAI dòng. Cộng net mới = 0.
+  KQKD dùng công thức thuần (Có − Nợ hoặc Nợ − Có tùy TK) nên đảo BAN_HANG 100.000 thì 511 về 0 — không còn số ảo.
+
+[VI_DU] Đảo bán hàng minh họa — gốc: Nợ 111 110.000 / Có 511 100.000 / Có 33311 10.000. Bút toán đảo (DAO_BAN_HANG) đảo Nợ ↔ Có:
+Nợ  511      100.000     Doanh thu bán hàng
+Nợ  33311     10.000     Thuế GTGT đầu ra
+    Có 111           110.000     Tiền mặt
+Sổ cái 511: +100.000 Có (gốc) và +100.000 Nợ (đảo) = 0. Cả gốc lẫn đảo đều Đã ghi sổ.
+
+[CHOT] 100 + (−100) = 0. Không xóa dòng gốc. Mini khuyến nghị không đảo tiếp một dòng đảo.
+
+[KHONG] Nút “Đảo” không hiện với bút toán hệ thống thường (Bán hàng, Mua hàng…) — chỉ thủ công trên form, hoặc máy đảo kết chuyển khi mở lại kỳ. Không hiểu “đã đảo” là xóa sổ.
+
+================================================================================
+4. TỪ ĐIỂN THUẬT NGỮ TRÊN MÀN HÌNH
+================================================================================
+
+Kỳ
+  Một tháng dương lịch Việt Nam. Mã kỳ dạng 2026-09.
+  Từ ngày 01 đến hết tháng. Ô chọn trên màn: “Tháng kỳ” / “Kỳ” / “Kỳ báo cáo”
+  (ô kiểu chọn tháng).
+
+Mở
+  Badge xanh “Mở”. Kỳ đang nhận bút toán. Chip góc phải: “Kỳ hiện tại”
+  + tên tháng + badge Mở.
+  Khuyến nghị chỉ 1 kỳ Mở. Bấm “2. Mở kỳ” khi đang có kỳ khác Mở → hệ thống
+  báo: “Đang có kỳ … mở. Khóa kỳ đó trước khi mở kỳ khác (khuyến nghị mini).”
+
+Khóa  (kỳ kế toán)
+  Badge “Khóa”. Không ghi bút toán VÀO kỳ đó nữa.
+  POS / đối chiếu / phiếu chi / lương VẪN chạy. Bút toán mới vào
+  “Chờ ghi sổ” với lý do “Kỳ đã khóa — chờ ghi sổ trễ”.
+
+Chưa mở
+  Kỳ đã tạo (bước 1) nhưng chưa bấm “2. Mở kỳ”.
+
+Số dư đầu
+  Số dư mang sang đầu tháng. Nhập ở Kỳ kế toán, cột Dư Nợ / Dư Có.
+  Chỉ nhập MỘT BÊN: Nợ hoặc Có, không cả hai.
+  Tài khoản then chốt nên nhớ: 111, 112, 156, 331, 411, 421.
+
+Chốt  (số dư đầu)
+  Nút “4. Chốt số dư”. Hộp thoại:
+    “Chốt số dư đầu kỳ? Sau khi chốt không sửa trực tiếp (dùng bút toán điều chỉnh).”
+  Sau chốt: ô số bị khóa, badge “Đã chốt”, sinh bút toán nguồn “Số dư đầu kỳ”.
+  Sai sau chốt: lập bút toán thủ công, KHÔNG sửa hàng số dư.
+
+Bút toán
+  Một lần ghi Nợ = Có. Mã kiểu BTyyMM…. Cột loại trên màn: Bán hàng, Giá vốn,
+  Mua hàng, Thủ công… Nguồn: Hệ thống / Thủ công / Số dư đầu kỳ / Đã đảo.
+
+Ghi sổ
+  Đưa bút toán vào sổ (trạng thái Đã ghi sổ). Hóa đơn bán hợp lệ thường tự ghi
+  lúc thu ngân hoàn thành. Nút “Ghi sổ” trên form bút toán thủ công.
+
+Chờ ghi sổ
+  Hàng chứng từ hợp lệ chưa có bút toán, hoặc phát sinh khi kỳ đã khóa,
+  hoặc phiếu nhập chưa đối chiếu, hoặc hóa đơn cũ thiếu thuế.
+  Màn: Bút toán & chờ ghi sổ, bảng “Chờ ghi sổ”.
+
+Đảo
+  Ghi bút toán ngược (Nợ ↔ Có) để triệt tiêu. Gốc vẫn “Đã ghi sổ” nhưng
+  badge “Đã đảo”. Cả gốc lẫn đảo đều hiện trên Nhật ký chung / Sổ cái
+  (100 + (−100) = 0). Nút “Đảo” chỉ hiện với bút toán thủ công chưa đảo.
+  Hộp hỏi: “Lý do đảo bút toán thủ công”.
+
+Kết chuyển
+  Nút “Kết chuyển” trên Khóa kỳ / kết chuyển.
+  Gom 511, 5212, 632, 642, 711 vào 911 rồi đẩy sang 421.
+  Sau đó dư các TK doanh thu / chi phí = 0. 911 = 0.
+
+Số liệu tạm tính
+  Dấu chìm trên báo cáo khi kỳ CHƯA khóa. Chữ đúng trên giấy:
+    “Số liệu tạm tính”
+  Kỳ đã khóa: “Kỳ đã khóa — số liệu chính thức”.
+  Vẫn xem được Bảng cân đối khi chưa khóa; phải CÂN (xem mục 10).
+
+BLOCK  (không được khóa)
+  Cột đỏ trên Khóa kỳ / kết chuyển:
+    “BLOCK — không khóa”
+    “Chứng từ đã ở trạng thái hợp lệ nhưng thiếu bút toán bắt buộc.
+     Không có nút bỏ qua.”
+  Nút “Khóa kỳ” bị tắt. Không có ô “khóa vẫn cảnh báo” cho nhóm này.
+
+WARN  (cảnh báo, vẫn khóa)
+  Cột vàng:
+    “WARN — vẫn khóa được”
+    “Phiếu nhập chưa 3-way, hóa đơn nháp, chứng từ chờ duyệt…
+     Cảnh báo nhưng vẫn khóa kỳ được.”
+  Hộp thoại khi khóa: “Còn cảnh báo WARN (vẫn khóa được). Khóa kỳ này?”
+
+NULL thuế  vs  0%
+  NULL / chưa chọn = Quản lý chưa gán thuế sản phẩm, hoặc hóa đơn cũ thiếu
+    snapshot. POS chặn bán mới. Bảng kê: badge “Chưa chọn”.
+    Chờ ghi sổ: “Thiếu thuế suất — POS chặn / chưa ghi sổ được”.
+    KHÔNG có nút Ghi sổ trễ.
+  0% = đã xác định 0%. Hợp lệ. VAT = 0. KHÔNG phải “thiếu thuế”.
+    Khi Quản lý chọn 0% lúc lưu sản phẩm, hộp:
+    “Xác nhận thuế suất 0% theo cấu hình sản phẩm?”
+
+[CHOT] NULL và 0% không cùng một ô. NULL = chưa chọn (chặn). 0% = đã chọn đúng mức không chịu thuế (bán bình thường).
+
+[CANH_BAO] Đừng bịa 10% cho dòng NULL để “cho sổ chạy”. Máy không đoán thuế. Khóa kỳ sẽ BLOCK nếu hóa đơn Hoàn thành vẫn thiếu Bán hàng vì thuế.
+
+Ghi sổ trễ
+  Nút trên dòng chờ (chỉ khi lý do KHÔNG phải thiếu thuế / PN chưa 3 bên).
+  Giữ ngày chứng từ gốc. Ngày hạch toán và kỳ chuyển sang kỳ đang Mở.
+
+3-way / đối chiếu 3 bên
+  So Đơn mua – Phiếu nhập – Hóa đơn nhà cung cấp. Chỉ khi khớp mới có công nợ
+  và bút toán Mua hàng.
+
+Phiếu chi
+  Chứng từ xin tiền trả NCC. Lập phiếu / duyệt / giao quỹ: chưa giảm nợ.
+  Chỉ “Thanh toán thành công” mới giảm 331.
+
+================================================================================
+5. LUỒNG NGÀY ĐẦU TIÊN (WIZARD KỲ)
+================================================================================
+
+Làm đúng 1 lần khi triển khai (hoặc mỗi khi mở tháng mới: bước tạo/mở;
+số dư tháng sau hệ thống copy khi khóa tháng trước).
+
+Vào: KẾ TOÁN TỔNG HỢP → Kỳ kế toán.
+
+[CHOT] Wizard đúng 4 bước trên màn, làm lần lượt. Stepper trên đầu trang đổi màu: bước hiện tại viền xanh; bước xong dấu ✓; bước chưa tới mờ. Bốn nút dưới stepper trùng nhãn: “1. Tạo kỳ” → “2. Mở kỳ” → “3. Lưu số dư” → “4. Chốt số dư”. Không nhảy cóc: chưa Tạo thì Mở tắt; chưa Mở thì ô số dư khóa; Nợ ≠ Có thì Chốt tắt.
+
+Màn hình
+  Tiêu đề: Kỳ kế toán
+  Dòng dẫn: Mỗi tháng một kỳ. Làm lần lượt: tạo kỳ → mở kỳ → nhập số dư cân
+            (Nợ = Có) → chốt số dư. Sau khi chốt không sửa trực tiếp —
+            dùng bút toán điều chỉnh.
+  Ô “Tháng kỳ”: chọn tháng (ví dụ 2026-09).
+  Nút “Tải lại”.
+  Bốn bước (stepper):
+    1. Tạo kỳ     Tạo kỳ tháng (từ ngày 01 đến cuối tháng).
+    2. Mở kỳ      Chỉ nên có một kỳ đang mở.
+    3. Nhập số dư Nhập dư Nợ hoặc dư Có — một bên, không cả hai.
+    4. Chốt số dư Chốt khi tổng Nợ = tổng Có. Không sửa sau khi chốt.
+  Bốn nút thao tác:
+    1. Tạo kỳ
+    2. Mở kỳ          (sau khi tạo: “Đang mở” / “Kỳ đã khóa” nếu không còn bấm)
+    3. Lưu số dư
+    4. Chốt số dư
+  Thanh cân: “Tổng Nợ … · Tổng Có …”
+    Xanh: “Đã cân Nợ = Có, có thể chốt”
+    Đỏ:   “Lệch … — chưa chốt được”
+  Bảng dưới: Các kỳ đã lập (Kỳ, Trạng thái, Từ ngày, Đến ngày, Kết chuyển).
+
+----- Ví dụ số ngày đầu (đúng yêu cầu cân) -----
+
+[VI_DU] 50 triệu két + 80 triệu hàng = 130 triệu vốn. Ba ô: 111 Nợ 50.000.000, 156 Nợ 80.000.000, 411 Có 130.000.000. Các TK khác 0. Thanh cân xanh “Đã cân Nợ = Có, có thể chốt” rồi mới bấm “4. Chốt số dư”.
+
+  Giả sử cửa hàng góp:
+    Tiền mặt trong két          50.000.000
+    Hàng trên kệ (giá vốn)      80.000.000
+    Chưa nợ NCC, chưa lãi cũ
+  Định khoản số dư đầu:
+    Nợ  111    50.000.000
+    Nợ  156    80.000.000
+        Có 411            130.000.000
+  Tổng Nợ 130.000.000 = Tổng Có 130.000.000 → chốt được.
+
+Cách bấm từng bước
+
+  Bước A — Tạo kỳ
+    1. Chọn Tháng kỳ = tháng đang làm (ví dụ tháng 9/2026).
+    2. Bấm “1. Tạo kỳ”.
+    3. Thông báo đã tạo kỳ. Nút đổi thành “Đã tạo kỳ” (không bấm lại).
+    4. Danh sách dưới: mã 2026-09, trạng thái Chưa mở.
+    5. Nếu quên tạo: chip “Kỳ hiện tại / Chưa có kỳ”. POS vẫn bán được
+       nhưng bút toán có thể vào chờ ghi sổ.
+
+  Bước B — Mở kỳ
+    1. Chỉ mở khi KHÔNG còn kỳ khác đang Mở. Nếu tháng trước còn Mở:
+       vào Khóa kỳ / kết chuyển, khóa tháng trước trước.
+    2. Bấm “2. Mở kỳ”.
+    3. Thông báo “Đã mở kỳ 2026-09.”
+    4. Chip góc: Tháng 9/2026, badge Mở.
+    5. Nếu báo đang có kỳ khác mở: khóa kỳ đó, rồi mở lại.
+
+  Bước C — Nhập số dư rồi Lưu
+    1. Trong bảng, tìm hàng 111, 156, 411 (hàng then chốt được tô đậm).
+    2. 111: ô Dư Nợ gõ 50000000, ô Dư Có để 0.
+    3. 156: Dư Nợ 80000000, Dư Có 0.
+    4. 411: Dư Nợ 0, Dư Có 130000000.
+    5. Các TK khác để 0 (hoặc nhập nếu cửa hàng thật có 112, 331, 421…).
+    6. KHÔNG gõ cả Nợ lẫn Có trên cùng một TK. Nếu lỡ:
+       dòng đỏ “Tài khoản 111 đang nhập cả Nợ và Có. Chỉ nhập một bên.”
+       Nút chốt bị tắt.
+    7. Bấm “3. Lưu số dư”. Thông báo đã lưu. Thanh cân xanh nếu Nợ = Có.
+
+  Bước D — Chốt
+    1. Nhìn thanh: Tổng Nợ 130.000.000 · Tổng Có 130.000.000.
+    2. Nếu lệch (ví dụ chỉ nhập 111 = 10.000.000, 411 = 0):
+       lưu nháp được, nhưng “4. Chốt số dư” tắt / báo
+       “Tổng Nợ phải bằng tổng Có trước khi chốt số dư.”
+    3. Bấm “4. Chốt số dư” → đồng ý hộp thoại.
+    4. Ô khóa. Badge Đã chốt. Nút thành “Đã chốt số dư”.
+    5. Vào Bút toán & chờ ghi sổ → Bút toán gần đây: loại Số dư đầu kỳ.
+
+[CANH_BAO] Sau khi chốt, ô Dư Nợ / Dư Có bị khóa. Sai số thì vào Bút toán & chờ ghi sổ → form Bút toán thủ công (kỳ đang Mở). Không gõ lại hàng số dư.
+
+Cảnh báo chỉ 1 kỳ Mở
+  Mini không để song song hai tháng đang hạch toán.
+  Làm xong tháng 9: kết chuyển + khóa, rồi mới mở tháng 10.
+  Số dư cuối tháng 9 được copy thành số dư đầu tháng 10 (đã chốt).
+
+Ví dụ số dư “có nợ NCC” (không bắt buộc ngày đầu)
+
+  111 Nợ 5.000.000 + 112 Nợ 3.000.000 + 156 Nợ 20.000.000
+  331 Có 8.000.000 + 411 Có 20.000.000
+  Tổng hai bên 28.000.000. 421 có thể 0.
+
+Sau khi chốt, muốn sửa 111?
+  Không sửa ô. Vào Bút toán thủ công (mục 7.8).
+
+================================================================================
+6. MAP TỪNG MÀN HÌNH MENU → LÀM GÌ, KHI NÀO VÀO, NÚT CHÍNH
+================================================================================
+
+----- Lịch làm việc -----
+  Khi nào: xem ca của mình.
+  Không ghi sổ.
+
+----- Đối chiếu hóa đơn -----
+  Tiêu đề: Đối chiếu hóa đơn Nhà cung cấp
+  Khi nào: đã có Phiếu nhập xác nhận và/hoặc Đơn mua; cầm hóa đơn GTGT NCC.
+  Nút chính:
+    “Tiếp nhận hóa đơn”
+    Trong danh sách: “Xem chi tiết” / “Tiếp nhận” / “Tiếp nhận hóa đơn này”
+    Form: Số hóa đơn Nhà cung cấp *, Ngày hóa đơn * → “Lưu hồ sơ hóa đơn”
+      (chỉ lưu chứng từ, CHƯA sinh công nợ, không trừ tồn)
+    Cột thao tác: “Chi tiết” / “Đối chiếu”
+    Modal đối chiếu: “Đóng, chưa đối chiếu” / “Xem bản in đối chiếu”
+      / “Xác nhận đối chiếu và ghi nhận công nợ”
+      (nút xác nhận chỉ bật khi ba chứng từ, thuế và tổng đều khớp)
+  Kết quả khớp: công nợ + bút toán Mua hàng (156 + 1331 / 331).
+  Lệch: không nợ, không bút toán.
+
+----- Công nợ Nhà cung cấp -----
+  Tiêu đề: Công nợ và Phiếu chi Nhà cung cấp
+  Khi nào: sau khi đối chiếu khớp; đến hạn trả.
+  Dòng trạng thái trên đầu:
+    Kế toán lập Phiếu chi → Quản lý duyệt và giao tiền
+    → Kế toán thanh toán NCC → Công nợ tất toán
+  Nút:
+    “Mở hồ sơ đối chiếu”
+    “Lập Phiếu chi” hoặc “Lập Phiếu chi sớm”
+    “Lập phiếu chi hàng loạt” (cùng một NCC, mỗi khoản một phiếu, không gộp tiền)
+    “Lập và gửi Quản lý duyệt”
+    “Sửa & gửi lại” (nếu Từ chối)
+    “Thanh toán” hoặc “Thực hiện lại”
+    Modal thanh toán: Kết quả “Thanh toán thành công” / “Thanh toán thất bại”
+      → “Ghi nhận kết quả”
+    Chờ duyệt: chữ “Chờ Quản lý giao tiền” (không bấm chi được)
+  Nhớ: lập phiếu / QL giao tiền = chưa giảm 331. Chỉ thành công mới giảm.
+
+----- Ca & Phiếu thu -----
+  Tiêu đề: Doanh thu theo ca và Phiếu thu
+  Khi nào: thu ngân đã đóng ca.
+  Nút: “Làm mới”, “Xem thực thu”
+  Trong ca:
+    “Lập Phiếu thu” (hoặc “Lập Phiếu thu (số âm do hoàn trả)”)
+    “Xác nhận Phiếu thu”
+    “In Phiếu thu”
+  Lệch tiền mặt: modal “CHÊNH LỆCH TIỀN MẶT”, ô “Lý do chênh lệch *”,
+    “Lưu lý do” rồi mới lập được.
+  Không lệch / đã xác nhận không lệch: KHÔNG sinh bút toán doanh thu.
+  Có lệch: sinh Lệch quỹ (138 hoặc 711) — mục 7.6.
+
+----- Báo cáo nội bộ -----
+  Tiêu đề: Báo cáo tài chính nội bộ
+  Khi nào: xem doanh thu thuần, phiếu thu, chi NCC, công nợ theo ngày/tháng/quý/năm.
+  Nút: “Lập báo cáo”, “Xuất CSV”, “Xem bản in / PDF”
+  Đây là báo cáo ĐIỀU HÀNH (chứng từ P0), không phải sổ cái.
+  Lãi gộp màn này có thể khác KQKD sổ cái vì VAT.
+
+----- Bảng lương tháng -----
+  Khi nào: cuối tháng, sau khi QL duyệt công.
+  Nút:
+    “Lập / tính lại · chỉ kế toán”
+    “Khóa kỳ lương · chỉ kế toán”
+      Hộp: “Khóa kỳ lương …? Sau khi khóa không tính lại…”
+    “Lập phiếu chi hàng loạt”
+    Từng dòng: chọn TM / CK → “Lập phiếu”
+    Sau QL duyệt + giao quỹ: “Chi từ quỹ chung” / “Thực hiện lại”
+    Modal: “Chi thành công” / “Chi thất bại” → “Ghi nhận kết quả”
+  Khóa kỳ lương → bút toán Trích lương (642 / 334).
+  Chi thành công → Chi lương (334 / 111 hoặc 112).
+  QL duyệt / giao quỹ: không bút toán.
+
+----- Lịch sử hoạt động -----
+  Xem mục 15.
+
+----- Hệ thống tài khoản -----
+  Khi nào: đối chiếu tên TK, giải thích cho hội đồng.
+  Không có nút xóa. Xem 18 dòng.
+
+----- Kỳ kế toán -----
+  Ngày đầu tháng / ngày triển khai. Xem mục 5.
+
+----- Chi phí vận hành -----
+  Khi nào: có hóa đơn điện, nước, thuê nhà, VP, cước xe…
+  Form trên cùng (tiêu đề “Lập phiếu chi phí”): Loại chi phí, Ngày chứng từ,
+        Tiền hàng (chưa VAT), Thuế suất (0% / 5% / 8% / 10%),
+        Tài khoản tiền (111 hoặc 112), Ghi chú
+  Nút form: “Lưu nháp”. Sau khi lưu, form reset (ngày chứng từ về hôm nay).
+  Không có lựa chọn 331. Không tick “cộng vào giá vốn” (cước luôn 642).
+
+[CHOT]
+  Phiếu vừa lưu không mất. Kéo xuống bảng “Phiếu đã lập” ngay dưới form.
+  Cột đúng trên app: Mã | Loại | Ngày | Tiền hàng | VAT | Tổng | TK tiền | Trạng thái | (nút).
+  Mã phiếu là nút chữ xanh gạch chân. Cả dòng bấm được. Nháp: badge vàng “Nháp” + nút “Xác nhận” cùng hàng. Đã xác nhận: hết nút Xác nhận trên bảng, đã có bút toán 642.
+
+[LUU_Y]
+  Mở lại phiếu chi phí nháp (thoát màn rồi quay lại, hoặc lưu sáng xác nhận chiều):
+  1. Vào lại KẾ TOÁN TỔNG HỢP → Chi phí vận hành.
+  2. Kéo bảng “Phiếu đã lập”. Dòng dẫn trên app: “Bấm mã phiếu (chữ xanh gạch chân) hoặc bấm vào dòng để mở lại.”
+  3. Bấm mã CPyyMM… hoặc bấm vào dòng (trừ nút trên hàng). Cửa sổ “PHIẾU CHI PHÍ VẬN HÀNH”: loại, ngày, tiền, VAT, TK tiền, trạng thái.
+  4. Phiếu Nháp trong cửa sổ: “Xác nhận” sinh bút toán; “Hủy nháp” (hộp hỏi) đổi phiếu thành Đã hủy, không sinh bút toán. Có thể Xác nhận luôn từ nút trên dòng bảng, không cần mở cửa sổ.
+  Form “Lập phiếu chi phí” phía trên chỉ lập phiếu MỚI — đừng điền lại cùng hóa đơn điện.
+
+[KHONG] Đừng Lưu nháp lần hai cho cùng hóa đơn điện rồi xác nhận cả hai — sổ sẽ chi tiền hai lần.
+
+----- Bút toán & chờ ghi sổ -----
+  Khi nào: sáng / cuối ngày; trước khi khóa kỳ; khi POS báo lạ.
+  Nút: “Tải lại”, “Ghi sổ trễ” (nếu được), form thủ công “Ghi sổ”, “Đảo”
+
+[CHOT] Cột Chứng từ là nút (chữ đậm, gạch chân xanh). Bấm mã HĐ / HDM / PN / PC / CP trên bảng Chờ ghi sổ (và cột chứng từ ở Bút toán gần đây) để mở chứng từ gốc. Không rời trang bút toán.
+
+  Click mã HĐ (hóa đơn bán, dạng HDyyMM…): cửa sổ “HÓA ĐƠN GỐC LÚC BÁN” —
+    khách, ngày bán, tổng lúc bán, dòng hàng lúc thanh toán. Có “In / lưu PDF”.
+    Chỉ đọc. Không có “Mở đổi trả” từ đây. Đóng lại vẫn đứng ở Bút toán & chờ ghi sổ.
+  Hóa đơn mua / phiếu chi / phiếu nhập: mở hồ sơ P0. Chi phí: modal phiếu CP. TSCĐ: modal thẻ.
+
+----- Nhật ký chung -----
+  Ô Kỳ báo cáo + “Lập báo cáo”. Kiểm tra Tổng Nợ = Tổng Có.
+
+----- Sổ cái -----
+  Ô “Mã tài khoản” (mặc định 111) + Kỳ + “Xem sổ cái”.
+
+----- Cân đối phát sinh -----
+  “Lập báo cáo”. Ba cặp Nợ/Có phải cân.
+
+----- Bảng kê VAT -----
+  “Lập báo cáo”. Xem mục 11.
+
+----- Khóa kỳ / kết chuyển -----
+  Cuối tháng. Nút: “Kiểm tra”, “Kết chuyển”, “Khóa kỳ”, “Mở lại kỳ”.
+  Xem mục 12–13.
+
+----- Kết quả kinh doanh / Lưu chuyển tiền tệ / Bảng cân đối kế toán -----
+  Ô kỳ + “Lập báo cáo”. Xem mục 10.
+
+----- Tài sản cố định -----
+  Form: Tên TSCĐ, Nguyên giá (chưa VAT), Ngày mua, Ngày đưa vào sử dụng,
+        Số tháng khấu hao, Tiền thuế VAT, Tài khoản tiền (111 hoặc 112)
+  Nút: “Lập thẻ”, trên dòng “Ghi sổ mua”, “Chạy khấu hao”
+  Không có form thanh lý.
+
+----- Ngân hàng & sao kê CSV -----
+  “Thêm tài khoản” (chỉ khi chưa có TK đang dùng), “Nhập CSV”.
+  Xem mục 14.
+
+================================================================================
+7. ĐỊNH KHOẢN TỪNG NGHIỆP VỤ (TIẾNG NGƯỜI + VÍ DỤ TIỀN)
+================================================================================
+
+[CHOT] Bảng hạch toán đầy đủ từng loại bút toán (BAN_HANG, GIA_VON, MUA_HANG, TRA_NCC, TRA_NCC_HANG, CHI_PHI, lương, lệch quỹ, TSCĐ, đổi trả, kiểm kê, THU_CONG, KET_CHUYEN, SODU_DAU_KY, đảo) nằm mục 3A trên mục lục trái. Mục này giữ bản theo luồng bấm.
+
+Quy ước giá bán: giá niêm yết ĐÃ GỒM VAT. Máy tách thuế trên từng dòng
+sau khi trừ khuyến mãi và điểm:
+  Tiền thuế = làm tròn( thành tiền sau giảm × t / (100 + t) ) khi t > 0
+  Doanh thu 511 = thành tiền sau giảm − tiền thuế
+  t = 0 → thuế 0, cả gói vào 511.
+
+Bạn không bấm “ghi sổ bán hàng”. Thu ngân hoàn thành hóa đơn là đủ
+(nếu kỳ Mở và dòng hàng có thuế 0/5/8/10).
+
+--------------------------------------------------------------------------------
+7.1. Bán tiền mặt + VAT
+--------------------------------------------------------------------------------
+
+  Cửa hàng: 1 sữa, giá kệ 110.000đ (gồm VAT 10%), vốn 70.000đ.
+  Khách đưa 110.000đ tiền mặt. Hóa đơn Hoàn thành.
+
+  Bút toán Bán hàng
+    Nợ  111      110.000     (tiền vào két)
+        Có 511            100.000     (doanh thu chưa thuế)
+        Có 33311           10.000     (VAT đầu ra)
+    Vì: 110.000 × 10 / 110 = 10.000.
+
+  Bút toán Giá vốn (cùng hóa đơn, mã bút toán khác)
+    Nợ  632       70.000
+        Có 156             70.000
+
+  Lãi gộp sổ cái: 100.000 − 70.000 = 30.000
+  Lãi gộp báo cáo bán hàng (gồm VAT): 110.000 − 70.000 = 40.000
+  Hai số khác nhau là đúng — khác ở VAT.
+
+  In lại / lưu PDF: không tăng 511, không tăng bảng kê VAT.
+
+--------------------------------------------------------------------------------
+7.2. Bán QR / Thẻ / Chuyển khoản
+--------------------------------------------------------------------------------
+
+  Cùng món 110.000 gồm VAT 10%, khách quét QR.
+
+    Nợ  112      110.000
+        Có 511            100.000
+        Có 33311           10.000
+  Giá vốn giống 7.1. Tiền không vào két; đối soát qua sao kê 112.
+
+--------------------------------------------------------------------------------
+7.3. Bán hỗn hợp (tiền mặt + QR)
+--------------------------------------------------------------------------------
+
+  Tổng phải trả 110.000 (gồm VAT 10%). Khách đưa 80.000 tiền mặt + 30.000 QR.
+
+    Nợ  111       80.000
+    Nợ  112       30.000
+        Có 511            100.000
+        Có 33311           10.000
+
+  Ví dụ VAT 8%, tổng 100.000, 80.000 TM + 20.000 QR:
+    Thuế = làm tròn(100.000 × 8 / 108) = 7.407
+    511 = 92.593
+    Nợ 111 80.000 + Nợ 112 20.000 / Có 511 92.593 / Có 33311 7.407
+
+  Khuyến mãi + điểm (không hạch toán 5212 lúc bán):
+    Hàng 200.000, KM 20.000, điểm 10.000, khách trả 170.000 TM, thuế 10%.
+    Thuế = làm tròn(170.000 × 10 / 110) = 15.455
+    511 = 154.545
+    Nợ 111 170.000 / Có 511 154.545 / Có 33311 15.455
+
+--------------------------------------------------------------------------------
+7.4. Giá vốn lúc bán
+--------------------------------------------------------------------------------
+
+  Luôn đi cùng hóa đơn hoàn thành. Lấy đơn giá vốn đã chốt trên dòng hóa đơn
+  (không lấy giá nhập “hiện tại” nếu đã đổi).
+
+  Nợ 632 / Có 156 = tổng thành tiền vốn.
+
+  Nếu sổ 156 bị âm vì phiếu nhập chưa đối chiếu: máy VẪN ghi, POS không chết.
+  Bạn đi đối chiếu 3 bên để 156 đuổi kịp tồn kho.
+
+--------------------------------------------------------------------------------
+7.5. Mua hàng sau 3-way, trả NCC
+--------------------------------------------------------------------------------
+
+  Thủ kho xác nhận phiếu nhập: tồn tăng, CHƯA có bút toán 156.
+  Hàng chờ có thể hiện: “Phiếu nhập chưa đối chiếu 3 bên” — không bấm
+  Ghi sổ trễ; phải đối chiếu.
+
+  Bạn: Đối chiếu hóa đơn → Tiếp nhận → Lưu hồ sơ → Đối chiếu
+  → “Xác nhận đối chiếu và ghi nhận công nợ” khi chữ
+     “Ba chứng từ, thuế và tổng tiền đều khớp”.
+
+  Ví dụ khớp: hàng 2.000.000, VAT 8% = 160.000, tổng 2.160.000
+
+    Nợ  156    2.000.000
+    Nợ  1331     160.000
+        Có 331            2.160.000
+
+  Lập Phiếu chi 2.160.000 CK, gửi QL: 0 bút toán, còn phải trả vẫn 2.160.000.
+  QL duyệt và giao tiền: 0 bút toán, còn phải trả vẫn 2.160.000.
+  Bạn bấm Thanh toán → “Thanh toán thành công” → Ghi nhận kết quả:
+
+    Nợ  331    2.160.000
+        Có 112            2.160.000     (nếu Tiền mặt thì Có 111)
+
+  Kết quả kinh doanh KHÔNG trừ 2.160.000.
+  Lưu chuyển tiền tệ CÓ trừ (dòng Trả NCC).
+
+  Thất bại: chọn “Thanh toán thất bại”, ghi nguyên nhân. Nợ không giảm.
+  Bấm “Thực hiện lại” sau.
+
+----- Nguồn VAT khi TRẢ HÀNG nhà cung cấp -----
+
+  Thuế hoàn / giảm 1331 lấy theo DÒNG HÓA ĐƠN MUA đã khớp (snapshot lúc 3-way),
+  KHÔNG lấy thuế suất sản phẩm đang sửa trên danh mục.
+  Lý do: đổi thuế suất SP sau này vẫn đảo đúng VAT lúc mua.
+
+  Ví dụ: lúc mua SP thuế 8%, sau QL đổi SP thành 10%. Trả 1 phần hàng:
+  vẫn dùng 8% trên hóa đơn mua.
+
+  Cấm trả hàng giảm nợ nếu ĐÃ CÓ Phiếu chi (chờ duyệt / đã duyệt / thành công
+  / thất bại… bất kỳ). Thông báo kiểu:
+    “Đã lập Phiếu chi cho công nợ này. Trả hàng NCC phải xử lý TRƯỚC KHI
+     lập Phiếu chi (1 công nợ – 1 Phiếu chi).”
+  Việc đúng: trả hàng TRƯỚC, rồi mới lập phiếu chi phần còn lại
+  (mini: một công nợ một phiếu — hãy trả hàng trước khi lập phiếu).
+
+  Nếu chưa có phiếu chi và đã khớp, phiếu xuất trả NCC (thủ kho xác nhận):
+
+    Nợ  331     (hàng + thuế tương ứng SL trả, thuế từ snapshot HĐMH)
+        Có 156      (tiền hàng)
+        Có 1331     (thuế snapshot)
+
+  Đồng thời giảm số còn phải trả. Bảng kê VAT: dòng âm (mục 11).
+
+  Nếu phiếu nhập CHƯA khớp: chỉ giảm tồn, không bút toán 156 (156 chưa tăng).
+
+--------------------------------------------------------------------------------
+7.6. Chi phí vận hành 642 (+ 1331) / 111 hoặc 112
+--------------------------------------------------------------------------------
+
+  Vào Chi phí vận hành.
+
+[LUU_Y] Form trên = lập mới. Phiếu nháp đã có: bảng Phiếu đã lập → bấm mã / bấm dòng để mở cửa sổ, hoặc bấm “Xác nhận” trên hàng.
+
+  Ví dụ tiền điện: tiền hàng 2.000.000, thuế 10%, TK 112, ghi chú “HĐ điện tháng”.
+    1. Loại = Tiền điện. Ngày = hôm nay. Tiền hàng 2000000. Thuế 10%. TK 112.
+    2. Lưu nháp → mã CPyyMM… hiện trên bảng Phiếu đã lập, badge Nháp. Chưa có bút toán. Form trên reset.
+    3. Mở lại: bấm mã phiếu (hoặc bấm dòng) → cửa sổ “PHIẾU CHI PHÍ VẬN HÀNH” → “Xác nhận”. Hoặc bấm “Xác nhận” ngay trên dòng bảng.
+
+    Nợ  642    2.000.000
+    Nợ  1331     200.000
+        Có 112            2.200.000
+
+  KQKD trừ 2.000.000 (chi phí). Dòng tiền trừ 2.200.000. Bảng kê VAT vào +200.000.
+  Không sinh 331, không vào màn Công nợ.
+
+  Cước vận chuyển 500.000, thuế 0%, TK 111:
+    Nợ 642 500.000 / Có 111 500.000
+    Không đụng 156, không đổi đơn giá vốn sản phẩm.
+
+  Kỳ đã khóa: phiếu vẫn lưu Đã xác nhận; bút toán vào chờ, lý do
+  “Kỳ đã khóa — chờ ghi sổ trễ”. Không báo lỗi chết form.
+
+--------------------------------------------------------------------------------
+7.7. Lương, lệch quỹ 138, TSCĐ chỉ 111/112, đổi trả, kiểm kê
+--------------------------------------------------------------------------------
+
+----- Lương (không BHXH) -----
+
+  Bảng lương tháng:
+    1. Chọn kỳ lương (ô tháng).
+    2. “Lập / tính lại · chỉ kế toán” — chưa có bút toán.
+    3. “Khóa kỳ lương · chỉ kế toán” — đồng ý hộp thoại.
+
+    Nợ  642    (tổng lương đã lập, ví dụ 8.800.000)
+        Có 334            8.800.000
+
+  4. Chọn TM hoặc CK từng người → “Lập phiếu” hoặc “Lập phiếu chi hàng loạt”.
+  5. Chờ QL duyệt từng người / duyệt tất cả, rồi QL giao quỹ chung.
+     Banner “QUỸ QUẢN LÝ ĐÃ GIAO CHO BẠN” hiện TM còn / CK còn.
+     Bước này 0 bút toán.
+  6. “Chi từ quỹ chung” → Chi thành công → Ghi nhận kết quả.
+
+    Nợ  334    số tiền người đó
+        Có 111 hoặc 112
+
+  Ví dụ chi TM 5.000.000 + CK 3.800.000: hai phiếu, cùng kiểu định khoản.
+  Chi thất bại: quỹ không trừ, bút toán chưa có; “Thực hiện lại”.
+
+----- Lệch quỹ ca (138 / 711) -----
+
+  Ca & Phiếu thu → Xem thực thu → Lập Phiếu thu.
+  Không lệch: xác nhận, 0 bút toán (111 đã ghi lúc bán TM).
+
+  Thiếu: hệ thống 500.000, nộp 480.000, lý do bắt buộc.
+
+    Nợ  138     20.000     (thu ngân còn nợ quỹ)
+        Có 111             20.000
+
+  Thừa: nộp nhiều hơn 15.000.
+
+    Nợ  111     15.000
+        Có 711             15.000
+
+  Sau này thu ngân nộp bù: bút toán thủ công Nợ 111 / Có 138 (mục 7.8).
+  QL cho xóa: thủ công Nợ 642 / Có 138 — đây là điều chỉnh được phép.
+  KHÔNG dùng thủ công để thanh lý TSCĐ.
+
+----- TSCĐ (KẾ TOÁN MỞ RỘNG → Tài sản cố định) -----
+
+  Dropdown tiền chỉ 111 / 112, không có 331.
+
+  Ví dụ tủ mát: nguyên giá 10.000.000, VAT 800.000, 36 tháng, TK 111.
+    1. Điền form → “Lập thẻ” (mã TSyyMM…).
+    2. “Ghi sổ mua”
+
+    Nợ  211   10.000.000
+    Nợ  1331     800.000
+        Có 111            10.800.000
+
+  Không công nợ. “Chạy khấu hao” (chọn kỳ):
+
+    Nợ  642      làm tròn(10.000.000 / 36) ≈ 277.778
+        Có 214                            277.778
+
+  Bấm lần 2 cùng kỳ: “Đã chạy khấu hao kỳ này”, không nhân đôi.
+  Mini không thanh lý, không đánh giá lại.
+
+----- Đổi trả -----
+
+  Thu ngân / kho / QL làm phiếu đến Hoàn thành. Máy tự ghi.
+
+  Hoàn tiền (thuế theo DÒNG HÓA ĐƠN GỐC, không lấy thuế SP lúc trả):
+    Ví dụ hoàn đúng món 110.000 gồm 10%:
+    Nợ 5212 100.000 + Nợ 33311 10.000 / Có 111 (hoặc 112 nếu hoàn QR/thẻ/CK)
+
+  Nhập lại kho bán:
+    Nợ 156 / Có 632  (trả lại giá vốn)
+  Không nhập lại (vứt): KHÔNG đảo 632 — giá vốn giữ.
+
+  Đổi hàng ngang giá: không hoàn tiền → không đảo 511.
+    Nhập lại hàng cũ: Nợ 156 / Có 632
+    Xuất hàng mới: Nợ 632 / Có 156
+
+----- Kiểm kê -----
+
+  Khi Quản lý duyệt phiếu kiểm kê (menu thủ kho / QL, không nằm nhóm
+  Kế toán tổng hợp):
+
+  Thiếu (không đi kèm phiếu xuất hủy):
+    Nợ 632 / Có 156   (SL thiếu × đơn giá bình quân)
+
+  Thừa:
+    Nợ 156 / Có 711
+
+  Không chênh: không bút toán.
+  Dòng kiểm kê đã có phiếu xuất hủy xác nhận: chỉ Xuất hủy (632/156),
+  không ghi kiểm kê thiếu trùng.
+
+----- Phiếu xuất thủ kho (bạn chỉ cần biết sổ) -----
+
+  Xuất hủy:     Nợ 632 / Có 156
+  Xuất nội bộ:  Nợ 642 / Có 156
+  Trả NCC:      xem 7.5 (cấm nếu đã có Phiếu chi)
+
+--------------------------------------------------------------------------------
+7.8. Bút toán thủ công (máy sinh mã TC…) — chỉ điều chỉnh kiểu 138
+--------------------------------------------------------------------------------
+
+  Màn Bút toán & chờ ghi sổ, khung “Bút toán thủ công”.
+  Dòng dẫn: Điều chỉnh được phép trong mô hình mini (ví dụ thu bù, xóa
+  chênh lệch TK 138). Không dùng cho thanh lý TSCĐ.
+  Không có ô mã chứng từ. Chữ: “Mã chứng từ do máy chủ sinh. Không gửi mã
+  từ giao diện.”
+
+  Form:
+    Ngày hạch toán
+    Số tiền
+    Diễn giải   (ví dụ: Xóa chênh lệch phải thu khác 138)
+    Nợ — mã TK    (ví dụ 111)
+    Có — mã TK    (ví dụ 138)
+  Nút: Ghi sổ
+
+  Ví dụ thu ngân nộp bù 50.000:
+    Nợ 111 50.000 / Có 138 50.000
+  Sau ghi: loại Thủ công, chứng từ TCyyMM + 5 số (ví dụ TC260900001).
+  LCTT nhóm I “Thu/chi khác (bút toán thủ công)” = +50.000.
+
+  Nợ và Có cùng TK: “Tài khoản Nợ và Có phải khác nhau.” Không ghi.
+
+  Đảo: nút “Đảo” trên dòng thủ công chưa đảo → nhập lý do.
+  Gốc badge Đã đảo. Dòng mới “Đảo thủ công”. Sổ cái net về 0.
+
+  Cấm dùng để ghi thanh lý 211/214/tiền thu/lãi lỗ. Không có nút thanh lý.
+
+  Thủ công bắt buộc kỳ đang Mở. Không đẩy vào chờ như hóa đơn bán.
+
+================================================================================
+8. CHỜ GHI SỔ — HÓA ĐƠN CŨ THIẾU BÁN HÀNG; THIẾU THUẾ THÌ SAO
+================================================================================
+
+Vào: Bút toán & chờ ghi sổ → bảng Chờ ghi sổ.
+Cột: Chứng từ | Loại | Lý do | (nút)
+
+[CHOT] Việc đầu tiên: bấm MÃ ở cột Chứng từ (nút xanh gạch chân), đừng đoán lý do. Hóa đơn bán mở “HÓA ĐƠN GỐC LÚC BÁN” — xem dòng hàng / thuế lúc thanh toán — rồi mới quyết định Ghi sổ trễ hay xử lý gốc.
+
+Lý do bạn sẽ gặp (tiếng Việt trên màn)
+
+  Thiếu bút toán Bán hàng / Giá vốn
+    Hóa đơn đã Hoàn thành nhưng chưa có cặp bút toán Bán hàng + Giá vốn.
+    Thường gặp: hóa đơn làm TRƯỚC khi bật lớp kế toán, hoặc môi trường lệch
+    móc nối. Đây không phải lỗi thu ngân.
+
+  Thiếu bút toán Mua hàng
+    Hóa đơn mua đã khớp 3 bên nhưng chưa có Mua hàng.
+
+  Kỳ đã khóa — chờ ghi sổ trễ
+    Chứng từ hợp lệ lúc kỳ đang Khóa. POS không chết.
+
+  Phiếu nhập chưa đối chiếu 3 bên
+    Tồn đã tăng, sổ 156 chưa tăng. ĐÚNG thiết kế. Không ghi sổ trễ.
+
+  Thiếu thuế suất — POS chặn / chưa ghi sổ được
+    Dòng hóa đơn ThueSuat trống (NULL). Không bịa 10%. Không ghi sổ trễ.
+
+Cách xử lý — đừng bấm lung tung
+
+  1. Bấm MÃ CHỨNG TỪ (cột Chứng từ, chữ liên kết).
+     Hóa đơn bán → cửa sổ “HÓA ĐƠN GỐC LÚC BÁN”: mã, khách, ngày, tổng,
+     dòng hàng lúc thanh toán. Có “In / lưu PDF”. Không có “Mở đổi trả”
+     (bạn xem chỉ đọc). Đóng lại vẫn ở trang bút toán.
+     Hóa đơn mua → modal hóa đơn NCC.
+     Phiếu chi / phiếu nhập → hồ sơ P0.
+     Chi phí → modal phiếu chi phí.
+     TSCĐ → modal thẻ.
+
+  2. Nếu lý do là thiếu Bán hàng / Giá vốn (hóa đơn cũ, thuế đã có 0/5/8/10):
+     được phép bấm “Ghi sổ trễ” khi có kỳ Mở.
+     Máy sinh Bán hàng + Giá vốn vào kỳ đang mở, giữ ngày chứng từ gốc.
+
+  3. Nếu lý do THIẾU THUẾ:
+     KHÔNG có nút Ghi sổ trễ (dòng vàng).
+     Xử lý GỐC:
+       - Hóa đơn mới: không complete được. Nhờ QL vào Sản phẩm & giá,
+         chọn thuế 0/5/8/10, lưu (0% thì xác nhận hộp thoại).
+       - Hóa đơn cũ NULL trên bảng kê: badge “Chưa chọn”. Không bấm ghi sổ
+         để “đoán” 10%. Bổ sung dữ liệu gốc / liên hệ người triển khai.
+         Khóa kỳ sẽ BLOCK nếu hóa đơn Hoàn thành vẫn thiếu Bán hàng vì thuế.
+
+  4. Nếu PN chưa 3 bên:
+     Không ghi sổ trễ. Vào Đối chiếu hóa đơn, làm khớp.
+     Khóa kỳ: đây là WARN (vẫn khóa được) — nhưng 156 sẽ lệch tồn;
+     nên khớp trước nếu muốn sổ đẹp.
+
+================================================================================
+9. GHI SỔ TRỄ / KHÓA KỲ KHÔNG LÀM CHẾT POS
+================================================================================
+
+Quy tắc sống còn
+  Khóa tháng 9 KHÔNG khóa quầy bán. Thu ngân vẫn mở ca, bán, complete,
+  trừ tồn. Đối chiếu / phiếu chi / lương / chi phí vẫn lưu chứng từ.
+
+Điều máy làm
+  Bút toán không nhét vào tháng đã Khóa.
+  Đưa vào Chờ ghi sổ, lý do “Kỳ đã khóa — chờ ghi sổ trễ”.
+  Ngày trên hóa đơn / phiếu (ngày chứng từ) GIỮ NGUYÊN.
+
+Khi bạn bấm “Ghi sổ trễ”
+  Ngày hạch toán + kỳ hạch toán = kỳ đang Mở (tháng 10).
+  Ngày chứng từ = ngày bán thật (tháng 9).
+  Ví dụ: bán 30/09 lúc tháng 9 đã khóa; bạn ghi sổ trễ ngày 02/10:
+    NgayChungTu = 30/09, NgayHachToan = thuộc kỳ 2026-10.
+
+Chưa có kỳ Mở
+  Hàng chờ tiếp tục nằm đó. Không báo lỗi 400 làm hỏng POS.
+  Việc của bạn: tạo + mở kỳ mới, rồi Ghi sổ trễ.
+
+Chi phí nhập muộn: cùng rule. Phiếu xác nhận được, bút toán chờ.
+
+Bút toán thủ công: không đi đường chờ; bắt buộc kỳ Mở.
+
+================================================================================
+10. BÁO CÁO SỔ CÁI
+================================================================================
+
+Chung
+  Chọn kỳ (ô tháng) → “Lập báo cáo” (Sổ cái: “Xem sổ cái”).
+  Kỳ chưa khóa: dấu chìm “Số liệu tạm tính”.
+  Nguồn: sổ cái kỳ … (không cộng tay nhiều bảng, trừ chỗ đối chiếu).
+
+----- Nhật ký chung -----
+  Toàn bộ dòng hạch toán trong kỳ. KPI: Tổng Nợ, Tổng Có, Đối chiếu Cân/Lệch.
+  Phải Cân. Số dư đầu kỳ không nằm trong NKC kỳ (tách riêng).
+  Gồm cả bút toán đã đảo và dòng đảo — nhìn từng dòng, net mới về 0.
+
+----- Sổ cái -----
+  Gõ mã TK (111, 511…). Thấy: Số dư đầu, Phát sinh Nợ, Phát sinh Có, Số dư cuối,
+  cột Dư chạy.
+  Ví dụ đảo bán 100.000: một dòng Có 511 100.000, một dòng Nợ 511 100.000,
+  dư chạy về 0.
+
+----- Cân đối phát sinh -----
+  Mỗi TK một dòng: Đầu Nợ/Có, PS Nợ/Có, Cuối Nợ/Có.
+  Ba cặp tổng phải bằng nhau → “Cân 3 cột”. Lệch → banner không “đạt”.
+
+----- Kết quả kinh doanh -----
+  Dòng dẫn: Phát sinh thuần trong kỳ (không gồm số dư đầu / kết chuyển).
+  Chưa xử lý thuế TNDN. Không trừ tiền trả NCC.
+
+  Công thức THUẦN (quan trọng khi có đảo):
+    511  = Phát sinh Có − Phát sinh Nợ
+    711  = PS Có − PS Nợ
+    5212 = PS Nợ − PS Có
+    632  = PS Nợ − PS Có
+    642  = PS Nợ − PS Có
+  Loại khỏi công thức: Kết chuyển, Đảo kết chuyển, Số dư đầu kỳ.
+  Gồm các bút toán đảo nghiệp vụ (Đảo bán hàng…) để tự triệt tiêu.
+
+  Tám dòng trên màn:
+    1. Doanh thu bán hàng
+    2. Trừ: Chiết khấu / giảm giá
+    3. Doanh thu thuần
+    4. Giá vốn hàng bán
+    5. Lợi nhuận gộp kế toán
+    6. Chi phí quản lý (642)
+    7. Thu nhập khác
+    8. Lợi nhuận kế toán trước thuế (mini)
+  Chú thích: “CHƯA xử lý thuế TNDN. Không trừ tiền trả NCC.”
+  Dòng 8 dùng cho chỉ tiêu J trên Bảng cân đối khi kỳ chưa kết chuyển.
+
+  Ví dụ đảo 100.000 (đúng / sai)
+    Gốc: Có 511 100.000. Đảo: Nợ 511 100.000.
+    SAI (chỉ lấy PS Có): doanh thu vẫn 100.000 — số ảo.
+    ĐÚNG: 511 = 100.000 − 100.000 = 0. Sổ cái cũng 0.
+    Nếu thấy DT 100 khi đã đảo hết: báo cáo đang tính sai chiều; trên app
+    đã chốt công thức thuần — lập lại báo cáo kỳ đó.
+
+  Ví dụ chuỗi mini (2 món 110.000 gồm 10% + lương 8.800.000 + điện 2.000.000
+  chưa VAT, bỏ qua số dư):
+    511 = 200.000
+    632 = 140.000   (vốn 70.000 × 2)
+    642 = 10.800.000
+    Lãi gộp kế toán 60.000
+    Lỗ mini  −10.740.000
+    Trả NCC 2.160.000 KHÔNG nằm đây.
+
+----- Lưu chuyển tiền tệ -----
+  Phát sinh 111 + 112. I + II + III phải khớp PS Nợ(111+112) − PS Có(111+112).
+
+  I. Kinh doanh
+    Thu bán hàng
+    Đổi trả / hoàn          (dấu trừ)
+    Trả NCC
+    Chi lương
+    Chi phí vận hành
+    Lệch quỹ
+    Thu/chi khác (bút toán thủ công)
+      THU_CONG đụng 111/112: Nợ 111/112 = thu (+), Có 111/112 = chi (−)
+      THU_CONG không đụng 111/112 (ví dụ Nợ 138 / Có 711): không vào LCTT
+  II. Đầu tư — Mua TSCĐ
+  III. Tài chính — mini = 0
+
+  Ví dụ thủ công Nợ 111 / Có 138 = 50.000 → I Thu/chi khác +50.000.
+  Nếu quên nhóm này, I+II+III lệch 50.000 so với sổ tiền.
+
+----- Bảng cân đối kế toán -----
+
+  Tài sản
+    A. Tiền (111 + 112)
+    B. Phải thu khác (138)
+    C. Hàng tồn kho (156)
+    D. VAT đầu vào (1331)
+    E. TSCĐ ròng (211 − 214)
+
+  Nguồn vốn
+    F. Phải trả NCC (331)
+    G. VAT đầu ra (33311)
+    H. Phải trả lương (334)
+    I. Vốn chủ sở hữu (411)
+    J.  Kỳ CHƯA kết chuyển: “LN lũy kế (421 + LN kỳ 8.4)”
+        J = dư 421 + dòng 8 Kết quả kinh doanh. KHÔNG cộng 911.
+        Kỳ ĐÃ kết chuyển: “LN lũy kế (421, đã kết chuyển)”
+        J = 421 thôi. KHÔNG cộng dòng 8 lần 2.
+
+  Chan: Tổng tài sản = Tổng nguồn vốn.
+  Kỳ mở: watermark tạm tính, VẪN phải cân.
+  Chú thích: “Số dư kết quả lũy kế mô hình mini, CHƯA xử lý thuế TNDN.”
+
+[CHOT]
+  Chỉ tiêu J trên Bảng cân đối — nhớ hai nhãn trên giấy, đừng cộng tay 911.
+  TRƯỚC kết chuyển (kỳ còn Mở, dấu chìm “Số liệu tạm tính”):
+  Nhãn nguồn vốn: “LN lũy kế (421 + LN kỳ 8.4)”
+  J = dư 421 + dòng 8 Kết quả kinh doanh. KHÔNG cộng 911
+  (911 đang = 0; lãi/lỗ kỳ đang nằm 511 / 5212 / 632 / 642 / 711).
+  SAU kết chuyển (dù chưa khóa hay đã khóa):
+  Nhãn: “LN lũy kế (421, đã kết chuyển)”
+  J = chỉ 421. KHÔNG cộng thêm dòng 8 (nhân đôi lãi). Meta giấy: “J = 421 (đã kết chuyển)”.
+
+  Ví dụ lệch 5.000.000 nếu hiểu sai J
+    Giả sử đầu kỳ 421 = 0. Kỳ lãi 5.000.000 (dòng 8 KQKD).
+    911 trước kết chuyển = 0 (lãi đang nằm 511/632/642…).
+    J ĐÚNG = 0 + 5.000.000 = 5.000.000  → TS = NV.
+    J SAI  = 421 + 911 = 0 + 0 = 0
+             → Nguồn vốn thiếu 5.000.000, bảng lệch đúng 5 triệu.
+    Sau kết chuyển: 911 đẩy sang 421, J = 421 = 5.000.000.
+    Nếu lúc này còn cộng thêm dòng 8: nguồn vốn thừa 5 triệu — cũng sai.
+
+  Ví dụ lỗ 10.740.000 (chuỗi mục 10): trước KC, J = −10.740.000;
+  J = 421+911 = 0 sẽ lệch 10.740.000.
+
+================================================================================
+11. VAT — BẢNG KÊ VÀO / RA, NULL VS 0%, TRẢ NCC DÒNG ÂM, GÁN THUẾ SP
+================================================================================
+
+Vào: Bảng kê VAT → chọn kỳ → Lập báo cáo.
+KPI: VAT đầu ra | VAT đầu vào | Chênh lệch | Dòng bán thiếu thuế
+Nhãn: không phải số phải nộp tờ khai.
+
+[CHOT]
+  NULL ≠ 0% trên Bảng kê VAT và trên Sản phẩm & giá.
+  Thuế 10% / 5% / 8%: cột suất, VAT > 0, không badge “Chưa chọn”.
+  Thuế 0% đã cấu hình: cột 0%, VAT = 0, KPI “Dòng bán thiếu thuế” KHÔNG tăng. POS bán bình thường.
+  NULL / chưa chọn: badge vàng “Chưa chọn”, KPI thiếu thuế tăng. POS chặn bán mới.
+  Chờ ghi sổ: “Thiếu thuế suất — POS chặn / chưa ghi sổ được”. Không nút Ghi sổ trễ.
+
+----- Đầu ra -----
+  Từng hóa đơn bán hoàn thành / dòng hàng.
+  Thuế 10% → cột 10%, VAT > 0, không badge “Chưa chọn”.
+  Thuế 0% đã cấu hình → 0%, VAT 0, không tính là thiếu thuế.
+  NULL → badge “Chưa chọn”, KPI thiếu thuế tăng.
+  Hoàn tiền: dòng giảm (đảo 33311).
+  In PDF lần 2: số dòng không tăng.
+
+----- Đầu vào -----
+  Công thức:
+    VAT vào = HĐ mua đã khớp + Chi phí vận hành + TSCĐ
+              − VAT Trả hàng nhà cung cấp (đã ghi sổ, còn hiệu lực)
+
+  Cột Nguồn (tiếng Việt):
+    Hóa đơn mua hàng
+    Chi phí vận hành
+    Tài sản cố định
+    Trả hàng nhà cung cấp   ← số ÂM
+
+  Ví dụ:
+    Mua khớp VAT 800.000, trả hàng Co 1331 200.000
+    Sổ cái 1331 = 600.000
+    Bảng kê ĐÚNG = 600.000 (dòng trả −200.000)
+    SAI nếu quên trừ: bảng kê 800.000, lệch sổ.
+
+  Chuỗi: VAT mua 160.000 + điện 200.000 = 360.000;
+  trả hàng VAT 40.000 → bảng kê / 1331 = 320.000.
+
+  Nguồn VAT trả hàng: snapshot Chi tiết hóa đơn mua đã 3-way, không lấy
+  thuế sản phẩm hiện tại.
+
+----- Gán thuế sản phẩm (việc của Quản lý, bạn nhắc) -----
+
+  QL: Sản phẩm & giá. Cột thuế: “Chưa chọn” hoặc 0%/5%/8%/10%.
+  Lọc: Tất cả thuế / Chưa chọn thuế / 0% / 5% / 8% / 10%.
+  Form: “Thuế suất VAT *”, mặc định “Chưa chọn”.
+  Không lưu được nếu bỏ trống: “Chọn thuế suất 0 / 5 / 8 / 10. 0% là mức hợp lệ.”
+  Chọn 0%: “Xác nhận thuế suất 0% theo cấu hình sản phẩm?”
+  POS: ThueSuat = 0 đã cấu hình thì bán bình thường, không hỏi lại ở quầy.
+  Copy thuế vào dòng hóa đơn lúc bán; không sửa sau khi hoàn thành.
+
+================================================================================
+12. KHÓA KỲ: BLOCK VS WARN; KẾT CHUYỂN 911 → 421
+================================================================================
+
+Vào: Khóa kỳ / kết chuyển.
+Dòng dẫn: Kiểm tra BLOCK (đỏ, chặn khóa) và WARN (vàng, vẫn khóa).
+Kết chuyển 511/5212/632/642/711 → 911 → 421, rồi khóa kỳ.
+Chỉ mở lại kỳ khóa gần nhất nếu kỳ sau chưa có bút toán nghiệp vụ.
+
+Nút: Kiểm tra | Kết chuyển | Khóa kỳ | Mở lại kỳ
+Ô Kỳ: chọn tháng.
+
+[BLOCK] Cột đỏ “BLOCK — không khóa”. Chứng từ ĐÃ ở trạng thái hợp lệ (HĐ Hoàn thành, HĐMH Đã khớp, phiếu chi Thành công, chi phí Đã xác nhận…) nhưng THIẾU bút toán bắt buộc. Nút “Khóa kỳ” tắt. Không có ô bỏ qua. Khóa lúc này → kết chuyển thiếu số, KQKD thiếu cả tháng.
+
+[WARN] Cột vàng “WARN — vẫn khóa được”. PN chưa 3-way, hóa đơn bán đang Nháp, chứng từ chờ duyệt… Máy vẫn cho khóa. Hộp: “Còn cảnh báo WARN (vẫn khóa được). Khóa kỳ này?”. Hiểu: tháng sau còn PN treo thì 156 có thể lệch tồn — nên khớp nếu muốn sổ đẹp, nhưng không phải BLOCK.
+
+Thứ tự nên làm
+  1. Bút toán & chờ ghi sổ: xử lý hàng BLOCK (ghi sổ trễ những dòng được phép;
+     đối chiếu PN; bổ sung thuế).
+  2. Bấm Kiểm tra. Đọc hai cột.
+  3. Nếu BLOCK còn dòng: Khóa kỳ tắt. Thông báo
+     “Không khóa — còn chứng từ hợp lệ thiếu bút toán.”
+     Không có nút bỏ qua.
+  4. Bấm Kết chuyển (nếu chưa). Có thể “Đã kết chuyển.” nếu chạy rồi.
+  5. Bấm Khóa kỳ.
+     Có WARN: “Còn cảnh báo WARN (vẫn khóa được). Khóa kỳ này?”
+     Không WARN: “Khóa kỳ …? Số dư cuối sẽ chuyển thành số dư đầu kỳ sau.”
+
+----- Nhóm BLOCK (không khóa) — chứng từ ĐÃ hợp lệ nhưng THIẾU bút toán -----
+
+  Hóa đơn bán Hoàn thành thiếu Bán hàng / Giá vốn
+    Câu trên checklist kiểu:
+    “Hóa đơn bán HD… đã hoàn thành nhưng thiếu bút toán Bán hàng / Giá vốn”
+  Hóa đơn mua Đã khớp thiếu Mua hàng
+    “Hóa đơn mua HDM… đã khớp nhưng thiếu bút toán Mua hàng”
+  Phiếu chi Thanh toán thành công thiếu Trả nhà cung cấp
+    “Phiếu chi PC… thanh toán thành công nhưng thiếu bút toán Trả nhà cung cấp”
+  Kỳ lương đã khóa thiếu Trích lương
+  Chi lương thành công thiếu Chi lương
+  Chi phí đã xác nhận thiếu Chi phí vận hành
+  Hóa đơn hoàn thành thuế NULL (chưa post được Bán hàng) cũng thuộc kiểu
+  không khóa khi thiếu số — không ép post, không khóa thiếu doanh thu.
+
+  Lý do siết: khóa + kết chuyển khi thiếu bút toán → KQKD thiếu số cả tháng.
+
+----- Nhóm WARN (vàng, vẫn khóa) -----
+
+  Phiếu nhập đã nhận / đã xác nhận chưa đối chiếu 3 bên
+    “Phiếu nhập PN… chưa đối chiếu 3 bên”
+  Hóa đơn bán đang Nháp
+    “Hóa đơn bán HD… đang ở trạng thái Nháp”
+  Chứng từ chờ duyệt (phiếu chi chờ QL, lương chờ duyệt…)
+  Nghiệp vụ chưa đủ điều kiện ghi sổ
+
+  Vẫn khóa được. Hiểu: tháng sau bạn còn PN treo, 156 có thể lệch tồn.
+
+----- Kết chuyển (tiếng người) -----
+
+  Máy, trong một lần:
+    Đưa dư Có 511 và 711 sang 911 (Nợ 511,711 / Có 911)
+    Đưa dư Nợ 5212, 632, 642 vào 911 (Nợ 911 / Có các TK đó)
+    Nếu 911 dư Có (lãi): Nợ 911 / Có 421
+    Nếu 911 dư Nợ (lỗ):  Nợ 421 / Có 911
+
+  Sau đó: 511, 5212, 632, 642, 711, 911 = 0. 421 đổi đúng dòng 8 KQKD.
+  KQKD khi xem lại VẪN ra doanh thu thuần (vì loại bút toán kết chuyển).
+  Bảng cân đối sau KC: J = 421.
+
+  Khóa xong: badge Khóa, số dư cuối copy sang kỳ sau (đã chốt).
+
+================================================================================
+13. MỞ LẠI KỲ
+================================================================================
+
+Nút “Mở lại kỳ”. Hộp nhập:
+  “Lý do mở lại kỳ (chỉ kỳ khóa gần nhất, kỳ sau chưa có bút toán nghiệp vụ)”
+
+Điều kiện
+  - Chỉ kỳ Khóa GẦN NHẤT (tháng khóa mới nhất).
+  - Kỳ kế tiếp chưa có bút toán nghiệp vụ hiệu lực
+    (đã ghi sổ, chưa đảo, loại khác Số dư đầu kỳ).
+    Kỳ sau chỉ được phép còn dòng số dư đầu đã copy lúc khóa.
+  - Kỳ sau đã có Bán hàng / chi phí… → “Kỳ sau đã có bút toán nghiệp vụ.
+    Không mở lại kỳ trước.” Sửa bằng bút toán điều chỉnh ở kỳ ĐANG MỞ.
+  - Không phải kỳ gần nhất → “Chỉ mở lại kỳ khóa gần nhất.”
+
+Sau khi mở
+  Kỳ về Mở. Kết chuyển bị đảo (gốc Đã đảo + bút toán Đảo kết chuyển).
+  Thông báo: “Đã mở lại kỳ …. Số dư đầu kỳ sau chưa đổi.”
+  Bạn sửa bút toán tháng này, rồi Kết chuyển + Khóa lại.
+
+Khi khóa LẠI
+  Hệ thống TÍNH LẠI và GHI ĐÈ số dư đầu kỳ sau (kể cả hàng đã chốt lần khóa
+  trước). Đây là ngoại lệ của MÁY, không phải bạn sửa ô số dư đã chốt.
+  Người dùng vẫn không PUT sửa hàng Đã chốt.
+
+Không cascade sang tháng thứ 3. Sai ở tháng cũ đã có phát sinh tháng mới:
+điều chỉnh trên tháng đang mở.
+
+================================================================================
+14. MỘT TÀI KHOẢN NGÂN HÀNG + NHẬP CSV
+================================================================================
+
+Vào: KẾ TOÁN MỞ RỘNG → Ngân hàng & sao kê CSV.
+Dòng dẫn: Kế toán mini chỉ dùng 1 tài khoản ngân hàng đang sử dụng, luôn map
+TK 112. Chỉ nhập sao kê CSV — không nhập Excel.
+
+Thêm TK lần đầu (khi chưa có dòng Đang sử dụng)
+  Form: Số tài khoản, Tên ngân hàng, Chủ tài khoản → “Thêm tài khoản”
+  Máy gán TK kế toán = 112, mã NHxxxx, trạng thái Đang sử dụng.
+  Form thêm biến mất, hiện panel “Đã có 1 tài khoản đang dùng”
+  “Mini không thêm ngân hàng thứ hai khi đã có tài khoản trạng thái
+   Đang sử dụng. Mọi bút toán ngân hàng vào TK 112 — không tách 1121/1122.”
+
+Thêm cái thứ hai
+  Giao diện ẩn form. Nếu vẫn gửi lệnh thêm: bị chặn
+  (mini chỉ 1 tài khoản đang sử dụng).
+
+Nhập sao kê
+  Ô Mã TKNH (thường tự điền NH0001…), Tệp CSV, nút “Nhập CSV”.
+  Chỉ nhận .csv. Chọn .xlsx / .xls:
+    “Chỉ nhận tệp CSV. Không nhập Excel.”
+  Cột gợi ý: ngay, sotien (hoặc no/co), diengiai, magd.
+  Thông báo: Đã nhập N dòng (mã SK…).
+  Số 112 trên sổ cái VẪN lấy từ bút toán, không lấy thuần từ file.
+  Đối chiếu: khớp mã giao dịch Fly với dòng sao kê, hoặc khớp tay.
+
+Không có 1121/1122. Không tách VCB vs MB trên sổ cái.
+
+================================================================================
+15. LỊCH SỬ HOẠT ĐỘNG — LỌC KẾ TOÁN TỔNG HỢP
+================================================================================
+
+Vào: NHÂN SỰ MỞ RỘNG → Lịch sử hoạt động.
+Tiêu đề: Lịch sử hoạt động
+Dòng dẫn: Mọi việc bạn đã làm: đối chiếu hóa đơn, phiếu chi NCC, phiếu thu,
+lập/khóa lương… kỳ kế toán, chi phí, bút toán, TSCĐ, sao kê. Không xóa được
+nhật ký.
+
+Bộ lọc
+  Từ ngày | Đến ngày
+  Loại việc:
+    Việc nghiệp vụ          (mặc định)
+    Tất cả
+    Công nợ / phiếu chi NCC
+    Chi lương / quỹ chung
+    Lương, công, ca
+    Tiền và tồn
+    Kế toán tổng hợp        ← lọc phần sổ cái mới
+  Ô Tìm: chứng từ, nội dung…
+  Nút: “Xem lịch sử”
+
+Khi lọc Kế toán tổng hợp, kỳ vọng thấy việc tiếng Việt:
+  Tạo kỳ kế toán, Mở kỳ kế toán, Lưu số dư đầu kỳ, Chốt số dư đầu kỳ,
+  Lập phiếu chi phí, Xác nhận chi phí vận hành,
+  Lập bút toán thủ công, Ghi sổ bút toán, Đảo bút toán, Ghi sổ trễ,
+  Kết chuyển kỳ kế toán, Khóa kỳ kế toán, Mở lại kỳ kế toán,
+  Lập thẻ TSCĐ, Ghi sổ mua TSCĐ, Chạy khấu hao TSCĐ,
+  Thêm tài khoản ngân hàng, Nhập sao kê CSV.
+
+Cột bảng: Thời gian, Việc làm, Đối tượng, Số tiền, Trạng thái, Giải thích.
+Bấm dòng: mở chứng từ (chi phí → modal/trang chi phí; HĐ bán → modal HĐ;
+kỳ → trang Kỳ kế toán).
+
+Phần dưới: “Lịch sử chi lương từ quỹ chung” — không xóa.
+
+Log đối chiếu / phiếu chi / lương P0 cũ vẫn còn. Không mất vì có sổ cái.
+
+================================================================================
+16. VIỆC KHÔNG LÀM (TRONG MÔ HÌNH MINI)
+================================================================================
+
+  - Không cài / không chạy n8n, Firebase, tự động hóa ngoài app.
+  - Không nhiều tài khoản ngân hàng đang dùng; không 1121/1122.
+  - Không nhập Excel sao kê.
+  - Không thanh lý / đánh giá lại TSCĐ; không dùng thủ công giả thanh lý.
+  - Không ghi 331 cho TSCĐ, tiền điện, cước xe, thuê nhà.
+  - Không bán chịu, không 131, không trả thiếu khách.
+  - Không trả trước NCC, không trả từng phần, không 1 phiếu chi gộp nhiều nợ
+    thành một số (hàng loạt vẫn tách từng phiếu).
+  - Không giảm công nợ lúc lập phiếu / duyệt / giao quỹ / chi thất bại.
+  - Không cộng doanh thu lần 2 từ Phiếu thu hay e-receipt / in lại.
+  - Không cộng cước vào giá vốn (156).
+  - Không tự build bảng lương bằng tài khoản Quản lý.
+  - Không kê khai tờ khai thuế nhà nước từ bảng kê VAT.
+  - Không tính thuế TNDN (không 821).
+  - Không BHXH trên 334.
+  - Không mở 2 kỳ Mở cùng lúc (máy chặn).
+  - Không sửa ô số dư đã chốt.
+  - Không ghi sổ trễ khi thiếu thuế hoặc PN chưa 3 bên.
+  - Không khóa kỳ khi còn BLOCK.
+  - Telegram: không nút Ghi sổ / Khóa kỳ / Đảo trên bot. Chỉ đọc.
+
+================================================================================
+17. FAQ / LỖI THƯỜNG GẶP
+================================================================================
+
+Q1. Chip “Chưa có kỳ” / không ghi được sổ?
+  Vào Kỳ kế toán, chọn tháng, 1. Tạo kỳ → 2. Mở kỳ → nhập dư cân → 4. Chốt.
+  Chưa mở kỳ: chứng từ P0 vẫn chạy, bút toán có thể chờ.
+
+Q2. POS chặn, báo chưa chọn thuế suất?
+  Đúng. Sản phẩm ThueSuat trống (NULL). Nhờ Quản lý: Sản phẩm & giá,
+  chọn 0/5/8/10, lưu. 0% phải xác nhận hộp thoại. Không phải lỗi thu ngân.
+
+Q3. Chốt số dư bị chặn, Nợ ≠ Có?
+  Thanh cân đỏ. Ví dụ 111 Nợ 10.000.000 mà 411 = 0 thì lệch 10 triệu.
+  Gõ thêm bên Có cho bằng, hoặc giảm bên Nợ. Không nhập cả Nợ lẫn Có
+  trên một TK.
+
+Q4. Thấy 409 / Telegram trên máy chủ — có liên quan sổ cái không?
+  Không. 409 kiểu Telegram là bot bị trùng process (còn cửa sổ npm start cũ
+  đang lấy tin) hoặc ChatId trùng nhân viên khác khi liên kết Telegram.
+  Không phải lỗi đối chiếu, không phải lỗi ghi sổ, không phải n8n
+  (n8n đã cắt, không dùng). Kế toán bỏ qua; nhờ người cài tắt process bot cũ.
+
+Q5. Trả NCC rồi lãi trên KQKD không giảm?
+  Đúng. Trả NCC là giảm nợ 331 và tiền 111/112, không phải chi phí 642.
+  Xem Lưu chuyển tiền tệ dòng Trả NCC.
+
+Q6. Lập Phiếu chi rồi công nợ vẫn nguyên?
+  Đúng đến khi bạn Ghi nhận kết quả Thanh toán thành công.
+  QL duyệt = giao quỹ, chưa tất toán.
+
+Q7. Thủ kho nhập xong sao sổ 156 chưa tăng?
+  Chưa đối chiếu 3 bên. Vào Đối chiếu hóa đơn. Hàng chờ PN là WARN, không
+  phải bug.
+
+Q8. Muốn trả hàng NCC nhưng máy chặn vì đã có Phiếu chi?
+  Đúng rule. Hủy ý định giảm nợ sau khi đã lập phiếu. Mini không sửa phiếu
+  để trả hàng. Lần sau: trả hàng trước, lập phiếu sau.
+
+Q9. Khóa kỳ xong quầy vẫn bán được — có sai không?
+  Không sai. Bút toán vào chờ. Bạn mở tháng mới rồi Ghi sổ trễ.
+
+Q10. Bảng cân đối lệch đúng bằng lãi tháng?
+  Đang cộng sai J (421+911=0 trước kết chuyển). Đúng: J = 421 + dòng 8 KQKD.
+  App đã làm vậy; nếu tự tính Excel nhớ quy tắc này.
+
+Q11. Đảo bán hàng rồi KQKD vẫn còn doanh thu?
+  Phải dùng công thức thuần (Có − Nợ). App đã thuần. Lập lại báo cáo.
+  Nhật ký chung vẫn thấy cả hai dòng 100.000 — cộng net mới = 0.
+
+Q12. Bút toán thủ công để bán TSCĐ?
+  Không. Không có thanh lý. Chỉ điều chỉnh kiểu 138.
+
+Q13. Thêm ngân hàng thứ hai?
+  Không. Panel “Đã có 1 tài khoản đang dùng”.
+
+Q14. File sao kê Excel?
+  Không. Chỉ CSV.
+
+Q15. Thu ngân vào Hệ thống tài khoản?
+  Không thấy menu. Không đủ quyền.
+
+Q16. Quản lý bấm lập bảng lương?
+  “Chỉ Kế toán được lập / tính lại bảng lương.”
+
+Q17. Double-click Xác nhận chi phí?
+  Chỉ một bút toán. Lần 2: đã xác nhận / already.
+
+Q18. Hết thời gian, spinner mãi?
+  Toast tiếng Việt, không treo vô hạn. Kiểm tra máy chủ, bấm Tải lại / Lập báo cáo.
+
+Q19. Click mã lạ không mở được?
+  “Chưa có màn hình chi tiết …” — không sập app.
+
+Q20. Cước có vào giá vốn không?
+  Không. Luôn 642.
+
+Q21. Phiếu thu có cộng doanh thu không?
+  Không. Chỉ đối soát tiền mặt. Lệch mới đụng 138/711.
+
+Q22. Muốn mở lại tháng 7 trong khi đã khóa 8 và 9, tháng 9 đã bán?
+  Không. Chỉ mở kỳ khóa gần nhất, kỳ sau chưa phát sinh. Sửa bằng thủ công
+  tháng đang mở.
+
+Q23. Số 421 gọi là lãi sau thuế?
+  Không, trừ khi có chú thích TNDN. Mini chưa TNDN.
+
+Q24. Hai thuế suất trên một hóa đơn?
+  33311 vẫn một TK. Bảng kê tách theo dòng / suất.
+
+================================================================================
+18. PHỤ LỤC — SƠ ĐỒ 1 TUẦN LÀM VIỆC CỦA KẾ TOÁN TRONG APP
+================================================================================
+
+Giả sử tuần giữa tháng, kỳ đang Mở, số dư đã chốt.
+
+----- Thứ Hai -----
+  1. Lịch sử hoạt động → Loại việc = Kế toán tổng hợp, Xem lịch sử
+     (cuối tuần trước khóa chưa, chi phí nào nháp).
+  2. Bút toán & chờ ghi sổ → Tải lại.
+     Ghi sổ trễ các dòng được phép. Click mã HĐ xem chứng từ.
+     PN chưa 3 bên: chuyển sang Đối chiếu hóa đơn.
+  3. Ca & Phiếu thu: ca Chủ nhật đóng chưa? Xem thực thu → Lập / Xác nhận
+     Phiếu thu. Có lệch thì ghi lý do, nhớ 138/711.
+
+----- Thứ Ba–Tư (mua hàng) -----
+  4. Đối chiếu hóa đơn → Tiếp nhận hóa đơn (ưu tiên Đã có Phiếu nhập).
+     Lưu hồ sơ → Đối chiếu → Xác nhận đối chiếu và ghi nhận công nợ
+     khi khớp. Lệch: đưa mua hàng / kho xử lý, không bấm xác nhận.
+  5. Công nợ Nhà cung cấp: đến hạn thì Lập Phiếu chi (hoặc hàng loạt cùng NCC)
+     → Lập và gửi Quản lý duyệt. Chưa chi.
+  6. Khi QL đã giao tiền: Thanh toán → Thanh toán thành công
+     (CK thì nhập mã GD) → Ghi nhận kết quả.
+     Nhắc: nếu sắp trả hàng NCC thì PHẢI trả trước bước 5.
+
+----- Thứ Năm (chi phí + quỹ) -----
+  7. Chi phí vận hành: điện/nước/thuê/cước — Lưu nháp → Xác nhận.
+     TK 111 hoặc 112. Cước không vào giá vốn.
+  8. Nếu thiếu quỹ ca tồn 138: thủ công Nợ 111 / Có 138 khi thu ngân nộp bù.
+
+----- Thứ Sáu (lương nếu cuối tháng / ngày chi) -----
+  9. Bảng lương tháng: Lập / tính lại → kiểm tra giờ → Khóa kỳ lương.
+     Lập phiếu (TM/CK) → chờ QL duyệt + giao quỹ → Chi từ quỹ chung.
+  10. Ngân hàng & sao kê CSV: Nhập CSV tuần, đối chiếu với 112
+      (phiếu chi CK, lương CK, QR).
+
+----- Cuối tháng (ngày 28–31 hoặc mùng 1 tháng sau) -----
+  11. Sản phẩm còn “Chưa chọn” thuế? Nhắc QL gán trước khi chốt sổ.
+  12. Tài sản cố định: Ghi sổ mua thẻ mới; Chạy khấu hao 1 lần.
+  13. Bảng kê VAT: Lập báo cáo. Dòng thiếu thuế / dòng trả NCC âm.
+  14. Nhật ký chung + Cân đối phát sinh: phải Cân.
+  15. Kết quả kinh doanh: dòng 8; đối chiếu không trừ trả NCC.
+  16. Bảng cân đối: TS = NV; J = 421 + dòng 8 nếu chưa kết chuyển.
+  17. Khóa kỳ / kết chuyển: Kiểm tra → hết BLOCK → Kết chuyển → Khóa kỳ
+      (đọc WARN).
+  18. Tháng sau: Kỳ kế toán → Tạo / Mở (số dư đầu đã copy). Chỉ 1 kỳ Mở.
+
+----- Việc không làm trong tuần -----
+  Không mở n8n. Không thêm TKNH thứ hai. Không Excel. Không thanh lý TSCĐ.
+  Không tự bịa thuế 10% cho dòng NULL. Không khóa khi còn BLOCK.
+  Không so KQKD với “lãi sau chi NCC” trên báo cáo cửa hàng rồi bảo sai.
+
+--------------------------------------------------------------------------------
+VÍ DỤ SỐ ĐI CẢ CHUỖI (đọc thêm khi giải thích hội đồng)
+--------------------------------------------------------------------------------
+
+Số dư đầu minh họa khác ví dụ 50+80=130:
+  111 = 5tr, 112 = 10tr, 156 = 20tr, 331 = 8tr, 411 = 27tr.
+
+(1) Bán TM 110.000 gồm 10%, vốn 70.000
+    Nợ 111 110.000 / Có 511 100.000 / Có 33311 10.000
+    Nợ 632 70.000 / Có 156 70.000
+
+(2) Bán hỗn hợp 80.000 TM + 30.000 QR trên HĐ 110.000 gồm 10%
+    Nợ 111 80.000 + Nợ 112 30.000 / Có 511 100.000 / Có 33311 10.000
+
+(3) Khớp HĐ mua 2.000.000 + VAT 160.000
+    Nợ 156 2.000.000 + Nợ 1331 160.000 / Có 331 2.160.000
+
+(4) Chi NCC CK 2.160.000 sau khi QL giao quỹ
+    Nợ 331 2.160.000 / Có 112 2.160.000
+    KQKD không trừ. LCTT trừ.
+
+(5) Khóa lương 8.800.000; chi TM 5tr + CK 3,8tr
+    Nợ 642 8.800.000 / Có 334 8.800.000
+    Nợ 334 / Có 111 và Có 112 khi chi thành công.
+
+(6) Điện 2.200.000 (hàng 2tr + VAT 200k) CK
+    Nợ 642 2.000.000 + Nợ 1331 200.000 / Có 112 2.200.000
+
+(7) PT ca thiếu 20.000
+    Nợ 138 20.000 / Có 111 20.000
+
+KQKD thuần các GD trên (bỏ số dư): DT 200.000 − GV 140.000 − 642 10.800.000
+= lỗ 10.740.000. Trả NCC không vào đây.
+
+--------------------------------------------------------------------------------
+KẾT THÚC CẨM NANG
+--------------------------------------------------------------------------------
+
+In file này hoặc để cạnh máy tính quầy kế toán.
+Khi màn hình đổi nhãn nút so với file: lấy nhãn TRÊN APP làm chuẩn,
+báo người phụ trách cập nhật cẩm nang theo plan 1.5 FINAL.
+
+HẾT TÀI LIỆU.
+================================================================================

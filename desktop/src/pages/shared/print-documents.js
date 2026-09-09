@@ -1,7 +1,15 @@
 (() => {
   const esc = value => String(value ?? '—').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
   const money = value => `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value || 0))} đ`;
-  const date = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
+  const date = value => {
+    if (window.FLY_VI_DATE?.formatDateVN) return window.FLY_VI_DATE.formatDateVN(value);
+    if (!value) return '—';
+    const exact = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (exact) return `${exact[3]}/${exact[2]}/${exact[1]}`;
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return '—';
+    return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' }).format(dt);
+  };
   const compact = value => {
     const amount = Number(value || 0); const absolute = Math.abs(amount);
     if (absolute >= 1_000_000_000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(amount / 1_000_000_000)} tỷ`;
@@ -15,10 +23,14 @@
     return formatted({ ...column, value: raw }) ?? '—';
   };
   const vnParts = value => {
-    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' })
-      .format(value ? new Date(value) : new Date())
-      .split('/');
-    return { day: parts[0], month: parts[1], year: parts[2] };
+    const key = window.FLY_VI_DATE?.dateKeyVN?.(value == null || value === '' ? new Date() : value);
+    if (key && /^\d{4}-\d{2}-\d{2}$/.test(key)) {
+      const [year, month, day] = key.split('-');
+      return { day, month, year };
+    }
+    const formatted = date(value == null || value === '' ? new Date() : value);
+    const parts = String(formatted).split('/');
+    return { day: parts[0] || '—', month: parts[1] || '—', year: parts[2] || '—' };
   };
   const isReportDoc = config => config.variant === 'report' || String(config.title || '').toUpperCase().startsWith('BÁO CÁO');
   const isOfficial = config => config.skin === 'official';
@@ -69,13 +81,15 @@
   };
 
   const systemCss = `
-      @page{size:A4 VAR_ORIENT;margin:10mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{margin:0;color:#183126;background:#e9eeeb;font:11px "Segoe UI",Arial,sans-serif}.sheet{width:VAR_W;min-height:VAR_H;margin:16px auto;padding:12mm 13mm;background:#fff;box-shadow:0 14px 44px #17251e24}.top{display:grid;grid-template-columns:1fr 1fr;align-items:start;gap:20px;padding-bottom:12px;border-bottom:1px solid #dbe4df}.brand-lockup{display:flex;align-items:center;gap:10px}.brand-mark{display:grid;width:34px;height:34px;place-items:center;border-radius:10px;background:#1d7656;color:#fff;font-size:19px;font-weight:900}.brand strong,.country strong{display:block;font-size:13px}.brand span,.country span{display:block;margin-top:3px;color:#677a70;font-size:9px}.country{text-align:right}.country i{display:block;width:120px;margin:6px 0 0 auto;border-top:1px solid #728179}.doc{position:relative;overflow:hidden;margin:14px 0;padding:17px 19px;border-radius:13px;background:linear-gradient(120deg,#174a37,#278261);color:#fff}.doc:after{content:"";position:absolute;width:150px;height:150px;right:-45px;top:-95px;border-radius:50%;background:#ffffff12}.doc .eyebrow{display:block;margin-bottom:5px;color:#d1eadf;font-size:8px;font-weight:800;letter-spacing:.13em}.doc h1{margin:0;font-size:21px;letter-spacing:.025em}.doc p{margin:7px 0 0;color:#e2f1ea}.doc .status{position:absolute;right:18px;bottom:17px;padding:5px 10px;border:1px solid #ffffff45;border-radius:20px;background:#ffffff16;color:#fff;font-size:9px;font-weight:700}.fields{display:grid;grid-template-columns:repeat(2,1fr);gap:7px 14px;margin-bottom:12px}.fields div{display:flex;gap:7px;padding:8px 10px;border:1px solid #dbe5df;border-radius:8px;background:#f8faf9}.fields span{color:#6c7d74}.fields strong{margin-left:auto;text-align:right}.summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}.summary-grid article{position:relative;overflow:hidden;min-height:62px;padding:10px 11px;border:1px solid #dde6e1;border-radius:10px;background:linear-gradient(145deg,#fff,#f8faf9)}.summary-grid article:before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--summary-color)}.summary-grid span,.summary-grid strong,.summary-grid small{display:block}.summary-grid span{color:#718178;font-size:8px;font-weight:800;letter-spacing:.05em}.summary-grid strong{margin-top:5px;color:#19382b;font-size:14px}.summary-grid small{margin-top:3px;color:#849088;font-size:8px}.report-chart{margin-bottom:12px;padding:10px 12px 6px;border:1px solid #dce5e0;border-radius:11px;page-break-inside:avoid}.section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:3px}.section-heading>div:first-child span,.section-heading>div:first-child strong{display:block}.section-heading>div:first-child span{color:#73867b;font-size:7px;font-weight:850;letter-spacing:.11em}.section-heading>div:first-child strong{margin-top:3px;font-size:11px}.chart-legend{display:flex;flex-wrap:wrap;gap:8px;color:#60736a;font-size:8px}.chart-legend span{display:flex;align-items:center;gap:4px}.chart-legend i{width:7px;height:7px;border-radius:2px}.report-chart svg{display:block;width:100%;height:43mm}.chart-grid line{stroke:#e3ebe6;stroke-dasharray:3 4}.chart-grid text{fill:#718279;font:8px "Segoe UI",Arial}.chart-lines path{fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}.chart-lines circle{stroke:#fff;stroke-width:1.8}.table-title{display:flex;align-items:center;justify-content:space-between;margin:3px 0 7px}.table-title strong{font-size:11px}.table-title span{color:#74857b;font-size:8px}table{width:100%;overflow:hidden;border:1px solid #d5dfda;border-radius:9px;border-collapse:separate;border-spacing:0;page-break-inside:auto}thead{display:table-header-group}tr{page-break-inside:avoid}th,td{padding:7px 7px;border:0;border-bottom:1px solid #e1e8e4;vertical-align:top}th{background:#eaf3ee;color:#315343;font-size:8px;text-align:center;letter-spacing:.03em}tbody tr:nth-child(even){background:#f8faf9}tbody tr:last-child td{border-bottom:0}.row-index{width:28px;color:#78877f}.center{text-align:center}.right{text-align:right}.totals{margin:12px 0 0 auto;width:min(90mm,100%)}.totals div{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dotted #9aa79f}.note{margin-top:11px;padding:9px 11px;border-left:3px solid #2b8060;border-radius:0 7px 7px 0;background:#f1f7f4;line-height:1.45}.signatures{display:grid;grid-template-columns:repeat(var(--signatures),1fr);gap:12px;margin-top:19px;text-align:center;page-break-inside:avoid}.signatures strong,.signatures span{display:block}.signatures span{margin-top:4px;color:#748078;font-size:9px;font-style:italic}.sign-space{height:38px}.footer{display:flex;justify-content:space-between;margin-top:12px;padding-top:7px;border-top:1px solid #d6dfda;color:#7b8881;font-size:8px}.footer:after{content:"Supermarket Fly · Nội bộ"}@media print{body{background:#fff}.sheet{width:auto;min-height:0;margin:0;padding:0;box-shadow:none}}
+      @page{size:A4 VAR_ORIENT;margin:10mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{margin:0;color:#183126;background:#e9eeeb;font:11px "Segoe UI",Arial,sans-serif}.sheet{position:relative;width:VAR_W;min-height:VAR_H;margin:16px auto;padding:12mm 13mm;background:#fff;box-shadow:0 14px 44px #17251e24}.print-wm{position:absolute;inset:18% 4%;display:grid;place-items:center;pointer-events:none;z-index:3}.print-wm b{font-size:88px;font-weight:900;letter-spacing:.16em;color:#1d76561f;transform:rotate(-24deg);white-space:nowrap}.top{display:grid;grid-template-columns:1fr 1fr;align-items:start;gap:20px;padding-bottom:12px;border-bottom:1px solid #dbe4df}.brand-lockup{display:flex;align-items:center;gap:10px}.brand-mark{display:grid;width:34px;height:34px;place-items:center;border-radius:10px;background:#1d7656;color:#fff;font-size:19px;font-weight:900}.brand strong,.country strong{display:block;font-size:13px}.brand span,.country span{display:block;margin-top:3px;color:#677a70;font-size:9px}.country{text-align:right}.country i{display:block;width:120px;margin:6px 0 0 auto;border-top:1px solid #728179}.doc{position:relative;overflow:hidden;margin:14px 0;padding:17px 19px;border-radius:13px;background:linear-gradient(120deg,#174a37,#278261);color:#fff}.doc:after{content:"";position:absolute;width:150px;height:150px;right:-45px;top:-95px;border-radius:50%;background:#ffffff12}.doc .eyebrow{display:block;margin-bottom:5px;color:#d1eadf;font-size:8px;font-weight:800;letter-spacing:.13em}.doc h1{margin:0;font-size:21px;letter-spacing:.025em}.doc p{margin:7px 0 0;color:#e2f1ea}.doc .status{position:absolute;right:18px;bottom:17px;padding:5px 10px;border:1px solid #ffffff45;border-radius:20px;background:#ffffff16;color:#fff;font-size:9px;font-weight:700}.fields{display:grid;grid-template-columns:repeat(2,1fr);gap:7px 14px;margin-bottom:12px}.fields div{display:flex;gap:7px;padding:8px 10px;border:1px solid #dbe5df;border-radius:8px;background:#f8faf9}.fields span{color:#6c7d74}.fields strong{margin-left:auto;text-align:right}.summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}.summary-grid article{position:relative;overflow:hidden;min-height:62px;padding:10px 11px;border:1px solid #dde6e1;border-radius:10px;background:linear-gradient(145deg,#fff,#f8faf9)}.summary-grid article:before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--summary-color)}.summary-grid span,.summary-grid strong,.summary-grid small{display:block}.summary-grid span{color:#718178;font-size:8px;font-weight:800;letter-spacing:.05em}.summary-grid strong{margin-top:5px;color:#19382b;font-size:14px}.summary-grid small{margin-top:3px;color:#849088;font-size:8px}.report-chart{margin-bottom:12px;padding:10px 12px 6px;border:1px solid #dce5e0;border-radius:11px;page-break-inside:avoid}.section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:3px}.section-heading>div:first-child span,.section-heading>div:first-child strong{display:block}.section-heading>div:first-child span{color:#73867b;font-size:7px;font-weight:850;letter-spacing:.11em}.section-heading>div:first-child strong{margin-top:3px;font-size:11px}.chart-legend{display:flex;flex-wrap:wrap;gap:8px;color:#60736a;font-size:8px}.chart-legend span{display:flex;align-items:center;gap:4px}.chart-legend i{width:7px;height:7px;border-radius:2px}.report-chart svg{display:block;width:100%;height:43mm}.chart-grid line{stroke:#e3ebe6;stroke-dasharray:3 4}.chart-grid text{fill:#718279;font:8px "Segoe UI",Arial}.chart-lines path{fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}.chart-lines circle{stroke:#fff;stroke-width:1.8}.table-title{display:flex;align-items:center;justify-content:space-between;margin:3px 0 7px}.table-title strong{font-size:11px}.table-title span{color:#74857b;font-size:8px}table{width:100%;overflow:hidden;border:1px solid #d5dfda;border-radius:9px;border-collapse:separate;border-spacing:0;page-break-inside:auto}thead{display:table-header-group}tr{page-break-inside:avoid}th,td{padding:7px 7px;border:0;border-bottom:1px solid #e1e8e4;vertical-align:top}th{background:#eaf3ee;color:#315343;font-size:8px;text-align:center;letter-spacing:.03em}tbody tr:nth-child(even){background:#f8faf9}tbody tr:last-child td{border-bottom:0}.row-index{width:28px;color:#78877f}.center{text-align:center}.right{text-align:right}.totals{margin:12px 0 0 auto;width:min(90mm,100%)}.totals div{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dotted #9aa79f}.note{margin-top:11px;padding:9px 11px;border-left:3px solid #2b8060;border-radius:0 7px 7px 0;background:#f1f7f4;line-height:1.45}.signatures{display:grid;grid-template-columns:repeat(var(--signatures),1fr);gap:12px;margin-top:19px;text-align:center;page-break-inside:avoid}.signatures strong,.signatures span{display:block}.signatures span{margin-top:4px;color:#748078;font-size:9px;font-style:italic}.sign-space{height:38px}.footer{display:flex;justify-content:space-between;margin-top:12px;padding-top:7px;border-top:1px solid #d6dfda;color:#7b8881;font-size:8px}.footer:after{content:"Supermarket Fly · Nội bộ"}@media print{body{background:#fff}.sheet{width:auto;min-height:0;margin:0;padding:0;box-shadow:none}}
     `;
 
   const officialCss = `
       @page{size:A4 VAR_ORIENT;margin:16mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
       body{margin:0;background:#fff;color:#000;font:13px "Times New Roman",Times,serif}
-      .sheet{width:VAR_W;min-height:VAR_H;margin:12px auto;padding:8mm 10mm;background:#fff}
+      .sheet{position:relative;width:VAR_W;min-height:VAR_H;margin:12px auto;padding:8mm 10mm;background:#fff}
+      .print-wm{position:absolute;inset:20% 4%;display:grid;place-items:center;pointer-events:none;z-index:3}
+      .print-wm b{font-size:88px;font-weight:900;letter-spacing:.18em;color:#00000018;transform:rotate(-24deg);white-space:nowrap}
       .vn-head{display:grid;grid-template-columns:1fr 1.2fr;gap:16px;align-items:start}
       .vn-org strong,.vn-state strong{display:block;text-transform:uppercase;font-size:13px;letter-spacing:.02em}
       .vn-org span{display:block;margin-top:3px;font-size:12px}
@@ -113,6 +127,38 @@
     return css.replaceAll('VAR_ORIENT', orientation).replaceAll('VAR_W', box.w).replaceAll('VAR_H', box.h);
   };
 
+  const watermarkHtml = config => config.watermark
+    ? `<div class="print-wm" aria-hidden="true"><b>${esc(config.watermark)}</b></div>`
+    : '';
+
+  const extraBlocks = (config, official = false) => {
+    const extraSummary = config.extraSummary || [];
+    const extraTables = config.extraTables || [];
+    if (!extraSummary.length && !extraTables.length) return '';
+    const summaryColors = ['#b05b43', '#197678', '#8a5a2b', '#2c8b66'];
+    const summaryTitle = config.extraSummaryTitle ? (official
+      ? `<p class="vn-sub">${esc(config.extraSummaryTitle)}</p>`
+      : `<div class="table-title"><strong>${esc(config.extraSummaryTitle)}</strong></div>`) : '';
+    const summaryHtml = extraSummary.length
+      ? official
+        ? `${summaryTitle}<table class="doc-table" style="margin:12px 0"><thead><tr><th>Chỉ tiêu</th><th>Giá trị</th></tr></thead><tbody>${extraSummary.slice(0, 4).map(item => `<tr><td>${esc(item.label)}</td><td class="right">${esc(formatted(item))}${item.hint ? ` (${esc(item.hint)})` : ''}</td></tr>`).join('')}</tbody></table>`
+        : `${summaryTitle}<section class="summary-grid">${extraSummary.slice(0, 4).map((item, index) => `<article style="--summary-color:${item.color || summaryColors[index % 4]}"><span>${esc(item.label)}</span><strong>${esc(formatted(item))}</strong>${item.hint ? `<small>${esc(item.hint)}</small>` : ''}</article>`).join('')}</section>`
+      : '';
+    const tablesHtml = extraTables.map(table => {
+      const columns = table.columns || [];
+      const rows = table.rows || [];
+      const body = rows.length
+        ? rows.map((row, index) => `<tr><td class="center row-index">${index + 1}</td>${columns.map(column => `<td class="${column.align || ''}">${esc(valueOf(row, column))}</td>`).join('')}</tr>`).join('')
+        : `<tr><td colspan="${Math.max(1, columns.length + 1)}" class="center">${esc(table.emptyText || 'Không có dòng chi tiết')}</td></tr>`;
+      const head = `<thead><tr><th style="width:34px">STT</th>${columns.map(column => `<th>${esc(column.label)}</th>`).join('')}</tr></thead><tbody>${body}</tbody>`;
+      if (official) {
+        return `${table.title ? `<p class="vn-sub">${esc(table.title)}</p>` : ''}<table class="doc-table">${head}</table>`;
+      }
+      return `<div class="table-title"><strong>${esc(table.title || 'Chi tiết bổ sung')}</strong><span>${rows.length} dòng dữ liệu</span></div><table>${head}</table>`;
+    }).join('');
+    return `${summaryHtml}${tablesHtml}`;
+  };
+
   const systemMarkup = (config, parts) => {
     const summaryColors = ['#267b5b', '#d89f32', '#4f72bb', '#7c5a96'];
     const fields = parts.fields.map(item => `<div><span>${esc(item.label)}</span><strong>${esc(item.text)}</strong></div>`).join('');
@@ -121,7 +167,7 @@
     const signatures = parts.signatures.map(item => `<div><strong>${esc(item)}</strong><span>(Ký, ghi rõ họ tên)</span></div>`).join('');
     const chart = parts.isReport ? printChart(config.chart, config.chart?.rows || parts.sourceRows) : '';
     const totalsSection = totals && !parts.isReport ? `<section class="totals">${totals}</section>` : '';
-    return `<main class="sheet ${parts.isReport ? 'report-sheet' : ''}"><section class="top"><div class="brand-lockup"><div class="brand-mark">F</div><div class="brand"><strong>SUPERMARKET FLY</strong><span>Cửa hàng Hà Nội · Hệ thống quản lý nội bộ</span></div></div><div class="country"><strong>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</strong><span>Độc lập – Tự do – Hạnh phúc</span><i></i></div></section><header class="doc"><span class="eyebrow">${parts.isReport ? 'BÁO CÁO QUẢN TRỊ · DỮ LIỆU HỆ THỐNG' : 'CHỨNG TỪ NỘI BỘ · DỮ LIỆU HỆ THỐNG'}</span><h1>${esc(config.title)}</h1><p>Số <strong>${esc(config.number || '—')}</strong> · Ngày lập ${esc(date(config.documentDate || new Date()))}</p>${config.status ? `<span class="status">${esc(config.status)}</span>` : ''}</header><section class="fields">${fields}</section>${parts.isReport && summaries ? `<section class="summary-grid">${summaries}</section>` : ''}${chart}${parts.isReport ? `<div class="table-title"><strong>Chi tiết số liệu trong kỳ</strong><span>${parts.sourceRows.length} dòng dữ liệu</span></div>` : ''}<table><thead><tr><th style="width:34px">STT</th>${parts.columns.map(column => `<th>${esc(column.label)}</th>`).join('')}</tr></thead><tbody>${parts.rows || `<tr><td colspan="${parts.columns.length + 1}" class="center">Không có dòng chi tiết</td></tr>`}</tbody></table>${totalsSection}${config.note ? `<section class="note"><strong>Ghi chú:</strong> ${esc(config.note)}</section>` : ''}<section class="signatures" style="--signatures:${Math.max(1, parts.signatures.length)}">${signatures}</section><div class="sign-space"></div><footer class="footer"><span>Phát hành tự động lúc ${esc(new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date()))}</span></footer></main>`;
+    return `<main class="sheet ${parts.isReport ? 'report-sheet' : ''}">${watermarkHtml(config)}<section class="top"><div class="brand-lockup"><div class="brand-mark">F</div><div class="brand"><strong>SUPERMARKET FLY</strong><span>Cửa hàng Hà Nội · Hệ thống quản lý nội bộ</span></div></div><div class="country"><strong>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</strong><span>Độc lập – Tự do – Hạnh phúc</span><i></i></div></section><header class="doc"><span class="eyebrow">${parts.isReport ? 'BÁO CÁO QUẢN TRỊ · DỮ LIỆU HỆ THỐNG' : 'CHỨNG TỪ NỘI BỘ · DỮ LIỆU HỆ THỐNG'}</span><h1>${esc(config.title)}</h1><p>Số <strong>${esc(config.number || '—')}</strong> · Ngày lập ${esc(date(config.documentDate || new Date()))}</p>${config.status ? `<span class="status">${esc(config.status)}</span>` : ''}</header><section class="fields">${fields}</section>${parts.isReport && summaries ? `<section class="summary-grid">${summaries}</section>` : ''}${chart}${parts.isReport ? `<div class="table-title"><strong>Chi tiết số liệu trong kỳ</strong><span>${parts.sourceRows.length} dòng dữ liệu</span></div>` : ''}<table><thead><tr><th style="width:34px">STT</th>${parts.columns.map(column => `<th>${esc(column.label)}</th>`).join('')}</tr></thead><tbody>${parts.rows || `<tr><td colspan="${parts.columns.length + 1}" class="center">Không có dòng chi tiết</td></tr>`}</tbody></table>${extraBlocks(config)}${totalsSection}${config.note ? `<section class="note"><strong>Ghi chú:</strong> ${esc(config.note)}</section>` : ''}<section class="signatures" style="--signatures:${Math.max(1, parts.signatures.length)}">${signatures}</section><div class="sign-space"></div><footer class="footer"><span>Phát hành tự động lúc ${esc(new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date()))}</span></footer></main>`;
   };
 
   const officialMarkup = (config, parts) => {
@@ -131,6 +177,7 @@
     const totals = parts.totalsConfig.map(item => `<div><span>${esc(item.label)}</span><strong>${esc(formatted(item))}</strong></div>`).join('');
     const signatures = parts.signatures.map(item => `<div><strong>${esc(item)}</strong><span>(Ký, ghi rõ họ tên)</span><div class="space"></div></div>`).join('');
     return `<main class="sheet">
+      ${watermarkHtml(config)}
       <section class="vn-head">
         <div class="vn-org"><strong>SUPERMARKET FLY</strong><span>Cửa hàng Hà Nội</span></div>
         <div class="vn-state"><strong>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</strong><em>Độc lập - Tự do - Hạnh phúc</em><i></i></div>
@@ -141,6 +188,7 @@
       ${fields ? `<table class="vn-fields">${fields}</table>` : ''}
       ${parts.isReport && summaryRows ? `<table class="doc-table" style="margin-bottom:12px"><thead><tr><th>Chỉ tiêu</th><th>Giá trị</th></tr></thead><tbody>${summaryRows}</tbody></table>` : ''}
       <table class="doc-table"><thead><tr><th style="width:34px">STT</th>${parts.columns.map(column => `<th>${esc(column.label)}</th>`).join('')}</tr></thead><tbody>${parts.rows || `<tr><td colspan="${parts.columns.length + 1}" class="center">Không có dòng chi tiết</td></tr>`}</tbody></table>
+      ${extraBlocks(config, true)}
       ${totals && !parts.isReport ? `<section class="vn-totals">${totals}</section>` : ''}
       ${config.note ? `<section class="vn-note"><strong>Ghi chú:</strong> ${esc(config.note)}</section>` : ''}
       <section class="vn-sign" style="--signatures:${Math.max(1, parts.signatures.length)}">${signatures}</section>
@@ -193,7 +241,7 @@
             <button type="button" class="print-skin" data-skin="official">Giấy trắng mực đen</button>
           </div>
           <button type="button" class="warehouse-secondary close-preview">Đóng</button>
-          <button type="button" class="warehouse-primary print-document">${isReport ? 'In / Lưu PDF' : 'In chứng từ'}</button>
+          <button type="button" class="warehouse-primary print-document">${config.useWindowPrint ? 'In' : (isReport ? 'In / Lưu PDF' : 'In chứng từ')}</button>
         </div>
       </header><iframe title="Xem trước ${esc(config.title)}"></iframe></div>`;
     document.body.appendChild(overlay);
@@ -229,8 +277,17 @@
     overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
     printButton.addEventListener('click', async () => {
       printButton.disabled = true;
-      setStatus('Đang tạo file PDF...');
       try {
+        if (config.useWindowPrint) {
+          setStatus('Đang mở hộp thoại in...');
+          const frameWin = iframe.contentWindow;
+          if (!frameWin) throw new Error('Chưa tải xong bản xem trước.');
+          frameWin.focus();
+          frameWin.print();
+          setStatus('Đã mở hộp thoại in / xem trước in.');
+          return;
+        }
+        setStatus('Đang tạo file PDF...');
         const html = htmlFromPreview(iframe, config, skin);
         const defaultName = pdfFileName({ ...config, skin });
         const landscape = config.orientation === 'landscape';

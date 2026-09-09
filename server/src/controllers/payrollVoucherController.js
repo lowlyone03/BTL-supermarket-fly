@@ -254,6 +254,11 @@ const payVoucher = async (req, res) => {
             success
                 ? `Đã chi ${voucher.PhuongThuc} ${amount} cho ${voucher.TenNV} kỳ ${voucher.MaKy} từ quỹ chung. TM còn ${matCon}; CK còn ${ckCon}.${late ? ` Trễ hạn, lý do: ${lateNote}` : ''}`
                 : `Chi lương thất bại; quỹ chung không trừ. Bảng lương giữ Đã khóa. Lý do: ${paymentNote}`);
+        const { postPayrollPay } = require('../services/accountingHooks');
+        await postPayrollPay(transaction, {
+            maPhieu, maNV: req.user.MaNV, user: req.user, success,
+            soTien: amount, phuongThuc: voucher.PhuongThuc, ngay: today
+        });
         await transaction.commit();
         res.json({
             message: success

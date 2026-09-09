@@ -5,15 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Điều hành - Supermarket Fly</title>
   <link rel="stylesheet" href="dashboard.css?v=count-click-1">
-  <link rel="stylesheet" href="../admin/admin.css?v=audit-rs-3">
-  <link rel="stylesheet" href="../warehouse/warehouse.css?v=count-click-1">
+  <link rel="stylesheet" href="../admin/admin.css?v=tax-ui-1">
+  <link rel="stylesheet" href="../warehouse/warehouse.css?v=close-confirm-1">
   <link rel="stylesheet" href="../workforce/workforce.css?v=approve-fix-2">
   <link rel="stylesheet" href="../cashier/cashier.css?v=qty-step-1">
   <link rel="stylesheet" href="../shared/locale-ui.css?v=vi-date-3">
   <link rel="stylesheet" href="../shared/ui-polish.css?v=count-click-1">
-  <link rel="stylesheet" href="../shared/report-charts.css?v=charts-7-wh-polish">
+  <link rel="stylesheet" href="../shared/report-charts.css?v=wh-report-5">
   <link rel="stylesheet" href="../shared/product-images.css?v=products-1">
   <link rel="stylesheet" href="overview-modern.css?v=overview-1">
+  <link rel="stylesheet" href="../accounting/ledger.css?v=dinh-khoan-3">
+  <link rel="stylesheet" href="../accounting/ledger-print.css?v=ledger-print-1">
 </head>
 <body>
   <svg class="svg-library" aria-hidden="true">
@@ -51,6 +53,7 @@
     <symbol id="i-cart" viewBox="0 0 24 24"><path d="M3 4h2l2.4 12h11.2L21 8H7"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></symbol>
     <symbol id="i-team" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M8 7h8M8 11h5"/></symbol>
     <symbol id="i-sound-on" viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16 9.2a3.6 3.6 0 0 1 0 5.6M18.6 7a7 7 0 0 1 0 10"/></symbol>
     <symbol id="i-sound-off" viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="m16.2 9.8 5 5M21.2 9.8l-5 5"/></symbol>
   </svg>
@@ -77,6 +80,11 @@
         <a href="#" class="nav-item" id="managerWorkforceApproveNav" data-target="manager-workforce-approve"><svg><use href="#i-approve"/></svg><span>Duyệt công</span></a>
         <a href="#" class="nav-item" id="managerHolidaysNav" data-target="manager-holidays"><svg><use href="#i-calendar"/></svg><span>Ngày lễ năm</span></a>
         <a href="#" class="nav-item" id="managerReportNav" data-target="manager-reports"><svg><use href="#i-report"/></svg><span>Báo cáo cửa hàng</span></a>
+        <a href="#" class="nav-item" id="managerWarehouseReportNav" data-target="admin-warehouse-reports"><svg><use href="#i-inventory"/></svg><span>Báo cáo Thủ kho</span></a>
+        <a href="#" class="nav-item" id="managerLedgerKqkdNav" data-target="ledger-kqkd"><svg><use href="#i-report"/></svg><span>Kết quả kinh doanh</span></a>
+        <a href="#" class="nav-item" id="managerLedgerCfNav" data-target="ledger-cf"><svg><use href="#i-report"/></svg><span>Lưu chuyển tiền tệ</span></a>
+        <a href="#" class="nav-item" id="managerLedgerBsNav" data-target="ledger-bs"><svg><use href="#i-report"/></svg><span>Bảng cân đối kế toán</span></a>
+        <a href="#" class="nav-item" id="managerLedgerHandbookNav" data-target="ledger-handbook"><svg><use href="#i-book"/></svg><span>Cẩm nang kế toán</span></a>
 
         <div class="nav-group" id="navGroupWarehouse" style="display:none">
           <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span>Lịch làm việc</span></a>
@@ -114,6 +122,23 @@
           <div class="nav-group-title">NHÂN SỰ MỞ RỘNG</div>
           <a href="#" class="nav-item" data-target="accounting-payroll"><svg><use href="#i-team"/></svg><span>Bảng lương tháng</span></a>
           <a href="#" class="nav-item" data-target="accounting-history"><svg><use href="#i-log"/></svg><span>Lịch sử hoạt động</span></a>
+          <div class="nav-group-title">KẾ TOÁN TỔNG HỢP</div>
+          <a href="#" class="nav-item" data-target="ledger-handbook"><svg><use href="#i-book"/></svg><span>Cẩm nang kế toán</span></a>
+          <a href="#" class="nav-item" data-target="ledger-coa"><svg><use href="#i-report"/></svg><span>Hệ thống tài khoản</span></a>
+          <a href="#" class="nav-item" data-target="ledger-periods"><svg><use href="#i-calendar"/></svg><span>Kỳ kế toán</span></a>
+          <a href="#" class="nav-item" data-target="ledger-expenses"><svg><use href="#i-approve"/></svg><span>Chi phí vận hành</span></a>
+          <a href="#" class="nav-item" data-target="ledger-journals"><svg><use href="#i-log"/></svg><span>Bút toán &amp; chờ ghi sổ</span></a>
+          <a href="#" class="nav-item" data-target="ledger-nkc"><svg><use href="#i-report"/></svg><span>Nhật ký chung</span></a>
+          <a href="#" class="nav-item" data-target="ledger-gl"><svg><use href="#i-report"/></svg><span>Sổ cái</span></a>
+          <a href="#" class="nav-item" data-target="ledger-trial"><svg><use href="#i-report"/></svg><span>Cân đối phát sinh</span></a>
+          <a href="#" class="nav-item" data-target="ledger-vat"><svg><use href="#i-report"/></svg><span>Bảng kê VAT</span></a>
+          <a href="#" class="nav-item" data-target="ledger-close"><svg><use href="#i-lock"/></svg><span>Khóa kỳ / kết chuyển</span></a>
+          <a href="#" class="nav-item" data-target="ledger-kqkd"><svg><use href="#i-report"/></svg><span>Kết quả kinh doanh</span></a>
+          <a href="#" class="nav-item" data-target="ledger-cf"><svg><use href="#i-report"/></svg><span>Lưu chuyển tiền tệ</span></a>
+          <a href="#" class="nav-item" data-target="ledger-bs"><svg><use href="#i-report"/></svg><span>Bảng cân đối kế toán</span></a>
+          <div class="nav-group-title">KẾ TOÁN MỞ RỘNG</div>
+          <a href="#" class="nav-item" data-target="ledger-assets"><svg><use href="#i-box"/></svg><span>Tài sản cố định</span></a>
+          <a href="#" class="nav-item" data-target="ledger-bank"><svg><use href="#i-store"/></svg><span>Ngân hàng &amp; sao kê CSV</span></a>
         </div>
 
         <div class="nav-group" id="navGroupCashier" style="display:none">
@@ -239,25 +264,31 @@
 
   <script src="../shared/escape-key.js"></script>
   <script src="../shared/api-config.js"></script>
-  <script src="../shared/field-validators.js?v=fields-7"></script>
+  <script src="../shared/field-validators.js?v=close-confirm-1"></script>
   <script src="../shared/employee-profile.js?v=emp-syll-1"></script>
-  <script src="../shared/locale-ui.js?v=qty-step-1"></script>
+  <script src="../shared/locale-ui.js?v=date-vn-1"></script>
   <script src="../shared/search-tools.js?v=search-2"></script>
   <script src="../shared/product-images.js?v=products-1"></script>
-  <script src="../shared/report-charts.js?v=charts-7-wh-polish"></script>
-  <script src="../shared/report-layout.js?v=report-hint-1"></script>
-  <script src="../shared/print-documents.js?v=print-pdf-1"></script>
-  <script src="../admin/admin-page-templates.js?v=audit-rs-3"></script>
+  <script src="../shared/report-charts.js?v=charts-9-widebars"></script>
+  <script src="../shared/report-layout.js?v=wh-report-3"></script>
+  <script src="../shared/print-documents.js?v=date-vn-1"></script>
+  <script src="../shared/warehouse-export.js?v=wh-report-5"></script>
+  <script src="../shared/warehouse-xlsx.js?v=wh-report-5"></script>
+  <script src="../shared/warehouse-report-ui.js?v=wh-report-5"></script>
+  <script src="../admin/admin-page-templates.js?v=tax-ui-1"></script>
   <script src="../warehouse/warehouse-pages.js?v=scrap-qty-1"></script>
   <script src="../warehouse/supplier-pages.js?v=search-2"></script>
   <script src="../warehouse/purchase-order-pages.js?v=scrap-qty-1"></script>
   <script src="../warehouse/receipt-pages.js?v=search-2"></script>
   <script src="../warehouse/stock-issue-pages.js?v=scrap-qty-1"></script>
   <script src="../accounting/store-pnl.js?v=store-pnl-1"></script>
-  <script src="../accounting/accounting-pages.js?v=invoice-intake-1"></script>
-  <script src="../workforce/workforce-pages.js?v=approve-fix-2"></script>
-  <script src="../cashier/cashier-pages.js?v=qty-step-1"></script>
-  <script src="../shared/role-reports.js?v=charts-7-wh-polish"></script>
-  <script src="dashboard.js?v=count-click-1"></script>
+  <script src="../accounting/accounting-pages.js?v=date-vn-1"></script>
+  <script src="../accounting/ledger-print.js?v=ledger-print-1"></script>
+  <script src="../accounting/ledger-pages.js?v=queue-date-2"></script>
+  <script src="../workforce/workforce-pages.js?v=close-confirm-1"></script>
+  <script src="../cashier/cashier-pages.js?v=date-vn-2"></script>
+  <script src="../shared/role-reports.js?v=wh-report-5"></script>
+  <script src="../shared/warehouse-keeper-reports.js?v=wh-report-5"></script>
+  <script src="dashboard.js?v=handbook-1"></script>
 </body>
 </html>

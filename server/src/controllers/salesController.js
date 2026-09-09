@@ -4,6 +4,10 @@ const { logAudit } = require('../services/auditLog');
 const { assertCashierDuty, CashierDutyError } = require('../services/cashierDuty');
 const { validateRequiredName, validateOptionalVnPhone, validateOptionalEmail, validateOptionalDate, validateOptionalNote } = require('../services/fieldValidators');
 const { invoiceListMatchSql, invoiceViewSql, resolveInvoiceListScope } = require('../services/invoiceSearch');
+const { hasVatColumns } = require('../services/journalEngine');
+const { assertChosenRate } = require('../services/vatSales');
+const { postSaleJournals } = require('../services/accountingHooks');
+const { calendarizeRow } = require('../services/reportingPeriod');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 const POINT_EARN_UNIT = Math.max(1, Number(process.env.POINT_EARN_UNIT || 10000));
@@ -41,6 +45,7 @@ const getCatalog = async (req, res) => {
         const [products, promotions] = await Promise.all([
             pool.request().input('Search', sql.NVarChar, `%${search}%`).query(`
                 SELECT sp.MaSP,sp.TenSP,sp.MaVach,sp.DonViTinh,sp.GiaBan,sp.DuongDanAnh,sp.TrangThai,
+                       ${await hasVatColumns(pool) ? 'sp.ThueSuat,' : ''}
                        dm.MaDM,dm.TenDM,tk.MaKho,tk.SLTon,tk.DonGiaBinhQuan
                 FROM SanPham sp
                 JOIN DanhMuc dm ON dm.MaDM=sp.MaDM
@@ -178,7 +183,7 @@ const listInvoices = async (req, res) => {
               AND (@Search=N'%%' OR ${invoiceListMatchSql})
             ORDER BY hd.NgayLap DESC`);
         res.json({
-            items: result.recordset,
+            items: result.recordset.map(calendarizeRow),
             scope: scoped.scope,
             currentShift: currentShift || null
         });
@@ -218,6 +223,7 @@ const calculateInvoice = async (source, lines, maKM, diemSuDung, maKH) => {
     if (!Array.isArray(lines) || !lines.length) throw new Error('Hóa đơn phải có ít nhất một sản phẩm.');
     const normalized = [];
     const seen = new Set();
+    const vatOn = await hasVatColumns(source);
     for (const raw of lines) {
         const maSP = clean(raw.MaSP, 20);
         const soLuong = Number(raw.SoLuong);
@@ -228,14 +234,16 @@ const calculateInvoice = async (source, lines, maKM, diemSuDung, maKH) => {
         seen.add(maSP);
         const product = await queryFrom(source).input(`SP${normalized.length}`, sql.VarChar, maSP).query(`
             SELECT sp.MaSP,sp.TenSP,sp.DonViTinh,sp.GiaBan,sp.DuongDanAnh,tk.MaKho,tk.SLTon
+                   ${vatOn ? ',sp.ThueSuat' : ''}
             FROM SanPham sp JOIN TonKho tk ON tk.MaSP=sp.MaSP
             JOIN Kho k ON k.MaKho=tk.MaKho AND k.TrangThai=1
             WHERE sp.MaSP=@SP${normalized.length} AND sp.TrangThai IN (N'Đang bán',N'Đang kinh doanh')`);
         if (!product.recordset.length) throw new Error(`Sản phẩm ${maSP} không còn kinh doanh.`);
         const item = product.recordset[0];
         if (soLuong > Number(item.SLTon)) throw new Error(`${item.TenSP} chỉ còn ${item.SLTon} ${item.DonViTinh || ''}.`);
+        if (vatOn) assertChosenRate(item.ThueSuat, `Thuế suất ${item.TenSP}`);
         normalized.push({ ...item, SoLuong: soLuong, DonGia: Number(item.GiaBan), GiamGia: 0,
-            ThanhTien: Number(item.GiaBan) * soLuong });
+            ThanhTien: Number(item.GiaBan) * soLuong, ThueSuat: vatOn ? Number(item.ThueSuat) : null });
     }
     const tongTienHang = normalized.reduce((sum, item) => sum + item.ThanhTien, 0);
     let tienGiamGia = 0;
@@ -295,13 +303,22 @@ const createInvoice = async (req, res) => {
                     DiemSuDung,TienDiemQuyDoi,TongThanhToan,TrangThai,DiemCong)
                 VALUES(@MaHD,@MaKH,@MaNV,@MaKho,@MaCa,@MaKM,GETDATE(),@TongTienHang,@TienGiamGia,
                     @DiemSuDung,@TienDiem,@TongThanhToan,N'Nháp',0)`);
+        const vatOn = await hasVatColumns(transaction);
         for (const line of calc.lines) {
-            await new sql.Request(transaction).input('MaHD', sql.VarChar, maHD)
+            const request = new sql.Request(transaction).input('MaHD', sql.VarChar, maHD)
                 .input('MaSP', sql.VarChar, line.MaSP).input('SoLuong', sql.Int, line.SoLuong)
                 .input('DonGia', sql.Decimal(18, 2), line.DonGia).input('GiamGia', sql.Decimal(18, 2), line.GiamGia)
-                .input('ThanhTien', sql.Decimal(18, 2), line.ThanhTien).query(`
+                .input('ThanhTien', sql.Decimal(18, 2), line.ThanhTien);
+            if (vatOn) {
+                request.input('Thue', sql.Decimal(5, 2), line.ThueSuat);
+                await request.query(`
+                    INSERT ChiTietHoaDon(MaHD,MaSP,SoLuong,DonGia,GiamGia,ThanhTien,DonGiaVon,ThanhTienVon,ThueSuat)
+                    VALUES(@MaHD,@MaSP,@SoLuong,@DonGia,@GiamGia,@ThanhTien,0,0,@Thue)`);
+            } else {
+                await request.query(`
                     INSERT ChiTietHoaDon(MaHD,MaSP,SoLuong,DonGia,GiamGia,ThanhTien,DonGiaVon,ThanhTienVon)
                     VALUES(@MaHD,@MaSP,@SoLuong,@DonGia,@GiamGia,@ThanhTien,0,0)`);
+            }
         }
         await logAudit(transaction, {
             user: req.user, req, action: 'Lập hóa đơn nháp', table: 'HoaDon', recordId: maHD, uc: 'UC24',
@@ -357,10 +374,10 @@ const getInvoice = async (req, res) => {
                 ORDER BY dt.NgayLap`)
         ]);
         res.json({
-            invoice: header.recordset[0],
+            invoice: calendarizeRow(header.recordset[0]),
             lines: lines.recordset,
             payments: payments.recordset,
-            returns: returns.recordset
+            returns: returns.recordset.map(calendarizeRow)
         });
     } catch (error) {
         res.status(500).json({ message: 'Không thể tải hóa đơn.' });
@@ -513,6 +530,7 @@ const completeInvoice = async (req, res) => {
             content: `Đã thu đủ ${Number(invoice.TongThanhToan).toLocaleString('vi-VN')}đ; tồn kho đã trừ; ghi doanh thu ca.`,
             after: { MaHD: invoice.MaHD, TongThanhToan: invoice.TongThanhToan, TrangThai: 'Hoàn thành' }
         });
+        await postSaleJournals(transaction, { maHD: invoice.MaHD, maNV: req.user.MaNV, user: req.user });
         await transaction.commit();
         res.json({ message: `Hóa đơn ${invoice.MaHD} đã hoàn thành.`, MaHD: invoice.MaHD, DiemCong: diemCong });
     } catch (error) {

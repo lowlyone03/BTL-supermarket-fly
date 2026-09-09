@@ -6,7 +6,7 @@ const {
     validateUsername, validateNewPassword, validateEmployeeCode, validateRequiredCode,
     validateRequiredVnTaxId, validateOptionalVnTaxId, validateOptionalBhxh, validateOptionalBankAccount,
     validateOptionalMaritalStatus, validateOptionalCccd, validateOptionalGender, validateOptionalBarcode, validatePositiveInteger,
-    validateRequiredNonNegativeInteger, validateRequiredNonNegativeNumber, validateClosingCash, validateOptionalDate, validateOptionalPastDate,
+    validateRequiredNonNegativeInteger, validateRequiredNonNegativeNumber, validateClosingCash, validateCloseShiftConfirm, validateCheckOutConfirm, validateOptionalDate, validateOptionalPastDate,
     validateRequiredText, validateRequiredCccd, validateRequiredVnPhone, validateEmployeeProfileFields
 } = require('./src/services/fieldValidators');
 
@@ -86,6 +86,14 @@ test('Tiền cuối ca: không âm, có trần; được nhỏ hơn quỹ đầu
     assert.equal(validateClosingCash('abc').ok, false);
     assert.equal(validateClosingCash(1_000_000_001).ok, false);
     assert.match(validateClosingCash(-1).message, /không âm/);
+});
+
+test('Xác nhận đóng ca / chấm công ra phải gõ đúng cụm từ', () => {
+    assert.equal(validateCloseShiftConfirm('DONG CA').ok, true);
+    assert.equal(validateCloseShiftConfirm('đóng ca').ok, true);
+    assert.equal(validateCloseShiftConfirm('').ok, false);
+    assert.equal(validateCheckOutConfirm('RA CA').ok, true);
+    assert.equal(validateCheckOutConfirm('ok').ok, false);
 });
 
 test('Số nguyên dương / không âm và ngày tùy chọn', () => {

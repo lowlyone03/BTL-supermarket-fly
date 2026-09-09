@@ -39,6 +39,7 @@ const warehouseRoutes = require('./routes/warehouseRoutes');
 const purchasingRoutes = require('./routes/purchasingRoutes');
 const supplierRoutes = require('./routes/supplierRoutes');
 const accountingRoutes = require('./routes/accountingRoutes');
+const ledgerRoutes = require('./routes/ledgerRoutes');
 const cashierRoutes = require('./routes/cashierRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const telegramRoutes = require('./routes/telegramRoutes');
@@ -54,6 +55,7 @@ app.use('/api/warehouse', warehouseRoutes);
 app.use('/api/purchasing', purchasingRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/accounting', accountingRoutes);
+app.use('/api/ledger', ledgerRoutes);
 app.use('/api/cashier', cashierRoutes);
 app.use('/api/telegram', telegramRoutes);
 
@@ -86,11 +88,17 @@ process.on('uncaughtException', (error) => {
     console.error('Ngoại lệ không bắt (API vẫn chạy):', error.message);
 });
 
+const {
+    startTelegramCompanion,
+    installParentDeathHooks
+} = require('./services/telegramCompanionProcess');
+installParentDeathHooks();
+
 const startHttp = (host, onListening) => {
-    const server = app.listen(PORT, host, onListening);
+    const server = app.listen({ port: Number(PORT), host, exclusive: true }, onListening);
     server.on('error', (error) => {
         if (error.code === 'EADDRINUSE') {
-            console.error(`Cổng ${PORT} (${host}) đang bị chiếm. Đóng process cũ rồi chạy lại npm start.`);
+            console.error(`Cổng ${PORT} đang bị chiếm. Đóng process cũ rồi chạy lại npm start.`);
             return;
         }
         console.error(`Không listen ${host}:${PORT}:`, error.message);
@@ -128,8 +136,7 @@ startHttp(HOST, () => {
         console.error('SQL chưa sẵn sàng (API vẫn listen):', error.message);
     });
     try {
-        require('./controllers/telegramBotController').startTelegramBot()
-            .catch(error => console.error('Telegram:', error.message));
+        startTelegramCompanion({ boundExclusivePort: true });
     } catch (error) {
         console.error('Telegram:', error.message);
     }

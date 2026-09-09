@@ -28,6 +28,8 @@ router.get('/reports/financial-documents', requirePermission('UC10'), reportCont
 router.get('/reports/store-operations', requirePermission('UC10'), reportController.getStoreOperationsReport);
 router.get('/reports/store-profit-loss', requirePermission('UC10'), reportController.getStoreProfitLossReport);
 router.post('/reports/store-profit-loss/plan', requirePermission('UC10'), reportController.postStoreProfitLossPlan);
+router.get('/reports/warehouse-submissions', requirePermission('UC10'), reportController.listAdminWarehouseReports);
+router.get('/reports/warehouse-submissions/:id', requirePermission('UC10'), reportController.getAdminWarehouseReport);
 router.get('/catalog/categories', requirePermission('UC04'), catalogController.getCategories);
 router.post('/catalog/categories', requirePermission('UC04'), catalogController.createCategory);
 router.put('/catalog/categories/:id', requirePermission('UC04'), catalogController.updateCategory);

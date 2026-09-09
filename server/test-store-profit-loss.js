@@ -34,8 +34,10 @@ test('Lãi gộp không trừ lương; lãi sau chi phí mới trừ NCC và lư
     });
     assert.equal(result.loiNhuanGop, 3_000_000);
     assert.equal(result.laiLoSauChiPhi, -700_000);
+    assert.equal(result.kqkdLoiNhuan, 500_000);
+    assert.equal(result.kqkdTrangThai, 'LÃI');
     assert.equal(result.trangThai, 'LỖ');
-    assert.equal(result.batBuocKeHoach, true);
+    assert.equal(result.batBuocKeHoach, false);
 });
 
 test('Kỳ lãi không bắt kế hoạch', () => {

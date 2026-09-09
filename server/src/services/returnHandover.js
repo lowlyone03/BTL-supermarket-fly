@@ -352,6 +352,26 @@ const handoverApprovedReturns = async (transaction, { fromMaNV, maQuay, fromMaCa
     return { handed, next, warning };
 }, { handed: [], next: null, warning: null });
 
+const reclaimReturnsOnShiftReopen = async (transaction, { maNV, maCa }) => safeHandover(async () => {
+    if (!maNV || !maCa) return [];
+    await ensureReturnHandoverSchema(transaction);
+    const result = await new sql.Request(transaction)
+        .input('MaNV', sql.VarChar, maNV)
+        .input('MaCa', sql.VarChar, maCa)
+        .query(`
+            UPDATE dt
+            SET MaNV_XuLy=@MaNV,
+                NgayBanGiao=NULL,
+                MaCaBanGiao=NULL
+            OUTPUT inserted.MaDT
+            FROM PhieuDoiTra dt
+            WHERE ${UNFINISHED_SQL}
+              AND dt.MaCaBanGiao=@MaCa
+              AND dt.MaNV_XuLy IS NULL
+              AND dt.NgayBanGiao IS NOT NULL`);
+    return result.recordset || [];
+}, []);
+
 const acceptLeftoverReturn = async (transaction, { maDT, maNV, maQuay, maCa }) => {
     if (!maDT || !maNV || !maQuay || !maCa) return null;
     return safeHandover(async () => {
@@ -420,6 +440,7 @@ module.exports = {
     healParkedReturns,
     findNextCashierAtQuay,
     handoverApprovedReturns,
+    reclaimReturnsOnShiftReopen,
     acceptLeftoverReturn,
     claimLeftoverReturnsForShift,
     claimHandoverReturns,

@@ -142,59 +142,88 @@
     return `${legend(cleanSeries, { line: true })}<div class="fly-chart-canvas line${useDual ? ' dual-axis' : ''}${emphasis ? ' is-emphasis' : ''}"><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Biểu đồ ${attr(cleanSeries.map(item => item.name).join(', '))}"><defs><linearGradient id="${id}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${cleanSeries[0].color}" stop-opacity=".24"/><stop offset="1" stop-color="${cleanSeries[0].color}" stop-opacity="0"/></linearGradient></defs><g class="fly-chart-grid">${grid}${xLabels}</g>${hits}${shapes}${dots}</svg></div>${note}`;
   };
 
-  const columns = ({ labels = [], series = [], formatter = compact, axisFormatter = compact, emptyText = '', markerNote = '', labelWrap = false, emphasizeBars = false, alwaysHit = false, pointExtras = null }) => {
-    const cleanSeries = series.map((item, index) => ({ ...item, color: item.color || palette[index % palette.length], values: (item.values || []).map(number) }));
-    if (!labels.length || !cleanSeries.some(item => item.values.length)) return empty(emptyText);
+  const columns = ({ labels = [], series = [], formatter = compact, axisFormatter = compact, emptyText = '', markerNote = '', labelWrap = false, emphasizeBars = false, alwaysHit = false, pointExtras = null, stacked = false, hideEmpty = false, valueLabels = false }) => {
+    let cleanSeries = series.map((item, index) => ({ ...item, color: item.color || palette[index % palette.length], values: (item.values || []).map(number) }));
+    let workLabels = labels.slice();
+    if (hideEmpty) {
+      const keep = workLabels.map((_, index) => cleanSeries.some(item => number(item.values[index]) > 0));
+      workLabels = workLabels.filter((_, index) => keep[index]);
+      cleanSeries = cleanSeries.map(item => ({ ...item, values: item.values.filter((_, index) => keep[index]) }));
+    }
+    if (!workLabels.length || !cleanSeries.some(item => item.values.length)) return empty(emptyText);
     const wrap = !!labelWrap;
     const width = 760;
-    const height = wrap ? 352 : 286;
+    const height = wrap ? 352 : valueLabels ? 300 : 286;
     const left = 58;
     const right = 18;
-    const top = 24;
+    const top = valueLabels ? 32 : 24;
     const bottom = wrap ? 92 : 44;
     const plotWidth = width - left - right;
     const plotHeight = height - top - bottom;
-    const max = Math.max(1, ...cleanSeries.flatMap(item => item.values.map(value => Math.max(0, value))));
-    const dense = labels.length > 14;
-    const groupWidth = plotWidth / labels.length;
-    const gap = dense ? 2 : emphasizeBars ? 8 : 5;
-    const inset = dense ? 3 : emphasizeBars ? 16 : 12;
-    const barWidth = emphasizeBars && cleanSeries.length === 1
-      ? Math.min(58, Math.max(22, groupWidth * 0.52))
-      : Math.min(34, Math.max(4, (groupWidth - inset) / cleanSeries.length - gap));
-    const totalWidth = cleanSeries.length * barWidth + (cleanSeries.length - 1) * gap;
+    const stackTotals = workLabels.map((_, index) => cleanSeries.reduce((sum, item) => sum + Math.max(0, item.values[index] || 0), 0));
+    const seriesMax = Math.max(0, ...cleanSeries.flatMap(item => item.values.map(value => Math.max(0, value))));
+    const max = Math.max(1, stacked ? Math.max(0, ...stackTotals) : seriesMax);
+    const dense = workLabels.length > 14;
+    const fewGroups = workLabels.length <= 6;
+    const groupWidth = plotWidth / workLabels.length;
+    const gap = dense ? 2 : emphasizeBars || fewGroups ? 10 : 5;
+    const inset = dense ? 3 : emphasizeBars || fewGroups ? 18 : 12;
+    const barWidth = stacked
+      ? Math.min(fewGroups ? 96 : 64, Math.max(28, groupWidth * (fewGroups ? 0.36 : 0.48)))
+      : emphasizeBars && cleanSeries.length === 1
+        ? Math.min(64, Math.max(22, groupWidth * 0.46))
+        : Math.min(fewGroups ? 72 : 34, Math.max(8, (groupWidth - inset) / Math.max(1, cleanSeries.length) - gap));
+    const totalWidth = stacked ? barWidth : cleanSeries.length * barWidth + (cleanSeries.length - 1) * gap;
     const id = `fly-cols-${++sequence}`;
     const grid = Array.from({ length: 5 }, (_, index) => {
       const value = max - (max * index / 4); const py = top + (plotHeight * index / 4);
       return `<line x1="${left}" y1="${py}" x2="${width - right}" y2="${py}"/><text x="${left - 10}" y="${py + 4}" text-anchor="end">${esc(axisFormatter(value))}</text>`;
     }).join('');
-    const labelStep = (wrap || labels.length <= 8) ? 1 : Math.max(1, Math.ceil(labels.length / 7));
-    const maxChars = labels.length <= 6 ? 14 : 11;
-    const xLabels = labels.map((label, index) => {
-      if (!(index % labelStep === 0 || index === labels.length - 1)) return '';
+    const labelStep = (wrap || workLabels.length <= 8) ? 1 : Math.max(1, Math.ceil(workLabels.length / 7));
+    const maxChars = workLabels.length <= 6 ? 14 : 11;
+    const xLabels = workLabels.map((label, index) => {
+      if (!(index % labelStep === 0 || index === workLabels.length - 1)) return '';
       const cx = left + groupWidth * (index + .5);
       if (!wrap) return `<text x="${cx}" y="${height - 13}" text-anchor="middle">${esc(label)}</text>`;
       const lines = wrapLabel(label, maxChars);
       const start = height - 18 - (lines.length - 1) * 13;
       return `<text class="fly-chart-wrap-label" x="${cx}" y="${start}" text-anchor="middle">${lines.map((line, lineIndex) => `<tspan x="${cx}" dy="${lineIndex ? 13 : 0}">${esc(line)}</tspan>`).join('')}</text>`;
     }).join('');
-    const hits = labels.map((label, index) => {
+    const hits = workLabels.map((label, index) => {
       if (!alwaysHit && !pointActive(cleanSeries, index)) return '';
       const bundle = tipBundle(label, cleanSeries, index, formatter, extraAt(pointExtras, label, index));
       return `<rect class="fly-chart-hit" tabindex="0" x="${left + groupWidth * index}" y="${top}" width="${groupWidth}" height="${plotHeight}" fill="transparent" ${tipAttrs(bundle, `col-${id}-${index}`)}/>`;
     }).join('');
-    const bars = labels.map((label, index) => {
+    const bars = workLabels.map((label, index) => {
       const bundle = tipBundle(label, cleanSeries, index, formatter, extraAt(pointExtras, label, index));
+      const px0 = left + groupWidth * index + (groupWidth - totalWidth) / 2;
+      if (stacked) {
+        let acc = 0;
+        const parts = cleanSeries.map((item, seriesIndex) => {
+          const value = Math.max(0, item.values[index] || 0);
+          if (!value) return '';
+          const barHeight = Math.max(value ? 6 : 0, (value / max) * plotHeight);
+          const py = top + plotHeight - acc - barHeight;
+          acc += barHeight;
+          const mid = py + barHeight / 2 + 4;
+          const inner = valueLabels && barHeight >= 18 ? `<text class="fly-chart-value" x="${px0 + barWidth / 2}" y="${mid}" text-anchor="middle">${esc(formatter(value))}</text>` : '';
+          return `<rect class="fly-chart-bar" tabindex="0" x="${px0}" y="${py}" width="${barWidth}" height="${barHeight}" rx="${seriesIndex === 0 ? 6 : 2}" fill="${item.color}" ${tipAttrs(bundle, `col-${id}-${index}`)}/>${inner}`;
+        }).join('');
+        const total = stackTotals[index];
+        const topLabel = valueLabels && total ? `<text class="fly-chart-stack-total" x="${px0 + barWidth / 2}" y="${top + plotHeight - acc - 8}" text-anchor="middle">${esc(formatter(total))}</text>` : '';
+        return `${parts}${topLabel}`;
+      }
       return cleanSeries.map((item, seriesIndex) => {
         const value = Math.max(0, item.values[index] || 0);
         if (!value) return '';
         const barHeight = Math.max(4, (value / max) * plotHeight);
-        const px = left + groupWidth * index + (groupWidth - totalWidth) / 2 + seriesIndex * (barWidth + gap);
-        return `<rect class="fly-chart-bar" tabindex="0" x="${px}" y="${top + plotHeight - barHeight}" width="${barWidth}" height="${barHeight}" rx="${emphasizeBars ? 7 : 4}" fill="${item.color}" ${tipAttrs(bundle, `col-${id}-${index}`)}/>`;
+        const px = px0 + seriesIndex * (barWidth + gap);
+        const labelText = valueLabels ? `<text class="fly-chart-value is-dark" x="${px + barWidth / 2}" y="${top + plotHeight - barHeight - 6}" text-anchor="middle">${esc(formatter(value))}</text>` : '';
+        return `<rect class="fly-chart-bar" tabindex="0" x="${px}" y="${top + plotHeight - barHeight}" width="${barWidth}" height="${barHeight}" rx="${emphasizeBars ? 7 : 4}" fill="${item.color}" ${tipAttrs(bundle, `col-${id}-${index}`)}/>${labelText}`;
       }).join('');
     }).join('');
     const note = markerNote ? `<p class="fly-chart-note">${esc(markerNote)}</p>` : '';
-    return `${legend(cleanSeries)}<div class="fly-chart-canvas columns${emphasizeBars ? ' is-emphasis' : ''}${wrap ? ' is-wrap' : ''}"><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Biểu đồ cột ${attr(cleanSeries.map(item => item.name).join(', '))}"><g class="fly-chart-grid">${grid}${xLabels}</g>${hits}${bars}</svg></div>${note}`;
+    return `${legend(cleanSeries)}<div class="fly-chart-canvas columns${emphasizeBars ? ' is-emphasis' : ''}${wrap ? ' is-wrap' : ''}${stacked ? ' is-stacked' : ''}"><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Biểu đồ cột ${attr(cleanSeries.map(item => item.name).join(', '))}"><g class="fly-chart-grid">${grid}${xLabels}</g>${hits}${bars}</svg></div>${note}`;
   };
 
   const horizontal = ({ items = [], formatter = compact, emptyText = '', color = palette[0] }) => {

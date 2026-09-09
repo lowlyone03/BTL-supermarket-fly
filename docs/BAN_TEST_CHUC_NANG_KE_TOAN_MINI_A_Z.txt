@@ -1,0 +1,776 @@
+================================================================================
+BẢN TEST CHỨC NĂNG A → Z
+PHẦN KẾ TOÁN MINI (KẾ TOÁN TỔNG HỢP) — SUPERMARKET FLY
+================================================================================
+Ngày lập          : 09/09/2026
+Phạm vi           : Phần KT MỚI (Hệ thống tài khoản → Ngân hàng & sao kê CSV)
+Khớp rule         : PLAN_HE_THONG_KE_TOAN_MINI_CHI_TIET.txt phiên bản 1.5 FINAL
+Không test        : P1 (nhiều TKNH, thanh lý TSCĐ, tờ khai thuế TNDN)
+Không phá         : P0 (POS, đối chiếu HĐ mua, công nợ, lương, phiếu thu)
+
+Cách dùng
+  - Làm lần lượt theo số case. Mỗi case độc lập về “Kết quả mong đợi” nhưng
+    nhiều case dùng dữ liệu case trước (ghi rõ ở Tiền điều kiện).
+  - Đánh dấu [ ] / [x]. Ghi mã chứng từ thật vào cột Ghi chú khi pass.
+  - UI phải tiếng Việt có dấu. Mã nội bộ (BAN_HANG, HoaDon, DIEN, 111) được
+    giữ trong API/CSDL; màn hình người dùng phải map sang nhãn có dấu.
+
+Actor (vai trò / tài khoản gợi ý — mật khẩu mặc định cửa hàng)
+  KT   = Kế toán          (ketoan)
+  TN   = Thu ngân         (thungan)
+  TK   = Thủ kho          (thukho)
+  MH   = Nhân viên mua    (muahang)
+  QL   = Quản lý          (admin / quanly)
+
+Tiền đề hệ thống (làm 1 lần trước Case 01)
+  T0. Đã chạy migration kế toán:
+        SupermarketFly_Migration_20260909_AccountingCore.sql
+        SupermarketFly_Migration_20260909_LedgerUiLabels.sql
+      (hoặc npm run migrate:next trên máy có SQL Server).
+  T1. Restart server (npm start) + đóng hẳn Electron rồi mở lại.
+  T2. Có ít nhất 1 sản phẩm Đang bán, đã CHỌN thuế suất (0 / 5 / 8 / 10).
+      Sản phẩm thuế NULL sẽ chặn POS complete — dùng cho case VAT riêng.
+  T3. Có 1 sản phẩm thuế 10% (gọi SP-A) và 1 sản phẩm thuế 0% đã xác nhận (SP-B).
+  T4. Chưa bắt buộc có TKNH. Case ngân hàng sẽ thêm đúng 1 tài khoản.
+  T5. Đồng hồ máy / timezone Asia/Ho_Chi_Minh. Ghi kỳ theo YYYY-MM.
+
+
+--------------------------------------------------------------------------------
+PHẦN A — GIAO DIỆN TIẾNG VIỆT CÓ DẤU
+--------------------------------------------------------------------------------
+
+Case 01. Dropdown Chi phí vận hành có dấu
+  Actor           : KT
+  Tiền điều kiện  : T0–T1. Đăng nhập Kế toán.
+  Bước
+    1. Mở KẾ TOÁN TỔNG HỢP → Chi phí vận hành.
+    2. Mở dropdown LOẠI CHI PHÍ.
+  Kết quả mong đợi
+    - Thấy đủ 8 loại, có dấu: Tiền điện, Tiền nước, Thuê mặt bằng,
+      Văn phòng phẩm, Cước vận chuyển, Quảng cáo, Sửa chữa nhỏ, Chi phí khác.
+    - KHÔNG còn "Tien nuoc", "Cuoc van chuyen", "Tien dien", "Thue mat bang".
+    - Value/option vẫn gửi mã Latin nội bộ (DIEN, NUOC, CUOC, THUE_NHA…).
+
+Case 02. Hệ thống tài khoản — tên TK có dấu
+  Actor           : KT
+  Tiền điều kiện  : T0–T1.
+  Bước            : Mở Hệ thống tài khoản.
+  Kết quả mong đợi
+    - 111 = Tiền mặt; 112 = Tiền gửi ngân hàng; 156 = Hàng hóa;
+      331 = Phải trả người bán; 511 = Doanh thu bán hàng và CCDV;
+      632 = Giá vốn hàng bán; 642 = Chi phí quản lý doanh nghiệp;
+      911 = Xác định kết quả kinh doanh.
+    - Tính chất: Nợ / Có / Lưỡng tính. Loại BC: Tài sản / Nguồn vốn / …
+    - Trạng thái: Đang sử dụng (không hiện "Su dung").
+
+Case 03. Cột LOẠI / LÝ DO ở Chờ ghi sổ có dấu
+  Actor           : KT
+  Tiền điều kiện  : Có ít nhất 1 dòng chờ (Hóa đơn hoàn thành thiếu bút toán,
+                    hoặc PN chưa 3-way, hoặc kỳ khóa). Nếu chưa có, làm Case 20
+                    rồi quay lại.
+  Bước            : Mở Bút toán & chờ ghi sổ.
+  Kết quả mong đợi
+    - LOẠI hiện "Hóa đơn bán", "Hóa đơn mua hàng", "Phiếu chi phí vận hành"…
+      không hiện "HoaDon", "HoaDonMuaHang".
+    - LÝ DO hiện "Thiếu bút toán Bán hàng / Giá vốn",
+      "Thiếu bút toán Mua hàng", "Kỳ đã khóa — chờ ghi sổ trễ",
+      "Phiếu nhập chưa đối chiếu 3 bên",
+      "Thiếu thuế suất — POS chặn / chưa ghi sổ được".
+    - KHÔNG hiện "Thiếu bút toán BAN_HANG / GIA_VON" hay "Thieu MUA_HANG".
+
+Case 04. Cột loại bút toán gần đây có dấu
+  Actor           : KT
+  Tiền điều kiện  : Đã có ít nhất 1 bút toán (sau Case 12 hoặc bán hàng).
+  Bước            : Xem bảng Bút toán gần đây.
+  Kết quả mong đợi
+    - Cột loại: Bán hàng, Giá vốn, Chi phí vận hành, Thủ công, Số dư đầu kỳ…
+    - Nguồn: Thủ công / Số dư đầu kỳ / Hệ thống / Đã đảo.
+    - Chứng từ: "Hóa đơn bán HD…" (nhãn loại + mã).
+
+
+--------------------------------------------------------------------------------
+PHẦN B — HỆ THỐNG TÀI KHOẢN (COA)
+--------------------------------------------------------------------------------
+
+Case 05. Xem 18 TK hệ thống
+  Actor           : KT
+  Tiền điều kiện  : T0.
+  Bước            : Mở Hệ thống tài khoản, đếm dòng.
+  Kết quả mong đợi
+    - Đúng 18 TK: 111, 112, 1331, 138, 156, 211, 214, 331, 33311, 334,
+      411, 421, 511, 5212, 632, 642, 711, 911.
+    - Không có nút xóa TK hệ thống trên UI.
+
+Case 06. Thu ngân không vào COA
+  Actor           : TN
+  Tiền điều kiện  : Đăng nhập thu ngân.
+  Bước            : Tìm menu Hệ thống tài khoản. (Tuỳ chọn) gọi GET /ledger/accounts.
+  Kết quả mong đợi
+    - Không thấy nhóm KẾ TOÁN TỔNG HỢP. API 403.
+
+
+--------------------------------------------------------------------------------
+PHẦN C — KỲ KẾ TOÁN 4 BƯỚC
+--------------------------------------------------------------------------------
+
+Case 07. Tạo kỳ tháng hiện tại
+  Actor           : KT
+  Tiền điều kiện  : Kỳ tháng này chưa tồn tại (hoặc chọn tháng trống).
+  Bước
+    1. Kỳ kế toán → chọn tháng (YYYY-MM) → 1. Tạo kỳ.
+  Kết quả mong đợi
+    - Thông báo đã tạo kỳ. Bước 1 stepper đánh dấu xong.
+    - Danh sách kỳ hiện mã YYYY-MM, trạng thái Chưa mở.
+    - Lịch sử hoạt động có dòng "Tạo kỳ kế toán" + mã kỳ.
+
+Case 08. Mở kỳ
+  Actor           : KT
+  Tiền điều kiện  : Case 07. Không có kỳ khác đang Mở (nếu có thì khóa trước
+                    hoặc chọn đúng kỳ đang mở).
+  Bước            : 2. Mở kỳ.
+  Kết quả mong đợi
+    - Chip kỳ hiện tại = tháng đã chọn, badge Mở.
+    - Lịch sử: "Mở kỳ kế toán".
+
+Case 09. Lưu số dư — lệch Nợ ≠ Có
+  Actor           : KT
+  Tiền điều kiện  : Case 08.
+  Bước
+    1. Nhập 111 dư Nợ 10.000.000; 411 để 0.
+    2. 3. Lưu số dư.
+    3. Bấm 4. Chốt số dư.
+  Kết quả mong đợi
+    - Lưu được (nháp). Thanh cân hiện lệch, nút Chốt disabled / báo lỗi
+      tổng Nợ ≠ tổng Có.
+
+Case 10. Không nhập cả Nợ và Có cùng một TK
+  Actor           : KT
+  Tiền điều kiện  : Case 08.
+  Bước            : Nhập 111 vừa Nợ 1.000.000 vừa Có 1.000.000.
+  Kết quả mong đợi
+    - Cảnh báo đỏ: chỉ nhập một bên. Không cho chốt.
+
+Case 11. Lưu số dư cân
+  Actor           : KT
+  Tiền điều kiện  : Case 08.
+  Bước
+    1. 111 Nợ 5.000.000; 112 Nợ 3.000.000; 156 Nợ 20.000.000;
+       331 Có 8.000.000; 411 Có 20.000.000. (Tổng Nợ = tổng Có = 28.000.000)
+    2. Có thể để 421 = 0. 3. Lưu số dư.
+  Kết quả mong đợi
+    - Thanh cân xanh, "Đã cân Nợ = Có". Lịch sử: "Lưu số dư đầu kỳ".
+
+Case 12. Chốt số dư
+  Actor           : KT
+  Tiền điều kiện  : Case 11 cân.
+  Bước            : 4. Chốt số dư → xác nhận hộp thoại.
+  Kết quả mong đợi
+    - Ô số dư khóa. Badge Đã chốt.
+    - Sinh bút toán số dư đầu kỳ (Nguồn: Số dư đầu kỳ).
+    - Lịch sử: "Chốt số dư đầu kỳ" và/hoặc "Ghi sổ bút toán".
+
+Case 13. Sửa số dư sau khi chốt
+  Actor           : KT
+  Tiền điều kiện  : Case 12.
+  Bước            : Đổi 111 rồi Lưu số dư (nếu nút còn). Hoặc PUT API opening.
+  Kết quả mong đợi
+    - UI không cho sửa / API 400: không sửa số dư đã chốt, dùng bút toán điều chỉnh.
+
+
+--------------------------------------------------------------------------------
+PHẦN D — CHI PHÍ VẬN HÀNH
+--------------------------------------------------------------------------------
+
+Case 14. Lưu nháp tiền điện VAT 10% CK (112)
+  Actor           : KT
+  Tiền điều kiện  : Kỳ đang Mở (Case 08+).
+  Bước
+    1. Chi phí vận hành → Loại = Tiền điện.
+    2. Ngày chứng từ = hôm nay; tiền hàng 2.000.000; thuế 10%; TK 112.
+    3. Ghi chú "HĐ điện tháng"; Lưu nháp.
+  Kết quả mong đợi
+    - Phiếu CPyyMMxxxx, trạng thái Nháp, loại "Tiền điện".
+    - Chưa có bút toán CHI_PHI.
+    - Lịch sử: "Lập phiếu chi phí" + mã CP.
+
+Case 15. Xác nhận chi phí — ghi sổ ngay
+  Actor           : KT
+  Tiền điều kiện  : Case 14. Kỳ Mở.
+  Bước            : Xác nhận phiếu vừa lập.
+  Kết quả mong đợi
+    - Trạng thái Đã xác nhận.
+    - Bút toán: Nợ 642 = 2.000.000, Nợ 1331 = 200.000, Có 112 = 2.200.000.
+    - KHÔNG phát sinh 331 / công nợ NCC.
+    - Lịch sử: "Xác nhận chi phí vận hành" + "Ghi sổ bút toán".
+
+Case 16. Cước vận chuyển — luôn 642, không vào giá vốn
+  Actor           : KT
+  Tiền điều kiện  : Kỳ Mở. Ghi nhận DonGiaVon / tồn SP-A trước khi lập.
+  Bước
+    1. Loại = Cước vận chuyển; tiền hàng 500.000; thuế 0%; TK 111; xác nhận.
+  Kết quả mong đợi
+    - Nợ 642 / Có 111 = 500.000. Không 156. DonGiaVon SP-A không đổi.
+
+Case 17. Chi phí khi kỳ đã khóa → chờ ghi sổ
+  Actor           : KT
+  Tiền điều kiện  : Có kỳ Khoa (làm sau Case 40) HOẶC tạm khóa kỳ rồi lập.
+                    Có thể làm lại sau Case 40.
+  Bước            : Lập + xác nhận chi phí ngày thuộc kỳ Khoa.
+  Kết quả mong đợi
+    - Phiếu vẫn lưu Đã xác nhận. Bút toán vào Chờ ghi sổ, lý do
+      "Kỳ đã khóa — chờ ghi sổ trễ". Không 400.
+
+Case 18. Hủy nháp
+  Actor           : KT
+  Bước            : Lập nháp mới, nếu có nút hủy / API cancel. (UI hiện chỉ Xác nhận;
+                    nếu chưa có nút hủy trên UI thì bỏ qua UI, không fail P0.)
+  Kết quả mong đợi
+    - Nháp hủy không sinh BT. Log "Hủy phiếu chi phí nháp" nếu gọi API.
+
+
+--------------------------------------------------------------------------------
+PHẦN E — CHỜ GHI SỔ + CLICK XEM HÓA ĐƠN
+--------------------------------------------------------------------------------
+
+Case 19. Bán 1 HĐ hoàn thành (dữ liệu cho click)
+  Actor           : TN
+  Tiền điều kiện  : SP-A thuế 10% còn tồn. Ca đang mở. Kỳ KT đang Mở
+                    (nếu kỳ khóa, POS vẫn bán được — Case 55).
+  Bước
+    1. POS bán 1 SP-A, thu đủ tiền mặt, hoàn thành.
+    2. Ghi mã HĐ (vd HD202609090001).
+  Kết quả mong đợi
+    - HĐ Hoàn thành. Tồn trừ. (BT BAN_HANG/GIA_VON nếu hook P0 chạy.)
+
+Case 20. Hàng chờ thiếu Bán hàng / Giá vốn (nếu có)
+  Actor           : KT
+  Tiền điều kiện  : Có HĐ Hoàn thành chưa có BT BAN_HANG (môi trường lệch hook).
+                    Nếu hook đã ghi đủ thì bảng chờ có thể trống — PASS có điều kiện,
+                    ghi "không có hàng thiếu".
+  Bước            : Mở Bút toán & chờ ghi sổ.
+  Kết quả mong đợi
+    - Nếu thiếu: dòng mã HD…, loại "Hóa đơn bán",
+      lý do "Thiếu bút toán Bán hàng / Giá vốn".
+    - Cột CHỨNG TỪ là liên kết (màu xanh, gạch chân).
+
+Case 21. Click CHỨNG TỪ HoaDon → xem đúng HĐ P0
+  Actor           : KT
+  Tiền điều kiện  : Case 19 (và/hoặc dòng chờ Case 20). Biết mã HD.
+  Bước
+    1. Ở Chờ ghi sổ (hoặc Bút toán gần đây), bấm mã HD… (cột Chứng từ).
+  Kết quả mong đợi
+    - Mở modal "HÓA ĐƠN GỐC LÚC BÁN" giống trang Hóa đơn của thu ngân:
+      mã HĐ, khách, ngày bán, tổng lúc bán, dòng hàng lúc thanh toán.
+    - Có thể In / lưu PDF hóa đơn gốc.
+    - Không có nút "Mở đổi trả" (KT xem read-only).
+    - Đóng modal, vẫn ở trang Bút toán.
+
+Case 22. Click HĐ trên bảng kê VAT đầu ra
+  Actor           : KT
+  Tiền điều kiện  : Case 19.
+  Bước            : Bảng kê VAT → Lập báo cáo tháng HĐ → bấm mã HĐ cột Hóa đơn.
+  Kết quả mong đợi
+    - Cùng modal xem HĐ như Case 21.
+
+Case 23. Click loại khác — Hóa đơn mua / phiếu chi / phiếu nhập
+  Actor           : KT
+  Tiền điều kiện  : Cửa hàng đã có HDM… đã tiếp nhận, PN đã xác nhận, PC nếu có.
+                    Nếu chưa có, lập 1 bộ P0 tối thiểu (không thuộc KT mới).
+  Bước            : Nếu hàng chờ / bút toán có HDM / PC / PN — bấm mã.
+  Kết quả mong đợi
+    - HDM → modal hóa đơn NCC (P0 Đối chiếu hóa đơn).
+    - PC → hồ sơ công nợ / phiếu chi P0.
+    - PN → modal phiếu nhập P0.
+    - CP → modal phiếu chi phí (loại có dấu, tiền, trạng thái).
+    - TS → modal thẻ TSCĐ.
+
+Case 24. Hover / focus link chứng từ
+  Actor           : KT
+  Bước            : Tab vào link, hover.
+  Kết quả mong đợi
+    - Màu đậm hơn, gạch chân rõ; focus-visible có viền.
+
+
+--------------------------------------------------------------------------------
+PHẦN F — BÚT TOÁN THỦ CÔNG + ĐẢO + GHI SỔ TRỄ
+--------------------------------------------------------------------------------
+
+Case 25. Thủ công — máy chủ sinh mã TC
+  Actor           : KT
+  Tiền điều kiện  : Kỳ Mở.
+  Bước
+    1. Bút toán thủ công: ngày hôm nay, số tiền 50.000,
+       diễn giải "Xóa chênh lệch phải thu khác 138",
+       Nợ 111, Có 138. Ghi sổ.
+    2. Không gõ mã chứng từ (UI không có ô mã).
+  Kết quả mong đợi
+    - Mã BT BTyyMM…. Loại Thủ công. Chứng từ TCyyMM + 5 số.
+    - Nợ 111 = Có 138 = 50.000.
+    - Lịch sử: "Lập bút toán thủ công" + "Ghi sổ bút toán".
+
+Case 26. Thủ công Nợ = Có cùng TK
+  Actor           : KT
+  Bước            : Nợ 111 và Có 111.
+  Kết quả mong đợi
+    - Báo lỗi: tài khoản Nợ và Có phải khác nhau. Không ghi.
+
+Case 27. Thủ công không phải thanh lý TSCĐ
+  Actor           : KT
+  Bước            : Đọc help trên form. Không có nút/form "Thanh lý TSCĐ".
+  Kết quả mong đợi
+    - Help nói không dùng thủ công cho thanh lý. Không API thanh lý.
+
+Case 28. Đảo bút toán thủ công
+  Actor           : KT
+  Tiền điều kiện  : Case 25, kỳ vẫn Mở.
+  Bước            : Đảo → nhập lý do "Sai số".
+  Kết quả mong đợi
+    - Gốc Đã đảo. BT mới loại "Đảo thủ công".
+    - Sổ cái 111/138 net về 0 (cộng đảo).
+    - Lịch sử: "Đảo bút toán thủ công" / "Đảo bút toán".
+
+Case 29. Ghi sổ trễ từ hàng chờ KY_KHOA
+  Actor           : KT
+  Tiền điều kiện  : Case 17 (chi phí kỳ khóa) + đã mở kỳ mới (sau Case 40).
+  Bước            : Chờ ghi sổ → Ghi sổ trễ trên dòng chi phí.
+  Kết quả mong đợi
+    - Dòng biến mất khỏi chờ. BT CHI_PHI: NgayChungTu = ngày gốc,
+      MaKy / Ngày hạch toán = kỳ đang Mở.
+    - Lịch sử: "Ghi sổ trễ".
+
+Case 30. Không ghi sổ trễ THIEU_THUE / PN chưa 3-way
+  Actor           : KT
+  Tiền điều kiện  : Có dòng lý do Thiếu thuế suất hoặc PN chưa đối chiếu
+                    (tạo bằng POS complete blocked / PN chưa khớp — Case 36, 44).
+  Bước            : Quan sát cột thao tác.
+  Kết quả mong đợi
+    - Không có nút Ghi sổ trễ. Dòng cảnh báo vàng.
+
+
+--------------------------------------------------------------------------------
+PHẦN G — NHẬT KÝ CHUNG / SỔ CÁI / CÂN ĐỐI PHÁT SINH
+--------------------------------------------------------------------------------
+
+Case 31. Nhật ký chung cân
+  Actor           : KT
+  Tiền điều kiện  : Có phát sinh (Case 15, 19, 25).
+  Bước            : Nhật ký chung → chọn kỳ → Lập báo cáo.
+  Kết quả mong đợi
+    - Tổng Nợ = tổng Có. KPI Đối chiếu = Cân.
+    - Không gồm dòng SODU_DAU_KY (số dư đầu không vào NKC kỳ).
+    - Kỳ chưa khóa: watermark "Số liệu tạm tính".
+
+Case 32. Sổ cái 111
+  Actor           : KT
+  Bước            : Sổ cái, mã 111, kỳ đang test.
+  Kết quả mong đợi
+    - Số dư đầu khớp Case 12. Phát sinh đúng bán/chi/thủ công.
+    - Dư chạy liên tục. Tên TK "Tiền mặt".
+
+Case 33. Cân đối phát sinh 3 cột
+  Actor           : KT
+  Bước            : Cân đối phát sinh kỳ.
+  Kết quả mong đợi
+    - Đầu Nợ = Đầu Có; PS Nợ = PS Có; Cuối Nợ = Cuối Có.
+    - Kết luận "Cân 3 cột" nếu dữ liệu sạch.
+
+
+--------------------------------------------------------------------------------
+PHẦN H — VAT (NULL vs 0, TRA_NCC)
+--------------------------------------------------------------------------------
+
+Case 34. VAT đầu ra — dòng thuế 10%
+  Actor           : KT
+  Tiền điều kiện  : Case 19 SP-A 10%.
+  Bước            : Bảng kê VAT kỳ.
+  Kết quả mong đợi
+    - Có dòng HĐ, thuế 10%, VAT > 0. Không gắn "Chưa chọn".
+
+Case 35. Thuế suất 0 đã cấu hình ≠ thiếu thuế
+  Actor           : TN + KT
+  Tiền điều kiện  : SP-B thuế = 0 (đã xác nhận lúc tạo SP).
+  Bước
+    1. TN bán SP-B, complete (không dialog chặn).
+    2. KT xem bảng kê.
+  Kết quả mong đợi
+    - HĐ hoàn thành. Dòng VAT 0, không phải "Chưa chọn".
+    - "Dòng bán thiếu thuế" không tăng vì dòng này.
+
+Case 36. Thuế NULL — POS chặn; bảng kê đánh thiếu
+  Actor           : QL + TN + KT
+  Tiền điều kiện  : Tạo SP-C, để thuế CHƯA chọn (NULL). Tồn > 0.
+  Bước
+    1. TN cố complete HĐ có SP-C.
+    2. Nếu lọt được HĐ cũ NULL (dữ liệu lịch sử): KT xem bảng kê.
+  Kết quả mong đợi
+    - POS chặn complete (chưa chọn thuế). Không sinh HĐ Hoàn thành mới.
+    - HĐ cũ NULL (nếu có): badge "Chưa chọn", KPI thiếu thuế ≥ 1.
+    - Hàng chờ lý do "Thiếu thuế suất…", không nút Ghi sổ trễ.
+
+Case 37. VAT vào = HĐ mua khớp + CP + TSCĐ − trả hàng NCC
+  Actor           : KT
+  Tiền điều kiện  : Có HDM đã khớp VAT V1; CP Case 15 VAT 200.000;
+                    (tuỳ chọn) TSCĐ VAT V2; (tuỳ chọn) trả NCC hàng VAT V3.
+  Bước            : Bảng kê VAT → phần VAT đầu vào.
+  Kết quả mong đợi
+    - Nguồn tiếng Việt: Hóa đơn mua hàng, Chi phí vận hành, TSCĐ,
+      Trả hàng nhà cung cấp (số âm).
+    - Tổng VAT vào = V1 + 200.000 + V2 − V3.
+    - Chú thích: không phải số phải nộp tờ khai.
+    - SAI nếu cộng trả hàng như số dương hoặc quên trừ.
+
+Case 38. In lại HĐ không tăng bảng kê
+  Actor           : KT / TN
+  Tiền điều kiện  : Case 21 đã in.
+  Bước            : In / lưu PDF lần 2. Tải lại bảng kê.
+  Kết quả mong đợi
+    - Số dòng / tổng VAT ra không đổi.
+
+
+--------------------------------------------------------------------------------
+PHẦN I — KHÓA KỲ: BLOCK / WARN / KẾT CHUYỂN / MỞ LẠI
+--------------------------------------------------------------------------------
+
+Case 39. Kiểm tra khóa — BLOCK khi thiếu BT bắt buộc
+  Actor           : KT
+  Tiền điều kiện  : Cố tình có HĐ Hoàn thành thiếu BAN_HANG (nếu tái hiện được)
+                    HOẶC HDM khớp thiếu MUA_HANG / PC thành công thiếu TRA_NCC.
+                    Nếu môi trường sạch: PASS có điều kiện "block rỗng".
+  Bước            : Khóa kỳ / kết chuyển → Kiểm tra.
+  Kết quả mong đợi
+    - BLOCK (đỏ): câu tiếng Việt, có mã chứng từ,
+      vd "Hóa đơn bán HD… đã hoàn thành nhưng thiếu bút toán Bán hàng / Giá vốn".
+    - Nút Khóa kỳ disabled. POST close → 400, không override.
+
+Case 40. WARN vẫn khóa được
+  Actor           : KT
+  Tiền điều kiện  : Có PN đã xác nhận chưa 3-way và/hoặc HĐ Nháp trong kỳ.
+                    Block rỗng.
+  Bước
+    1. Kiểm tra: WARN vàng liệt kê PN / HĐ nháp tiếng Việt.
+    2. Kết chuyển (nếu chưa).
+    3. Khóa kỳ → xác nhận hộp WARN.
+  Kết quả mong đợi
+    - Khóa thành công 200. Kỳ badge Khóa.
+    - Số dư cuối copy sang kỳ sau (đã chốt).
+    - Lịch sử: "Kết chuyển kỳ kế toán", "Khóa kỳ kế toán".
+
+Case 41. Kết chuyển đúng TK
+  Actor           : KT
+  Tiền điều kiện  : Trước Case 40, kỳ còn Mở, có DT/GV/CP.
+  Bước            : Kết chuyển. Xem sổ cái 511, 632, 642, 911, 421.
+  Kết quả mong đợi
+    - 511/5212/632/642/711 về 0 sau KC. 421 đổi đúng LN dòng 8 KQKD.
+    - 911 = 0 sau KC.
+
+Case 42. Mở lại kỳ gần nhất — kỳ sau chưa có BT nghiệp vụ
+  Actor           : KT (theo plan 1.5: QL mới được mở lại ở một số môi trường;
+                    nếu KT 403 thì ghi nhận Case 58 và nhờ QL làm bước này)
+  Tiền điều kiện  : Case 40. Kỳ sau chỉ có SODU_DAU_KY hoặc trống.
+  Bước            : Mở lại kỳ → nhập lý do.
+  Kết quả mong đợi
+    - Kỳ về Mở. KC bị đảo nếu có. Số dư đầu kỳ SAU chưa đổi lúc mở.
+    - Lịch sử: "Mở lại kỳ kế toán".
+
+Case 43. Không mở lại kỳ không phải gần nhất
+  Actor           : KT / QL
+  Tiền điều kiện  : Có ≥ 2 kỳ Khoa.
+  Bước            : Mở lại kỳ cũ hơn kỳ Khoa mới nhất.
+  Kết quả mong đợi
+    - 400: Chỉ mở lại kỳ khóa gần nhất.
+
+Case 44. Không mở lại nếu kỳ sau đã có BAN_HANG
+  Actor           : TN + KT
+  Tiền điều kiện  : Đã khóa kỳ N, mở kỳ N+1, TN bán 1 HĐ (BT BAN_HANG).
+  Bước            : Mở lại kỳ N.
+  Kết quả mong đợi
+    - 400: kỳ sau đã có bút toán nghiệp vụ.
+
+
+--------------------------------------------------------------------------------
+PHẦN J — KQKD / BCDKT / LCTT / P&L ĐIỀU HÀNH
+--------------------------------------------------------------------------------
+
+Case 45. KQKD thuần — không trừ tiền trả NCC
+  Actor           : KT
+  Tiền điều kiện  : Có doanh thu, giá vốn, chi phí 642; có Phiếu chi NCC đã trả
+                    trong kỳ (P0).
+  Bước            : Kết quả kinh doanh → lập kỳ.
+  Kết quả mong đợi
+    - Dòng 1 DT, 2 trả lại, 3 DT thuần, 4 GV, 5 LN gộp, 6 CP 642, 7 thu khác,
+      8 LN kế toán mini trước thuế.
+    - Số dòng 8 KHÔNG giảm vì tiền trả NCC (331/111).
+    - Chú thích: CHƯA thuế TNDN. Không trừ tiền trả NCC.
+
+Case 46. P&L quản trị (nếu mở được) không lấy laiLoSauChiPhi trừ NCC
+  Actor           : QL / KT
+  Tiền điều kiện  : Có báo cáo lãi lỗ cửa hàng P0.
+  Bước            : So KQKD dòng 8 với P&L điều hành (lãi gộp − chi bên thứ 3 − lương).
+  Kết quả mong đợi
+    - Hai báo cáo khác nhau (đúng). P&L không trừ chi NCC như lãi kế toán.
+    - Không lấy trường laiLoSauChiPhi cũ (deprecated) làm số chính.
+
+Case 47. BCDKT kỳ chưa kết chuyển — J = 421 + LN 8
+  Actor           : KT
+  Tiền điều kiện  : Kỳ Mở, chưa KC (trước Case 40 hoặc sau mở lại).
+  Bước            : Bảng cân đối kế toán.
+  Kết quả mong đợi
+    - Watermark tạm tính. J = 421 + LN KQKD dòng 8. KHÔNG cộng 911.
+    - Tài sản = Nguồn vốn.
+
+Case 48. BCDKT sau kết chuyển — J = 421
+  Actor           : KT
+  Tiền điều kiện  : Đã KC.
+  Bước            : Lập BCDKT.
+  Kết quả mong đợi
+    - J = 421. 911 = 0. Không cộng LN 8 lần 2. TS = NV.
+
+Case 49. LCTT — THU_CONG dùng 111/112 vào I Thu/chi khác
+  Actor           : KT
+  Tiền điều kiện  : Case 25 (Nợ 111 / Có 138 = 50.000) chưa đảo, hoặc lập mới.
+  Bước            : Lưu chuyển tiền tệ.
+  Kết quả mong đợi
+    - Nhóm I có "Thu/chi khác (bút toán thủ công)" = +50.000.
+    - I + II + III = PS Nợ(111+112) − PS Có(111+112). Khớp.
+
+Case 50. LCTT — THU_CONG không đụng 111/112 thì không đổi
+  Actor           : KT
+  Bước            : Thủ công Nợ 138 / Có 711 (không 111/112). Xem LCTT trước/sau.
+  Kết quả mong đợi
+    - I Thu/chi khác không đổi vì bút toán này.
+
+Case 51. LCTT có trả NCC
+  Actor           : KT
+  Tiền điều kiện  : Có TRA_NCC trong kỳ.
+  Bước            : Xem dòng Trả NCC (I).
+  Kết quả mong đợi
+    - Có số (dòng tiền). KQKD Case 45 vẫn không trừ khoản này.
+
+
+--------------------------------------------------------------------------------
+PHẦN K — TSCĐ
+--------------------------------------------------------------------------------
+
+Case 52. Lập thẻ + ghi sổ mua 111
+  Actor           : KT
+  Tiền điều kiện  : Kỳ Mở. 111 đủ tiền trên sổ.
+  Bước
+    1. TSCĐ: tên "Tủ mát", nguyên giá 10.000.000, VAT 800.000,
+       ngày mua/SD hôm nay, 36 tháng, TK 111. Lập thẻ.
+    2. Ghi sổ mua.
+  Kết quả mong đợi
+    - Nợ 211 = 10.000.000, Nợ 1331 = 800.000, Có 111 = 10.800.000.
+    - Không 331, không công nợ.
+    - Lịch sử: "Lập thẻ TSCĐ", "Ghi sổ mua TSCĐ".
+
+Case 53. Ghi sổ mua 112
+  Actor           : KT
+  Bước            : Thẻ khác, TK 112, xác nhận.
+  Kết quả mong đợi
+    - Có 112. Không 111. Không 331.
+
+Case 54. Form/API chặn MaTKTien = 331
+  Actor           : KT
+  Bước            : Dropdown chỉ 111 / 112. (Tuỳ chọn) POST MaTKTien=331.
+  Kết quả mong đợi
+    - UI không có 331. API 400.
+
+Case 55. Khấu hao kỳ — 1 lần
+  Actor           : KT
+  Tiền điều kiện  : Case 52. Kỳ Mở.
+  Bước            : Chạy khấu hao 2 lần cùng kỳ.
+  Kết quả mong đợi
+    - Lần 1: Nợ 642 / Có 214 = round(10.000.000/36).
+    - Lần 2: "Đã chạy khấu hao kỳ này", không nhân đôi.
+    - Lịch sử: "Chạy khấu hao TSCĐ".
+
+
+--------------------------------------------------------------------------------
+PHẦN L — NGÂN HÀNG 1 TK + CSV
+--------------------------------------------------------------------------------
+
+Case 56. Thêm đúng 1 TKNH — luôn 112
+  Actor           : KT
+  Tiền điều kiện  : Chưa có TKNH Đang sử dụng.
+  Bước            : Số TK, tên NH, chủ TK → Thêm.
+  Kết quả mong đợi
+    - MaTKNH NHxxxx, TK kế toán 112, trạng thái Đang sử dụng.
+    - Lịch sử: "Thêm tài khoản ngân hàng".
+    - Form thêm biến mất, panel "Đã có 1 tài khoản đang dùng".
+
+Case 57. Không thêm TKNH thứ hai khi đang dùng
+  Actor           : KT
+  Tiền điều kiện  : Case 56.
+  Bước            : POST /ledger/bank-accounts lần 2 (nếu UI ẩn form thì dùng API).
+  Kết quả mong đợi
+    - 400: Mini chỉ dùng 1 tài khoản đang sử dụng.
+
+Case 58. Nhập CSV hợp lệ
+  Actor           : KT
+  Tiền điều kiện  : Case 56. File .csv cột ngay,sotien,diengiai,magd (hoặc no/co).
+  Bước            : Ngân hàng & sao kê CSV → chọn file → Nhập CSV.
+  Kết quả mong đợi
+    - Thông báo đã nhập N dòng + mã SK….
+    - Lịch sử: "Nhập sao kê CSV".
+
+Case 59. Từ chối Excel
+  Actor           : KT
+  Bước            : Chọn .xlsx / .xls.
+  Kết quả mong đợi
+    - UI: "Chỉ nhận tệp CSV. Không nhập Excel." API 400.
+
+
+--------------------------------------------------------------------------------
+PHẦN M — POS / P0 KHÔNG CHẾT KHI KHÓA KỲ
+--------------------------------------------------------------------------------
+
+Case 60. POS vẫn bán khi kỳ Khoa
+  Actor           : TN
+  Tiền điều kiện  : Kỳ tháng hiện tại Khoa (Case 40) hoặc khóa lại sau test.
+  Bước            : Mở ca (nếu cần), bán SP-A, complete.
+  Kết quả mong đợi
+    - POS không chết, HĐ Hoàn thành, tồn trừ.
+    - BT có thể vào Chờ ghi sổ (KY_KHOA) — không 500.
+
+Case 61. P0 đối chiếu / phiếu chi / lương không mất menu
+  Actor           : KT
+  Bước            : Mở Đối chiếu hóa đơn, Công nợ, Ca & Phiếu thu, Bảng lương tháng.
+  Kết quả mong đợi
+    - Các màn P0 mở bình thường. Nhật ký P0 cũ vẫn xem được.
+
+
+--------------------------------------------------------------------------------
+PHẦN N — LỊCH SỬ HOẠT ĐỘNG
+--------------------------------------------------------------------------------
+
+Case 62. Lịch sử ghi đủ luồng KT mới
+  Actor           : KT
+  Tiền điều kiện  : Đã làm Case 07–16, 25, 28, 52, 56, 58.
+  Bước
+    1. NHÂN SỰ MỞ RỘNG → Lịch sử hoạt động.
+    2. Loại việc = Việc nghiệp vụ; khoảng ngày hôm nay.
+    3. Lọc "Kế toán tổng hợp".
+  Kết quả mong đợi
+    - Thấy các việc tiếng Việt: Tạo/Mở/Lưu/Chốt kỳ, Lập/Xác nhận chi phí,
+      Lập/Đảo bút toán thủ công, Ghi sổ bút toán, Ghi sổ trễ (nếu có),
+      Lập thẻ / Ghi sổ mua TSCĐ, Thêm TKNH, Nhập sao kê.
+    - Có actor (tên KT), mã chứng từ, không xóa được dòng.
+    - Log P0 cũ (đối chiếu, phiếu chi, lương) vẫn còn — không bị mất.
+
+Case 63. Click dòng lịch sử mở đúng chỗ
+  Actor           : KT
+  Bước            : Bấm dòng chi phí / HĐ bán / kỳ.
+  Kết quả mong đợi
+    - Chi phí → modal hoặc trang chi phí. HĐ bán → modal HĐ.
+    - Kỳ → trang Kỳ kế toán.
+
+
+--------------------------------------------------------------------------------
+PHẦN O — PHÂN QUYỀN / HỒI QUY
+--------------------------------------------------------------------------------
+
+Case 64. Thu ngân không gọi journal API
+  Actor           : TN
+  Bước            : GET /api/ledger/journals (token TN).
+  Kết quả mong đợi
+    - 403.
+
+Case 65. Admin không xác nhận chi phí (trừ khi gán UC36)
+  Actor           : QL
+  Bước            : POST /ledger/expenses/:id/confirm.
+  Kết quả mong đợi
+    - 403 nếu chưa gán UC36.
+
+Case 66. Double-click Xác nhận chi phí
+  Actor           : KT
+  Bước            : Xác nhận rất nhanh 2 lần cùng phiếu.
+  Kết quả mong đợi
+    - 1 bút toán CHI_PHI. Lần 2: already / "đã xác nhận".
+
+Case 67. Telegram không ghi sổ
+  Actor           : QL (bot)
+  Bước            : /today, /debt (nếu bot bật).
+  Kết quả mong đợi
+    - Chỉ đọc. Không insert ButToan.
+
+
+--------------------------------------------------------------------------------
+PHẦN P — HỒI QUY P0 (KHÔNG PHÁ)
+--------------------------------------------------------------------------------
+
+Case 68. E2E P0 bán hàng còn chạy
+  Actor           : TN
+  Bước            : Mở ca, bán, thu, complete, in HĐ từ menu Hóa đơn.
+  Kết quả mong đợi
+    - Như trước KT mới. Modal HĐ P0 không đổi với thu ngân
+      (vẫn có Mở đổi trả khi không read-only).
+
+Case 69. Đối chiếu 3-way P0
+  Actor           : KT
+  Bước            : Tiếp nhận HĐ + đối chiếu PN (luồng cũ).
+  Kết quả mong đợi
+    - Công nợ phát sinh khi khớp. Không lỗi JS do FLY_ACC_DOCS.
+
+Case 70. Nhật ký hệ thống admin
+  Actor           : QL
+  Bước            : Nhật ký hệ thống (admin).
+  Kết quả mong đợi
+    - Vẫn xem được log cũ + log KT mới (nếu QL có quyền).
+
+
+--------------------------------------------------------------------------------
+PHẦN Q — ỔN ĐỊNH / BIÊN
+--------------------------------------------------------------------------------
+
+Case 71. Chưa migration — màn KT
+  Actor           : KT
+  Tiền điều kiện  : Máy chưa chạy AccountingCore (chỉ nếu có môi trường sạch).
+  Bước            : Mở Hệ thống tài khoản.
+  Kết quả mong đợi
+    - 503 / thông báo chưa chạy migration. Không trắng trang.
+
+Case 72. Hết thời gian API
+  Actor           : KT
+  Bước            : Tắt server, bấm Tải lại chờ ghi sổ.
+  Kết quả mong đợi
+    - Toast lỗi tiếng Việt, không treo spinner vĩnh viễn.
+
+Case 73. Mã chứng từ không mở được
+  Actor           : KT
+  Bước            : (Dev) gọi open với loại lạ.
+  Kết quả mong đợi
+    - Toast "Chưa có màn hình chi tiết…" — không crash.
+
+Case 74. Restart sau đổi API
+  Actor           : Người cài
+  Bước            : Đổi server + Electron sau pull code này.
+  Kết quả mong đợi
+    - GET /ledger/documents/HoaDon/:id tồn tại.
+    - Dropdown có dấu ngay cả khi chưa chạy LedgerUiLabels
+      (API/FE map tên). Sau migration, TenLoaiCP trong DB cũng có dấu.
+
+
+--------------------------------------------------------------------------------
+BẢNG ĐỐI CHIẾU NHANH VỚI PLAN 1.5
+--------------------------------------------------------------------------------
+  VAT NULL vs 0                 Case 35, 36, 34
+  TRA_NCC trừ VAT vào           Case 37
+  BLOCK vs WARN                 Case 39, 40
+  KQKD thuần, không trừ NCC     Case 45, 46
+  BCDKT J trước/sau KC          Case 47, 48
+  LCTT + THU_CONG               Case 49, 50, 51
+  TSCĐ 111/112, không 331       Case 52–54
+  1 TKNH + CSV only             Case 56–59
+  Đảo BT                        Case 28
+  Ghi sổ trễ / kỳ khóa          Case 17, 29, 60
+  POS không chết khi khóa       Case 60
+  THU_CONG mã server, không TL  Case 25, 27
+  Click xem HĐ                  Case 21, 22
+  Tiếng Việt có dấu             Case 01–04
+  Lịch sử hoạt động             Case 62, 63
+
+Tổng số case đánh số: 74
+(Case điều kiện / phụ thuộc dữ liệu P0 được phép PASS có điều kiện nếu ghi rõ.)
+
+Kết thúc bản test.
+================================================================================

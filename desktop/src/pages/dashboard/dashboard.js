@@ -170,6 +170,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const holidaysNav = document.getElementById('managerHolidaysNav');
   if (holidaysNav) holidaysNav.style.display = isManager ? '' : 'none';
   document.getElementById('managerReportNav').style.display = isManager ? '' : 'none';
+  const warehouseReportNav = document.getElementById('managerWarehouseReportNav');
+  if (warehouseReportNav) warehouseReportNav.style.display = isManager ? '' : 'none';
+  ['managerLedgerKqkdNav', 'managerLedgerCfNav', 'managerLedgerBsNav', 'managerLedgerHandbookNav'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isManager ? '' : 'none';
+  });
   if (isManager) document.getElementById('navGroupSystem').style.display = 'block';
   if (isWarehouse) document.getElementById('navGroupWarehouse').style.display = 'block';
   if (isPurchasing) document.getElementById('navGroupPurchasing').style.display = 'block';
@@ -364,6 +370,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setNavBadge('warehouse-inventory-counts', byTarget['warehouse-inventory-counts'] || 0);
     setNavBadge('accounting-settlements', byTarget['accounting-settlements'] || 0);
     setNavBadge('cashier-returns', byTarget['cashier-returns'] || 0);
+    setNavBadge('admin-warehouse-reports', byTarget['admin-warehouse-reports'] || 0);
     if (!document.getElementById('notificationPanel').hidden) renderInboxPanel();
     if (announce && fresh.length) {
       fresh.forEach(item => announcedInboxIds.add(item.id));
@@ -373,7 +380,7 @@ document.addEventListener('DOMContentLoaded', () => {
       playInboxChime();
       if (document.getElementById('notificationPanel')?.hidden) showInboxToast(fresh[0], fresh.length);
       const currentTarget = currentNav?.dataset.target;
-      const heavyPages = new Set(['accounting-reports', 'manager-reports', 'warehouse-reports', 'cashier-reports', 'purchasing-reports']);
+      const heavyPages = new Set(['accounting-reports', 'manager-reports', 'warehouse-reports', 'cashier-reports', 'purchasing-reports', 'admin-warehouse-reports']);
       const shouldReload = fresh.some(item => item.target === currentTarget || (currentTarget === 'home' && item.target === 'manager-purchase-approvals'));
       if (shouldReload && !workspaceBusy() && !heavyPages.has(currentTarget)) refreshCurrentPage();
     }
@@ -934,6 +941,9 @@ document.addEventListener('DOMContentLoaded', () => {
     closeInboxPanel();
     let target = button.dataset.inboxTarget;
     const title = button.querySelector('strong')?.textContent || '';
+    const detail = button.querySelector('span')?.textContent || '';
+    const warehouseCode = `${title} ${detail}`.match(/BCK\d{8}\d{3}/);
+    if (warehouseCode) sessionStorage.setItem('fly_open_warehouse_report', warehouseCode[0]);
     if (target === 'manager-workforce' && /chấm công/i.test(title)) target = 'manager-workforce-approve';
     const nav = pageNavItems.find(item => item.dataset.target === target);
     if (nav) openPage(nav);

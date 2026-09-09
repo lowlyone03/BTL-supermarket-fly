@@ -43,10 +43,14 @@ const calculateOperatingResult = input => {
     const chiPhiBenThu3 = roundMoney(n(input.chiNhaCungCap) + n(input.cuocVanChuyen));
     const chiPhiNhanVien = roundMoney(input.chiPhiNhanVien);
     const laiLoSauChiPhi = roundMoney(gross - chiPhiBenThu3 - chiPhiNhanVien);
+    const kqkdLoiNhuan = roundMoney(gross - n(input.cuocVanChuyen) - chiPhiNhanVien);
     const tongLuongKhoa = roundMoney(input.tongLuongKhoa ?? chiPhiNhanVien);
     let trangThai = 'HÒA';
     if (laiLoSauChiPhi > 0) trangThai = 'LÃI';
     else if (laiLoSauChiPhi < 0) trangThai = 'LỖ';
+    let kqkdTrangThai = 'HÒA';
+    if (kqkdLoiNhuan > 0) kqkdTrangThai = 'LÃI';
+    else if (kqkdLoiNhuan < 0) kqkdTrangThai = 'LỖ';
     const khongDuTraLuong = tongLuongKhoa > 0 && doanhThuThuan < tongLuongKhoa;
     return {
         doanhThuThuan,
@@ -54,9 +58,11 @@ const calculateOperatingResult = input => {
         chiPhiBenThu3,
         chiPhiNhanVien,
         laiLoSauChiPhi,
+        kqkdLoiNhuan,
+        kqkdTrangThai,
         trangThai,
         khongDuTraLuong,
-        batBuocKeHoach: trangThai === 'LỖ' || khongDuTraLuong
+        batBuocKeHoach: kqkdTrangThai === 'LỖ' || khongDuTraLuong
     };
 };
 
@@ -71,7 +77,7 @@ const buildLossReasons = input => {
     const cuoc = n(input.cuocVanChuyen);
     const luong = n(input.tongLuongKhoa ?? input.chiPhiNhanVien);
     const chiThu3 = roundMoney(chiNcc + cuoc);
-    const laiLo = n(input.laiLoSauChiPhi);
+    const laiLo = n(input.loiNhuanKqkd ?? input.laiLoSauChiPhi);
     const khongDuTraLuong = luong > 0 && dtThuan < luong;
     if (laiLo >= 0 && !khongDuTraLuong) return [];
 
@@ -85,12 +91,12 @@ const buildLossReasons = input => {
             nghiaLa: 'Tiền bán sau khi trừ giá vốn còn ít, nên các khoản chi sau đó dễ đẩy cửa hàng sang lỗ.'
         });
     }
-    if (chiThu3 > 0 && chiThu3 > Math.max(0, laiGop)) {
+    if (input.includeNccCause === true && chiThu3 > 0 && chiThu3 > Math.max(0, laiGop)) {
         reasons.push({
             ma: 'chi_ncc_lon',
             tieuDe: CAUSE_CATALOG.chi_ncc_lon,
             soLieu: `Đã chi nhà cung cấp ${formatVnd(chiNcc)}${cuoc ? ` và cước vận chuyển ${formatVnd(cuoc)}` : ''}, trong khi lãi gộp chỉ ${formatVnd(laiGop)}.`,
-            nghiaLa: 'Tiền trả nhà cung cấp trong kỳ lớn hơn phần lãi từ bán hàng, nên không còn đủ để bù các chi phí khác.'
+            nghiaLa: 'Đây là dòng tiền (trả NCC), không phải lỗ kế toán. Chỉ hiện khi bật giải thích tiền mặt.'
         });
     }
     if (luong > 0 && luong > Math.max(0, laiGop)) {
@@ -118,12 +124,13 @@ const buildLossReasons = input => {
             nghiaLa: 'Khách trả hàng làm giảm tiền bán thực tế, nên kỳ này khó trang trải chi phí.'
         });
     }
-    if (laiGop - chiThu3 - luong < 0 && (chiThu3 > 0 || luong > 0)) {
+    const kqkd = n(input.loiNhuanKqkd ?? (laiGop - cuoc - luong));
+    if (kqkd < 0 && (cuoc > 0 || luong > 0)) {
         reasons.push({
             ma: 'chi_phi_an_het_lai',
             tieuDe: CAUSE_CATALOG.chi_phi_an_het_lai,
-            soLieu: `Lãi gộp ${formatVnd(laiGop)} − chi bên thứ 3 ${formatVnd(chiThu3)} − lương ${formatVnd(luong)} = ${formatVnd(laiGop - chiThu3 - luong)}.`,
-            nghiaLa: 'Sau khi trừ hết chi phí đang có chứng từ, cửa hàng không còn lãi.'
+            soLieu: `Lãi gộp ${formatVnd(laiGop)} − cước ${formatVnd(cuoc)} − lương ${formatVnd(luong)} = ${formatVnd(kqkd)}. Không trừ tiền trả NCC.`,
+            nghiaLa: 'Sau chi phí vận hành và lương đã khóa, cửa hàng không còn lãi kế toán. Tiền trả NCC là dòng tiền, không trừ vào KQKD.'
         });
     }
     return reasons;

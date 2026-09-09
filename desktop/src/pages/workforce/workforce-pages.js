@@ -544,6 +544,75 @@
     await loadPayroll();
   };
 
+  const confirmCheckOutModal = (context, onDone) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'warehouse-modal-backdrop';
+    const phrase = window.FLY_FIELDS?.CHECK_OUT_CONFIRM_PHRASE || 'RA CA';
+    overlay.innerHTML = `<div class="warehouse-modal warehouse-confirm-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">CHẤM CÔNG RA</p><h2>Xác nhận kết thúc ca</h2></div><button type="button" class="warehouse-icon-button close" aria-label="Đóng">×</button></div><div class="warehouse-modal-body"><div class="cashier-close-alert"><svg><use href="#i-warning"/></svg><div><strong>Chấm công ra sẽ kết thúc ca làm việc</strong><p>Không bấm nếu còn đang làm. Sau khi ra, lượt chấm chuyển chờ Quản lý duyệt — không phải nút đóng POS.</p></div></div><div id="checkOutStep1"><p class="cashier-payment-help">Bước 1/2: đọc cảnh báo rồi bấm Tiếp tục. Không chấm ra chỉ vì muốn thoát màn hình.</p></div><div id="checkOutStep2" hidden><div class="warehouse-field"><label>Gõ <strong>${esc(phrase)}</strong> để xác nhận chấm công ra *</label><input id="checkOutConfirm" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="${esc(phrase)}"></div></div></div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Hủy</button><button type="button" class="warehouse-secondary" id="checkOutBack" hidden>Quay lại</button><button type="button" class="warehouse-primary" id="checkOutContinue">Tiếp tục</button><button type="button" class="warehouse-danger" id="checkOutConfirmBtn" hidden disabled>Xác nhận chấm công ra</button></div></div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    const step1 = overlay.querySelector('#checkOutStep1');
+    const step2 = overlay.querySelector('#checkOutStep2');
+    const continueBtn = overlay.querySelector('#checkOutContinue');
+    const backBtn = overlay.querySelector('#checkOutBack');
+    const confirmBtn = overlay.querySelector('#checkOutConfirmBtn');
+    const confirmInput = overlay.querySelector('#checkOutConfirm');
+    overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+    const phraseOk = () => {
+      const check = window.FLY_FIELDS?.validateCheckOutConfirm
+        ? window.FLY_FIELDS.validateCheckOutConfirm(confirmInput.value)
+        : { ok: String(confirmInput.value || '').trim().toUpperCase() === phrase };
+      confirmBtn.disabled = !check.ok;
+      return check;
+    };
+    continueBtn.addEventListener('click', () => {
+      step1.hidden = true;
+      step2.hidden = false;
+      continueBtn.hidden = true;
+      backBtn.hidden = false;
+      confirmBtn.hidden = false;
+      phraseOk();
+      confirmInput.focus();
+    });
+    backBtn.addEventListener('click', () => {
+      step2.hidden = true;
+      step1.hidden = false;
+      continueBtn.hidden = false;
+      backBtn.hidden = true;
+      confirmBtn.hidden = true;
+      confirmInput.value = '';
+      confirmBtn.disabled = true;
+    });
+    confirmInput.addEventListener('input', phraseOk);
+    confirmInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        if (!confirmBtn.disabled) confirmBtn.click();
+      }
+    });
+    confirmBtn.addEventListener('click', async () => {
+      const typed = phraseOk();
+      if (!typed.ok) return context.showToast(typed.message || `Hãy gõ ${phrase} để xác nhận.`, 'error');
+      confirmBtn.disabled = true;
+      try {
+        const result = await api(context, '/cashier/attendance/check-out', {
+          method: 'POST',
+          body: JSON.stringify({ XacNhan: confirmInput.value })
+        });
+        context.showToast(result.message, 'success');
+        close();
+        await onDone();
+      } catch (error) {
+        confirmBtn.disabled = false;
+        context.showToast(error.message, 'error');
+        if (error.recovery === 'close-shift') {
+          close();
+          context.navigate('cashier-shifts');
+        }
+      }
+    });
+  };
+
   const initCashierSchedule = async (root, context) => {
     const load = async () => {
       try {
@@ -590,16 +659,7 @@
         const cardKicker = stuck ? 'CA CÒN MỞ' : 'LỊCH HÔM NAY';
         root.innerHTML = `<header class="warehouse-heading"><div><p class="warehouse-kicker">NHÂN VIÊN / LỊCH CÁ NHÂN</p><h1>Lịch làm việc của tôi</h1><p>${intro}</p></div><span class="warehouse-chip">Supermarket Fly · Hà Nội</span></header>${today ? `<article class="workforce-today${stuck ? ' is-stuck' : ''}"><div><span class="cashier-live"><i></i> ${cardKicker}</span><h2>${esc(today.TenCa)} · ${esc(today.GioBatDau)}–${esc(today.GioKetThuc)}${lunch}</h2><p>${esc(today.NhiemVu)}${today.TenQuay ? ` tại ${esc(today.TenQuay)}` : ''}${officeToday ? ' · không mở quầy bán hàng' : ''}${today.NgayLam && today.NgayLam !== data.todayKey ? ` · ngày ${esc(shortDate(today.NgayLam))}` : ''}</p>${dutyLine}<div class="workforce-today-times"><span>Vào ca <strong>${fmtDateTime(today.ThoiGianVao)}</strong></span><span>Ra ca <strong>${fmtDateTime(today.ThoiGianRa)}</strong></span></div></div><div class="workforce-today-actions">${closePosBtn}${checkInBtn}${nextBtn}</div></article>` : restNote}<article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>LỊCH ĐÃ CÔNG BỐ</p><h2>Các lượt làm việc gần đây</h2></div><button class="warehouse-secondary" id="refreshPersonal"><svg><use href="#i-refresh"/></svg>Làm mới</button></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>NGÀY</th><th>CA LÀM VIỆC</th><th>NHIỆM VỤ</th><th>QUẦY</th><th>CHẤM CÔNG VÀO</th><th>CHẤM CÔNG RA</th><th>TRẠNG THÁI</th></tr></thead><tbody>${data.items.length ? data.items.map(item => `<tr><td><strong>${shortDate(item.NgayLam)}</strong></td><td>${esc(item.TenCa)}<small>${esc(item.GioBatDau)}–${esc(item.GioKetThuc)}${item.GioNghiBatDau ? ` · nghỉ ${esc(item.GioNghiBatDau)}–${esc(item.GioNghiKetThuc)}` : ''}</small></td><td>${esc(item.NhiemVu)}</td><td>${esc(item.TenQuay || '—')}</td><td>${fmtDateTime(item.ThoiGianVao)}</td><td>${fmtDateTime(item.ThoiGianRa)}</td><td><span class="status-pill ${item.ThoiGianRa ? 'ok' : item.ThoiGianVao ? 'sent' : 'draft'}">${esc(item.TrangThaiChamCong || 'Chưa chấm công')}</span></td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Chưa có lịch nào được công bố.</td></tr>'}</tbody></table></div></article>`;
         root.querySelector('#checkIn')?.addEventListener('click', async () => { try { const result = await api(context, '/cashier/attendance/check-in', { method: 'POST' }); context.showToast(result.message, 'success'); await load(); } catch (error) { context.showToast(error.message, 'error'); } });
-        root.querySelector('#checkOut')?.addEventListener('click', async () => {
-          try {
-            const result = await api(context, '/cashier/attendance/check-out', { method: 'POST' });
-            context.showToast(result.message, 'success');
-            await load();
-          } catch (error) {
-            context.showToast(error.message, 'error');
-            if (error.recovery === 'close-shift') context.navigate('cashier-shifts');
-          }
-        });
+        root.querySelector('#checkOut')?.addEventListener('click', () => confirmCheckOutModal(context, load));
         root.querySelector('#goCloseShift')?.addEventListener('click', () => context.navigate('cashier-shifts'));
         root.querySelector('#goNext')?.addEventListener('click', event => {
           const target = event.currentTarget.dataset.next;

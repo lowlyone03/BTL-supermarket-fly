@@ -312,7 +312,8 @@ const buildReport = async (pool, resolved) => {
         chiNhaCungCap,
         cuocVanChuyen: shipping.tong,
         tongLuongKhoa,
-        laiLoSauChiPhi: operating.laiLoSauChiPhi
+        laiLoSauChiPhi: operating.laiLoSauChiPhi,
+        loiNhuanKqkd: operating.kqkdLoiNhuan
     });
 
     const keHoach = await loadPlans(pool, period);
@@ -332,9 +333,25 @@ const buildReport = async (pool, resolved) => {
         latestActivity: resolved.latestActivity,
         fallbackFrom: resolved.fallbackFrom,
         congThuc: {
-            laiLo: 'Doanh thu thuần − giá vốn thuần − chi NCC thành công − cước vận chuyển (nếu có chứng từ) − lương đã khóa = lãi/lỗ sau chi phí.',
+            laiLo: 'KQKD điều hành: lãi gộp − cước (nếu có) − lương đã khóa. Không trừ tiền trả NCC.',
             laiGop: 'Lãi gộp giữ nguyên định nghĩa cũ, không trừ lương.',
-            tienThu: 'Tiền mặt phiếu thu ca đã nộp + đã thu CK/QR/thẻ bán trong kỳ, so với lương đã khóa.'
+            tienThu: 'Tiền mặt phiếu thu ca đã nộp + đã thu CK/QR/thẻ bán trong kỳ, so với lương đã khóa.',
+            deprecated: 'hoatDong.laiLoSauChiPhi vẫn trừ chi NCC (deprecated, chỉ giữ FE cũ).'
+        },
+        kqkd: {
+            doanhThuThuan: operating.doanhThuThuan,
+            loiNhuanGop: operating.loiNhuanGop,
+            chiPhiNhanVien: tongLuongKhoa,
+            cuocVanChuyen: shipping.tong,
+            loiNhuan: operating.kqkdLoiNhuan,
+            trangThai: operating.kqkdTrangThai,
+            ghiChu: 'Không trừ tiền trả NCC — đó là dòng tiền.'
+        },
+        dongTien: {
+            chiNcc: chiNhaCungCap,
+            cuocVanChuyen: shipping.tong,
+            tienThuKy,
+            ghiChu: 'Chi NCC là dòng tiền, không trừ KQKD.'
         },
         hoatDong: {
             ...operating,

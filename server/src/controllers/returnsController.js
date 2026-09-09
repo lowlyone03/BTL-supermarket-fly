@@ -1,6 +1,8 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
 const { isRestockAccepted, looksUnsellable, isEqualValueExchange, roundMoney } = require('../services/financialRules');
+const { postReturnJournals } = require('../services/accountingHooks');
+const { calendarizeRow } = require('../services/reportingPeriod');
 const { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS } = require('../services/invoiceReturnSql');
 const { assertCashierDuty } = require('../services/cashierDuty');
 const {
@@ -168,7 +170,7 @@ const getInvoiceForReturn = async (req, res) => {
                    ),0) AS SLConDoiTra
             FROM ChiTietHoaDon ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
             WHERE ct.MaHD=@MaHD`);
-        res.json({ invoice: header.recordset[0], lines: lines.recordset });
+        res.json({ invoice: calendarizeRow(header.recordset[0]), lines: lines.recordset });
     } catch (error) {
         res.status(500).json({ message: 'Không thể tải hóa đơn đổi trả.' });
     }
@@ -868,6 +870,7 @@ const completeReturn = async (req, res) => {
             })
             : ticket.HinhThucXuLy;
         await writeAudit(new sql.Request(transaction), req.user, 'Hoàn thành đổi trả', maDT, completeNote);
+        await postReturnJournals(transaction, { maDT, maNV: req.user.MaNV, user: req.user });
         await transaction.commit();
         res.json({ message: `Đã hoàn thành phiếu đổi trả ${maDT}.`, MaDT: maDT, MaCaHoan: maCaHoan, history: completeNote });
     } catch (error) {

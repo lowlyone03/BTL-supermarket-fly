@@ -42,6 +42,25 @@ assert.match(html, /Chi tiết số liệu trong kỳ/);
 assert.match(html, /In \/ Lưu PDF|BÁO CÁO QUẢN TRỊ/);
 assert.doesNotMatch(html, /undefined|NaN/);
 
+const writeoffPrint = window.FLY_PRINT.build({
+    variant: 'report',
+    title: 'BÁO CÁO NHẬP – XUẤT – TỒN',
+    number: '2026-09',
+    extraSummaryTitle: 'Hàng đã xuất — không còn bán',
+    extraSummary: [{ label: 'Tổng giá trị', value: 12000, format: 'money', hint: '6 đơn vị' }],
+    extraTables: [{
+        title: 'Chi tiết hàng đã xuất không còn bán',
+        columns: [{ label: 'Sản phẩm', key: 'TenSP' }, { label: 'Thành tiền', key: 'GiaTri', format: 'money', align: 'right' }],
+        rows: [{ TenSP: 'Sữa', GiaTri: 12000 }]
+    }],
+    columns: [{ label: 'Mã SP', key: 'MaSP' }],
+    rows: [{ MaSP: 'SP1' }]
+});
+assert.match(writeoffPrint, /Hàng đã xuất — không còn bán/);
+assert.match(writeoffPrint, /Chi tiết hàng đã xuất không còn bán/);
+assert.match(writeoffPrint, /Sữa/);
+assert.doesNotMatch(writeoffPrint, /undefined|NaN/);
+
 const official = window.FLY_PRINT.build({
     variant: 'report',
     skin: 'official',
