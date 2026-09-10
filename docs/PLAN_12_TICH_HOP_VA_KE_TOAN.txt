@@ -7,6 +7,57 @@ Ngay sua: 05/09/2026 (ban 3 + wording: /payroll QL=UC10 KT=UC33;
   scanner dien thoai de sau, khong cat han)
 Pham vi: supermarket-fly (Electron desktop + Node Express :3000 + SQL Server)
 
+--------------------------------------------------------------------------------
+TRANG THAI THUC TE (cap nhat 10/09/2026) — LAY CODE LAM SU THAT
+--------------------------------------------------------------------------------
+File nay VAN LA plan goc 05/09. Khong xoa lich su VNPay / "Telegram khong duyet".
+Doan nay ghi he thong DANG CHAY. Chi tiet MoMo: docs/PLAN_MOMO_TEST_P1.txt.
+Chi tiet AI (chua code): docs/PLAN_AI_CHATBOT_TRO_LY.txt.
+
+  KT loi + KT mo rong (KHONG nam trong 12 muc, nhung plan ghi "lam truoc P1"):
+    DA CODE 09/09. UC34-UC43, migration 20260909_AccountingCore,
+    journalEngine.js, ledgerController.js, ledger-pages.js, CAM_NANG,
+    BAN_TEST 74 case. README/BAN_GIAO 07/09 noi "chua so cai" = LAC HAU.
+
+  #   Tich hop (bang muc 2)            Code 10/09
+  1   QR adapter                       DA CHAY = MoMo sandbox (khong VNPay).
+                                        providers/vnpay.js + payos.js = stub
+                                        "Provider chua bat". POS chi TM | MoMo.
+                                        IPN doi chieu amount. Test: test-payment-gateway.js
+  2   AI tro ly                        P2-MIN DA CHAY. P2-DU (Telegram /ask, FAQ
+                                        40-60) CHUA HET — plan rieng, KHONG nhet
+                                        P3/P4 vao P2-DU.
+  P3  Doi soat ngan hang thong minh    DA CODE 10/09. UC42, rule engine (khong
+                                        LLM match). Plan:
+                                        docs/PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt
+  P4  Customer Loyalty Intelligence    MVP DA CODE. RFM HĐ hoàn thành. Plan:
+                                        docs/PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt
+  3   Telegram companion               DA CHAY (08/09 + nang giao dien).
+                                        OTP, /fly pull, push, Control Center.
+                                        LECH PLAN GOC: CO nut duyet inline
+                                        (telegramApprove.js + audit). Lenh chu
+                                        /approve bi chan. Khong hard-code ChatId.
+  4   OCR hoa don NCC                  CHUA. Form UC27 nhap tay.
+  5   Barcode 3 che do                 MOT PHAN. #posSearch MaVach / USB HID.
+                                        Chua webcam / ZXing / UI [Go|USB|Camera].
+                                        Scanner DT (kieu 2) de sau — dung plan.
+  6   Smart replenishment A6           MOT PHAN. Canh bao ton min + SLDatMua.
+                                        Chua GET replenishment-suggest, chua
+                                        NhuCauNgay * 7 ngay.
+  7   Thoi tiet                        CAT — khong code (dung plan).
+  8   E-Receipt QR                     CHUA token/URL public. In PDF noi bo co.
+  9   n8n                              CAT — khong cai.
+ 10   Sentry                           CHUA cai @sentry/node.
+ 11   Firebase                         CAT.
+ 12   Ollama module rieng              CHUA (fallback cua #2 khi #2 chua co).
+
+  P&L: storeProfitLossMath da co kqkdLoiNhuan (KHONG tru tra NCC) va
+  laiLoSauChiPhi (cu, deprecated). Man QL dung KQKD vs dong tien.
+
+  Huy HD hon hop da co dong Thanh cong: van CHAN 400; chua luong "hoan
+  tung dong roi moi huy" (A1 buoc 8).
+--------------------------------------------------------------------------------
+
 Tai lieu nen (KHONG DE, KHONG CHON PHUONG AN B):
   - README.md
   - docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt
@@ -302,6 +353,8 @@ PHAN A — CHI TIET 12 TICH HOP
 
 --------------------------------------------------------------------------------
 A1. QR PAYMENT VNPay SANDBOX (ADAPTER)             Uu tien 1    Pha P1
+     TRANG THAI 10/09: DA CHAY = MoMo sandbox. File nay giu lich su VNPay.
+     Chi tiet cong dang dung: docs/PLAN_MOMO_TEST_P1.txt
 --------------------------------------------------------------------------------
 
 MUC TIEU
@@ -469,6 +522,7 @@ KHONG LAM O P1
 
 --------------------------------------------------------------------------------
 A2. AI TRO LY                                      Uu tien 2    Pha P2
+     CHI TIET IMPLEMENT (10/09, CHUA CODE): docs/PLAN_AI_CHATBOT_TRO_LY.txt
 --------------------------------------------------------------------------------
 
 KHUNG BAO VE (BAT BUOC — KHONG NOI TRAIN DATA)

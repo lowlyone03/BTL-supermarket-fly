@@ -394,13 +394,19 @@ const getShiftSummary = async (source, maCa, lock = false) => {
     return summary;
 };
 
+const loadCurrentShiftSummary = async (pool, user) => {
+        const current = await pool.request().input('MaNV', sql.VarChar, user.MaNV)
+            .query(`SELECT TOP 1 MaCa FROM CaLamViec WHERE MaNV=@MaNV AND TrangThai=N'Đang mở' AND ThoiGianKetThuc IS NULL ORDER BY ThoiGianBatDau DESC`);
+        if (!current.recordset.length) return { open: false };
+        return { open: true, summary: await getShiftSummary(pool, current.recordset[0].MaCa) };
+};
+
 const getCurrentShiftSummary = async (req, res) => {
     try {
         const pool = await poolPromise;
-        const current = await pool.request().input('MaNV', sql.VarChar, req.user.MaNV)
-            .query(`SELECT TOP 1 MaCa FROM CaLamViec WHERE MaNV=@MaNV AND TrangThai=N'Đang mở' AND ThoiGianKetThuc IS NULL ORDER BY ThoiGianBatDau DESC`);
-        if (!current.recordset.length) return res.status(404).json({ message: 'Bạn chưa có ca bán hàng đang mở.' });
-        res.json(await getShiftSummary(pool, current.recordset[0].MaCa));
+        const snapshot = await loadCurrentShiftSummary(pool, req.user);
+        if (!snapshot.open) return res.status(404).json({ message: 'Bạn chưa có ca bán hàng đang mở.' });
+        res.json(snapshot.summary);
     } catch (error) {
         console.error(error);
         res.status(400).json({ message: error.message });
@@ -527,5 +533,5 @@ const reopenShift = async (req, res) => {
 
 module.exports = {
     getShifts, getMySchedule, checkIn, checkOut, openShift,
-    getCurrentShiftSummary, closeShift, reopenShift
+    loadCurrentShiftSummary, getCurrentShiftSummary, closeShift, reopenShift
 };

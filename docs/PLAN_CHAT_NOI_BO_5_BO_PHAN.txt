@@ -1,0 +1,864 @@
+================================================================================
+PLAN CHAT NỘI BỘ 5 BỘ PHẬN — SUPERMARKET FLY
+BẢN THIẾT KẾ CHI TIẾT  (10/09/2026)
+CẬP NHẬT CHỐT LẠI + IMPLEMENT P5-MIN  (10/09/2026, sau review plan-chat)
+================================================================================
+
+Vị trí     : supermarket-fly/docs/PLAN_CHAT_NOI_BO_5_BO_PHAN.txt
+Repo       : supermarket-fly (Electron dashboard + Express :3000 + SQL Server)
+Trạng thái : P5-MIN ĐÃ CODE — PhongChat / TinNhan / SSE / file / widget trái.
+Môn        : AIS — kênh trao đổi nội bộ cửa hàng, không phải LLM, không phải Telegram
+
+Đọc trước khi code
+  server/src/constants/permissions.js          5 vai trò + UC01–UC43
+  server/src/middlewares/authMiddleware.js     JWT verifyToken (MaNV, TenVaiTro, MaVaiTro)
+  server/src/controllers/authController.js     payload JWT 8h: MaTK, MaNV, MaVaiTro, TenVaiTro, TenNV
+  server/src/services/inboxService.js          listForRole — việc chờ, không phải hội thoại
+  server/src/services/notificationHub.js       SSE event:inbox + debounce 320ms + Telegram onInboxChanged
+  server/src/routes/notificationRoutes.js      GET /api/notifications + GET /api/notifications/stream
+  desktop/src/pages/dashboard/dashboard.html   topbar chuông / Trợ lý / Telegram modal
+  desktop/src/pages/dashboard/dashboard.js     EventSource + fetch stream + poll 3s
+  desktop/src/pages/dashboard/assistant-panel.js  CẤM SỬA (khung AI góc phải)
+  desktop/src/pages/dashboard/assistant.css    FAB + widget right:20px bottom:20px, ~400×560
+  docs/PLAN_TELEGRAM_BOT_P1.txt                kênh điện thoại + duyệt chứng từ
+  docs/PLAN_AI_CHATBOT_TRO_LY.txt              Trợ lý Fly / Intelligence Center
+  docs/PLAN_12_TICH_HOP_VA_KE_TOAN.txt         P1 Telegram, P2 AI/OCR — chat này = P5 riêng
+
+Khuyên triển khai: làm P5-MIN trước (mục 7). Không Socket.IO, không Firebase,
+không Bot Telegram, không LLM, không đụng assistant-panel.js.
+
+
+================================================================================
+SỬA PLAN SAU REVIEW  (CHỐT MỚI — đè các dòng cũ nếu lệch)
+================================================================================
+
+Người dùng đã review plan-chat và yêu cầu SỬA rồi LÀM. Ba điểm dưới đây
+thắng mọi bảng/ma trận/regex cũ trong file này.
+
+S1. Ma trận kênh  (CHỐT MỚI — bỏ ma trận cứng “1 vai trò / 1 kênh”)
+
+  #kho:        QL + Thủ kho + Mua hàng
+  #mua-hàng:   QL + Mua hàng + Thủ kho
+  #kế-toán:    QL + Kế toán
+  #thu-ngân:   QL + Thu ngân
+  #quản-lý:    chỉ QL
+  #cửa-hàng:   tất cả
+
+  Lý do: kho ↔ mua hàng cần nói đề nghị / giao thiếu / nhận hàng trên kênh
+  bộ phận; không đẩy hết lên #cửa-hàng. Thu ngân vẫn KHÔNG vào #kế-toán
+  (không lộ lương). Kế toán vẫn không vào #kho / #mua-hàng / #thu-ngân.
+
+  Server enforce bằng ROOM_MATRIX (chatPolicy.js) + ThanhVienPhongChat.
+  Không tin body client.
+
+S2. CCCD — không 400 cứng mọi \b\d{12}\b
+
+  Đây là guardrail đồ án. Chặn cứng mọi 12 số → false-positive (mã phiếu,
+  mã tham chiếu, SĐT ghép…). KHÔNG giữ chặn cứng 12 số đứng riêng.
+
+  - Cảnh báo mạnh / HTTP 400 chỉ khi có từ khóa CCCD|căn cước|CMND
+    VÀ một cụm 12 chữ số trong cùng NoiDung.
+  - 12 số đứng riêng: cảnh báo mềm (warning trong JSON và/hoặc banner UI),
+    VẪN GỬI ĐƯỢC (200).
+  - mật khẩu|password|otp|jwt|bearer|api[_-]?key: vẫn 400.
+
+S3. Retention 90 ngày — MaTinCuoi là WATERMARK, không phải FK
+
+  TinNhanDaDoc.MaTinCuoi = mốc đã đọc, KHÔNG FK bắt buộc tới tin còn sống.
+  Cleanup: DELETE tin cũ (>90 ngày, trừ HeThong). Không xóa hàng DaDoc.
+  Nếu watermark < MIN(MaTin) còn lại → vẫn đúng unread:
+      COUNT TinNhan WHERE MaTin > MaTinCuoi AND DaXoa=0 AND MaNV_Gui<>me
+  Ví dụ: xóa tin 1..80, user đang MaTinCuoi=50, tin sống từ 81 → mọi tin
+  mới hơn 50 (tức toàn bộ tin còn lại của người khác) vẫn hiện chưa đọc.
+
+S4. P5-MIN BỔ SUNG (review): realtime bắt buộc + đính tài liệu
+
+  - SSE /api/chat/stream (hub riêng, không lẫn /notifications/stream).
+    Fallback poll 3–4s nếu SSE rớt — không F5 / Ctrl+R.
+  - Đính file trên tin: PDF, ảnh png/jpg/webp, tối đa 8MB, multer,
+    lưu uploads/chat/ — KHÔNG serve public /uploads/chat (phải JWT +
+    thành viên phòng qua GET /api/chat/files/:maTin).
+  - Đính chứng từ hệ thống (loại + mã + snapshot + mở/in sẵn có) khi
+    tra được bảng. Không OCR. Không bắt user xuất PDF tay nếu picker gọn.
+  - UI: nút Chat + badge topbar (không lẫn #menuAssistant). Widget trái
+    dưới ~400px. Cột 6 kênh theo ma trận S1.
+
+Không làm: LLM, API key, Firebase, Socket.IO cloud, Telegram sync,
+AI đọc chat, DM 1-1 (P5-ĐỦ).
+
+
+--------------------------------------------------------------------------------
+CÂU TRÌNH BÀY VỚI GIẢNG VIÊN
+--------------------------------------------------------------------------------
+
+  “Chat nội bộ Fly là kênh nhắn tin giữa năm bộ phận trên desktop đã đăng
+   nhập. Dữ liệu nằm trên SQL Server của cửa hàng, realtime bằng SSE giống
+   chuông thông báo. Không dùng mô hình ngôn ngữ, không API key nhà cung cấp
+   chat, không ứng dụng điện thoại riêng. Tin nhắn không phải chứng từ kế
+   toán và không thay thế Trung tâm phê duyệt hay nút duyệt Telegram.”
+
+
+================================================================================
+0. HIỆN TRẠNG  (ngày 10/09/2026 — lấy CODE làm sự thật)
+================================================================================
+
+0.1. Năm actor đã chốt  (permissions.js + seed-accounts.js)
+
+  Vai trò (TenVaiTro)        Login demo (*)     UC cốt
+  -------------------------- -----------------  --------------------------------
+  Quản lý                    admin              UC01–UC10, UC30, UC32, UC38, UC39, UC43
+  Nhân viên mua hàng         muahang            UC01, UC11–UC14, UC31
+  Thủ kho                    thukho             UC01, UC15–UC21, UC31
+  Thu ngân                   thungan            UC01, UC22–UC26, UC31
+  Kế toán                    ketoan             UC01, UC27–UC29, UC31, UC33, UC34–UC43
+
+  (*) Mật khẩu test: xem hướng dẫn test local. Không ghi mật khẩu / secret vào file này.
+
+  JWT sau login (authController.login):
+    { MaTK, MaNV, MaVaiTro, TenVaiTro, TenNV }  hết hạn 8 giờ.
+  Mọi API chat: verifyToken. Quyền phòng: TenVaiTro + bảng thành viên trên server.
+  Không tin body client “tôi là Quản lý”.
+
+
+0.2. Inbox / chuông — ĐÃ CÓ, KHÔNG PHẢI CHAT
+
+  Việc chờ theo vai trò (PO chờ duyệt, xe đến kho, ca chốt, phiếu chi…).
+  Không lưu hội thoại người–người.
+
+  API
+    GET /api/notifications          JWT  → { items[], count, stamp, hint }
+    GET /api/notifications/stream   JWT  (header Authorization hoặc ?token=)
+                                    event: ready | event: inbox | comment keepalive 20s
+
+  Client (dashboard.js)
+    EventSource(?token=) ; nếu lỗi → fetch stream Authorization ; nếu rớt → poll 3s.
+    Badge #notificationCount, chấm #notificationDot, panel #notificationPanel
+    (cố định top:78px right:22px, rộng ~420px). Toast việc mới top-right.
+    localStorage fly_inbox_seen_${MaNV} — chỉ ẩn badge đã xem, không phải “đã đọc tin”.
+
+  Server
+    notificationHub.notifyInboxChanged → broadcast mọi client đang mở stream,
+    client tự GET lại listForRole (lọc vai trò lúc REST, không lúc SSE).
+    Sau flush, GỌI telegramNotify.onInboxChanged — đẩy việc chờ lên điện thoại
+    người đã OTP. Đừng nhét tin chat vào luồng này.
+
+  Bảng liên quan inbox (không tái sử dụng cho hội thoại)
+    ThongBaoCuaHang     kế hoạch lãi/lỗ, báo cáo kho, từ chối kiểm kê…
+    ThongBaoGiaoHang    ETA xe NCC — chứng từ mua hàng, không phải chat.
+
+
+0.3. Telegram companion — KÊNH KHÁC, ĐÃ CÓ
+
+  Mục đích: QL/NV đã bind ChatId xem số liệu, nhận push việc chờ, duyệt chứng từ
+  bằng nút inline (telegramApprove.js + NhatKy). Không phải chat 5 bộ phận.
+
+  Không sync nội dung chat nội bộ sang Telegram (P5 cấm).
+  Không dùng Bot API / webhook / OTP cho tin nội bộ.
+  PLAN_TELEGRAM giữ UC44 dự phòng “Kênh Telegram” nếu hội đồng bắt UC riêng;
+  P1 không seed UC44. Chat nội bộ không chiếm UC44.
+
+
+0.4. Trợ lý Fly / Intelligence Center — KÊNH KHÁC, P2-MIN ĐÃ CÓ
+
+  Nút topbar #menuAssistant + FAB #assistantFab góc PHẢI dưới (right:20px).
+  Drawer #assistantDrawer ~400×560, z-index 1500. File assistant-panel.js.
+  POST /api/assistant/ask — LLM diễn giải số liệu đúng UC. Rate 40 câu/ngày.
+
+  assistantTools đọc GET /api/notifications (việc chờ), KHÔNG có bảng tin nhắn.
+  P5: Trợ lý KHÔNG được đọc PhongChat / TinNhan (PII + kiểm soát nội bộ).
+
+  CẤM khi code P5:
+    sửa assistant-panel.js, assistant.css (trừ khi z-index đụng nhau — ưu tiên
+    đặt chat TRÁI để không cần sửa CSS AI), trộn tab Chat của trợ lý với hội thoại NV.
+
+
+0.5. Đã có bảng tin nhắn / inbox chat chưa?
+
+  KHÔNG. Grep PhongChat, TinNhan (hội thoại), ThanhVienPhong: không có.
+  “Inbox” trong code = listForRole việc chờ. “purchasing-inbox” = màn đề nghị kho.
+  Không có Socket.IO, không Firebase (PLAN_12 mục 11 đã CẮT).
+
+
+0.6. Auth / layout tóm tắt cho P5
+
+  Desktop một shell: dashboard.html. 5 vai trò ẩn/hiện nav theo TenVaiTro
+  (dashboard.js isManager / isWarehouse / isPurchasing / isAccounting / isCashier).
+  Topbar hiện tại (trái → phải): tìm kiếm | RS | chuông | | Trợ lý | avatar.
+  Telegram: nút trong #profileMenu, modal riêng — không đụng.
+
+  Uploads ảnh sản phẩm đã có (multer, /uploads/products). P5-MIN chat file
+  bắt chước productImageUpload nhưng thư mục /uploads/chat, hạn 8MB,
+  PDF + ảnh; không public static.
+
+
+================================================================================
+1. MỤC TIÊU / KHÔNG LÀM
+================================================================================
+
+1.1. Làm gì
+
+  Chat nội bộ cửa hàng trên Electron đã login, giữa 5 vai trò.
+  Tự host: REST JWT + SQL Server + SSE (cùng kiểu chuông).
+  Khung UI riêng, nút riêng, badge chưa đọc riêng.
+  Lọc phòng server-side theo vai trò + thành viên.
+
+1.2. Không làm  (pha nào cũng cấm, trừ khi ghi rõ P5-ĐỦ)
+
+  Không LLM, không API key nhà chat, không Ollama, không “trợ lý đọc nhóm”.
+  Không Telegram Bot / không đẩy tin nội bộ ra điện thoại.
+  Không Firebase, không Socket.IO, không Pusher/Ably trả phí.
+  Không app khách / PWA / native mobile.
+  Không video, không voice. File P5-MIN: PDF + ảnh png/jpg/webp ≤ 8MB
+  (không file lớn tùy tiện, không zip/exe).
+  Không thay Trung tâm phê duyệt, không thay telegramApprove, không “duyệt trong chat”.
+  Không thay phiếu đề nghị / PO / phiếu chi / đối soát.
+  Không đọc CCCD, MST, số TKNH từ HoSoNhanVien để nhét vào chat.
+  Không sửa UI trợ lý (assistant-panel.js).
+  Không gộp tab với Intelligence Center.
+
+
+================================================================================
+2. MÔ HÌNH PHÒNG CHAT  (chốt phương án chính)
+================================================================================
+
+Người dùng nói “5 bộ phận với nhau”. Không mở Facebook group tự do.
+Kiểm soát nội bộ: kênh bộ phận hẹp, kênh chung rộng, DM để sau.
+
+
+2.1. Phương án chính — P5-MIN  (CHỐT)
+
+  6 kênh cố định, seed một lần, không xóa:
+
+  MaPhong      Khoa          Tên hiện UI              LoaiPhong
+  -----------  ------------  -----------------------  -----------
+  CH_CUAHANG   cua-hang      #cửa-hàng                KenhChung
+  CH_QUANLY    quan-ly       #quản-lý                 KenhVaiTro
+  CH_KHO       kho           #kho                     KenhVaiTro
+  CH_MUAHANG   mua-hang      #mua-hàng                KenhVaiTro
+  CH_KETOAN    ke-toan       #kế-toán                 KenhVaiTro
+  CH_THUNGAN   thu-ngan      #thu-ngân                KenhVaiTro
+
+  Ai vào kênh nào  (server enforce, UI chỉ ẩn)
+  ***** CHỐT MỚI 10/09 — bỏ ma trận 1-vai-trò-cũ *****
+
+  Kênh         QL   Thủ kho   Mua hàng   Kế toán   Thu ngân
+  -----------  --   -------   --------   -------   --------
+  #cửa-hàng    x    x         x          x         x
+  #quản-lý     x    —         —          —         —
+  #kho         x    x         x          —         —     ← thêm Mua hàng (đề nghị/giao thiếu)
+  #mua-hàng    x    x         x          —         —     ← thêm Thủ kho (nhận hàng)
+  #kế-toán     x    —         —          x         —     ← TN không list / không SSE
+  #thu-ngân    x    —         —          —         x     ← chỉ TN + QL
+
+  Quy tắc mặc định hợp AIS:
+    - #cửa-hàng: mọi NV Đang làm việc có tài khoản.
+    - #kho và #mua-hàng: QL + Thủ kho + Mua hàng (hai chiều, không đẩy #cửa-hàng).
+    - #kế-toán: QL + Kế toán. #thu-ngân: QL + Thu ngân. #quản-lý: chỉ QL.
+    - Quản lý vào TẤT CẢ 6 kênh (giám sát, không cần “xin vào”).
+    - Thu ngân KHÔNG vào #kế-toán, #mua-hàng, #kho, #quản-lý.
+    - Thủ kho / Mua hàng KHÔNG vào #kế-toán (công nợ, lương nằm kênh KT).
+    - Kế toán KHÔNG vào #kho / #mua-hàng / #thu-ngân (dùng #cửa-hàng hoặc DM sau).
+    - Không kênh công nợ riêng. TN không cần, không tạo #cong-no.
+    - Không kênh #lương ở P5-MIN.
+
+  Cảnh báo UI (không chặn cứng P5-MIN trừ mục 8.2):
+    Gửi trên #cửa-hàng mà nội dung khớp lương / “duyệt hộ” / số tài khoản
+    → banner vàng: “Kênh chung mọi bộ phận thấy. Lương để #kế-toán (và QL).
+      Duyệt chứng từ mở Trung tâm phê duyệt / Telegram — không duyệt trong chat.”
+    12 số đứng riêng: cảnh báo mềm, vẫn gửi. CCCD/CMND + 12 số: 400 (mục 8.2).
+
+  Thành viên:
+    Bảng ThanhVienPhongChat. Seed + đồng bộ khi tạo NV / đổi vai trò / khóa TK.
+    Người nghỉ (NhanVien.TrangThai ≠ N'Đang làm việc') hoặc TaiKhoan.TrangThai=0
+    → không list phòng, không gửi, SSE cắt.
+
+
+2.2. Phương án phụ — P5-ĐỦ  (không làm cùng P5-MIN)
+
+  (A) DM 1-1 theo MaNV
+      LoaiPhong = 'DM'. MaPhong = 'DM_' + min(MaNV,MaNV kia) + '_' + max(...)
+      cắt còn VARCHAR(40) nếu cần — xem schema mục 4 (MaPhong VARCHAR(40)).
+      Tạo khi user A mở chat với B (cả hai Đang làm việc).
+      QL được DM mọi người; NV chỉ DM người cùng cửa hàng (tất cả 5 vai trò),
+      vì “5 bộ phận với nhau” gồm hỏi nhanh 1-1. Không DM tài khoản khóa.
+
+  (B) Nhóm ad-hoc
+      LoaiPhong = 'Nhom'. Chỉ QL tạo, mời danh sách MaNV. P5-ĐỦ muộn hoặc CẮT
+      nếu hết giờ — không bắt buộc bảo vệ.
+
+  (C) #lương  (optional, chỉ KT + QL)
+      Không seed P5-MIN. Nếu hội đồng hỏi lương trên #cửa-hàng: trả lời
+      “cảnh báo UI + kênh #kế-toán đã có QL; không mở thêm trừ khi cần”.
+
+
+2.3. Không chọn
+
+  Một phòng duy nhất mọi người — lộ lương / công nợ cho TN.
+  Ma trận full-mesh 5×5 kênh đôi (kho-kt, tn-mh…) — quá nhiều, P5-MIN không cần.
+  Slack workspace / Discord — trái yêu cầu tự host 0 key.
+
+
+================================================================================
+3. KIẾN TRÚC KỸ THUẬT  (tự host, 0 API key)
+================================================================================
+
+  Electron UI  (khung chat RIÊNG, góc TRÁI)
+       │
+       ├─ REST JWT  /api/chat/*     phòng, tin, đánh dấu đã đọc, unread
+       │
+       └─ realtime  GET /api/chat/stream     SSE riêng
+            fallback poll GET /api/chat/unread  mỗi 4s nếu SSE rớt
+
+  SQL Server    PhongChat, ThanhVienPhongChat, TinNhan, TinNhanDaDoc
+  Node          chatSchema.js (ensure lúc start, giống telegramSchema)
+                chatHub.js    (SSE, KHÔNG gọi telegramNotify)
+                chatService.js + chatController.js + chatRoutes.js
+
+3.1. Vì sao SSE /api/chat/stream, không nhét vào /notifications/stream
+
+  notificationHub.flush() luôn gọi telegramNotify.onInboxChanged.
+  Gửi chat qua event:inbox → rủi ro đẩy nội dung / làm kêu chuông việc chờ
+  / làm Telegram “có việc mới” giả.
+
+  Tái DÙNG KIỂU: copy pattern subscribe / keepalive 20s / retry:2000 /
+  EventSource(?token=) / fetch Authorization / poll 3–5s.
+  Không tái sử dụng CÙNG hub.
+
+  Không Socket.IO trừ khi SSE chứng minh không kéo nổi (cửa hàng < 20 user
+  online — SSE đủ). Không Firebase.
+
+3.2. chatHub.js
+
+  clients = Map<MaNV, Set<res>>
+  subscribe(res, user): gắn res._flyMaNV, heartbeat ': keepalive'
+  notifyChat({ maPhong, maTin, maNVGui, preview }) :
+    SELECT MaNV FROM ThanhVienPhongChat WHERE MaPhong=@p
+    chỉ writeEvent(res, 'chat', payload) cho member đang mở stream.
+    Payload: { seq, at, maPhong, maTin } — KHÔNG gửi full NoiDung trên SSE
+    (client REST GET tin mới). Tránh lộ tin trên log proxy.
+  Không debounce chung mọi phòng (hoặc debounce 80ms theo maPhong).
+  Không import telegramNotify / assistantService.
+
+3.3. Polling fallback
+
+  Client: nếu !inboxLive analog chatLive → setInterval 4000ms GET /api/chat/unread
+  + nếu đang mở một phòng GET /api/chat/rooms/:id/messages?after=MaTin
+  Tắt interval khi SSE ready trở lại.
+
+3.4. Đồng bộ thành viên
+
+  ensureChatSchema + syncMembership(pool, { MaNV, TenVaiTro, TrangThaiNV, TrangThaiTK })
+  Gọi từ: app.js start (mọi NV đang làm), employeeController create/update,
+  accountController khóa/mở, đổi MaVaiTro.
+  Idempotent: INSERT thành viên thiếu, DELETE hoặc AnKhoiPhong=1 thành viên sai vai trò
+  (giữ lịch sử tin; chỉ cắt quyền).
+
+3.5. File sẽ thêm khi implement  (chưa tạo ở lần plan này)
+
+  server/migrations/SupermarketFly_Migration_20260911_ChatNoiBo.sql
+  server/src/services/chatSchema.js
+  server/src/services/chatHub.js
+  server/src/services/chatService.js
+  server/src/controllers/chatController.js
+  server/src/routes/chatRoutes.js
+  server/test-internal-chat.js
+  desktop/src/pages/dashboard/chat-panel.js
+  desktop/src/pages/dashboard/chat.css
+  Sửa (khi code, không sửa lúc plan):
+    app.js                  mount /api/chat + ensureChatSchema
+    dashboard.html          nút topbar + markup widget TRÁI + script chat-panel.js
+    dashboard.css           chỉ khoảng trống topbar nếu cần — không đụng assistant
+    package.json            test:chat
+    docs/README.md          một dòng index
+  CẤM sửa: assistant-panel.js, telegramApprove.js, inboxService.js (trừ khi
+  cố ý thêm dòng chuông “tin chat” — KHÔNG làm P5-MIN; badge chat riêng).
+
+
+================================================================================
+4. SCHEMA SQL
+================================================================================
+
+Convention repo: tên bảng/cột tiếng Việt không dấu camel hoa chữ đầu,
+NVARCHAR cho chữ, VARCHAR mã, DATETIME GETDATE(), IF OBJECT_ID IS NULL,
+index IX_/UX_/PK_, FK tới NhanVien(MaNV).
+
+Migration idempotent + ensureChatSchema.js (app start) giống TelegramDangKy
+để máy thành viên quên chạy migrate vẫn có bảng.
+
+4.1. PhongChat
+
+  CREATE TABLE dbo.PhongChat (
+      MaPhong      VARCHAR(40)  NOT NULL,          -- CH_CUAHANG / DM_NV_QL01_NV_KT01
+      Khoa         VARCHAR(40)  NOT NULL,          -- cua-hang, dm:nv1:nv2
+      TenPhong     NVARCHAR(100) NOT NULL,
+      LoaiPhong    NVARCHAR(20)  NOT NULL,         -- KenhChung | KenhVaiTro | DM | Nhom
+      MaVaiTro     INT           NULL,             -- kênh bộ phận; NULL = chung/DM
+      MoTa         NVARCHAR(200) NULL,
+      NgayTao      DATETIME      NOT NULL CONSTRAINT DF_PhongChat_NgayTao DEFAULT GETDATE(),
+      TrangThai    NVARCHAR(20)  NOT NULL CONSTRAINT DF_PhongChat_TT DEFAULT N'DangMo',
+      CONSTRAINT PK_PhongChat PRIMARY KEY (MaPhong),
+      CONSTRAINT CK_PhongChat_Loai CHECK (LoaiPhong IN (N'KenhChung', N'KenhVaiTro', N'DM', N'Nhom')),
+      CONSTRAINT CK_PhongChat_TT CHECK (TrangThai IN (N'DangMo', N'Dong')),
+      CONSTRAINT FK_PhongChat_VaiTro FOREIGN KEY (MaVaiTro) REFERENCES dbo.VaiTro (MaVaiTro)
+  );
+  CREATE UNIQUE INDEX UX_PhongChat_Khoa ON dbo.PhongChat (Khoa);
+
+4.2. ThanhVienPhongChat
+
+  CREATE TABLE dbo.ThanhVienPhongChat (
+      MaPhong      VARCHAR(40)  NOT NULL,
+      MaNV         VARCHAR(20)  NOT NULL,
+      NgayVao      DATETIME     NOT NULL CONSTRAINT DF_TVPC_NgayVao DEFAULT GETDATE(),
+      AnKhoiPhong  BIT          NOT NULL CONSTRAINT DF_TVPC_An DEFAULT (0),  -- 1 = mất quyền
+      CONSTRAINT PK_ThanhVienPhongChat PRIMARY KEY (MaPhong, MaNV),
+      CONSTRAINT FK_TVPC_Phong FOREIGN KEY (MaPhong) REFERENCES dbo.PhongChat (MaPhong),
+      CONSTRAINT FK_TVPC_NV    FOREIGN KEY (MaNV)    REFERENCES dbo.NhanVien (MaNV)
+  );
+  CREATE INDEX IX_TVPC_NV ON dbo.ThanhVienPhongChat (MaNV, AnKhoiPhong) INCLUDE (MaPhong);
+
+4.3. TinNhan
+
+  CREATE TABLE dbo.TinNhan (
+      MaTin        BIGINT IDENTITY(1,1) NOT NULL,
+      MaPhong      VARCHAR(40)   NOT NULL,
+      MaNV_Gui     VARCHAR(20)   NOT NULL,
+      TenNV_Gui    NVARCHAR(100) NOT NULL,         -- snapshot lúc gửi (đổi tên NV không sửa tin cũ)
+      TenVaiTro_Gui NVARCHAR(50) NOT NULL,
+      NoiDung      NVARCHAR(1000) NOT NULL,        -- cùng trần ThongBaoCuaHang.NoiDung
+      LoaiTin      NVARCHAR(20)  NOT NULL CONSTRAINT DF_TinNhan_Loai DEFAULT N'VanBan',
+      DuongDanFile NVARCHAR(260) NULL,             -- tên file trong uploads/chat/; không URL public
+      TenFile      NVARCHAR(200) NULL,
+      MimeFile     VARCHAR(80)   NULL,
+      DungLuong    INT           NULL,
+      LoaiChungTu  NVARCHAR(40)  NULL,             -- DeNghiMuaHang / DonMuaHang / PhieuXuat…
+      MaChungTu    VARCHAR(40)   NULL,
+      NgayGui      DATETIME      NOT NULL CONSTRAINT DF_TinNhan_NgayGui DEFAULT GETDATE(),
+      DaXoa        BIT           NOT NULL CONSTRAINT DF_TinNhan_Xoa DEFAULT (0),
+      CONSTRAINT PK_TinNhan PRIMARY KEY (MaTin),
+      CONSTRAINT CK_TinNhan_Loai CHECK (LoaiTin IN (N'VanBan', N'HeThong', N'Anh', N'File', N'ChungTu')),
+      CONSTRAINT FK_TinNhan_Phong FOREIGN KEY (MaPhong) REFERENCES dbo.PhongChat (MaPhong),
+      CONSTRAINT FK_TinNhan_Gui   FOREIGN KEY (MaNV_Gui) REFERENCES dbo.NhanVien (MaNV)
+  );
+  CREATE INDEX IX_TinNhan_PhongNgay ON dbo.TinNhan (MaPhong, NgayGui DESC) INCLUDE (MaTin, DaXoa);
+  CREATE INDEX IX_TinNhan_PhongTin  ON dbo.TinNhan (MaPhong, MaTin);
+
+  P5-MIN: VanBan | HeThong | Anh | File | ChungTu.
+  File thật nằm uploads/chat/, không base64 trong SQL, không static public.
+
+4.4. TinNhanDaDoc
+
+  CREATE TABLE dbo.TinNhanDaDoc (
+      MaPhong      VARCHAR(40) NOT NULL,
+      MaNV         VARCHAR(20) NOT NULL,
+      MaTinCuoi    BIGINT      NOT NULL CONSTRAINT DF_TNDD_Tin DEFAULT (0),
+      NgayDoc      DATETIME    NOT NULL CONSTRAINT DF_TNDD_Ngay DEFAULT GETDATE(),
+      CONSTRAINT PK_TinNhanDaDoc PRIMARY KEY (MaPhong, MaNV),
+      CONSTRAINT FK_TNDD_Phong FOREIGN KEY (MaPhong) REFERENCES dbo.PhongChat (MaPhong),
+      CONSTRAINT FK_TNDD_NV    FOREIGN KEY (MaNV)    REFERENCES dbo.NhanVien (MaNV)
+      -- KHÔNG có FK TinNhanDaDoc.MaTinCuoi → TinNhan(MaTin).
+      -- MaTinCuoi là WATERMARK đã đọc, không phải khóa ngoại tới tin còn sống.
+  );
+
+  -- Unread một phòng (vẫn đúng sau cleanup 90 ngày, kể cả MaTinCuoi < MIN tin sống):
+  Unread = COUNT TinNhan WHERE MaPhong AND MaTin > ISNULL(MaTinCuoi,0) AND DaXoa=0
+           AND MaNV_Gui <> @me
+  Badge topbar = SUM unread các phòng user còn quyền (AnKhoiPhong=0).
+
+4.5. Seed 6 kênh  (trong ensure, không hard-code MaVaiTro số nếu có thể)
+
+  INSERT PhongChat theo Khoa. MaVaiTro lấy từ VaiTro.TenVaiTro:
+    quan-ly → N'Quản lý'
+    kho → N'Thủ kho'
+    mua-hang → N'Nhân viên mua hàng'
+    ke-toan → N'Kế toán'
+    thu-ngan → N'Thu ngân'
+    cua-hang → MaVaiTro NULL
+
+4.6. Retention 90 ngày
+
+  Job trong ensureChatSchema mỗi lần start (và có thể gọi tay):
+    -- Chỉ xóa tin. Không đụng TinNhanDaDoc (watermark sống độc lập).
+    DELETE FROM TinNhan WHERE NgayGui < DATEADD(DAY, -90, GETDATE()) AND LoaiTin <> N'HeThong';
+    -- Watermark nhỏ hơn MIN(MaTin) còn lại vẫn OK: unread = MaTin > MaTinCuoi.
+  Không xóa PhongChat / thành viên / hàng DaDoc.
+  Không lưu secret, OTP, JWT, ChatId Telegram trong 4 bảng này.
+  Không FULLTEXT bắt buộc P5-MIN (search = P5-ĐỦ LIKE).
+
+4.7. NhatKy  (audit số lượng, không dump nội dung)
+
+  Khi gửi tin: logAudit action N'Gửi tin nội bộ', table N'TinNhan',
+    recordId = MaPhong (VARCHAR — MaTin BIGINT có thể cắt; ghi MaTin trong NoiDung
+    dạng “#kho · MaTin=1234 · 80 ký tự” — KHÔNG full NoiDung, không CCCD).
+  Severity Thông tin. Không gọi notifyInboxChanged (tránh Telegram).
+  Hành động đăng nhập đã QUIET trong notificationHub — giữ nguyên.
+
+
+================================================================================
+5. API + USE CASE
+================================================================================
+
+5.1. UC mới hay gộp UC01?  — KHUYÊN: UC01, không seed UC44/UC45 ở P5-MIN
+
+  Telegram P1 đã chốt: bind OTP = UC01; UC44 chỉ nếu hội đồng bắt “mỗi tích hợp một UC”.
+  Chat nội bộ cùng lý: mọi tài khoản login đã có UC01. ACL phòng ≠ catalog chức năng.
+
+  Làm
+    router.use(verifyToken);
+    router.use(requirePermission('UC01'));
+    Trong từng handler: assertMember(req.user, maPhong) dựa TenVaiTro + ThanhVienPhongChat
+    + NhanVien.TrangThai + TaiKhoan.TrangThai. 403 tiếng Việt nếu không phải thành viên.
+
+  Không làm
+    Client gửi TenVaiTro / isAdmin: true.
+    requireRole('Quản lý') cho mọi endpoint (TN phải chat được #thu-ngân và #cửa-hàng).
+
+  Nếu hội đồng bắt UC riêng lúc báo cáo:
+    UC45 — Chat nội bộ 5 bộ phận  (sau UC43; không chiếm UC44 Telegram).
+    Seed 5 vai trò = UC45. Khi đó đổi requirePermission('UC45').
+    Đừng dùng UC44 cho chat.
+
+
+5.2. Endpoint  (prefix /api/chat, JSON tiếng Việt)
+
+  GET    /stream
+    SSE. verifyToken (query token như notifications). subscribe chatHub.
+    event: ready { seq, at }
+    event: chat  { seq, at, maPhong, maTin }
+    event: room  { seq, at }     — membership / danh sách phòng đổi
+    event: unread { seq, at }    — gợi ý refresh badge (thường kèm chat)
+    Không event: inbox.
+
+  GET    /unread
+    { tongChuaDoc, phong: [{ maPhong, khoa, tenPhong, chuaDoc, tinCuoiAt }] }
+    Chỉ phòng AnKhoiPhong=0.
+
+  GET    /rooms
+    Danh sách phòng user được vào, kèm chuaDoc, preview 80 ký tự tin cuối
+    (cắt, escape phía client). Thứ tự: chuaDoc DESC, NgayGui tin cuối DESC.
+
+  GET    /rooms/:maPhong/messages?before=&after=&limit=
+    limit mặc định 50, max 100.
+    403 nếu không phải thành viên.
+    Không trả tin DaXoa=1 (hoặc trả LoaiTin HeThong “đã xóa” không nội dung).
+
+  POST   /rooms/:maPhong/messages
+    body { NoiDung } hoặc { LoaiChungTu, MaChungTu, NoiDung? }
+    trim, max 1000. Cấm HTML (lưu text thuần; UI escapeHtml như dashboard).
+    400 nếu rỗng (trừ khi đính chứng từ) / quá dài / CCCD+từ khóa (mục 8.2).
+    12 số đứng riêng: 200 + canhBao (không 400).
+    429 rate limit.
+    403 không phải thành viên / phòng Dong.
+    Insert + notifyChat. Trả { maTin, ngayGui, phong, canhBao? }.
+
+  POST   /rooms/:maPhong/files
+    multipart field TepChat (+ NoiDung chú thích). PDF/ảnh ≤ 8MB.
+    400 loại sai / chữ ký file sai. 413 quá 8MB.
+
+  GET    /files/:maTin
+    JWT + thành viên phòng. inline preview. Không public /uploads/chat.
+
+  GET    /vouchers?q=&loai=
+    Picker chứng từ hệ thống (đúng quyền tra bảng). Không OCR.
+  GET    /vouchers/:loai/:ma
+    Snapshot xem/in (title, số, ngày, trạng thái) cho widget.
+
+  POST   /rooms/:maPhong/read
+    body { MaTinCuoi }  (bắt buộc = tin mới nhất user đã thấy)
+    UPSERT TinNhanDaDoc. Không tin client MaTinCuoi > MAX(MaTin) phòng — kẹp trần.
+
+  GET    /directory          — P5-ĐỦ DM: { MaNV, TenNV, TenVaiTro } đang làm, trừ chính mình
+  POST   /rooms/dm           — P5-ĐỦ body { MaNV } tạo/lấy phòng DM
+  GET    /rooms/:id/search   — P5-ĐỦ q min 3 ký tự, LIKE trong 90 ngày, cùng quyền phòng
+
+  Mount trong app.js:
+    app.use('/api/chat', chatRoutes);
+    cạnh /api/notifications, TRƯỚC catch-all 404.
+    Không mount dưới /api/assistant.
+
+
+5.3. assertMember (bắt buộc mọi GET tin / POST)
+
+  1. Token có MaNV, TenVaiTro.
+  2. Phòng tồn tại, TrangThai=DangMo.
+  3. EXISTS ThanhVienPhongChat (MaPhong, MaNV, AnKhoiPhong=0).
+  4. (Phòng thủ) nếu LoaiPhong=KenhVaiTro: TenVaiTro là Quản lý HOẶC khớp VaiTro.MaVaiTro phòng.
+     KenhChung: mọi role hợp lệ.
+  Bước 4 chống hàng thành viên cấy tay sai. TN không bao giờ thấy CH_KETOAN dù client đoán URL.
+
+
+5.4. Rate limit  (in-memory Map như assistantService.consumeRate, không Redis)
+
+  Mỗi MaNV:
+    20 tin / 60 giây  → 429 “Gửi chậm lại, tối đa 20 tin mỗi phút.”
+    400 tin / ngày (Asia/Ho_Chi_Minh) → 429.
+  SSE: 1 stream / MaNV; stream mới đóng stream cũ (tránh leak fd khi F5).
+  Unread poll: không đếm vào hạn tin.
+
+
+5.5. Lỗi chuẩn
+
+  401  verifyToken — “Vui lòng đăng nhập!” / hết hạn (giữ nguyên middleware).
+  403  không thành viên / tài khoản khóa.
+  404  phòng không tồn tại (không tiết lộ phòng KT-only cho TN: trả 403 giống nhau
+       để không dò MaPhong — khuyến nghị 403 cho cả hai).
+  413  file vượt 8MB.
+  429  rate.
+
+
+================================================================================
+6. UI/UX
+================================================================================
+
+6.1. Nút riêng trên topbar  — không lẫn Trợ lý, không lẫn chuông
+
+  Thêm nút #menuInternalChat TRƯỚC divider + #menuAssistant:
+
+    [chuông việc chờ] | [Chat nội bộ + badge #chatUnreadCount] | [Trợ lý] | [avatar]
+
+  Icon: bong bóng chat (symbol #i-chat mới trong svg-library dashboard.html).
+  Không dùng #i-sparkle (đó là Trợ lý). Không dùng #i-bell.
+  title="Chat nội bộ". aria-controls="chatDrawer".
+  Badge số chưa đọc (cùng kiểu b.notificationCount). Không dùng #notificationCount.
+
+6.2. Khung widget  — góc TRÁI DƯỚI, đối xứng FAB trợ lý
+
+  Phải = AI (đã có). Trái = nội bộ (mới).
+
+  #chatFab     position:fixed; left:20px; bottom:20px; 52×52; z-index 1510
+               ẩn khi drawer mở (class is-hidden như assistant-fab).
+  #chatDrawer  left:20px; bottom:20px; width:min(380px, calc(100vw - 32px));
+               height:min(540px, 70vh); z-index 1500; border-radius 20px;
+               transform-origin bottom left.
+  Không nửa màn, không overlay content-area full.
+  #chatBackdrop optional nhạt; click ngoài đóng. Esc: thêm data-escape-overlay
+  nếu escape-key.js đã hỗ trợ (giống assistant).
+
+  POS thu ngân: widget không che nút thanh toán (thường phải/giữa). Trái dưới
+  an toàn hơn phải. Nếu ca POS fullscreen sau này, cho phép thu gọn chỉ còn FAB.
+
+  CSS file MỚI chat.css — không nhồi vào assistant.css.
+  JS file MỚI chat-panel.js — không import logic từ assistant-panel.js.
+  dashboard.html: script chat-panel.js SAU dashboard.js, không đụng thứ tự
+  assistant-panel.js.
+
+6.3. Layout trong drawer (~380px)
+
+  Header: “Chat nội bộ” / tên phòng đang mở / nút đóng.
+  Thân 2 cột hẹp:
+    Trái ~112px: list phòng (tên #kho, badge unread).
+    Phải: luồng tin (scroll, tin mới dưới) + ô nhập.
+  Ô nhập: textarea maxlength=1000, Enter gửi, Shift+Enter xuống dòng
+  (cùng quy ước trợ lý — copy UX, không copy file).
+  Placeholder: “Nhắn với bộ phận…” — không “Hỏi Fly Intelligence”.
+  Footer hint 1 dòng: “Không duyệt chứng từ trong chat.”
+
+6.4. Online / last seen
+
+  P5-MIN: không. Không chấm xanh.
+  P5-ĐỦ optional: LanDangNhapCuoi đã có trên TaiKhoan; heartbeat SSE = đang mở app.
+  Không làm presence server phức tạp.
+
+6.5. Mention @kho
+
+  P5-ĐỦ. P5-MIN: gõ chữ thường. Không parse, không notify kênh khác.
+
+6.6. Thông báo tin mới
+
+  Badge topbar + badge trên FAB trái.
+  Toast nhỏ GÓC TRÁI DƯỚI (trên FAB) “Tin mới · #kho · Tên NV” — không dùng
+  #inboxToast (top-right, việc chờ).
+  Âm thanh: tái sử dụng cùng unlock audio chuông HOẶC im lặng nếu user đã mute
+  notificationSoundToggle — P5-MIN được dùng chung mute (đơn giản).
+  Không Web Push, không FCM, không Telegram.
+
+  Khi user đang mở đúng phòng: không toast, chỉ append tin + POST read.
+
+6.7. Copywriting UI (tránh nhầm 3 kênh)
+
+  Kicker drawer: “Nội bộ cửa hàng — không phải Trợ lý Fly”.
+  Không dùng chữ “Bot”, “AI”, “Telegram” trên widget này.
+
+
+================================================================================
+7. PHÂN PHA VÀ EFFORT
+================================================================================
+
+P5-MIN  (làm trước — đủ bảo vệ “có chat 5 bộ phận”)
+  Seed 6 kênh + sync thành viên theo ma trận S1 (kho↔mua hàng)
+  REST rooms / messages / read / unread / files / vouchers
+  SSE /api/chat/stream + poll 4s (bắt buộc realtime, không F5)
+  Unread badge
+  Widget trái + nút topbar
+  Đính PDF/ảnh ≤ 8MB + preview; đính chứng từ hệ thống nếu tra được
+  Cảnh báo UI lương/duyệt; CCCD theo S2 (không chặn cứng 12 số)
+  Test mục 10
+  Không DM, không mention, không search, không online
+
+  Effort: 2,5–3,5 ngày làm việc
+    Schema + seed + sync vai trò     0,5 ngày
+    Service ACL + REST + rate        0,75
+    chatHub SSE + client reconnect   0,5
+    UI widget + topbar + toast       1,0
+    Test + cảnh báo AIS              0,5–0,75
+
+P5-ĐỦ  (sau MIN ổn)
+  DM 1-1
+  Ảnh JPEG/PNG ≤ 200KB, uploads/chat/, LoaiTin=Anh
+  Mention @kho / @ke-toan (chỉ ping thành viên kênh đó, badge)
+  Search tin trong phòng
+  (Optional) last seen; nhóm ad-hoc QL
+
+  Effort: 2–3 ngày thêm
+    DM + directory                   0,75
+    Ảnh                              0,75–1,0
+    Mention + search                 0,5–0,75
+
+Không có P5-MAX / Slack clone.
+
+
+================================================================================
+8. BẢO MẬT / AIS
+================================================================================
+
+8.1. Tin nhắn không phải chứng từ
+
+  Không số chứng từ bắt buộc. Không hạch toán. Không thay NhatKy nghiệp vụ.
+  In / xuất Excel chat: không làm.
+  Kế toán không lấy chat làm căn cứ ghi sổ.
+
+8.2. Không gửi CCCD / bí mật  (CHỐT LẠI — không 400 mọi 12 số)
+
+  Guardrail đồ án: chặn cứng \b\d{12}\b gây false-positive (mã phiếu, tham chiếu).
+  KHÔNG giữ chặn cứng 12 số đứng riêng.
+
+  Server:
+    - 400 nếu (CCCD|căn cước|CMND) VÀ \b\d{12}\b trong cùng NoiDung.
+      “Không gửi số CCCD/CMND trong chat.”
+    - 12 số đứng riêng: không 400; gắn canhBao mềm, vẫn insert.
+    - mật khẩu|password|otp|jwt|bearer|api[_-]?key → 400
+      “Không gửi mật khẩu hay mã đăng nhập trong chat.”
+  Không đọc cột NhanVien.CCCD để “xác nhận”.
+
+8.3. Không duyệt PO trong chat
+
+  Regex gợi ý (cảnh báo UI, P5-MIN vẫn cho gửi trừ khi có CCCD):
+    duyệt hộ|duyệt giúp|approve hộ|/approve
+  Banner: “Mở Trung tâm phê duyệt hoặc nút Telegram. Chat không duyệt được.”
+  API không gọi orderController.approve.
+
+8.4. Lương trên #cửa-hàng
+
+  Cảnh báo UI. Không chặn cứng. Không tạo #luong P5-MIN.
+  KT + QL dùng #kế-toán.
+
+8.5. Audit
+
+  Đếm số tin / ngày / vai trò đủ cho AIS (NhatKy rút gọn + COUNT TinNhan).
+  Không LLM phân loại nội dung.
+  QL xem nhật ký hệ thống UC03: thấy “Gửi tin nội bộ” + MaPhong, không full chat
+  dump trên audit-log.html trừ khi filter table TinNhan — không làm màn đọc lướt
+  toàn bộ chat cho QL ngoài việc QL đã là thành viên mọi kênh.
+
+8.6. XSS / injection
+
+  Lưu text. Client escapeHtml. Không innerHTML NoiDung sống.
+  Không cho Markdown ảnh remote P5-MIN.
+
+8.7. Token SSE
+
+  Giống chuông: EventSource không set Header → ?token= JWT.
+  Không log query token. Không đưa JWT vào TinNhan.
+
+8.8. Trợ lý / analytics
+
+  CẤM assistantTools SELECT TinNhan. CẤM analyticsEngine đọc chat.
+  Grep khi review: assistantTools, collectContext không chứa PhongChat.
+
+
+================================================================================
+9. LIÊN HỆ MODULE KHÁC
+================================================================================
+
+  Trợ lý AI (P2)     Không đọc chat nội bộ. Không chung drawer.
+  Telegram (P1)      Không sync tin. Không notifyChat → telegramNotify.
+                     Duyệt chứng từ giữ telegramApprove + UC05–UC09, UC32.
+  Inbox chuông       Việc chờ nghiệp vụ. Badge riêng. Không gộp số unread chat.
+  P0 / kế toán mini  Không phụ thuộc chat. 3 cột tiền không đổi.
+  P1 còn lại         MoMo, barcode — không đụng.
+  P2 còn lại         OCR HĐ NCC, replenishment 7 ngày — không đợi chat,
+                     không ghi vào PhongChat.
+  P3/P4 (PLAN_12     OCR (#4) và e-receipt (#8) / replenishment đủ (#6)
+  mục 2, 4, 6, 8)    độc lập. Chat P5 không chặn, không bị chặn.
+  Firebase           Vẫn CẮT.
+  permissions.js     P5-MIN không thêm dòng UC. permissions.html không đổi.
+
+  Đổi vai trò NV: bắt buộc syncMembership kẻo TN cũ vẫn nằm #kế-toán.
+
+
+================================================================================
+10. TEST  (server/test-internal-chat.js + 2 cửa sổ Electron)
+================================================================================
+
+Ký hiệu: TN = user Thu ngân, KT = Kế toán, QL = Quản lý. JWT thật từ login test
+(không nhúng secret vào file test; dùng seed-accounts).
+
+  T1  Không token → GET /api/chat/rooms 401
+  T2  Token hết hạn → 401 (verifyToken)
+  T3  TN GET /rooms không chứa CH_KETOAN / khoa ke-toan
+  T3b TK GET /rooms CÓ CH_MUAHANG (ma trận mới)
+  T3c MH GET /rooms CÓ CH_KHO
+  T4  TN GET /rooms/CH_KETOAN/messages → 403 (không 200 rỗng)
+  T5  TN POST /rooms/CH_KETOAN/messages → 403
+  T6  KT GET /rooms có CH_KETOAN + CH_CUAHANG, không có CH_KHO
+  T7  QL GET /rooms đủ 6 kênh
+  T8  KT POST #kế-toán 200; TN đang SSE không nhận event maPhong=CH_KETOAN
+  T9  TN POST #cửa-hàng 200; KT và QL nhận SSE event chat + GET tin thấy nội dung
+  T10 Unread: KT gửi #cửa-hàng, TN chưa read → /unread.tongChuaDoc ≥ 1;
+      POST read → 0 phòng đó
+  T11 Body { TenVaiTro: 'Quản lý' } không nâng quyền TN
+  T12 Rate: 21 tin/phút → 429
+  T13 NoiDung chỉ 12 số (không từ khóa CCCD) → 200 + canhBao, không 400
+  T13b NoiDung “CCCD”/“căn cước”/“CMND” + 12 số → 400
+  T14 SSE rớt: poll unread vẫn tăng khi có tin mới
+  T15 Hai user hai role (TN + KT) hai cửa sổ: gửi #cửa-hàng hai chiều;
+      #kế-toán chỉ KT thấy
+  T16 Grep: chatHub.js không require telegramNotify; assistantTools không PhongChat
+  T17 Tài khoản khóa (TrangThai=0) → 403 chat
+  T18 UI: nút Chat ≠ nút Trợ lý; widget trái, assistant vẫn phải; không mở nhầm drawer
+
+Chạy: npm run test:chat (thêm khi implement).
+Không cần browser MCP để chốt plan; khi code P5-MIN phải bấm thật 2 role.
+
+
+================================================================================
+11. THỨ TỰ IMPLEMENT GỢI Ý  (khi được lệnh code — không làm lúc ghi plan)
+================================================================================
+
+  1. Migration + chatSchema.ensure + seed 6 kênh + sync 5 role
+  2. chatService assertMember + REST rooms/messages/read/unread
+  3. chatHub + GET /stream ; app.js mount
+  4. test-internal-chat.js T1–T13
+  5. chat.css + markup dashboard.html + chat-panel.js (topbar, FAB trái, SSE)
+  6. Cảnh báo UI + T15–T18
+  7. README một dòng index plan này
+
+Không mở nhánh DM cho đến khi MIN xanh.
+
+
+================================================================================
+12. TÓM TẮT QUYẾT ĐỊNH ĐÃ CHỐT
+================================================================================
+
+  Khung          Riêng, trái dưới ~380px. Không đụng assistant-panel.js.
+  Phòng P5-MIN   6 kênh. Ma trận S1: kho↔mua hàng; TN không vào #kế-toán.
+  File P5-MIN    PDF/ảnh ≤ 8MB + chứng từ hệ thống. Không public static.
+  DM / nhóm      P5-ĐỦ / optional.
+  UC             UC01 + lọc phòng server. UC45 chỉ nếu môn bắt; không lấy UC44.
+  Realtime       SSE /api/chat/stream (clone kiểu chuông, hub riêng). Poll 4s.
+  Cloud trả phí  Không.
+  LLM / key      Không.
+  Telegram       Không sync, không duyệt hộ qua chat.
+  Retention      90 ngày. MaTinCuoi = watermark, không FK. Audit không full text.
+
+Hết plan. File này đủ để implement P5-MIN mà không đoán kiến trúc.
+================================================================================

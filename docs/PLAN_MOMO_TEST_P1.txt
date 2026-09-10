@@ -1,5 +1,10 @@
 PLAN MOMO TEST P1 — FINAL (gọn)
 ================================
+Đây là cổng QR ĐANG CHẠY trên POS (cập nhật 10/09/2026).
+PLAN_12 A1 (05/09) ghi mặc định VNPay Sandbox — đã ĐỔI sang MoMo Test.
+VNPay/PayOS = stub "Provider chưa bật" trong providers/vnpay.js, payos.js.
+Adapter vẫn là paymentGatewayService (đổi provider không sửa POS).
+
 POS P1 chỉ TIỀN MẶT | MOMO. Không Thẻ, CK, nút QR, QR thủ công.
 Ngày: 10/09/2026. Adapter: paymentGatewayService → providers/momo.js
 PAYMENT_PROVIDER=momo. Không payment.routes.js / momoController.

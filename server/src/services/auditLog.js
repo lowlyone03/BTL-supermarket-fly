@@ -42,6 +42,7 @@ const TABLE_LABELS = {
     TaiSanCoDinh: 'Tài sản cố định',
     TaiKhoanNganHang: 'Tài khoản ngân hàng',
     SaoKeNganHang: 'Sao kê ngân hàng',
+    KetQuaDoiSoatNganHang: 'Đối soát ngân hàng thông minh',
     TaiKhoanKeToan: 'Tài khoản kế toán',
     ChoGhiSo: 'Chờ ghi sổ'
 };
@@ -77,6 +78,7 @@ const TARGET_BY_TABLE = {
     TaiSanCoDinh: 'ledger-assets',
     TaiKhoanNganHang: 'ledger-bank',
     SaoKeNganHang: 'ledger-bank',
+    KetQuaDoiSoatNganHang: 'ledger-reconciliation',
     TaiKhoanKeToan: 'ledger-coa',
     SanPham: '../admin/products.html',
     DanhMuc: '../admin/products.html',
@@ -681,6 +683,26 @@ const ACTION_META = {
         viecLam: 'Đánh chênh lệch sao kê',
         giaiThich: 'Đánh dấu dòng sao kê lệch, không tự sinh bút toán.',
         mucDo: 'Cảnh báo', nhom: 'so-cai', target: 'ledger-bank'
+    },
+    'Nhập sao kê đối soát thông minh': {
+        viecLam: 'Nhập sao kê đối soát thông minh',
+        giaiThich: 'Nhập CSV rồi chạy rule engine. Không LLM, không ghi sổ.',
+        mucDo: 'Quan trọng', nhom: 'so-cai', target: 'ledger-reconciliation'
+    },
+    'Chạy đối soát ngân hàng thông minh': {
+        viecLam: 'Chạy đối soát ngân hàng thông minh',
+        giaiThich: 'Tính điểm khớp theo tiền/ngày/mã/NCC. Kế toán còn phải xác nhận.',
+        mucDo: 'Thông tin', nhom: 'so-cai', target: 'ledger-reconciliation'
+    },
+    'Xác nhận đối soát ngân hàng': {
+        viecLam: 'Xác nhận đối soát ngân hàng',
+        giaiThich: 'Kế toán chốt khớp. Engine không postJournal, không trả NCC.',
+        mucDo: 'Quan trọng', nhom: 'so-cai', target: 'ledger-reconciliation'
+    },
+    'Bỏ gợi ý đối soát ngân hàng': {
+        viecLam: 'Bỏ gợi ý đối soát ngân hàng',
+        giaiThich: 'Kế toán bỏ ứng viên. Dòng trở lại chưa khớp.',
+        mucDo: 'Thông tin', nhom: 'so-cai', target: 'ledger-reconciliation'
     },
     'Thêm tài khoản kế toán': {
         viecLam: 'Thêm tài khoản kế toán',

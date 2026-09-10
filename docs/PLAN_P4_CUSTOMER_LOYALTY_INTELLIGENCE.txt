@@ -1,0 +1,116 @@
+================================================================================
+PLAN P4 — CUSTOMER LOYALTY INTELLIGENCE
+MVP  (10/09/2026)  — LÀM SAU P3
+KHÔNG NHÉT VÀO P2-ĐỦ. KHÔNG EMAIL/SMS/APP KHÁCH.
+================================================================================
+
+Vị trí     : supermarket-fly/docs/PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt
+Repo       : supermarket-fly
+UC         : QL = UC10 (báo cáo tổng hợp đã có). TN = UC23 (hồ sơ KH đã có).
+             KHÔNG mở UC mới.
+Đọc trước  : KhachHang.DiemTichLuy / HangThanhVien; HoaDon.TrangThai=Hoàn thành.
+
+Câu bảo vệ
+  “Phân khúc khách thành viên theo RFM trên hóa đơn hoàn thành. Gợi ý ưu đãi
+   chỉ chọn trong chính sách đã cấu hình (VIP tối đa 10%, win-back 20.000đ,
+   khách mới nhân 2 điểm). AI không bịa phần trăm.”
+
+
+================================================================================
+0. PHẠM VI / KHÔNG LÀM
+================================================================================
+
+Làm
+  RFM backend (không LLM): Recency, Frequency, Monetary
+  Segment: Giá trị cao / Thân thiết / Nguy cơ rời bỏ / Mới / Ngủ đông / Tiềm năng
+  UI QL: bảng segment, KPI tháng, khách at-risk
+  API QL overview + endpoint TN hẹp (điểm khách đang phục vụ)
+  Chính sách file loyaltyPolicy.js
+
+Không làm
+  Email / SMS / Zalo / app khách / e-commerce
+  Tự áp KM lên POS khi segment đổi
+  RFM toàn cửa hàng cho Thu ngân
+  P3 đối soát NH, P2-ĐỦ Telegram /ask
+
+
+================================================================================
+1. RULE RFM (loyaltyAnalytics.js)
+================================================================================
+
+  Nguồn: KhachHang LEFT JOIN HoaDon Hoàn thành (GROUP BY MaKH).
+  R: ngày từ lần mua gần nhất → 5 (≤7n) … 1 (>180n)
+  F: số HĐ hoàn thành → 5 (≥12) … 1 (1)
+  M: tổng TongThanhToan → 5 (≥5tr) … 1 (<300k)
+
+  Segment
+    R≥4 F≥4 M≥4     Giá trị cao     → category VIP (max 10%)
+    F≥3 M≥3 R≤2     Nguy cơ rời bỏ  → win-back voucher 20.000đ
+    F≥4 R≥3         Thân thiết      → không bịa % mới
+    F≤2 R≥4         Mới             → ×2 điểm
+    R=1             Ngủ đông        → win-back
+    còn lại         Tiềm năng
+
+  Chính sách (không LLM bịa):
+    vipMaxPercent = 10
+    winBackVoucherVnd = 20000
+    newMemberPointMultiplier = 2
+
+
+================================================================================
+2. API
+================================================================================
+
+  QL UC10 + requireRole Quản lý
+    GET /api/admin/loyalty/overview?month=YYYY-MM
+    GET /api/admin/loyalty/summary          (gói đếm cho trợ lý)
+
+  TN UC23
+    GET /api/cashier/customers/:id/loyalty
+    Trả điểm, hạng, số HĐ hoàn thành, lần mua gần — KHÔNG bảng RFM cửa hàng.
+    cuaHangRfm=false
+
+  Hàm (pool, user, opts). CẤM fetch localhost.
+
+
+================================================================================
+3. UI QL
+================================================================================
+
+  Menu Điều hành: “Khách hàng thân thiết”
+  desktop/src/pages/admin/loyalty-pages.js
+  KPI tháng + bảng segment + cột gợi ý đúng chính sách + panel at-risk.
+
+
+================================================================================
+4. DEMO QL
+================================================================================
+
+  1. Đăng nhập Quản lý → Khách hàng thân thiết.
+  2. Đổi tháng KPI. Xem số HĐ thành viên / DT thành viên / at-risk.
+  3. Lọc tên. Segment “Nguy cơ rời bỏ” chỉ hiện win-back 20.000đ, không % bịa.
+  4. Đăng nhập Thu ngân → Khách hàng: vẫn chỉ điểm/hạng (POS cũ).
+     API /customers/:id/loyalty không trả list RFM cửa hàng.
+  5. Trợ lý QL: loadLoyaltySummary đếm segment; TN không nhận RFM store.
+
+
+================================================================================
+5. TEST
+================================================================================
+
+  cd supermarket-fly/server
+  npm run test:loyalty
+  Fixture: VIP / at-risk / mới; policy 10% / 20k / ×2; không LLM.
+
+
+================================================================================
+6. CHỖ CỐ Ý MỎNG
+================================================================================
+
+  Không ghi bảng lịch sử RFM theo ngày (tính lúc gọi).
+  Không đẩy gợi ý vào KhuyenMai / POS.
+  Không PII (SĐT/email) trên overview AI — UI QL vẫn thấy tên (nội bộ).
+  assistant: gắn loadLoyaltySummary trong collectContext; không sửa widget UI trợ lý.
+
+HẾT FILE
+================================================================================

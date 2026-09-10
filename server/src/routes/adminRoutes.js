@@ -89,4 +89,10 @@ router.get('/telegram/bindings', requirePermission('UC02'), telegramBotControlle
 router.post('/telegram/bindings/:maNV/revoke', requirePermission('UC02'), telegramBotController.revokeBinding);
 router.post('/telegram/bindings/:maNV/channel', requirePermission('UC02'), telegramBotController.setChannel);
 
+const recon = require('../controllers/reconciliationController');
+const loyalty = require('../controllers/loyaltyController');
+router.get('/reconciliation/summary', requirePermission('UC10'), recon.qlSummary);
+router.get('/loyalty/overview', requirePermission('UC10'), loyalty.overview);
+router.get('/loyalty/summary', requirePermission('UC10'), loyalty.summary);
+
 module.exports = router;

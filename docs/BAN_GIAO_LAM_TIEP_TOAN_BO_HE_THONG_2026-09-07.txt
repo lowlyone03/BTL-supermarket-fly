@@ -6,11 +6,36 @@ SUPERMARKET FLY  —  FE + BE + CSDL + TÀI LIỆU
 Ngày đóng gói     : 07/09/2026 (tối)
 Mục đích          : Người nhận CHỈ VIỆC LÀM TIẾP, không phải đoán lại từ đầu.
 Phạm vi           : Backend (Node/Express), Frontend (Electron), SQL Server,
-                    5 actor / 33 UC, kế toán nghiệp vụ đang chạy.
+                    5 actor / UC01–UC43 (P0 + kế toán mini), cổng MoMo, Telegram.
 Môn               : Ứng dụng hệ thống thông tin kế toán (AIS) — bài tập lớn.
 
 Đây là FILE CHÍNH để người mới bắt đầu. Đọc file này trước, rồi mới mở
 các file khác khi cần chi tiết.
+
+--------------------------------------------------------------------------------
+TRẠNG THÁI CODE SAU BÀN GIAO (cập nhật 10/09/2026) — lấy CODE làm sự thật
+--------------------------------------------------------------------------------
+Bản đóng gói 07/09 (mục 2, 14, 15 dưới đây) mô tả P0 UC01–UC33 + .bak tối.
+SAU ĐÓ đã làm trên main (không xóa lịch sử 07/09):
+
+  ĐÃ CÓ
+    - Kế toán mini UC34–UC43 (09/09): TaiKhoanKeToan, ButToan, KyKeToan,
+      VAT POS, NKC/sổ cái/CĐPS, KQKD, LCTT, BCĐKT, TSCĐ, sao kê CSV.
+      File: journalEngine.js, ledgerController.js, ledger-pages.js,
+      migration 20260909_AccountingCore.sql. Cẩm nang + 74 case test.
+    - Telegram companion (08/09): OTP, /fly, push, Control Center.
+      CÓ nút duyệt inline + audit (telegramApprove.js). Lệnh chữ /approve bị chặn.
+    - Cổng QR POS (10/09): MoMo sandbox, không VNPay. PLAN_MOMO_TEST_P1.txt.
+      VNPay/PayOS = stub. P&L: kqkdLoiNhuan KHÔNG trừ trả NCC.
+    - Restore .bak 07/09 rồi PHẢI chạy npm run migrate:next (tới 20260910).
+
+  CHƯA CÓ (đúng PLAN_12)
+    AI trợ lý, OCR HĐ NCC, e-receipt token, webcam barcode, replenishment A6,
+    Sentry, Ollama. n8n / Firebase / thời tiết = cắt.
+
+  Tài liệu vận hành đúng hiện tại: supermarket-fly/README.md
+  Plan AI (chưa code): docs/PLAN_AI_CHATBOT_TRO_LY.txt
+--------------------------------------------------------------------------------
 
 GitHub (mã nguồn) :
   https://github.com/lowlyone03/BTL-supermarket-fly.git
@@ -148,20 +173,21 @@ LÀ:
     đề nghị mua → đơn mua → nhập kho → bán tại quầy → quỹ ca
     → công nợ NCC → lương → báo cáo lãi/lỗ điều hành.
 
-  Kế toán TRONG CODE hiện tại = kế toán NGHIỆP VỤ:
-    đối chiếu 3 chứng từ mua, công nợ phải trả, phiếu thu ca,
-    lãi GỘP (DT thuần − GV thuần), bảng lương theo công,
-    P&L điều hành (trừ chi NCC đã trả + lương đã khóa).
+  Kế toán TRONG CODE (10/09/2026):
+    (1) Nghiệp vụ P0: đối chiếu 3 chứng từ, công nợ, phiếu thu ca, lương.
+        Lãi GỘP = DT thuần − GV thuần.
+    (2) Kế toán mini UC34–UC43: đã code (sổ cái, VAT POS, TSCĐ, sao kê…).
+    P&L điều hành: KQKD KHÔNG trừ chi NCC; dòng tiền mới trừ chi NCC.
+    (Mô tả 07/09 “P&L trừ chi NCC như lỗ” = SAI so với code hiện tại.)
 
 KHÔNG PHẢI:
   - Website / app khách. Khách không đăng nhập.
   - ERP nhiều công ty, nhiều kho, nhiều chi nhánh.
-  - MISA / FAST / sổ cái Nợ–Có. Chưa có TaiKhoanKeToan, ButToan, KyKeToan.
+  - MISA / FAST đầy đủ. Đã có sổ cái MINI (18 TK), không phải “chưa có ButToan”.
   - Phần mềm BHXH nhà nước. Không tính BHXH/BHYT/BHTN/công đoàn.
   - Bán chịu (không TK 131), thương mại điện tử, kho FEFO/lô, HĐĐT nhà nước.
 
-Hướng "kế toán mini" (sổ cái, VAT POS, TSCĐ) đã CHỐT là Plan A
-NHƯNG CHƯA CODE. Làm tiếp: đánh số từ UC34, không đụng UC30–UC33.
+Kế toán mini (Plan A) ĐÃ TRIỂN KHAI 09/09. UC34–UC43 không đụng nghĩa UC30–UC33.
 
 
 ================================================================================
@@ -423,10 +449,11 @@ FILE NỐI MÔ-ĐUN — sửa đúng vùng, không xóa template người khác:
 
 
 ================================================================================
-10. 33 USE CASE VÀ MA TRẬN QUYỀN
+10. USE CASE VÀ MA TRẬN QUYỀN (07/09: 33 UC; 10/09: thêm UC34–UC43)
 ================================================================================
 
-Word gốc: UC01–UC29. Code GIỮ 29 UC gốc và THÊM UC30–UC33.
+Word gốc: UC01–UC29. Code GIỮ 29 UC gốc, THÊM UC30–UC33 (nhân sự/lương),
+rồi UC34–UC43 (kế toán mini — đã seed trong permissions.js).
 Nguồn quyền: server/src/constants/permissions.js
 
 CHỨC NĂNG CHUNG
@@ -467,19 +494,19 @@ E. KẾ TOÁN
   UC31
   UC33  Lập / khóa / thanh toán bảng lương     (mới so với Word)
 
-Ma trận ĐANG CHẠY:
+Ma trận ĐANG CHẠY (10/09):
 
-  QL       UC01–UC10 + UC30 + UC32
+  QL       UC01–UC10 + UC30 + UC32 + UC38 + UC39 + UC43 (xem sổ/KQKD, không lập kỳ)
   MH       UC01, UC11–UC14, UC31
   TK       UC01, UC15–UC21, UC31
   TN       UC01, UC22–UC26, UC31
-  KT       UC01, UC27–UC29, UC31, UC33
+  KT       UC01, UC27–UC29, UC31, UC33 + UC34–UC43
 
 QL KHÔNG có UC31 (không check-in như nhân viên).
 QL KHÔNG có UC33 (bấm "Lập / tính lại" lương → API 403).
 
 API nghiệp vụ PHẢI requirePermission('UCxx'), không chỉ requireRole.
-Không tự thêm mã trùng UC30–UC33. UC mới = UC34 trở đi.
+UC30–UC43 đã dùng. Mã mới tiếp theo = UC44 trở đi.
 
 
 ================================================================================
@@ -493,7 +520,8 @@ Không tự thêm mã trùng UC30–UC33. UC mới = UC34 trở đi.
   Đổi trả Hoàn thành: giảm DT/GV, không sửa tay tồn.
   Lãi gộp = DT thuần − GV thuần.
   PHIẾU THU KHÔNG CỘNG DOANH THU LẦN HAI.
-  Tiền trả NCC KHÔNG trừ vào lãi gộp (trừ ở P&L điều hành, mục riêng).
+  Tiền trả NCC KHÔNG trừ vào lãi gộp. KHÔNG trừ vào KQKD điều hành
+  (kqkdLoiNhuan). Chỉ trừ trên báo cáo dòng tiền.
 
 ----- CỘT B — KÉT CA / PHIẾU THU -----
   TienMatHeThong = TongTienMat − TongTienHoanMat.
@@ -536,7 +564,9 @@ QUY TRÌNH 3 — LƯƠNG (tất toán mùng 10 tháng sau)
   → QL giao 1 CỤC quỹ cho kế toán
   → KT chi từng NV; chuyển khoản bắt buộc mã giao dịch; thất bại thì làm lại cùng phiếu.
   Bảng lương KHÔNG trừ vào lãi gộp.
-  P&L điều hành (màn QL) mới trừ lương ĐÃ KHÓA + chi NCC thành công.
+  P&L điều hành (màn QL, code 10/09): KQKD = lãi gộp − lương khóa − cước;
+  KHÔNG trừ chi NCC. Dòng tiền mới trừ chi NCC. Field cũ laiLoSauChiPhi
+  (trừ NCC) deprecated — không dùng làm “cửa hàng lỗ kế toán”.
 
 Công thức lãi gộp (không đổi so với Chương 6):
   DT thuần = DT hóa đơn hoàn thành − tiền hoàn đã hoàn thành
@@ -653,20 +683,23 @@ CSDL Word gốc 35 bảng. Hệ thống đã mở rộng (khoảng 45+ bảng):
             test-return-handover, test-field-validators, test-shift-scheduler
 
   Tài liệu
-    - FILE NÀY
-    - docs/PLAN_12_TICH_HOP_VA_KE_TOAN.txt  (kế hoạch NÂNG CẤP, chưa code)
+    - FILE NÀY (đóng gói 07/09) + khối TRẠNG THÁI 10/09 ở đầu file
+    - docs/PLAN_12_TICH_HOP_VA_KE_TOAN.txt  (plan 05/09 + trạng thái 10/09 ở đầu)
 
-14.3. Cố ý CHƯA LÀM
+14.3. Cố ý CHƯA LÀM — phân hai mốc
 
-  - Sổ cái, Nợ/Có, TaiKhoanKeToan / ButToan / KyKeToan
-  - VAT trên POS (tách 511 / 33311) — Plan A ưu tiên số 1 khi làm kế toán
-  - TSCĐ, sao kê 112, LCTT, BCĐKT
+  Đúng 07/09 (lúc đóng gói .bak) chưa có sổ cái / VAT POS / TSCĐ / Telegram / MoMo.
+
+  ĐẾN 10/09 ĐÃ CÓ (đừng lặp lại như “chưa làm”):
+  - Sổ cái, TaiKhoanKeToan / ButToan / KyKeToan, VAT POS, TSCĐ, sao kê, LCTT, BCĐKT
+  - Telegram companion + nút duyệt inline + audit
+  - Cổng MoMo sandbox (không VNPay)
+
+  VẪN CHƯA (10/09):
   - Cước vận chuyển 4.000 đ/km + bồi 20% khi hư ≥ 1/3 (plan đã chốt)
   - BHXH / BHYT / BHTN / công đoàn
   - TK 242, kho FEFO/lô, nhiều cửa hàng, HĐĐT nhà nước, bán chịu
-  - VNPay / mã vạch / hóa đơn điện tử / OCR / AI  (PLAN_12, P1–P2)
-  - Telegram companion P1 đã được triển khai sau bản bàn giao này (08/09/2026),
-    gồm OTP, dashboard, chứng từ ảnh, duyệt có audit và giao diện Control Center.
+  - AI, OCR, e-receipt token, webcam barcode, replenishment A6 (PLAN_12)
 
 
 ================================================================================
@@ -683,28 +716,29 @@ HƯỚNG A — GIỮ UC01–UC33, sửa lỗi / test / báo cáo môn
       TaiLieu_Du_An\01_Yeu_Cau_Nghiep_Vu\
       PHAN_CONG_7_THANH_VIEN_VA_CHI_TIET_DU_AN_Supermarket_Fly.txt
 
-HƯỚNG B — KẾ TOÁN TỔNG HỢP (Plan A, CHƯA CODE)
-  Đọc theo thứ tự:
-    1) docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt     luật ĐANG CHẠY
-    2) docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt
-    3) docs/PLAN_12_TICH_HOP_VA_KE_TOAN.txt
-  Thứ tự đã chốt:
-    P0         Nghiệp vụ đang chạy — GIỮ, không phá 3 cột tiền
-    KT lõi     VAT POS + danh mục tài khoản + bút toán + nhật ký chung
-               + sổ cái + cân đối phát sinh + kết quả kinh doanh
-    P1         Bộ chuyển VNPay, mã vạch, hóa đơn điện tử, Telegram
-    P2         Gợi ý nhập hàng, trợ lý AI, OCR
-    KT mở rộng TSCĐ, nhập sao kê, LCTT, khóa sổ, BCĐKT thu gọn
-  BẮT ĐẦU TỪ UC34. Không đổi nghĩa UC30–UC33.
-  VAT bán: giá niêm yết ĐÃ GỒM VAT; tách 511/33311 lúc ghi sổ,
-  KHÔNG cộng thêm thuế trên quầy.
+HƯỚNG B — KẾ TOÁN TỔNG HỢP (Plan A) — ĐÃ CODE 09/09, không làm lại từ đầu
+  Đọc: CAM_NANG_KE_TOAN_MINI.txt + BAN_TEST_CHUC_NANG_KE_TOAN_MINI_A_Z.txt
+  + README mục kế toán mini. UC34–UC43 đã gắn permissions.js.
+
+HƯỚNG C — P1/P2 còn thiếu (PLAN_12 trạng thái 10/09)
+  Đã xong: MoMo, Telegram (kể cả nút duyệt).
+  Chưa: e-receipt, webcam barcode, replenishment A6, AI, OCR.
+  Plan AI: docs/PLAN_AI_CHATBOT_TRO_LY.txt
+
+  Thứ tự lịch sử đã chốt 05/09 (giữ):
+    P0         Nghiệp vụ — GIỮ, không phá 3 cột tiền
+    KT lõi     ĐÃ XONG
+    P1         Cổng QR ĐÃ = MoMo; Telegram ĐÃ; barcode/e-receipt còn
+    P2         Gợi ý nhập hàng, trợ lý AI, OCR — chưa
+    KT mở rộng ĐÃ XONG phần mini (TSCĐ, sao kê, LCTT, khóa sổ, BCĐKT)
 
 KHÔNG:
   - Tự sinh công nợ
   - Bán chịu / TK 131
-  - Chatbot duyệt đơn mua / chi NCC / hoàn thành hóa đơn
+  - AI chatbot duyệt đơn mua / chi NCC / hoàn thành hóa đơn
+    (Telegram CODE đã duyệt bằng nút; AI thì vẫn cấm)
   - OCR/AI tự chèn CongNoPhaiTra
-  - Khóa POS vào một cổng thanh toán
+  - Khóa POS vào một cổng (adapter giữ; runtime đang MoMo)
   - Huấn luyện mô hình AI
 
 
@@ -871,7 +905,16 @@ Bắt đầu từ FILE NÀY. Các file dưới đây là bản đầy đủ hơn
       Plan A: giữ VAT/sổ cái/TSCĐ; cắt 242 và FEFO.
 
   docs/PLAN_12_TICH_HOP_VA_KE_TOAN.txt
-      Kế hoạch nâng cấp (chưa code).
+      Plan 05/09 + khối TRẠNG THÁI 10/09 (MoMo đã chạy, Telegram có duyệt…).
+
+  docs/PLAN_MOMO_TEST_P1.txt
+      Cổng QR đang dùng.
+
+  docs/PLAN_AI_CHATBOT_TRO_LY.txt
+      Plan trợ lý AI — chưa code.
+
+  docs/CAM_NANG_KE_TOAN_MINI.txt
+      Sổ cái mini đã chạy.
 
   docs/HUONG_DAN_BAN_GIAO_CHO_THANH_VIEN_TEST.md
       Gói tester (bản 30/08). File NÀY thay thế cho người LÀM TIẾP.
@@ -903,7 +946,8 @@ LỖI THỜI — không dùng làm bước tiếp theo:
   [ ] Đọc mục 11 (3 cột tiền)
   [ ] npm run test:next PASS
   [ ] Biết file xương (dashboard, app.js, permissions.js) không sửa lung tung
-  [ ] Biết việc tiếp theo: Hướng A (lỗi/báo cáo) hay Hướng B (UC34 sổ cái)
+  [ ] Biết việc tiếp theo: Hướng A (lỗi/báo cáo) / test KT mini /
+      P1 còn thiếu (e-receipt, webcam) / P2 AI-OCR — không làm lại UC34 từ đầu
   [ ] Có TaiLieu_Du_An (ít nhất 01 + 05_Backup) ngoài Git
 
 

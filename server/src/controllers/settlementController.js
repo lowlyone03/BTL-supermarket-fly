@@ -4,12 +4,10 @@ const { ensurePhieuThuSchema } = require('../services/phieuThuSchema');
 
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
 
-const listShifts = async (req, res) => {
-    try {
-        const pool = await poolPromise;
+const loadClosedShifts = async (pool, { status = '' } = {}) => {
         await ensurePhieuThuSchema(pool).catch(() => {});
-        const status = clean(req.query.status, 30);
-        const result = await pool.request().input('Status', sql.NVarChar, status).query(`
+        const filter = clean(status, 30);
+        const result = await pool.request().input('Status', sql.NVarChar, filter).query(`
             SELECT ca.MaCa,ca.MaNV,nv.TenNV,ca.MaQuay,q.TenQuay,ca.ThoiGianBatDau,ca.ThoiGianKetThuc,
                    ca.TienDauCa,ca.TienCuoiCa,ca.TongTienMat,ca.TongTienQR,ca.TongTienThe,
                    ca.TongTienChuyenKhoan,ca.TongTienHoanMat,ca.TienMatHeThong,ca.TienThucNop,
@@ -35,7 +33,13 @@ const listShifts = async (req, res) => {
             acc.TongTienChuyenKhoan += Number(row.TongTienChuyenKhoan || 0);
             return acc;
         }, { DoanhThu: 0, TienMatHeThong: 0, TienThucNop: 0, TongTienQR: 0, TongTienThe: 0, TongTienChuyenKhoan: 0 });
-        res.json({ items, summary });
+        return { items, summary };
+};
+
+const listShifts = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        res.json(await loadClosedShifts(pool, { status: req.query.status }));
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải danh sách ca chờ đối soát.' });
@@ -208,4 +212,4 @@ const confirmReceipt = async (req, res) => {
     }
 };
 
-module.exports = { listShifts, getShift, createReceipt, confirmReceipt };
+module.exports = { loadClosedShifts, listShifts, getShift, createReceipt, confirmReceipt };

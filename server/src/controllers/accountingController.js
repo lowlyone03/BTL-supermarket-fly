@@ -156,16 +156,12 @@ const getPurchaseOrderFile = async (req, res) => {
     }
 };
 
-const listInvoices = async (req, res) => {
-    try {
-        const keyword = clean(req.query.search, 120, '');
-        const match = clean(req.query.match, 30, '');
-        const pool = await poolPromise;
-        await pool.request().query(`UPDATE CongNoPhaiTra SET TrangThai=N'Quá hạn'
-            WHERE SoTienConLai>0 AND HanThanhToan<CONVERT(date,GETDATE()) AND TrangThai<>N'Quá hạn'`);
+const loadPurchaseInvoices = async (pool, { search = '', match = '' } = {}) => {
+        const keyword = clean(search, 120, '');
+        const doiChieu = clean(match, 30, '');
         const result = await pool.request()
             .input('TuKhoa', sql.NVarChar, keyword).input('Mau', sql.NVarChar, `%${keyword}%`)
-            .input('DoiChieu', sql.NVarChar, match).query(`
+            .input('DoiChieu', sql.NVarChar, doiChieu).query(`
                 SELECT hd.MaHDMH,hd.SoHoaDon,hd.MaNCC,ncc.TenNCC,hd.MaPO,hd.MaPN,hd.NgayHoaDon,
                        hd.TongTienHang,hd.TienThue,hd.TongCong,hd.TrangThaiDoiChieu,hd.GhiChuChenhLech,hd.TrangThai,
                        cn.MaCNPTra,cn.HanThanhToan,cn.SoTienConLai,cn.TrangThai AS TrangThaiCongNo
@@ -174,7 +170,15 @@ const listInvoices = async (req, res) => {
                 WHERE (@DoiChieu=N'' OR hd.TrangThaiDoiChieu=@DoiChieu)
                   AND (@TuKhoa=N'' OR hd.SoHoaDon LIKE @Mau COLLATE Latin1_General_100_CI_AI OR hd.MaHDMH LIKE @Mau COLLATE Latin1_General_100_CI_AI OR hd.MaPO LIKE @Mau COLLATE Latin1_General_100_CI_AI OR ncc.TenNCC LIKE @Mau COLLATE Latin1_General_100_CI_AI)
                 ORDER BY hd.NgayTiepNhan DESC`);
-        res.json({ items: result.recordset });
+        return { items: result.recordset };
+};
+
+const listInvoices = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        await pool.request().query(`UPDATE CongNoPhaiTra SET TrangThai=N'Quá hạn'
+            WHERE SoTienConLai>0 AND HanThanhToan<CONVERT(date,GETDATE()) AND TrangThai<>N'Quá hạn'`);
+        res.json(await loadPurchaseInvoices(pool, { search: req.query.search, match: req.query.match }));
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải danh sách hóa đơn mua hàng.' });
@@ -398,6 +402,7 @@ const previewReconciliation = async (req, res) => {
 };
 
 module.exports = {
+    loadPurchaseInvoices,
     listReceiptFiles, getReceiptFile, listPurchaseOrderFiles, getPurchaseOrderFile,
     listInvoices, getInvoiceDetail, createInvoice, previewReconciliation, reconcileInvoice
 };

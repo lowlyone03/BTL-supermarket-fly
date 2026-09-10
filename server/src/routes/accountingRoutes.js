@@ -43,4 +43,17 @@ router.post('/payroll/:month/:employee/pay', accountantPayroll, payroll.pay);
 router.post('/payroll-vouchers/:id/resubmit', accountantPayroll, payrollVoucher.resubmitVoucher);
 router.post('/payroll-vouchers/:id/pay', accountantPayroll, payrollVoucher.payVoucher);
 
+const recon = require('../controllers/reconciliationController');
+const kt42 = requirePermission('UC42');
+router.get('/reconciliation/template.csv', kt42, recon.downloadTemplate);
+router.get('/reconciliation/summary', kt42, recon.ktSummary);
+router.get('/reconciliation/statements', kt42, recon.listStatements);
+router.post('/reconciliation/statements/import', kt42, recon.csvUpload.single('file'), recon.importStatement);
+router.get('/reconciliation/statements/:id', kt42, recon.getStatement);
+router.post('/reconciliation/statements/:id/run', kt42, recon.runEngine);
+router.post('/reconciliation/statements/:id/confirm-auto', kt42, recon.confirmAuto);
+router.get('/reconciliation/lines/:maDong', kt42, recon.getLine);
+router.post('/reconciliation/lines/:maDong/confirm', kt42, recon.confirmLine);
+router.post('/reconciliation/lines/:maDong/reject', kt42, recon.rejectLine);
+
 module.exports = router;

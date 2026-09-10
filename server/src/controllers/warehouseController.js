@@ -53,28 +53,32 @@ const inventoryQuery = `
     ORDER BY CASE WHEN ISNULL(tk.SLTon, 0) <= sp.TonKhoToiThieu THEN 0 ELSE 1 END,
              ThieuSoVoiDinhMuc DESC, sp.TenSP`;
 
-const getInventory = async (req, res) => {
-    try {
-        const pool = await poolPromise;
+const loadInventory = async (pool, user, { search = '', lowOnly = false } = {}) => {
         const warehouse = await getWarehouse(pool);
-        const keyword = String(req.query.search || '').trim();
-        const lowOnly = String(req.query.lowOnly || '') === 'true';
+        const keyword = String(search || '').trim();
         const result = await pool.request()
             .input('MaKho', sql.VarChar, warehouse.MaKho)
             .input('TuKhoa', sql.NVarChar, keyword)
             .input('Mau', sql.NVarChar, `%${keyword}%`)
             .input('CanBoSung', sql.Bit, lowOnly ? 1 : 0)
             .query(inventoryQuery);
-        res.json({ warehouse, items: result.recordset });
+        return { warehouse, items: result.recordset };
+};
+
+const getInventory = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        res.json(await loadInventory(pool, req.user, {
+            search: req.query.search,
+            lowOnly: String(req.query.lowOnly || '') === 'true'
+        }));
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: error.message || 'Không thể tải dữ liệu tồn kho.' });
     }
 };
 
-const getDashboard = async (req, res) => {
-    try {
-        const pool = await poolPromise;
+const loadWarehouseDashboard = async (pool, user) => {
         const warehouse = await getWarehouse(pool);
         const [summary, lowStock, requests, logs] = await Promise.all([
             pool.request().input('MaKho', sql.VarChar, warehouse.MaKho).query(`
@@ -103,19 +107,25 @@ const getDashboard = async (req, res) => {
                 FROM SanPham sp LEFT JOIN TonKho tk ON tk.MaSP=sp.MaSP AND tk.MaKho=@MaKho
                 WHERE sp.TrangThai=N'Đang bán' AND ISNULL(tk.SLTon,0) <= sp.TonKhoToiThieu
                 ORDER BY (sp.TonKhoToiThieu-ISNULL(tk.SLTon,0)) DESC, sp.TenSP`),
-            pool.request().input('MaNV', sql.VarChar, req.user.MaNV).query(`
+            pool.request().input('MaNV', sql.VarChar, user.MaNV).query(`
                 SELECT TOP 5 dn.MaDN, dn.NgayLap, dn.NgayGui, dn.TrangThai, dn.LyDo,
                        COUNT(ct.MaSP) AS SoMatHang, SUM(ct.SLDeNghi) AS TongSoLuong
                 FROM DeNghiMuaHang dn JOIN ChiTietDeNghi ct ON ct.MaDN=dn.MaDN
                 WHERE dn.MaNV_Lap=@MaNV
                 GROUP BY dn.MaDN,dn.NgayLap,dn.NgayGui,dn.TrangThai,dn.LyDo
                 ORDER BY dn.NgayLap DESC`),
-            pool.request().input('MaTK', sql.Int, req.user.MaTK).query(`
+            pool.request().input('MaTK', sql.Int, user.MaTK).query(`
                 SELECT TOP 5 HanhDong, NoiDung, ThoiGian FROM NhatKy
                 WHERE MaTK=@MaTK AND BangLienQuan=N'DeNghiMuaHang'
                 ORDER BY ThoiGian DESC`)
         ]);
-        res.json({ warehouse, summary: summary.recordset[0], lowStock: lowStock.recordset, recentRequests: requests.recordset, recentActivity: logs.recordset });
+        return { warehouse, summary: summary.recordset[0], lowStock: lowStock.recordset, recentRequests: requests.recordset, recentActivity: logs.recordset };
+};
+
+const getDashboard = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        res.json(await loadWarehouseDashboard(pool, req.user));
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: error.message || 'Không thể tải tổng quan kho.' });
@@ -136,20 +146,27 @@ const requestListQuery = `
     GROUP BY dn.MaDN,dn.MaNV_Lap,nv.TenNV,dn.NgayLap,dn.NgayGui,dn.LyDo,dn.TrangThai,dn.GhiChu,dn.MaNV_TiepNhan
     ORDER BY dn.NgayLap DESC`;
 
-const listRequests = (purchasing = false) => async (req, res) => {
-    try {
-        const pool = await poolPromise;
-        const keyword = String(req.query.search || '').trim();
-        const status = String(req.query.status || '').trim();
+const loadPurchaseRequests = async (pool, user, { purchasing = false, search = '', status = '' } = {}) => {
+        const keyword = String(search || '').trim();
         const result = await pool.request()
             .input('ChiCuaToi', sql.Bit, purchasing ? 0 : 1)
             .input('AnNhap', sql.Bit, purchasing ? 1 : 0)
-            .input('MaNV', sql.VarChar, req.user.MaNV)
-            .input('TrangThai', sql.NVarChar, status)
+            .input('MaNV', sql.VarChar, user.MaNV)
+            .input('TrangThai', sql.NVarChar, String(status || '').trim())
             .input('TuKhoa', sql.NVarChar, keyword)
             .input('Mau', sql.NVarChar, `%${keyword}%`)
             .query(requestListQuery);
-        res.json({ items: result.recordset });
+        return { items: result.recordset };
+};
+
+const listRequests = (purchasing = false) => async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        res.json(await loadPurchaseRequests(pool, req.user, {
+            purchasing,
+            search: req.query.search,
+            status: req.query.status
+        }));
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải danh sách đề nghị mua hàng.' });
@@ -661,6 +678,7 @@ const getHistory = async (req, res) => {
 };
 
 module.exports = {
+    loadWarehouseDashboard, loadPurchaseRequests, loadInventory,
     getDashboard, getInventory, getHistory,
     listWarehouseRequests: listRequests(false),
     listPurchasingRequests: listRequests(true),

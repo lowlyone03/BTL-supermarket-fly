@@ -13,6 +13,7 @@ Cách đọc
   - Làm lần lượt mục 1 → 5 (ngày đầu tiên) rồi mới vào nghiệp vụ hằng ngày.
   - Định khoản Nợ/Có: nhảy mục 3A (HẠCH TOÁN) trên mục lục — ngay sau 18 tài khoản.
   - Gặp lỗi: nhảy mục 17 (FAQ).
+  - Đối soát sao kê / MoMo / phiếu chi / 112: nhảy mục 19.
   - Số tiền ví dụ là VNĐ, dấu chấm ngăn cách hàng nghìn.
   - Chữ IN HOA trong ngoặc là mã nội bộ hệ thống (BAN_HANG, 111…).
     Trên màn hình bạn thấy nhãn tiếng Việt có dấu.
@@ -23,7 +24,7 @@ Cách đọc
       Bước bấm trên màn = viên số (Bước 1, 2, 3…).
       Thuật ngữ chốt / chờ ghi sổ / tạm tính / NULL / 0% được tô nền.
 
-[CHOT] Mở cẩm nang trong hệ thống: đăng nhập Kế toán → nhóm KẾ TOÁN TỔNG HỢP → Cẩm nang kế toán. Quản lý cũng thấy cùng mục trên menu điều hành. Đây không chỉ là file TXT cạnh máy.
+[CHOT] Mở cẩm nang trong hệ thống: đăng nhập Kế toán → nhóm KẾ TOÁN TỔNG HỢP → Cẩm nang kế toán. Quản lý cũng thấy cùng mục trên menu điều hành. Mục 19 (Đối soát ngân hàng thông minh) có trên mục lục của cả hai vai trò. Đây không chỉ là file TXT cạnh máy.
 
 --------------------------------------------------------------------------------
 MỤC LỤC
@@ -48,6 +49,7 @@ MỤC LỤC
   16. Việc KHÔNG làm trong mô hình mini
   17. FAQ / lỗi thường gặp
   18. Phụ lục: sơ đồ 1 tuần làm việc của kế toán trong app
+  19. Đối soát ngân hàng thông minh (sao kê + MoMo + phiếu chi + 112)
 
 ================================================================================
 1. CẨM NANG NÀY LÀ GÌ / PHẠM VI MINI / KHÔNG PHẢI MISA
@@ -148,6 +150,7 @@ MỤC LỤC
     Lịch sử hoạt động
 
   KẾ TOÁN TỔNG HỢP
+    Cẩm nang kế toán
     Hệ thống tài khoản
     Kỳ kế toán
     Chi phí vận hành
@@ -164,6 +167,7 @@ MỤC LỤC
   KẾ TOÁN MỞ RỘNG
     Tài sản cố định
     Ngân hàng & sao kê CSV
+    Đối soát ngân hàng thông minh
 
   Việc của bạn (tóm tắt):
     - Ngày đầu: tạo / mở / nhập / chốt số dư kỳ.
@@ -174,13 +178,16 @@ MỤC LỤC
     - Chi phí vận hành: lưu nháp → xác nhận (sinh Nợ 642).
     - Cuối tháng: kiểm tra chờ ghi sổ → kết chuyển → khóa kỳ.
     - Xem báo cáo sổ cái; lọc lịch sử “Kế toán tổng hợp”.
+    - Đối soát ngân hàng: nhập CSV, xem gợi ý, xác nhận hoặc bỏ gợi ý
+      (không tự ghi sổ). Đọc mục 19.
 
 2.2. Quản lý
 
   Menu điều hành (không phải menu kế toán đầy đủ):
     Tổng quan, Trung tâm phê duyệt, Theo dõi công nợ, Phân ca, Duyệt công,
-    Ngày lễ năm, Báo cáo cửa hàng, Báo cáo Thủ kho,
-    Kết quả kinh doanh, Lưu chuyển tiền tệ, Bảng cân đối kế toán.
+    Ngày lễ năm, Báo cáo cửa hàng, Khách hàng thân thiết, Báo cáo Thủ kho,
+    Kết quả kinh doanh, Lưu chuyển tiền tệ, Bảng cân đối kế toán,
+    Cẩm nang kế toán, Đối soát ngân hàng thông minh (chỉ tóm tắt).
 
   Việc của Quản lý chạm kế toán:
     - Duyệt Phiếu chi nhà cung cấp = giao tiền cho bạn (nút kiểu
@@ -189,6 +196,9 @@ MỤC LỤC
     - Gán thuế suất sản phẩm 0 / 5 / 8 / 10 (màn Sản phẩm & giá).
       Để trống (NULL) thì POS chặn bán.
     - Xem KQKD / LCTT / Bảng cân đối (cùng mẫu với bạn, chủ yếu xem).
+    - Đối soát ngân hàng thông minh: chỉ số dòng + tổng tiền chờ đối soát
+      (UC10). Không xem từng dòng sao kê, không nhập CSV, không xác nhận.
+      Chi tiết thuộc Kế toán UC42. Đọc mục 19.
     - Báo cáo cửa hàng: lãi gộp điều hành (có thể gồm VAT, có nhắc chi NCC
       như dòng TIỀN) — KHÁC Kết quả kinh doanh sổ cái. Đừng so hai số
       rồi bảo hệ thống sai.
@@ -923,6 +933,12 @@ Sau khi chốt, muốn sửa 111?
   Khi nào: xem ca của mình.
   Không ghi sổ.
 
+----- Cẩm nang kế toán -----
+  KT: KẾ TOÁN TỔNG HỢP → Cẩm nang kế toán.
+  QL: menu điều hành → Cẩm nang kế toán.
+  Cùng một sổ tay. Mục lục trái. Ô tìm trên cùng.
+  Đối soát ngân hàng thông minh = mục 19 (cả QL và KT đều thấy).
+
 ----- Đối chiếu hóa đơn -----
   Tiêu đề: Đối chiếu hóa đơn Nhà cung cấp
   Khi nào: đã có Phiếu nhập xác nhận và/hoặc Đơn mua; cầm hóa đơn GTGT NCC.
@@ -1062,6 +1078,10 @@ Sau khi chốt, muốn sửa 111?
 ----- Ngân hàng & sao kê CSV -----
   “Thêm tài khoản” (chỉ khi chưa có TK đang dùng), “Nhập CSV”.
   Xem mục 14.
+
+----- Đối soát ngân hàng thông minh -----
+  KT: nhập CSV, chạy engine, xác nhận / bỏ gợi ý. QL: chỉ tóm tắt số dòng.
+  Xem mục 19.
 
 ================================================================================
 7. ĐỊNH KHOẢN TỪNG NGHIỆP VỤ (TIẾNG NGƯỜI + VÍ DỤ TIỀN)
@@ -1759,6 +1779,8 @@ Nhập sao kê
   Thông báo: Đã nhập N dòng (mã SK…).
   Số 112 trên sổ cái VẪN lấy từ bút toán, không lấy thuần từ file.
   Đối chiếu: khớp mã giao dịch Fly với dòng sao kê, hoặc khớp tay.
+  Đối soát thông minh (điểm, ứng viên, xác nhận KT) nằm menu riêng —
+  KẾ TOÁN MỞ RỘNG → Đối soát ngân hàng thông minh. Đọc mục 19.
 
 Không có 1121/1122. Không tách VCB vs MB trên sổ cái.
 
@@ -1808,6 +1830,7 @@ Log đối chiếu / phiếu chi / lương P0 cũ vẫn còn. Không mất vì c
   - Không cài / không chạy n8n, Firebase, tự động hóa ngoài app.
   - Không nhiều tài khoản ngân hàng đang dùng; không 1121/1122.
   - Không nhập Excel sao kê.
+  - Không để đối soát ngân hàng tự ghi sổ (postJournal) hay tự trả NCC.
   - Không thanh lý / đánh giá lại TSCĐ; không dùng thủ công giả thanh lý.
   - Không ghi 331 cho TSCĐ, tiền điện, cước xe, thuê nhà.
   - Không bán chịu, không 131, không trả thiếu khách.
@@ -1916,6 +1939,13 @@ Q23. Số 421 gọi là lãi sau thuế?
 Q24. Hai thuế suất trên một hóa đơn?
   33311 vẫn một TK. Bảng kê tách theo dòng / suất.
 
+Q25. Quản lý xem được từng dòng sao kê không?
+  Không. QL (UC10) chỉ tóm tắt số dòng / tổng tiền. Chi tiết và xác nhận
+  thuộc Kế toán UC42. Đọc mục 19.
+
+Q26. Bấm xác nhận đối soát có ghi sổ 112 không?
+  Không. Engine không postJournal, không tự trả NCC. Đọc mục 19.7.
+
 ================================================================================
 18. PHỤ LỤC — SƠ ĐỒ 1 TUẦN LÀM VIỆC CỦA KẾ TOÁN TRONG APP
 ================================================================================
@@ -1949,8 +1979,10 @@ Giả sử tuần giữa tháng, kỳ đang Mở, số dư đã chốt.
 ----- Thứ Sáu (lương nếu cuối tháng / ngày chi) -----
   9. Bảng lương tháng: Lập / tính lại → kiểm tra giờ → Khóa kỳ lương.
      Lập phiếu (TM/CK) → chờ QL duyệt + giao quỹ → Chi từ quỹ chung.
-  10. Ngân hàng & sao kê CSV: Nhập CSV tuần, đối chiếu với 112
-      (phiếu chi CK, lương CK, QR).
+  10. Ngân hàng & sao kê CSV: nhập / giữ 1 TKNH map 112.
+      Đối soát ngân hàng thông minh: nhập CSV tuần, chạy engine,
+      xác nhận dòng MoMo / phiếu chi CK / lương CK. Không ghi sổ từ nút này.
+      Đọc mục 19.
 
 ----- Cuối tháng (ngày 28–31 hoặc mùng 1 tháng sau) -----
   11. Sản phẩm còn “Chưa chọn” thuế? Nhắc QL gán trước khi chốt sổ.
@@ -2001,6 +2033,136 @@ Số dư đầu minh họa khác ví dụ 50+80=130:
 
 KQKD thuần các GD trên (bỏ số dư): DT 200.000 − GV 140.000 − 642 10.800.000
 = lỗ 10.740.000. Trả NCC không vào đây.
+
+================================================================================
+19. ĐỐI SOÁT NGÂN HÀNG THÔNG MINH
+================================================================================
+
+19.1. Mục đích AIS — sao kê gặp chứng từ
+
+  Siêu thị nhận tiền bán QR (MoMo) vào tài khoản ngân hàng (TK 112) và
+  chi chuyển khoản: trả nhà cung cấp, chi lương. Sao kê CSV là “sự thật
+  của ngân hàng”. Đối soát thông minh ghép từng dòng sao kê với:
+    - Giao dịch MoMo QR đã xác nhận (ThanhToan, nguồn xác nhận MoMo)
+    - Phiếu chi nhà cung cấp chuyển khoản
+    - Phiếu chi lương chuyển khoản
+    - Bút toán đã ghi TK 112
+
+  Mục đích: biết dòng nào đã có chứng từ tương ứng, dòng nào lệch tiền,
+  dòng nào chưa tìm ra (phí ngân hàng, chuyển khoản lạ…). Đây là đối soát
+  AIS trong mô hình mini — không phải Open Banking và không phải AI tự quyết.
+
+[CHOT] Engine chỉ tính điểm và xếp loại. Nút cuối cùng luôn là Kế toán:
+  “Xác nhận đối soát” hoặc “Bỏ gợi ý”. Máy không tự ghi sổ, không tự trả NCC.
+
+19.2. Ai làm gì trên app
+
+  Vai trò | Việc được làm | Việc không làm
+  Kế toán (UC42) | Nhập sao kê CSV, chạy engine, xem từng dòng, xác nhận / bỏ gợi ý, xác nhận hàng loạt khớp tự động | Không nhờ máy tự ghi sổ (postJournal)
+  Quản lý (UC10) | Xem tóm tắt: số dòng chờ, tổng tiền chưa đối soát, số gợi ý / chênh lệch | Không xem từng dòng sao kê, không nhập CSV, không bấm xác nhận
+
+  Mở trên app — đúng nhãn menu
+    Kế toán: nhóm KẾ TOÁN MỞ RỘNG → Đối soát ngân hàng thông minh
+    Quản lý: menu điều hành → Đối soát ngân hàng thông minh (chỉ tóm tắt)
+    Cẩm nang (cả hai vai trò đều mở được mục này):
+      Kế toán: KẾ TOÁN TỔNG HỢP → Cẩm nang kế toán → mục lục trái → 19
+      Quản lý: menu điều hành → Cẩm nang kế toán → mục lục trái → 19
+      Ô tìm trên cẩm nang: gõ “đối soát”, “MoMo”, “sao kê”.
+
+[LUU_Y] Quản lý không thấy bảng từng dòng sao kê. Đó là đúng plan UC10,
+  không phải lỗi giao diện.
+
+19.3. Chuỗi MoMo — từ quầy tới ngoại lệ
+
+  1. POS: khách quét QR MoMo, thu ngân hoàn thành hóa đơn.
+  2. Hệ thống ghi Nợ 112 (tiền vào ngân hàng). Không vào két 111.
+  3. Thanh toán được gắn nguồn xác nhận MoMo, có mã giao dịch.
+  4. Kế toán nhập sao kê CSV. Nội dung chuyển khoản thường chứa mã GD.
+  5. Engine đối soát: dòng sao kê ↔ MoMo / phiếu chi / lương / bút toán 112.
+  6. Kế toán xem ngoại lệ (chênh lệch, chưa khớp) rồi xác nhận hoặc bỏ gợi ý.
+
+[LUU_Y] 112 không vào két. Đối soát két tiền mặt (Phiếu thu ca) là việc khác
+  — menu Ca & Phiếu thu. Đừng trộn hai quỹ.
+
+19.4. Thang điểm cố định — không LLM
+
+  Điều kiện | Điểm
+  Số tiền khớp (giá trị tuyệt đối) | +50
+  Ngày giao dịch ± 1 ngày (lịch Việt Nam) | +20
+  Mã phiếu chi / mã GD / mã tham chiếu xuất hiện trong nội dung | +25
+  Tên hoặc mã nhà cung cấp xuất hiện trong nội dung | +5
+  Tổng tối đa | 100
+
+  Kết quả xếp loại trên màn (tiếng Việt):
+    Khớp tự động   điểm 95–100. Vẫn CHỜ Kế toán xác nhận. Máy không ghi sổ.
+    Gợi ý          khoảng 70 (thường tiền + ngày, chưa có mã).
+    Chênh lệch     tiền lệch nhưng có mã hoặc cùng ngày — hiện 2 số + chênh.
+    Chưa khớp      không có ứng viên.
+
+  Một chứng từ không được gán cho hai dòng sao kê.
+
+19.5. AI / trợ lý không quyết định khớp
+
+  Trợ lý chỉ được đọc số đếm (bao nhiêu dòng chờ, tổng tiền).
+  Không được chọn ứng viên, không được bấm xác nhận hộ bạn.
+  LLM không nằm trong engine đối soát.
+
+[KHONG] Không để AI “tự khớp vì điểm cao”. Nút cuối là Kế toán.
+
+19.6. Cách nhập CSV và các nút trên màn
+
+  Bước 1 — Có tài khoản ngân hàng đang sử dụng
+    Nếu chưa có: KẾ TOÁN MỞ RỘNG → Ngân hàng & sao kê CSV → Thêm tài khoản.
+    Mini chỉ 1 TKNH, luôn map 112. Xem mục 14.
+
+  Bước 2 — Tải mẫu
+    Nút “Tải mẫu CSV”. Cột chuẩn trên mẫu và trên khối Nhập sao kê:
+      Ngày | Số tiền | Nội dung | Mã tham chiếu
+    Dòng dương = tiền vào (MoMo / Nợ 112).
+    Dòng âm = tiền ra (chi NCC / chi lương).
+
+  Bước 3 — Nhập và chạy
+    Ô Tài khoản ngân hàng (thường NH0001), chọn tệp .csv,
+    nút “Nhập và chạy đối soát”. Engine chạy ngay. Chưa ghi sổ.
+
+  Bước 4 — Lọc và xem dòng
+    Chọn sao kê đã nhập, ô tìm (nội dung / mã PC / mã GD),
+    lọc trạng thái, “Chạy lại engine” nếu sao kê cũ,
+    “Xác nhận hàng loạt (khớp tự động)” khi đã đọc KPI.
+
+  Bước 5 — Chi tiết một dòng
+    Bấm dòng: xem ứng viên, lý do điểm (tiền / ngày / mã / NCC).
+    Nếu Chênh lệch: hai số (sao kê và chứng từ) + chênh.
+    “Xác nhận đối soát” hoặc “Bỏ gợi ý”.
+    Có thể chọn một ứng viên rồi xác nhận.
+
+[CANH_BAO] Chỉ nhận tệp .csv. Chọn Excel (.xlsx / .xls) sẽ bị từ chối.
+
+[VI_DU] Dòng sao kê +1.100.000, nội dung có mã MoMo trùng ThanhToan
+  cùng ngày → thường Khớp tự động (điểm 95–100), vẫn chờ bạn bấm xác nhận.
+  Dòng phí dịch vụ không có chứng từ → Chưa khớp. Bạn không bịa phiếu chi.
+
+19.7. Việc đối soát KHÔNG làm
+
+  - Không tự ghi sổ (không postJournal) khi điểm ≥ 95 hay khi bấm xác nhận.
+  - Không tự trả nhà cung cấp, không tự lập / duyệt phiếu chi.
+  - Không sửa số dư 112 từ file sao kê — sổ cái 112 vẫn lấy từ bút toán.
+  - Không Open Banking, không đọc PDF / ảnh sao kê, không OCR.
+  - Không nhiều tài khoản ngân hàng đang dùng.
+
+[CHOT] Xác nhận đối soát chỉ ghi kết quả khớp trên dòng sao kê.
+  Mở Nhật ký chung / Bút toán sau bước này: không có bút toán mới
+  sinh từ nút xác nhận.
+
+19.8. TK 112 và két tiền mặt (111) — đừng lẫn
+
+  Tài khoản | Quỹ nào | Màn liên quan
+  111 | Két tại quầy | Ca & Phiếu thu — đối soát tiền mặt cuối ca
+  112 | Tài khoản ngân hàng | QR / MoMo, chuyển khoản, sao kê, đối soát thông minh
+
+  Bán MoMo: Nợ 112, không Nợ 111.
+  Chi NCC / lương chuyển khoản: Có 112, không lấy từ két.
+  Lệch két (thiếu nộp) mới đụng 138 / 711 — không phải màn đối soát ngân hàng.
 
 --------------------------------------------------------------------------------
 KẾT THÚC CẨM NANG

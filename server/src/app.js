@@ -23,6 +23,9 @@ const listLanIPv4 = () => {
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use('/uploads/chat', (req, res) => {
+    res.status(403).json({ message: 'Tệp chat chỉ tải qua /api/chat/files với JWT.' });
+});
 app.use('/uploads', express.static(path.resolve(__dirname, '..', 'uploads'), {
     maxAge: '7d',
     fallthrough: false
@@ -44,6 +47,8 @@ const cashierRoutes = require('./routes/cashierRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const telegramRoutes = require('./routes/telegramRoutes');
 const paymentGatewayRoutes = require('./routes/paymentGatewayRoutes');
+const assistantRoutes = require('./routes/assistantRoutes');
+const chatRoutes = require('./routes/chatRoutes');
 
 // Định tuyến API
 app.use('/api/auth', authRoutes);
@@ -59,6 +64,8 @@ app.use('/api/accounting', accountingRoutes);
 app.use('/api/ledger', ledgerRoutes);
 app.use('/api/cashier', cashierRoutes);
 app.use('/api/telegram', telegramRoutes);
+app.use('/api/assistant', assistantRoutes);
+app.use('/api/chat', chatRoutes);
 // IPN/return MoMo: public, mount TRƯỚC catch-all 404. Không payment.routes / momoController.
 app.use('/api/payments/gateway', paymentGatewayRoutes);
 
@@ -132,6 +139,12 @@ startHttp(HOST, () => {
             await ensureTelegramSchema(pool);
             await ensureCountSuccessorSchema(pool);
             await syncRejectedCountSuccessors(pool);
+            const { ensureReconciliationSchema } = require('./services/reconciliationService');
+            await ensureReconciliationSchema(pool);
+            const { ensureChatSchema } = require('./services/chatSchema');
+            const { syncAllMemberships } = require('./services/chatService');
+            await ensureChatSchema(pool);
+            await syncAllMemberships(pool);
         } catch (error) {
             console.error('Không thể bổ sung schema thông báo / bàn giao / Telegram:', error.message);
         }

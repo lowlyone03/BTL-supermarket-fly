@@ -239,6 +239,11 @@ const createEmployee = async (req, res) => {
             content: `Thêm nhân viên ${TenNV} — ${ChucVu}`
         });
 
+        try {
+            const { syncMembershipSafe } = require('../services/chatService');
+            await syncMembershipSafe(pool, MaNV);
+        } catch { /* chat không chặn tạo NV */ }
+
         res.status(201).json({ message: 'Thêm nhân viên thành công' });
     } catch (error) {
         console.error(error);
@@ -318,6 +323,11 @@ const updateEmployee = async (req, res) => {
             user: req.user, req, action: 'Sửa nhân viên', table: 'NhanVien', recordId: maNV,
             content: `Cập nhật thông tin NV: ${TenNV}`
         });
+
+        try {
+            const { syncMembershipSafe } = require('../services/chatService');
+            await syncMembershipSafe(pool, maNV);
+        } catch { /* chat không chặn sửa NV */ }
 
         res.json({ message: 'Cập nhật nhân viên thành công' });
     } catch (error) {

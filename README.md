@@ -31,9 +31,14 @@ Hệ thống thay việc đó bằng **chứng từ điện tử + phân quyền
 
 ## 2. Dự án này là gì — và không phải gì
 
-**Là:** AIS vận hành cửa hàng. Chuỗi *đề nghị → mua → nhập → bán → quỹ ca → công nợ NCC → lương → báo cáo*.
+**Là:** AIS vận hành cửa hàng. Chuỗi *đề nghị → mua → nhập → bán → quỹ ca → công nợ NCC → lương → sổ cái mini / báo cáo*.
 
-Kế toán trong code hiện tại là **kế toán nghiệp vụ**: đối chiếu chứng từ, công nợ phải trả, phiếu thu/chi, lãi **gộp** (doanh thu thuần − giá vốn thuần), bảng lương theo công. Quản lý có thêm màn **lãi/lỗ sau chi phí** (trừ luôn chi NCC đã trả và lương đã khóa) để điều hành, không phải báo cáo tài chính nộp thuế.
+Hai lớp kế toán **đã có trong code** (cập nhật 10/09/2026):
+
+1. **Kế toán nghiệp vụ (P0, UC27–UC33):** đối chiếu 3 chứng từ, công nợ phải trả, phiếu thu/chi, lãi **gộp** (doanh thu thuần − giá vốn thuần), bảng lương theo công.
+2. **Kế toán mini (UC34–UC43):** `TaiKhoanKeToan`, `ButToan`, `KyKeToan`, VAT POS (511/33311), nhật ký chung, sổ cái, CĐPS, KQKD, LCTT, BCĐKT thu gọn, TSCĐ, sao kê CSV 112. Menu Kế toán tổng hợp + cẩm nang.
+
+Quản lý xem **hai báo cáo tách nhau**: KQKD / lãi kế toán (`kqkdLoiNhuan` = lãi gộp − lương đã khóa − cước; **không** trừ tiền trả NCC) và báo cáo **dòng tiền / thu-chi** (có chi NCC). Field cũ `laiLoSauChiPhi` (trừ NCC) vẫn trả API cho tương thích, **không** dùng làm “vì sao lỗ kế toán”.
 
 **Không phải:**
 
@@ -41,10 +46,10 @@ Kế toán trong code hiện tại là **kế toán nghiệp vụ**: đối chi�
 | --- | --- |
 | Website bán hàng / app khách | Khách không đăng nhập |
 | ERP nhiều công ty, nhiều kho | Một cửa hàng, một kho |
-| MISA / FAST / sổ cái Nợ–Có | Chưa có `TaiKhoanKeToan`, `ButToan`, khóa sổ, BCĐKT |
+| MISA / FAST đầy đủ | Sổ cái **mini** (18 TK, 1 TKNH); không BHXH, không tờ khai thuế nhà nước |
 | Phần mềm BHXH – bảng lương nhà nước | Không tính BHXH/BHYT; lương theo giờ công + ngày lễ luật VN |
 
-Hướng “kế toán mini” (sổ cái, VAT POS, TSCĐ) nhóm đã **chốt là Plan A** nhưng **chưa code** — chỉ làm khi được yêu cầu.
+Cổng QR POS đang chạy: **MoMo sandbox** (`PAYMENT_PROVIDER=momo`), không phải VNPay. VNPay/PayOS là stub `Provider chưa bật`. Telegram companion **đã có**, gồm nút duyệt inline + audit (`telegramApprove.js`). Trợ lý AI **P2-MIN đã có** (nút Trợ lý trên dashboard, `POST /api/assistant/ask`). Chưa có: OCR HĐ NCC, e-receipt token, webcam barcode, replenishment theo doanh số 7 ngày. **P3 đối soát NH thông minh** và **P4 RFM khách** đã có plan + code demo (không nhét vào P2-ĐỦ).
 
 ---
 
@@ -340,7 +345,7 @@ Mật khẩu mặc định **`123`** (seed `server/seed-accounts.js`).
 | **MH** | NCC, đọc đề nghị từ kho, lập đơn mua, theo dõi giao hàng | `warehouse/supplier-pages.js`, `purchase-order-pages.js` |
 | **TK** | Tồn kho, kiểm đếm thực tế rồi mới đề nghị mua (hết giai đoạn khai trương), nhận hàng, phiếu nhập, xuất hủy, kiểm kê, kiểm đổi trả | `warehouse/` |
 | **TN** | Lịch ca, check-in, POS, hóa đơn, đổi trả, đóng ca | `cashier/` |
-| **KT** | Đối chiếu 3 chứng từ mua, công nợ NCC, phiếu thu ca, bảng lương, chi lương từ quỹ QL đã giao, báo cáo nội bộ, lịch sử hoạt động KT | `accounting/` |
+| **KT** | Đối chiếu 3 chứng từ mua, công nợ NCC, phiếu thu ca, bảng lương, chi lương từ quỹ QL đã giao, **kế toán mini (sổ cái, VAT, TSCĐ, sao kê)**, báo cáo nội bộ | `accounting/`, `accounting/ledger-pages.js` |
 
 **Không có** actor Nhân sự riêng, không BHXH/BHYT trên phiếu lương, không nhiều chi nhánh, không bán chịu (không TK 131).
 
@@ -384,14 +389,15 @@ supermarket-fly/
 └── server/
     ├── apply-migration.js
     ├── seed-accounts.js, seed-permissions.js
-    ├── migrations/           CreateDB + 12 file theo ngày
+    ├── migrations/           CreateDB + chuỗi đến 20260910 (gồm sổ cái + MoMo)
     ├── uploads/
     └── src/
         ├── app.js            mount /api/*
         ├── config/db.js
-        ├── routes/           11 file
+        ├── routes/           accounting, ledger, cashier, telegram, paymentGateway…
         ├── controllers/
-        ├── services/         payrollEngine, payrollFund, storeProfitLoss, cashierDuty…
+        ├── services/         journalEngine, paymentGateway (MoMo), telegram*,
+        │                     payrollEngine, storeProfitLoss, cashierDuty…
         └── middlewares/      auth, upload ảnh
 ```
 
@@ -436,13 +442,12 @@ Nút **Lập đề nghị khai trương** đã bỏ.
 
 ## Kế toán nghiệp vụ đã chốt
 
-Chi tiết từng quyết định: [docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt](docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt).
+Chi tiết P0: [docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt](docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt) (luật tiền–hàng–nợ **vẫn đúng**; đoạn “chưa sổ cái” ở cuối file đó là mốc 02/09 — **đã làm sau đó**).
 
-- Lãi trên báo cáo nội bộ cũ = **lãi gộp** = DT thuần − GV thuần. **Bảng lương không trừ vào lãi gộp.**
-- Kỳ báo cáo theo `Asia/Ho_Chi_Minh`. Ngày 1–3: ô tháng mặc định lùi tháng trước. Nút **Lập báo cáo** = tổng hợp chứng từ đã hoàn thành trong kỳ, **không** chi tiền, **không** khóa sổ cái.
-- Plan A sổ cái (`TaiKhoanKeToan`, `KyKeToan`, `ButToan`) **chưa code** — chỉ làm khi nhóm bảo làm.
-
-Gợi ý hạch toán *để dành* (chưa sinh bút toán): khóa lương Nợ 642 / Có 334; chi lương Nợ 334 / Có 111 hoặc 112.
+- Lãi gộp nội bộ = DT thuần − GV thuần. **Bảng lương không trừ vào lãi gộp.**
+- Kỳ báo cáo theo `Asia/Ho_Chi_Minh`. Ngày 1–3: ô tháng mặc định lùi tháng trước. Nút **Lập báo cáo** trên màn điều hành = tổng hợp chứng từ P0, **không** chi tiền.
+- **Kế toán mini đã code (09/09/2026):** migration `20260909_AccountingCore`, `journalEngine.js`, `ledgerController.js`, menu `ledger-*`. Hạch toán lúc chứng từ hợp lệ: bán Nợ 111/112 Có 511+33311; giá vốn Nợ 632 Có 156; khóa lương Nợ 642 Có 334; chi lương Nợ 334 Có 111/112; khớp 3 bên Nợ 156+1331 Có 331; trả NCC Nợ 331 Có 111/112.
+- Cẩm nang + 74 case test tay: [docs/CAM_NANG_KE_TOAN_MINI.txt](docs/CAM_NANG_KE_TOAN_MINI.txt), [docs/BAN_TEST_CHUC_NANG_KE_TOAN_MINI_A_Z.txt](docs/BAN_TEST_CHUC_NANG_KE_TOAN_MINI_A_Z.txt).
 
 ---
 
@@ -483,17 +488,21 @@ Phiếu chi **NCC** vẫn duyệt + giao **từng phiếu**. Phiếu chi **lươ
 
 ## Báo cáo lãi / lỗ cửa hàng (QL)
 
-Tab đầu **Báo cáo cửa hàng**: *Cửa hàng đang lãi hay lỗ*. Không thay báo cáo lãi gộp cũ.
+Tab đầu **Báo cáo cửa hàng**: *Cửa hàng đang lãi hay lỗ*. Không thay báo cáo lãi gộp cũ. Không thay KQKD sổ cái (UC43).
 
-**P&L quản trị**
+**KQKD điều hành (đúng, dùng để bảo vệ)**
 
-Doanh thu thuần − giá vốn thuần − chi NCC thanh toán thành công trong kỳ − lương **đã khóa** (− cước nếu có chứng từ).
+Doanh thu thuần − giá vốn thuần − lương **đã khóa** − cước (khi có chứng từ 642). **Không trừ** Phiếu chi NCC thành công. Code: `storeProfitLossMath.kqkdLoiNhuan`.
+
+**Dòng tiền / thu-chi (tab cùng màn, không gọi là lãi kế toán)**
+
+Tiền thu khách − tiền trả NCC − trả lương − chi phí đã chi. Chi NCC chỉ hiện ở đây. Field API cũ `laiLoSauChiPhi` vẫn trừ NCC — **deprecated**, không dùng làm “cửa hàng lỗ”.
 
 **Tiền có trả lương không?** Phiếu thu ca (TM) + đã thu CK/QR/thẻ so với lương đã khóa.
 
-**Chưa trừ:** thuê mặt bằng, điện nước, cước vận chuyển (chưa có bảng chứng từ cước).
+Chi phí điện/nước/thuê mặt bằng: đã có chứng từ UC36 trên Kế toán tổng hợp; màn P&L điều hành P0 **không** cộng đủ mọi 642 (xem KQKD sổ cái). Cước 4.000 đ/km + bồi 20% **chưa code**.
 
-Khi **lỗ** (hoặc DT thuần < lương khóa): hiện nguyên nhân theo số thật; QL bắt buộc nhập kế hoạch điều chỉnh (≥ 50 ký tự) → **Lưu và gửi thông báo toàn cửa hàng** (mọi NV đang làm việc). Kỳ lãi không bắt plan. Lịch sử plan không xóa.
+Khi **lỗ KQKD** (hoặc DT thuần < lương khóa): hiện nguyên nhân theo số thật (không lấy `chi_ncc_lon` làm lỗ kế toán); QL bắt buộc nhập kế hoạch điều chỉnh (≥ 50 ký tự) → **Lưu và gửi thông báo toàn cửa hàng**. Kỳ lãi không bắt plan. Lịch sử plan không xóa.
 
 ---
 
@@ -510,7 +519,7 @@ Khi **lỗ** (hoặc DT thuần < lương khóa): hiện nguyên nhân theo số
 - Menu ba ngôn ngữ, nút dùng màu mặc định tương thích mọi giao diện Telegram, điều hướng **Tổng quan / Làm mới / Báo cáo / Chứng từ** và cập nhật ngay trên tin hiện tại để không làm đầy chat.
 - Báo cáo quản trị **Tháng / Quý / Năm**: doanh thu hóa đơn, hoàn tiền, doanh thu thuần, giá vốn, lãi gộp, chi NCC/cước, lương đã khóa, lãi/lỗ sau chi phí, biên lợi nhuận, dòng tiền và so sánh cùng tiến độ kỳ trước.
 - Công nợ, tồn thấp, ca, thanh toán, lương và việc chờ có badge màu, progress bar và phân cấp nội dung rõ trên màn hình điện thoại.
-- Khi tải dữ liệu/chứng từ, Telegram hiện animation `typing` / `upload_photo`. Duyệt thành công có reaction; nút duyệt cũ được khóa lại để tránh bấm lặp.
+- Khi tải dữ liệu/chứng từ, Telegram hiện animation `typing` / `upload_photo`. **Code đã có nút duyệt inline** (PO, phiếu xuất, kiểm kê, đổi trả, phiếu chi NCC, chấm công) qua `telegramApprove.js` + audit; lệnh chữ `/approve` bị chặn. PLAN_12 gốc (05/09) ghi “không duyệt” — **lệch với code hiện tại**.
 - Có thể bật message effect cho chat riêng bằng `TELEGRAM_EFFECT_SUCCESS_ID` và `TELEGRAM_EFFECT_ALERT_ID`; để trống thì bot vẫn chạy bình thường.
 - Bảo mật giữ nguyên: OTP từ Fly, kiểm tra vai trò/quyền UC ở mỗi lệnh, webhook secret, chống gửi lặp và ghi Nhật ký hệ thống.
 
@@ -528,7 +537,11 @@ Prefix `/api`. Health: `GET /api/health`.
 | `/api/warehouse` | Tồn, kiểm kê, nhập, xuất, đề nghị |
 | `/api/purchasing`, `/api/suppliers` | Đơn mua, NCC, đề nghị inbox |
 | `/api/accounting` | Đối chiếu, công nợ, phiếu thu, lương, quỹ, lịch sử KT |
-| `/api/cashier` | Ca, POS, HĐ, đổi trả |
+| `/api/ledger` | Kế toán mini UC34–UC43: COA, kỳ, bút toán, NKC/sổ cái/CĐPS, KQKD/LCTT/BCĐKT, TSCĐ, sao kê |
+| `/api/accounting/reconciliation` | P3 đối soát NH thông minh (UC42): import CSV, chạy engine, KT xác nhận |
+| `/api/admin/loyalty` | P4 RFM thành viên (QL UC10). TN: `GET /api/cashier/customers/:id/loyalty` |
+| `/api/cashier` | Ca, POS, HĐ, đổi trả, thanh toán MoMo QR |
+| `/api/payments/gateway` | IPN/return MoMo (không JWT) |
 | `/api/notifications` | Chuông |
 | `/api/telegram` | Liên kết OTP, trạng thái kênh và webhook Telegram |
 
@@ -557,6 +570,11 @@ Thư mục `server/migrations/`:
 | `20260903_PayrollEngine` | Lễ, hệ số, phiếu chi lương |
 | `20260904_PayrollCommonFund` | Quỹ lương chung QL → KT |
 | `20260905_StoreProfitLoss` | Kế hoạch điều chỉnh khi lỗ |
+| `20260907_*` | Đổi trả bàn giao, hồ sơ NV, phiếu thu số âm |
+| `20260908_TelegramCompanion` (+ kiểm kê/xuất) | Telegram OTP / ChatId |
+| `20260909_AccountingCore` (+ LedgerUiLabels) | Sổ cái mini UC34–UC43 |
+| `20260910_PaymentGateway` (+ Qr) | Cổng MoMo: `NguonXacNhan`, `MaThamChieuCong` |
+| `20260910_SmartBankReconciliation` | P3: `KetQuaDoiSoatNganHang`, `UngVienDoiSoat`, `MaThamChieu` |
 
 Chạy lẻ: `cd server && node apply-migration.js <tên-file.sql>`  
 Hoặc cả chuỗi: `npm run setup:next` / `npm run migrate:next`.
@@ -583,12 +601,20 @@ Một số controller còn `ensure*Schema()` lúc gọi API (máy cũ tự ALTER
 
 | Hạng mục | Ghi chú |
 | --- | --- |
-| Sổ cái, Nợ/Có, `TaiKhoanKeToan` / `ButToan` / `KyKeToan` | Chờ nhóm bảo làm kế toán mini |
+| Trợ lý AI (`POST /api/assistant/ask`) | PLAN_12 #2 — **P2-MIN đã có**. P2-ĐỦ chưa hết. **P3/P4 không thuộc P2-ĐỦ** — AI chỉ đọc summary qua tool |
+| Đối soát NH thông minh (P3) | **Đã demo** · UC42 · `docs/PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt` · engine không LLM, KT xác nhận, không tự ghi sổ |
+| Loyalty RFM (P4) | **MVP** · UC10/UC23 · `docs/PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt` · không email/SMS/app KH |
+| OCR hóa đơn NCC | PLAN_12 #4 — chưa code |
+| E-receipt token / QR xem HĐ trên điện thoại | PLAN_12 #8 — chưa; in PDF nội bộ đã có |
+| Webcam / ZXing trên POS | PLAN_12 #5 — mới gõ tay + USB HID vào ô tìm |
+| Smart replenishment (TB bán 7 ngày) | PLAN_12 #6 — mới cảnh báo tồn min + `SLDatMua` |
+| VNPay / PayOS chạy thật | Stub; cổng đang dùng = **MoMo sandbox** |
+| Sentry, n8n, Firebase, Ollama riêng, thời tiết | Cắt hoặc không slide (PLAN_12 #7, #9–#12) |
 | BHXH / BHYT / BHTN / công đoàn | Ngoài phạm vi BTL |
-| VAT trên POS (tách 511/33311) | Plan A, chưa cột thuế HĐ bán |
-| TSCĐ, sao kê 112, LCTT, BCĐKT | Plan A |
 | Cước vận chuyển 4.000 đ/km, bồi thường 20% (NCC + nhà xe cùng chịu) khi hư ≥ 1/3 | **Đã chốt plan, chưa code** |
 | TK 242, kho FEFO/lô, nhiều cửa hàng, HĐĐT nhà nước, bán chịu | Cắt |
+
+Sổ cái / VAT POS / TSCĐ / sao kê / LCTT / BCĐKT **đã có** (UC34–UC43) — không còn nằm mục “chưa làm”.
 
 Cước giao hàng (plan): siêu thị trả cước cho đơn vị NCC thuê; chuyến 10–100 km; thanh toán cước mùng 10; bồi **một gói 20%** giá trị chuyến chia mặc định 10% + 10%. Công nợ **hàng** vẫn chỉ khi đối chiếu 3 chứng từ khớp.
 
@@ -613,8 +639,12 @@ Cước giao hàng (plan): siêu thị trả cước cho đơn vị NCC thuê; c
 | File | Nội dung |
 | --- | --- |
 | [docs/README.md](docs/README.md) | Mục lục toàn bộ file trong `docs/` |
-| [docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt](docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt) | Phương án đang chạy trong code |
-| [docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt](docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt) | Plan A: giữ / cắt |
+| [docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt](docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt) | Luật P0 đang chạy (tiền–hàng–nợ); đoạn “chưa sổ cái” là mốc 02/09 |
+| [docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt](docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt) | Plan A: giữ / cắt (đã triển khai 09/09) |
+| [docs/PLAN_MOMO_TEST_P1.txt](docs/PLAN_MOMO_TEST_P1.txt) | Cổng QR **đang dùng**: MoMo sandbox |
+| [docs/PLAN_AI_CHATBOT_TRO_LY.txt](docs/PLAN_AI_CHATBOT_TRO_LY.txt) | Plan + P2-MIN đã chạy (chưa P2-ĐỦ) |
+| [docs/PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt](docs/PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt) | P3 đối soát NH thông minh |
+| [docs/PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt](docs/PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt) | P4 RFM khách thành viên |
 | [docs/HUONG_DAN_TEST_DON_GIAN_CHO_6_NGUOI.md](docs/HUONG_DAN_TEST_DON_GIAN_CHO_6_NGUOI.md) | Smoke test 6 người |
 | [docs/HUONG_DAN_BAN_GIAO_CHO_THANH_VIEN_TEST.md](docs/HUONG_DAN_BAN_GIAO_CHO_THANH_VIEN_TEST.md) | Bàn giao Git / `.bak` |
 | `../TaiLieu_Du_An/` | UC, CSDL mô tả, ảnh, backup môn học |

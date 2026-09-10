@@ -143,6 +143,11 @@ const createAccount = async (req, res) => {
             severity: 'Cảnh báo', content: `Tạo tài khoản ${TenDangNhap} cho nhân viên ${MaNV}. Mật khẩu không được ghi nhật ký.`
         });
 
+        try {
+            const { syncMembershipSafe } = require('../services/chatService');
+            await syncMembershipSafe(pool, MaNV);
+        } catch { /* chat không chặn tạo TK */ }
+
         res.status(201).json({ message: 'Tạo tài khoản thành công với mật khẩu mặc định là 123' });
     } catch (error) {
         console.error(error);
@@ -167,7 +172,7 @@ const toggleAccountStatus = async (req, res) => {
 
         const account = await pool.request()
             .input('MaTK', sql.Int, maTK)
-            .query('SELECT TenDangNhap, TrangThai FROM TaiKhoan WHERE MaTK = @MaTK');
+            .query('SELECT TenDangNhap, TrangThai, MaNV FROM TaiKhoan WHERE MaTK = @MaTK');
 
         if (account.recordset.length === 0) {
             return res.status(404).json({ message: 'Không tìm thấy tài khoản!' });
@@ -188,6 +193,11 @@ const toggleAccountStatus = async (req, res) => {
             user: req.user, req, action: `${actionStr} tài khoản`, table: 'TaiKhoan', recordId: String(maTK),
             severity: 'Cảnh báo', content: `${actionStr} tài khoản ${username}`
         });
+
+        try {
+            const { syncMembershipSafe } = require('../services/chatService');
+            await syncMembershipSafe(pool, account.recordset[0].MaNV);
+        } catch { /* chat không chặn khóa TK */ }
 
         res.json({ message: `${actionStr} tài khoản thành công!` });
     } catch (error) {
@@ -299,6 +309,11 @@ const updateAccountRole = async (req, res) => {
             user: req.user, req, action: 'Đổi vai trò', table: 'TaiKhoan', recordId: String(maTK),
             severity: 'Quan trọng', content: `Cập nhật vai trò tài khoản thành ${role.recordset[0].TenVaiTro}`
         });
+
+        try {
+            const { syncMembershipSafe } = require('../services/chatService');
+            await syncMembershipSafe(pool, account.recordset[0].MaNV);
+        } catch { /* chat không chặn đổi vai trò */ }
 
         res.json({ message: 'Cập nhật vai trò thành công!' });
     } catch (error) {

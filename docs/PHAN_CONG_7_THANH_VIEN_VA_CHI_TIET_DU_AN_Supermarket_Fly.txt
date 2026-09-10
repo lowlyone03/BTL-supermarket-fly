@@ -1,5 +1,8 @@
 Bản sao để nhóm mở cùng thư mục docs/ (Git).
 
+Cập nhật 10/09/2026: file gốc (TaiLieu) đã gắn khối trạng thái — sổ cái UC34–43,
+MoMo, Telegram đã có. TV6/TV7 không còn “cấm làm sổ cái”.
+
 File gốc đầy đủ (nên sửa ở đây nếu chỉ giữ một chỗ):
 
   D:\UDTHTKT\BTL\TaiLieu_Du_An\01_Yeu_Cau_Nghiep_Vu\

@@ -630,8 +630,7 @@ const presentUnpostedRow = (row) => {
     return next;
 };
 
-const listUnposted = handle(async (req, res, pool) => {
-    await runExpenseJournalBackfill(pool, req);
+const loadUnpostedQueue = async (pool) => {
     const rows = await pool.request().query(`
         SELECT cgs.MaCho, cgs.LoaiChungTu, cgs.MaChungTu, cgs.LyDo, cgs.DaXuLy,
                CASE WHEN cgs.LyDo=N'PN_CHUA_DOI_CHIEU' OR cgs.LyDo=N'THIEU_THUE' THEN 0 ELSE 1 END AS ChoGhi,
@@ -660,6 +659,12 @@ const listUnposted = handle(async (req, res, pool) => {
         LEFT JOIN TaiSanCoDinh ts ON cgs.LoaiChungTu=N'TaiSanCoDinh' AND ts.MaTSCD=cgs.MaChungTu
         WHERE cgs.DaXuLy=0
         ORDER BY NgayPhatSinh DESC, cgs.MaCho DESC`);
+    return rows.recordset;
+};
+
+const listUnposted = handle(async (req, res, pool) => {
+    await runExpenseJournalBackfill(pool, req);
+    const queueRows = await loadUnpostedQueue(pool);
     const missing = await pool.request().query(`
         SELECT hd.MaHD MaChungTu, N'HoaDon' LoaiChungTu, N'THIEU_BAN_HANG' LyDo,
                CONVERT(varchar(10), hd.NgayLap, 23) NgayPhatSinh
@@ -684,7 +689,7 @@ const listUnposted = handle(async (req, res, pool) => {
             SELECT 1 FROM ButToan bt WHERE bt.LoaiChungTu=N'ChiPhiVanHanh' AND bt.MaChungTu=cp.MaCP
               AND bt.LoaiButToan=N'CHI_PHI' AND bt.DaBiDao=0 AND bt.MaBTGoc IS NULL AND bt.TrangThai=N'DaGhiSo')`);
     res.json({
-        queue: rows.recordset.map(presentUnpostedRow),
+        queue: queueRows.map(presentUnpostedRow),
         missing: missing.recordset.map(presentUnpostedRow)
     });
 });
@@ -854,10 +859,9 @@ const hasClosing = async (pool, maKy) => {
     return Boolean(row.recordset.length);
 };
 
-const incomeStatement = handle(async (req, res, pool) => {
-    const period = periodBounds(req);
+const loadIncomeStatement = async (pool, period) => {
     const pl = await loadPlNets(pool, period);
-    res.json({
+    return {
         period,
         watermark: true,
         lines: [
@@ -873,7 +877,12 @@ const incomeStatement = handle(async (req, res, pool) => {
         loiNhuanKeToan: pl.ln,
         chuThich: 'CHƯA xử lý thuế TNDN. Không trừ tiền trả NCC.',
         nguon: `Sổ cái kỳ ${period.label}`
-    });
+    };
+};
+
+const incomeStatement = handle(async (req, res, pool) => {
+    const period = periodBounds(req);
+    res.json(await loadIncomeStatement(pool, period));
 });
 
 const closingBalances = async (pool, period) => {
@@ -936,8 +945,7 @@ const balanceSheet = handle(async (req, res, pool) => {
     });
 });
 
-const cashFlow = handle(async (req, res, pool) => {
-    const period = periodBounds(req);
+const loadCashFlow = async (pool, period) => {
     const rows = await pool.request().input('From', sql.Date, period.from).input('To', sql.Date, period.toExclusive).query(`
         SELECT v.LoaiButToan, v.MaTK, SUM(v.SoTienNo) PsNo, SUM(v.SoTienCo) PsCo
         FROM vw_SoCaiDong v
@@ -965,14 +973,19 @@ const cashFlow = handle(async (req, res, pool) => {
     const iii = 0;
     const tong = roundMoney(i + ii + iii);
     const raw = roundMoney(rows.recordset.reduce((s, r) => s + n(r.PsNo) - n(r.PsCo), 0));
-    res.json({
+    return {
         period,
         I: { banHang: thuBan, hoan, traNcc, luong, chiPhi: cp, lechQuy: lech, thuChiKhac: thuCong, tong: i },
         II: { muaTscd: tscd, tong: ii },
         III: { tong: iii },
         tong, doiChieuPs: raw, khop: tong === raw,
         nguon: `Phát sinh 111+112 kỳ ${period.label}`
-    });
+    };
+};
+
+const cashFlow = handle(async (req, res, pool) => {
+    const period = periodBounds(req);
+    res.json(await loadCashFlow(pool, period));
 });
 
 const vatOutput = handle(async (req, res, pool) => {
@@ -1630,5 +1643,8 @@ module.exports = {
     matchBankLine,
     mismatchBankLine,
     getDocument,
-    getHandbook
+    getHandbook,
+    loadUnpostedQueue,
+    loadIncomeStatement,
+    loadCashFlow
 };

@@ -20,6 +20,7 @@ router.post('/shifts/:id/reopen', requireAnyPermission(['UC10', 'UC29']), contro
 router.get('/customers', requirePermission('UC23'), sales.listCustomers);
 router.post('/customers', requirePermission('UC23'), sales.saveCustomer);
 router.put('/customers/:id', requirePermission('UC23'), sales.updateCustomer);
+router.get('/customers/:id/loyalty', requirePermission('UC23'), require('../controllers/loyaltyController').servingCustomer);
 router.get('/pos/catalog', requirePermission('UC24'), sales.getCatalog);
 router.post('/invoices/quote', requirePermission('UC24'), sales.quoteInvoice);
 router.get('/invoices', requirePermission('UC24'), sales.listInvoices);

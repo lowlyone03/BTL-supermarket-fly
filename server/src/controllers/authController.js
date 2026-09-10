@@ -74,6 +74,13 @@ const login = async (req, res) => {
                     WHERE MaVaiTro = @MaVaiTro AND DuocPhep = 1
                     ORDER BY MaChucNang`);
 
+        setImmediate(() => {
+            Promise.resolve().then(async () => {
+                const { syncMembershipSafe } = require('../services/chatService');
+                await syncMembershipSafe(pool, user.MaNV);
+            }).catch(() => {});
+        });
+
         // Trả về kết quả
         res.status(200).json({
             message: 'Đăng nhập thành công!',

@@ -12,6 +12,12 @@ Phạm vi code: thư mục supermarket-fly (server Node.js + ứng dụng deskto
 Tài liệu gốc không bị đè: PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt (cùng thư mục
 docs/). File này là bản giải trình cập nhật sau lần sửa tháng 9/2026.
 
+CẬP NHẬT 10/09/2026: Mục 1–4 (ba cột tiền, phiếu thu/chi, 3-way, lương) VẪN ĐÚNG.
+Mục "CHƯA LÀM" cuối file (sổ cái, VAT POS, TSCĐ, sao kê, LCTT, chi phí 642) là
+mốc 02/09 — ĐÃ TRIỂN KHAI 09/09 (UC34–UC43, CAM_NANG_KE_TOAN_MINI.txt).
+P&L: KQKD điều hành KHÔNG trừ trả NCC (kqkdLoiNhuan). File này không mô tả cổng
+MoMo / Telegram (làm sau).
+
 
 --------------------------------------------------------------------------------
 1. TÊN HỆ THỐNG VÀ VAI TRÒ
@@ -530,18 +536,19 @@ Không cần Ctrl+R để biết việc người trước vừa gửi.
   Bảng lương tháng (UC33) và lịch/chấm công (UC30-UC32) đã có từ trước.
   Lãi GỘP, giá vốn dòng hóa đơn, tuổi nợ, cảnh báo quá hạn.
 
-CHƯA LÀM (đã chốt HƯỚNG ngày 31/08, chưa có trong CSDL/API)
+CHƯA LÀM TẠI MỐC 02/09/2026 (đã chốt HƯỚNG 31/08 — ĐÃ CODE 09/09, xem CAM_NANG)
 
-  Danh mục TaiKhoanKeToan, KyKeToan, ButToan / ChiTietButToan.
-  Tự động định khoản Nợ/Có từ bán, mua, kho, lương, chi.
-  Nhật ký chung, Sổ cái, Cân đối phát sinh, khóa kỳ kế toán.
-  VAT trên POS (SanPham.ThueSuat / ChiTietHoaDon.TienThue) — hóa đơn BÁN hiện
-  chưa lưu thuế; chỉ hóa đơn MUA có ThueSuat/TienThue.
-  TSCĐ và khấu hao tháng.
-  Import sao kê ngân hàng và đối chiếu 112.
-  LCTT thu gọn.
-  Chi phí vận hành (điện, nước, thuê mặt bằng) như một chứng từ riêng.
-  Số dư đầu kỳ 111/112/156/331/411/421.
+  Danh mục TaiKhoanKeToan, KyKeToan, ButToan / ChiTietButToan.     [x] 09/09
+  Tự động định khoản Nợ/Có từ bán, mua, kho, lương, chi.          [x]
+  Nhật ký chung, Sổ cái, Cân đối phát sinh, khóa kỳ kế toán.      [x]
+  VAT trên POS (SanPham.ThueSuat / ChiTietHoaDon.TienThue).       [x]
+  TSCĐ và khấu hao tháng.                                         [x]
+  Import sao kê ngân hàng và đối chiếu 112.                       [x] CSV
+  LCTT thu gọn.                                                   [x]
+  Chi phí vận hành (điện, nước, thuê mặt bằng) như chứng từ riêng.[x] UC36
+  Số dư đầu kỳ 111/112/156/331/411/421.                           [x]
+
+  Vẫn chưa (10/09): cước 4.000 đ/km + bồi 20%; BHXH; AI/OCR/e-receipt.
 
 KHÔNG THUỘC PHẠM VI (nhóm đã cắt hoặc không mở)
 

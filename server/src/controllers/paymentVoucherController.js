@@ -60,18 +60,14 @@ const payableSelect = `
     LEFT JOIN NhanVien nvLap ON nvLap.MaNV=pc.MaNV
     LEFT JOIN NhanVien nvDuyet ON nvDuyet.MaNV=pc.MaNV_Duyet`;
 
-const listPayables = async (req, res) => {
-    try {
-        const keyword = clean(req.query.search, 120, '');
-        const status = clean(req.query.status, 30, '');
-        const pool = await poolPromise;
+const loadPayablesList = async (pool, { search = '', status = '' } = {}) => {
+        const keyword = clean(search, 120, '');
+        const filter = clean(status, 30, '');
         await ensureFundColumns(pool);
-        await pool.request().query(`UPDATE CongNoPhaiTra SET TrangThai=N'Quá hạn'
-            WHERE SoTienConLai>0 AND HanThanhToan<CONVERT(date,GETDATE()) AND TrangThai<>N'Quá hạn'`);
         const result = await pool.request()
             .input('Keyword', sql.NVarChar, keyword)
             .input('Pattern', sql.NVarChar, `%${keyword}%`)
-            .input('Status', sql.NVarChar, status)
+            .input('Status', sql.NVarChar, filter)
             .query(`${payableSelect}
                 WHERE (@Keyword=N'' OR cn.MaCNPTra LIKE @Pattern COLLATE Latin1_General_100_CI_AI OR ncc.TenNCC LIKE @Pattern COLLATE Latin1_General_100_CI_AI
                        OR hd.SoHoaDon LIKE @Pattern COLLATE Latin1_General_100_CI_AI OR hd.MaPO LIKE @Pattern COLLATE Latin1_General_100_CI_AI OR pc.MaPhieu LIKE @Pattern COLLATE Latin1_General_100_CI_AI)
@@ -80,7 +76,7 @@ const listPayables = async (req, res) => {
                 ORDER BY CASE WHEN cn.SoTienConLai>0 AND cn.HanThanhToan<=CONVERT(date,GETDATE()) THEN 0 ELSE 1 END,
                          cn.HanThanhToan,cn.NgayPhatSinh DESC`);
         const items = result.recordset;
-        res.json({
+        return {
             items,
             summary: {
                 TongKhoan: items.length,
@@ -88,7 +84,15 @@ const listPayables = async (req, res) => {
                 ChoDuyet: items.filter(item => item.TrangThaiPhieuChi === 'Chờ duyệt').length,
                 ChoThanhToan: items.filter(item => ['Đã duyệt', 'Thanh toán thất bại'].includes(item.TrangThaiPhieuChi)).length
             }
-        });
+        };
+};
+
+const listPayables = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        await pool.request().query(`UPDATE CongNoPhaiTra SET TrangThai=N'Quá hạn'
+            WHERE SoTienConLai>0 AND HanThanhToan<CONVERT(date,GETDATE()) AND TrangThai<>N'Quá hạn'`);
+        res.json(await loadPayablesList(pool, { search: req.query.search, status: req.query.status }));
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải công nợ và Phiếu chi.' });
@@ -424,6 +428,7 @@ const decideVoucher = approved => async (req, res) => {
 };
 
 module.exports = {
+    loadPayablesList,
     listPayables,
     getPayable,
     createVoucher,

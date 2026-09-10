@@ -5,9 +5,7 @@ const { ensurePayrollSchema } = require('../services/payrollSchema');
 
 const clean = (value, max = 120) => String(value ?? '').trim().slice(0, max);
 
-const getDashboard = async (req, res) => {
-    try {
-        const pool = await poolPromise;
+const loadAdminDashboard = async (pool) => {
         await closeOpenAttendance(pool).catch(() => {});
         const [summaryResult, rolesResult, pendingResult, logsResult, revenueResult, lowStockResult] = await Promise.all([
             pool.request().query(`
@@ -64,7 +62,7 @@ const getDashboard = async (req, res) => {
         ]);
 
         const pending = pendingResult.recordset[0];
-        res.json({
+        return {
             summary: summaryResult.recordset[0],
             roleDistribution: rolesResult.recordset,
             pendingApprovals: {
@@ -74,16 +72,20 @@ const getDashboard = async (req, res) => {
             recentLogs: logsResult.recordset,
             revenue: revenueResult.recordset[0] || { DoanhThuHomNay: 0, DoanhThu7Ngay: 0, LaiGopHomNay: 0 },
             lowStock: lowStockResult.recordset
-        });
+        };
+};
+
+const getDashboard = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        res.json(await loadAdminDashboard(pool));
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải dữ liệu tổng quan.' });
     }
 };
 
-const getApprovalQueues = async (req, res) => {
-    try {
-        const pool = await poolPromise;
+const loadApprovalQueues = async (pool) => {
         await ensurePayrollSchema(pool);
         const warehouse = await pool.request().query(`
                 SELECT N'Phiếu xuất kho' AS LoaiHoSo,px.MaPX AS MaHoSo,px.NgayXuat AS NgayLap,
@@ -130,7 +132,13 @@ const getApprovalQueues = async (req, res) => {
                     JOIN NhanVien lap ON lap.MaNV=pcl.MaNV_Lap
                     WHERE pcl.TrangThai=N'Chờ duyệt'
                     ORDER BY pcl.NgayLap DESC`);
-        res.json({ warehouse: warehouse.recordset, finance: finance.recordset, payroll: payroll.recordset });
+        return { warehouse: warehouse.recordset, finance: finance.recordset, payroll: payroll.recordset };
+};
+
+const getApprovalQueues = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        res.json(await loadApprovalQueues(pool));
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải trung tâm phê duyệt.' });
@@ -139,17 +147,15 @@ const getApprovalQueues = async (req, res) => {
 
 // Màn hình giám sát dành cho Quản lý. API này chỉ đọc dữ liệu công nợ;
 // việc đối chiếu hóa đơn, ghi nhận và thanh toán vẫn thuộc nghiệp vụ Kế toán.
-const getPayablesOverview = async (req, res) => {
-    try {
-        const keyword = clean(req.query.search);
-        const status = clean(req.query.status, 30);
-        const pool = await poolPromise;
+const loadPayablesOverview = async (pool, { search = '', status = '' } = {}) => {
+        const keyword = clean(search);
+        const filter = clean(status, 30);
         await ensureFundColumns(pool);
         const [itemsResult, summaryResult] = await Promise.all([
             pool.request()
                 .input('TuKhoa', sql.NVarChar, keyword)
                 .input('Mau', sql.NVarChar, `%${keyword}%`)
-                .input('TrangThai', sql.NVarChar, status)
+                .input('TrangThai', sql.NVarChar, filter)
                 .query(`
                     WITH DuLieuCongNo AS (
                         SELECT cn.MaCNPTra,cn.MaNCC,ncc.TenNCC,cn.MaHDMH,hd.SoHoaDon,
@@ -200,7 +206,13 @@ const getPayablesOverview = async (req, res) => {
                        (SELECT COUNT(*) FROM PhieuChi WHERE TrangThai IN (N'Đã duyệt', N'Thanh toán thất bại')) AS ChoKeToanChi
                 FROM CongNoPhaiTra`)
         ]);
-        res.json({ items: itemsResult.recordset, summary: summaryResult.recordset[0] });
+        return { items: itemsResult.recordset, summary: summaryResult.recordset[0] };
+};
+
+const getPayablesOverview = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        res.json(await loadPayablesOverview(pool, { search: req.query.search, status: req.query.status }));
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải tình hình công nợ Nhà cung cấp.' });
@@ -259,14 +271,12 @@ const getPayableDetail = async (req, res) => {
     }
 };
 
-const getSalesShifts = async (req, res) => {
-    try {
-        const from = clean(req.query.from, 10);
-        const to = clean(req.query.to, 10);
-        const pool = await poolPromise;
+const loadSalesShifts = async (pool, { from = '', to = '' } = {}) => {
+        const fromDay = clean(from, 10);
+        const toDay = clean(to, 10);
         const result = await pool.request()
-            .input('From', sql.Date, from || null)
-            .input('To', sql.Date, to || null)
+            .input('From', sql.Date, fromDay || null)
+            .input('To', sql.Date, toDay || null)
             .query(`
                 SELECT ca.MaCa,ca.MaNV,nv.TenNV,ca.MaQuay,q.TenQuay,
                        ca.ThoiGianBatDau,ca.ThoiGianKetThuc,ca.TienDauCa,ca.TienCuoiCa,
@@ -283,11 +293,27 @@ const getSalesShifts = async (req, res) => {
                 WHERE (@From IS NULL OR CONVERT(date,ca.ThoiGianBatDau)>=@From)
                   AND (@To IS NULL OR CONVERT(date,ca.ThoiGianBatDau)<=@To)
                 ORDER BY ca.ThoiGianBatDau DESC`);
-        res.json({ items: result.recordset });
+        return { items: result.recordset };
+};
+
+const getSalesShifts = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        res.json(await loadSalesShifts(pool, { from: req.query.from, to: req.query.to }));
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải báo cáo ca bán hàng.' });
     }
 };
 
-module.exports = { getDashboard, getApprovalQueues, getPayablesOverview, getPayableDetail, getSalesShifts };
+module.exports = {
+    loadAdminDashboard,
+    loadApprovalQueues,
+    loadPayablesOverview,
+    loadSalesShifts,
+    getDashboard,
+    getApprovalQueues,
+    getPayablesOverview,
+    getPayableDetail,
+    getSalesShifts
+};

@@ -23,9 +23,10 @@
 .overview-heading h1 {
   color: #172b22;
   font-size: clamp(34px, 2.55vw, 44px);
-  font-weight: 740;
-  line-height: 1.04;
-  letter-spacing: -.052em;
+  font-weight: 650;
+  line-height: 1.22;
+  letter-spacing: 0;
+  word-spacing: 0.08em;
 }
 .overview-heading > div > p:last-child {
   max-width: 790px;
@@ -68,8 +69,9 @@
   margin: 14px 0 8px;
   color: #173126;
   font-size: clamp(22px, 1.65vw, 28px);
-  font-weight: 680;
-  letter-spacing: -.03em;
+  font-weight: 650;
+  letter-spacing: 0;
+  word-spacing: 0.03em;
 }
 .priority-copy p { max-width: 710px; color: #67786f; }
 .priority-copy button {
@@ -94,7 +96,8 @@
   margin: 4px 0;
   font-size: 46px;
   font-weight: 650;
-  letter-spacing: -.06em;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .overview-page .section-heading {
@@ -107,7 +110,8 @@
   color: #1b3026;
   font-size: 20px;
   font-weight: 650;
-  letter-spacing: -.025em;
+  letter-spacing: 0;
+  word-spacing: 0.03em;
 }
 .overview-page .section-heading span {
   display: block;
@@ -157,7 +161,7 @@
 }
 .decision-card .card-top { color: var(--decision-tone); }
 .decision-icon { background: color-mix(in srgb, var(--decision-tone), white 89%); }
-.decision-card .card-top strong { font-size: 26px; letter-spacing: -.045em; }
+.decision-card .card-top strong { font-size: 26px; letter-spacing: 0; font-variant-numeric: tabular-nums; }
 .decision-card h3 { margin-top: 16px; color: #21362c; font-size: 13px; }
 .decision-card p { color: #6f7d75; opacity: 1; }
 .decision-card button { color: color-mix(in srgb, var(--decision-tone), #253a30 28%); }
@@ -173,7 +177,7 @@
 }
 .stat-card > div { align-items: center; }
 .stat-card i { width: 34px; height: 34px; border-radius: 10px; }
-.stat-card strong { margin-top: 12px; font-size: 25px; letter-spacing: -.04em; }
+.stat-card strong { margin-top: 12px; font-size: 25px; letter-spacing: 0; font-variant-numeric: tabular-nums; }
 .stat-card small { margin-top: 5px; font-size: 10px; line-height: 1.4; }
 .stat-card.attention { border-color: #ead7ad; }
 

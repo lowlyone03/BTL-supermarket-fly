@@ -13,14 +13,21 @@ Chạy app vẫn từ thư mục gốc repo: `1_CAI_DAT_LAN_DAU.bat` rồi `2_CH
 | --- | --- |
 | [PHUONG_AN_KE_TOAN_DA_CHOT.txt](PHUONG_AN_KE_TOAN_DA_CHOT.txt) | Phương án đang chạy trong mã nguồn (02/09/2026) |
 | [PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt](PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt) | Phạm vi Plan A hiệu chỉnh: giữ/cắt gì (31/08/2026) |
-| [PLAN_12_TICH_HOP_VA_KE_TOAN.txt](PLAN_12_TICH_HOP_VA_KE_TOAN.txt) | Plan tổng (bản 3+wording): /payroll QL=UC10 KT=UC33; scanner ĐT để sau — chưa code |
-| [PLAN_TELEGRAM_BOT_P1.txt](PLAN_TELEGRAM_BOT_P1.txt) | Thiết kế gốc Telegram companion P1; đã triển khai và nâng giao diện ngày 08/09/2026 |
+| [PLAN_12_TICH_HOP_VA_KE_TOAN.txt](PLAN_12_TICH_HOP_VA_KE_TOAN.txt) | Plan 05/09 + **trạng thái code 10/09** (MoMo đã chạy; AI/OCR/e-receipt chưa) |
+| [PLAN_MOMO_TEST_P1.txt](PLAN_MOMO_TEST_P1.txt) | Cổng QR **đang dùng** (MoMo sandbox, 10/09) |
+| [PLAN_AI_CHATBOT_TRO_LY.txt](PLAN_AI_CHATBOT_TRO_LY.txt) | Plan trợ lý AI — **P2-MIN đã code** |
+| [PLAN_AI_P2_DU_TELEGRAM_ASK_LICH_SU_TOOL_QL_FAQ.txt](PLAN_AI_P2_DU_TELEGRAM_ASK_LICH_SU_TOOL_QL_FAQ.txt) | Sprint P2-ĐỦ (Telegram /ask, FAQ…) — **chưa làm hết**; P3/P4 không thuộc sprint này |
+| [PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt](PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt) | P3 Đối soát ngân hàng thông minh (UC42, rule engine, **đã code demo**) |
+| [PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt](PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt) | P4 RFM khách thành viên (UC10/UC23, **MVP đã code**) |
+| [PLAN_CHAT_NOI_BO_5_BO_PHAN.txt](PLAN_CHAT_NOI_BO_5_BO_PHAN.txt) | P5 Chat nội bộ 5 bộ phận — **P5-MIN đã code** (SSE + file, ma trận kho↔mua hàng) |
+| [PLAN_TELEGRAM_BOT_P1.txt](PLAN_TELEGRAM_BOT_P1.txt) | Telegram đã triển khai; code **có nút duyệt** inline (lệch plan gốc “không duyệt”) |
+| [CAM_NANG_KE_TOAN_MINI.txt](CAM_NANG_KE_TOAN_MINI.txt) | Sổ cái mini UC34–UC43 **đã chạy** |
 
 ## Test và bàn giao
 
 | File | Nội dung |
 | --- | --- |
-| [BAN_GIAO_LAM_TIEP_TOAN_BO_HE_THONG_2026-09-07.txt](BAN_GIAO_LAM_TIEP_TOAN_BO_HE_THONG_2026-09-07.txt) | **File chính 07/09/2026:** người nhận làm tiếp FE+BE+CSDL — clone, restore `.bak`, chạy, map file, việc đã xong / việc tiếp theo |
+| [BAN_GIAO_LAM_TIEP_TOAN_BO_HE_THONG_2026-09-07.txt](BAN_GIAO_LAM_TIEP_TOAN_BO_HE_THONG_2026-09-07.txt) | Đóng gói 07/09 + **khối trạng thái 10/09** ở đầu file (sổ cái/MoMo/Telegram đã có) |
 | [HUONG_DAN_BAN_GIAO_CHO_THANH_VIEN_TEST.md](HUONG_DAN_BAN_GIAO_CHO_THANH_VIEN_TEST.md) | Gói gửi tester: Git, `.bak`, uploads (bản 30/08; người *làm tiếp* dùng file TXT 07/09) |
 | [HUONG_DAN_TEST_DON_GIAN_CHO_6_NGUOI.md](HUONG_DAN_TEST_DON_GIAN_CHO_6_NGUOI.md) | Smoke test cho 6 người, không cần biết Git |
 | [0_TIN_NHAN_GUI_NHOM_TEST_6_NGUOI.txt](0_TIN_NHAN_GUI_NHOM_TEST_6_NGUOI.txt) | Tin nhắn vòng 1 (copy gửi nhóm) |

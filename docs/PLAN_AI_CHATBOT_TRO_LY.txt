@@ -1,0 +1,679 @@
+================================================================================
+PLAN TRỢ LÝ AI — SUPERMARKET FLY
+BẢN HOÀN CHỈNH  (10/09/2026)  —  P2-MIN ĐÃ CODE
+PLAN_12 mục A2  ·  P2
+================================================================================
+
+Vị trí     : supermarket-fly/docs/PLAN_AI_CHATBOT_TRO_LY.txt
+Repo       : supermarket-fly (Electron + Express :3000 + SQL Server)
+Trạng thái : Intelligence Center (10/09 đêm) — CodeCraft mặc định + workspace 5 tab.
+             P2-MIN ask vẫn chạy. Ollama thật / Telegram /ask / OCR CHƯA.
+Môn        : AIS — trợ lý nghiệp vụ nội bộ, không ChatGPT chung
+
+Đọc trước khi code
+  PLAN_12 khối trạng thái 10/09 + mục A2
+  PLAN_TELEGRAM_BOT_P1.txt  — /guide FAQ tĩnh; Telegram ĐÃ có nút duyệt
+  CAM_NANG_KE_TOAN_MINI.txt — 3 cột tiền, KQKD không trừ trả NCC
+  server/src/constants/permissions.js
+  server/src/services/inboxService.js   listForRole
+  desktop/src/pages/dashboard/dashboard.html  (nút Telegram cạnh chỗ sẽ thêm Trợ lý)
+
+FAQ tĩnh: docs/ASSISTANT_FAQ.txt (P2-MIN, ~20 câu).
+
+Khuyên triển khai: làm P2-MIN trước (mục 11). Không vector DB, không RAG
+framework, không Ollama, không Telegram /ask cùng lúc.
+
+
+--------------------------------------------------------------------------------
+CÂU TRÌNH BÀY VỚI GIẢNG VIÊN  (giữ nguyên khi bảo vệ)
+--------------------------------------------------------------------------------
+
+  “Trợ lý Fly sử dụng mô hình ngôn ngữ có sẵn để diễn giải dữ liệu nghiệp
+  vụ theo ngữ cảnh. Dữ liệu được lấy từ các service của Supermarket Fly
+  theo đúng quyền của người đang đăng nhập. Các phép tính nghiệp vụ và
+  kế toán vẫn do hệ thống thực hiện; AI không trực tiếp sửa dữ liệu,
+  duyệt chứng từ hay ghi sổ.”
+
+Khi thầy hỏi “có train trên database siêu thị không?”:
+
+  “Nhóm không huấn luyện mô hình bằng dữ liệu siêu thị. Nhóm sử dụng mô
+  hình có sẵn và cung cấp dữ liệu nghiệp vụ cần thiết vào context tại
+  thời điểm truy vấn.”
+
+
+--------------------------------------------------------------------------------
+TRAINING  ≠  CONTEXT   (PLAN_12 khung bảo vệ 0.3 / A2)
+--------------------------------------------------------------------------------
+
+  TRAINING DATA  = dữ liệu dùng để thay đổi trọng số mô hình
+                   → NHÓM KHÔNG LÀM.
+                   Không gọi SupermarketFlyDB là “train data”.
+                   Không fine-tune, không embedding hóa đơn NCC.
+
+  CONTEXT        = tài liệu nội bộ + số liệu lấy ĐÚNG LÚC người hỏi
+                   → NHÓM CÓ LÀM.
+                   Copilot kế toán, không phải ChatGPT chung.
+
+Luồng đúng:
+
+  CSDL  →  service nghiệp vụ đã có  →  assistantTools lọc UC
+        →  context có cấu trúc  →  LLM  →  giải thích tiếng Việt
+
+Luồng cấm:
+
+  Người dùng  →  AI tự viết SQL  →  Database
+
+
+================================================================================
+1. AI NÀY THỰC SỰ LÀM GÌ
+================================================================================
+
+Người đã login bấm nút “Trợ lý” trên dashboard Electron, hỏi tiếng Việt,
+ví dụ:
+
+  “Hôm nay cần chú ý gì?”
+  “Ca này tiền mặt vào két thế nào?”
+  “Công nợ sắp hạn?”
+
+Hai loại context (không train):
+
+  (1) Luật nghiệp vụ — FAQ + cẩm nang Fly (3 cột tiền, MoMo không vào két,
+      trả NCC không trừ KQKD…).
+  (2) Số liệu thật — gọi service/API ĐANG CHẠY, đúng UC của người đó.
+
+Mỗi câu có số phải kèm khối Nguồn (mã chứng từ hoặc tên báo cáo).
+Không nguồn → không được bịa số.
+
+AI không thay thế logic kế toán. Hệ thống vẫn tính; AI diễn giải.
+
+
+================================================================================
+2. ĐƯỢC ĐỌC — GẦN NHƯ KHÔNG ĐƯỢC “LÀM HỘ”
+================================================================================
+
+Ranh giới quan trọng nhất. AI hỗ trợ quyết định; thao tác CSDL vẫn thuộc
+người có quyền trên Fly (hoặc nút Telegram đã có — AI không đụng).
+
+CẤM tuyệt đối
+  INSERT / UPDATE / DELETE chứng từ
+  completeInvoice, lập PO, lập phiếu chi, giảm SoTienConLai
+  ghi sổ / postJournal / khóa kỳ
+  duyệt hoặc từ chối: PO, phiếu xuất, kiểm kê, đổi trả, phiếu chi, chấm công
+  gọi telegramApprove.js
+  nút Duyệt trong panel trợ lý
+
+Chặn Ở assistantService TRƯỚC khi gọi LLM
+  (không tin model sẽ “tự biết từ chối”)
+
+  Mẫu nhận diện (không phân biệt hoa thường, bỏ dấu khi so).
+  Không chặn câu “phiếu nào đang chờ tôi duyệt?” (hỏi danh sách).
+  Chỉ chặn khi nhờ AI LÀM hộ:
+    duyệt hộ / duyệt giúp / duyệt giùm / /approve / /reject
+    trả NCC giúp / chi NCC giúp / lập phiếu chi giúp
+    hoàn thành hóa đơn / completeInvoice / tick MoMo thành công
+    ghi sổ giúp / khóa kỳ giúp
+
+  Ví dụ bắt buộc khi demo:
+
+    QL:  Duyệt PO00012 giúp tôi.
+    AI:  Trợ lý Fly không được phép duyệt chứng từ.
+         Bạn mở Đơn mua hàng (trung tâm phê duyệt) để xem và duyệt PO00012.
+
+  Câu đó trả template cố định, không gọi Gemini/OpenAI.
+  Vẫn ghi audit: HanhDong = "Trợ lý AI", KetQua có thể "Từ chối".
+
+
+================================================================================
+3b. FLY INTELLIGENCE CENTER  (bổ sung 10/09)
+================================================================================
+
+Kiến trúc 5 tầng (AI không autonomous):
+
+  CSDL → service thuần / load* đã tách
+       → analyticsEngine (KPI, trend, anomaly, risk, scenario)
+       → assistantTools lọc UC + PII
+       → context có cấu trúc
+       → LLM diễn giải + evidence + next action (mở màn, không execute)
+
+API (JWT + UC01):
+  POST /api/assistant/ask          body { question, history[] }
+  GET  /api/assistant/brief        Hôm nay
+  GET  /api/assistant/alerts       Cảnh báo + risk
+  GET  /api/assistant/insights     Phân tích KQKD / MoMo / top SP
+  POST /api/assistant/scenario     { type, params } — engine tính
+
+QL không UC15/UC37. Key trống: Brief/Cảnh báo vẫn ra số; chat báo chưa cấu hình.
+LLM mặc định CodeCraft OpenAI-compatible (xem phụ lục B). Gemini/OpenAI vẫn chọn được.
+
+Fallback: thiếu lịch sử 14 ngày thì so các ngày có HĐ, ghi rõ không bịa TB.
+Tồn QL chỉ TOP dashboard. Replenishment module không bị AI ghi đề nghị.
+
+================================================================================
+================================================================================
+
+Mọi người đã login mở trợ lý nhờ UC01 (Đăng nhập và sử dụng tài khoản).
+PLAN_12 B4: Assistant = UC01 + lọc tool theo UC sẵn có.
+
+Server lấy vai trò từ JWT  req.user  (authMiddleware.verifyToken).
+Không tin body “tôi là quản lý”.
+
+Nguồn quyền: ROLE_PERMISSION_CODES trong
+  server/src/constants/permissions.js
+
+  Vai trò (TenVaiTro, chữ thường khi so)     UC
+  quản lý          UC01–UC10, UC30, UC32, UC38, UC39, UC43
+                   (KHÔNG UC15, KHÔNG UC27–29, KHÔNG UC33, KHÔNG UC34–37)
+  nhân viên mua hàng   UC01, UC11–UC14, UC31
+  thủ kho          UC01, UC15–UC21, UC31
+  thu ngân         UC01, UC22–UC26, UC31
+  kế toán          UC01, UC27–UC29, UC31, UC33, UC34–UC43
+                   (KHÔNG UC05–UC09 duyệt)
+
+Bảng hỗ trợ / giới hạn
+
+  QL  Được: việc chờ duyệt, DT / lãi gộp hôm nay, KQKD vs dòng tiền,
+      công nợ tới hạn (UC10), tồn thấp trên dashboard QL (TOP, không
+      bằng UC15 tồn đầy đủ), lệch két, tóm tắt lương kỳ (UC10 / UC32
+      GET /api/admin/workforce/payroll-preview — không giờ từng NV).
+      Không: chi tiết bảng lương 1 NV (UC33 = KT), không listUnposted
+      (UC37 = KT), không lập kỳ hộ KT.
+
+  MH  Được: đề nghị kho chờ tiếp nhận (UC12), đơn mua (UC13/14), NCC
+      (UC11), báo cáo mua (UC14).
+      Không: tồn kho toàn cửa hàng (UC15), công nợ/sổ cái, POS.
+
+  TK  Được: tồn min / hết / SLĐặt mua (UC15), đề nghị của mình (UC16),
+      nhập/xuất, đổi trả chờ kiểm (UC21).
+      Không: duyệt PO, P&L cửa hàng, lương người khác.
+
+  TN  Được: ca đang mở (UC22), lịch (UC31), HĐ nháp của mình (UC24),
+      đổi trả (UC26). P1 POS chỉ Tiền mặt | MoMo; MoMo không vào két.
+      Không: công nợ NCC, sổ cái, tick MoMo hộ khách.
+
+  KT  Được: HĐMH chờ 3-way (UC27), công nợ/phiếu chi (UC28), ca chờ
+      phiếu thu (UC29), lương kỳ (UC33), chờ ghi sổ (UC37), KQKD/CĐPS
+      (UC38/UC43). Giải thích 3 cột tiền.
+      Không: duyệt PO hộ QL.
+
+
+================================================================================
+4. KIẾN TRÚC
+================================================================================
+
+  Electron dashboard.js  (#menuAssistant + drawer)
+        POST /api/assistant/ask
+        Header Authorization: Bearer <JWT>
+        Body { "question": "..." }   cắt 500 ký tự
+              │
+              ▼
+  assistantRoutes.js
+        router.use(verifyToken)
+        requirePermission('UC01')
+              │
+              ▼
+  assistantController.js
+              │
+              ▼
+  assistantService.js   THỨ TỰ BẮT BUỘC:
+        1. rate limit (memory, ~40/MaNV/ngày)
+        2. chặn câu bị cấm → template, KHÔNG gọi LLM
+        3. đóng gói context theo role/UC (assistantTools + FAQ)
+        4. provider Gemini / OpenAI / Ollama stub
+        5. ghi audit
+              │
+              ▼
+  assistantTools.js     hàm thuần (pool, user) — không (req,res)
+              │
+              ▼
+  providers/gemini.js | openai.js | ollama.js
+        complete({ system, user, maxTokens }) → { text, model }
+              │
+              ├─ providers/codecraft.js  MẶC ĐỊNH (OpenAI-compatible)
+              ├─ providers/gemini.js
+              ├─ providers/openai.js
+              └─ providers/ollama.js     fallback CÙNG interface
+                                         (PLAN_12 #12 — không slide “AI local”)
+
+Adapter (cùng kiểu paymentGatewayService):
+
+  complete({ system, user, maxTokens }) → { text, model }
+
+Đổi cổng chỉ bằng env, không sửa POS / sổ cái / assistantTools:
+
+  ASSISTANT_PROVIDER=codecraft | gemini | openai | ollama
+
+Mount app.js — JWT bắt buộc, KHÔNG public như IPN MoMo:
+
+  app.use('/api/assistant', assistantRoutes);
+
+Telegram /guide
+  Hiện tại: telegramGuide.js — FAQ tĩnh, không LLM.
+  P2-MIN: GIỮ NGUYÊN. Không gọi assistantService từ webhook.
+  P2-ĐỦ (optional): /ask trên Telegram, user từ TelegramDangKy, vẫn cấm duyệt.
+
+
+================================================================================
+5. KHÔNG SQL TÙY Ý — GỌI SERVICE NỘI BỘ
+================================================================================
+
+AI không sinh SQL chạy vào SupermarketFlyDB.
+Server gọi hàm nội bộ đã có. Không fetch http://127.0.0.1:3000 (tránh JWT lồng).
+
+Lưu ý khi code: hầu hết controller hiện là (req, res). assistantTools
+tách phần SELECT thành hàm thuần (pool, user, opts) rồi controller cũ
+và tool cùng gọi — không copy SQL mới, không bịa endpoint.
+
+Timeout mỗi tool ~2 giây. Lỗi → ghi vào [SO LIEU]:
+  “không lấy được [tên tool], không bịa”.
+
+----- Tool map (đúng route đang mount) -----
+
+Dùng chung (mọi role đã login)
+  inboxService.listForRole(pool, user)
+      file: server/src/services/inboxService.js
+      HTTP tương đương: GET /api/notifications   notificationController.list
+  Không lấy stream SSE.
+
+QL  — KHÔNG UC15, UC27–29, UC33, UC34–37.
+  AI chỉ đọc data mà dashboard/admin route QL vốn cho phép.
+  Tồn thấp = TOP trên getDashboard, KHÔNG getInventory (UC15).
+  KHÔNG gọi listUnposted (UC37 ← không phải QL).
+
+  P2-MIN snapshot: loadAdminDashboard (pending + DT + lowStock TOP).
+  P2-ĐỦ được (vẫn không UC15/UC37):
+  adminController.getApprovalQueues     GET /api/admin/approvals/queues
+  adminController.getPayablesOverview   GET /api/admin/finance/payables   UC10
+  reportController.getStoreProfitLossReport
+      GET /api/admin/reports/store-profit-loss   UC10
+      Dùng kqkdLoiNhuan — CẤM laiLoSauChiPhi như “lỗ kế toán”
+  ledgerController.incomeStatement
+      GET /api/ledger/reports/income-statement   UC38|UC43
+  workforceController.getPayrollPreview
+      GET /api/admin/workforce/payroll-preview   UC32 — tóm tắt, không 1 NV
+
+MH
+  warehouseController.listPurchasingRequests
+      GET /api/purchasing/purchase-requests   UC12
+  purchaseOrderController.list
+      GET /api/purchasing/purchase-orders     UC13
+  reportController.getPurchasingReport
+      GET /api/purchasing/reports/buying      UC14
+  supplierController.list
+      GET /api/suppliers                      UC11
+
+TK
+  warehouseController.getDashboard
+      GET /api/warehouse/dashboard            UC15
+  warehouseController.getInventory
+      GET /api/warehouse/inventory            UC15
+  warehouseController.listWarehouseRequests
+      GET /api/warehouse/purchase-requests    UC16
+  returnsController.listReturns
+      GET /api/warehouse/returns              UC21
+
+TN
+  cashierController.getCurrentShiftSummary
+      GET /api/cashier/shifts/current/summary UC22
+  cashierController.getMySchedule
+      GET /api/cashier/schedule               UC31
+  salesController.listInvoices
+      GET /api/cashier/invoices               UC24
+  returnsController.listReturns
+      GET /api/cashier/returns                UC26
+
+KT
+  accountingController.listInvoices
+      GET /api/accounting/purchase-invoices   UC27
+  paymentVoucherController.listPayables
+      GET /api/accounting/payables            UC28
+  settlementController.listShifts
+      GET /api/accounting/shift-settlements   UC29
+  payrollController.get
+      GET /api/accounting/payroll/:month      UC33
+  ledgerController.listUnposted
+      GET /api/ledger/unposted                UC37   ← không phải QL
+  ledgerController.incomeStatement
+      GET /api/ledger/reports/income-statement  UC38|UC43
+  ledgerController.trialBalance
+      GET /api/ledger/reports/trial-balance     UC38|UC43
+
+CẤM gắn vào tool (mọi role)
+  telegramApprove, orderController.approve, completeInvoice,
+  paymentGatewayController.queryPayment, postUnposted, payVoucher,
+  BACKUP DATABASE, đọc .env.
+
+
+================================================================================
+6. ĐÓNG GÓI CONTEXT  (8–12 KB / request)
+================================================================================
+
+Không dump CSDL. Không ném cả CAM_NANG (~2000 dòng).
+
+A. FAQ tĩnh — docs/ASSISTANT_FAQ.txt (P2-MIN ~20 câu; P2-ĐỦ 40–60). Rút từ:
+     PHUONG_AN_KE_TOAN_DA_CHOT.txt  (3 cột tiền)
+     CAM_NANG_KE_TOAN_MINI.txt      (KQKD vs 331; 111 vs 112)
+     README.md mục 7
+     PLAN_MOMO_TEST_P1.txt          (TM vào két, MoMo không)
+   Chọn tối đa ~3 mục khớp từ khóa câu hỏi.
+
+B. Snapshot JWT (không hỏi client)
+   MaNV, TenNV, TenVaiTro, danh sách UC từ ROLE_PERMISSION_CODES.
+
+C. Số liệu = output tool mục 5, đã lọc UC.
+   Che PII trước khi nhét context (mục 9).
+
+D. Khối đưa LLM — đúng thứ tự:
+
+  [VAI TRO]
+  Kế toán
+
+  [QUYEN]
+  UC01, UC27, UC28, UC29, UC31, UC33, UC34, UC35, UC36, UC37, UC38, UC39, UC40, UC41, UC42, UC43
+
+  [FAQ]
+  - Trả NCC không phải chi phí mới của kỳ; không trừ KQKD.
+  - MoMo (PhuongThuc=QR, NguonXacNhan=MoMo) không vào két tiền mặt.
+  - ...
+
+  [SO LIEU]
+  Công nợ sắp hạn:
+  CN00023 — hạn 12/09 — 2.160.000đ
+  Chờ ghi sổ: 2 chứng từ
+  (hoặc: không lấy được công nợ — không bịa)
+
+  [CAM]
+  Không duyệt. Không bịa. KQKD không trừ trả NCC.
+  Chỉ dùng số trong [SO LIEU]. Thiếu quyền thì nói thiếu quyền.
+
+
+================================================================================
+7. NGUYÊN TẮC KẾ TOÁN FLY TRONG SYSTEM PROMPT
+================================================================================
+
+Trợ lý Fly — siêu thị một cửa hàng, Hà Nội. Tiếng Việt có dấu, ngắn.
+Chỉ dùng số trong [SO LIEU] và luật trong [FAQ]. Không bịa.
+Mỗi con số có Nguồn ngay dưới.
+Không biết / thiếu quyền / tool lỗi → nói rõ + gợi ý đúng màn hình.
+
+Cấm: duyệt chứng từ, hoàn thành hóa đơn, trả NCC, sửa tồn, lộ secret.
+
+Ba cột tiền — không trộn
+
+  A. Doanh thu / giá vốn: lúc hóa đơn Hoàn thành (cột DT).
+  B. Két ca: chỉ tiền mặt (TM thu − hoàn TM). MoMo không vào két, không
+     vào Phiếu thu ca.
+  C. Nợ NCC: chỉ sau đối chiếu 3 bên Khớp. Trả NCC = giảm 331, nằm báo
+     cáo dòng tiền. KHÔNG trừ kqkdLoiNhuan lần nữa.
+
+POS P1: Tiền mặt | MoMo. Giá kệ đã gồm VAT.
+
+Câu mẫu bảo vệ
+  “Khách nửa TM nửa MoMo thì phiếu thu tính sao?”
+    → Chỉ TM vào két / phiếu thu. MoMo không vào PT. DT đã ghi lúc HĐ
+      hoàn thành.
+  “Trả NCC 10 triệu thì lãi gộp / KQKD giảm 10 triệu?”
+    → Không. Trả nợ 331. Nằm dòng tiền. Nguồn: CAM_NANG / FAQ.
+
+
+================================================================================
+8. VÍ DỤ “HÔM NAY CẦN CHÚ Ý GÌ?”  +  “AI TÍNH SAI THÌ SAO?”
+================================================================================
+
+QL hỏi: Hôm nay cần chú ý gì?
+
+Backend (P2-MIN) lấy thật:
+  inboxService.listForRole
+  adminController.getDashboard   (pending + DT + tồn thấp TOP)
+
+[SO LIEU] ví dụ (số minh họa — lúc demo phải là số live):
+
+  Đơn mua chờ duyệt: PO00015 — 8.400.000đ
+  Kiểm kê chờ duyệt: KK00008
+  Tồn thấp: SP0034 còn 3 · SP0071 còn 0
+  Doanh thu hôm nay: 12.350.000đ
+
+Model chỉ diễn giải, không tính lại:
+
+  Hôm nay bạn cần chú ý 3 việc:
+
+  1. PO00015 đang chờ duyệt, trị giá 8.400.000đ.
+     Nguồn: Hàng chờ duyệt (inbox / GET /api/admin/dashboard)
+
+  2. KK00008 đang chờ xử lý.
+     Nguồn: Hàng chờ duyệt
+
+  3. Có 2 mặt hàng cần bổ sung, trong đó SP0071 đã hết.
+     Nguồn: Dashboard tồn thấp
+
+  Doanh thu hôm nay: 12.350.000đ.
+  Nguồn: Dashboard quản lý
+
+Khi thầy hỏi “Nếu AI tính sai thì sao?”
+
+  “Con số do hệ thống Fly tính sẵn trong service. AI chỉ tổng hợp và
+  giải thích. Nếu tool lỗi, trợ lý phải nói không lấy được — không đoán
+  số. Muốn đối chiếu, mở đúng màn dashboard / phê duyệt.”
+
+
+================================================================================
+9. BẢO MẬT
+================================================================================
+
+Cấm đưa lên LLM
+  CCCD, mật khẩu, hash, JWT, nội dung .env
+  ASSISTANT_API_KEY, MOMO_SECRET / ACCESS_KEY, TELEGRAM_BOT_TOKEN
+  MaGiaoDich MoMo đầy đủ
+  SĐT khách: nếu bắt buộc thì **** + 4 số cuối
+
+Endpoint
+  POST /api/assistant/ask sau verifyToken. Không public như
+  POST /api/payments/gateway/ipn.
+
+Rate: ASSISTANT_DAILY_LIMIT (mặc định 40 / MaNV / ngày), Map in-memory
+  ở P2-MIN. Vượt → 429 tiếng Việt, không gọi LLM.
+
+Timeout provider (ASSISTANT_TIMEOUT_MS ~ 25000). Lỗi → 502:
+  “Trợ lý tạm không trả lời được — mở màn [X].”
+
+Audit: logAudit action "Trợ lý AI", uc UC01, content = 120 ký tự đầu
+  câu hỏi (bỏ nếu giống mật khẩu). Không log API key, không log completion đầy đủ.
+
+AI chết / key trống: POS, ca, MoMo, Telegram, sổ cái vẫn chạy.
+  UI: “Chưa cấu hình trợ lý (xem .env).” — HTTP 503/400, không 500 xuyên app.
+
+
+================================================================================
+10. GIAO DIỆN DESKTOP
+================================================================================
+
+Nút trên topbar dashboard.html, trong .topbar-actions, cạnh chuông /
+trước #profileButton (cùng hàng #notificationButton, trước divider):
+
+  <button type="button" id="menuAssistant">Trợ lý</button>
+
+Mọi vai trò đã login thấy nút (UC01). Panel không tự gọi
+/api/admin/dashboard nếu user không phải QL — server lọc tool.
+
+Drawer phải (cùng họ UI notification-panel / telegramModal):
+
+  Trợ lý Fly
+  [conversation]
+    Bạn: Hôm nay cần chú ý gì?
+    Trợ lý Fly: …
+    Nguồn:
+      - Dashboard quản lý
+      - Danh sách chờ duyệt
+  [ô nhập]  [Gửi]
+
+P2-MIN: lịch sử chỉ memory renderer (biến JS / sessionStorage).
+Không bảng SQL. Enter gửi. Chip câu mẫu đổi theo TenVaiTro.
+
+Chip
+
+  QL  Hôm nay cần chú ý gì?
+      Cửa hàng tháng này lãi hay lỗ kế toán?
+      Trả NCC 10 triệu thì lãi gộp giảm 10 triệu?
+      Những phiếu nào đang chờ tôi duyệt?
+  MH  Đề nghị kho nào chưa lập đơn?
+      Đơn nào đang giao dở?
+  TK  Mặt hàng nào dưới định mức?
+      Có phiếu đổi trả chờ kiểm không?
+  TN  Ca này tiền mặt hệ thống là bao nhiêu? MoMo có vào két không?
+      Tôi còn hóa đơn nháp không?
+  KT  Ca nào chờ lập Phiếu thu?
+      Chứng từ nào chờ ghi sổ?
+      Khách nửa TM nửa MoMo thì phiếu thu tính sao?
+
+
+================================================================================
+11. P2-MIN  vs  P2-ĐỦ
+================================================================================
+
+Làm P2-MIN trước. Đủ demo 5 phút / bảo vệ. Đừng mở vector DB, RAG,
+Ollama, Telegram AI cùng lúc.
+
+P2-MIN  — ĐÃ CODE 10/09 (demo 5 phút)
+  POST /api/assistant/ask + Gemini (OpenAI cùng adapter; Ollama stub)
+  FAQ ~20 câu (docs/ASSISTANT_FAQ.txt)
+  inboxService.listForRole
+  + 1 snapshot / role:
+      QL  loadAdminDashboard (pending + DT + tồn thấp TOP — không UC15)
+      MH  loadPurchaseRequests
+      TK  loadWarehouseDashboard
+      TN  loadCurrentShiftSummary
+      KT  loadUnpostedQueue  (UC37 ← không phải QL)
+  UI nút #menuAssistant + drawer
+  Chặn câu duyệt hộ trước LLM
+  Audit + rate limit memory
+  Không Telegram /ask, không bảng SQL, không Ollama bắt buộc
+
+  Phụ thuộc: ASSISTANT_API_KEY. Mất mạng → video dự phòng
+  (cùng kiểu checklist MoMo).
+
+P2-ĐỦ  (+2–3 ngày)
+  Đủ tool mục 5, FAQ 40–60, Ollama fallback, che PII chặt
+  Optional bảng AssistantNhatKy (không bắt buộc)
+  Optional Telegram /ask cùng assistantService
+
+P3 — Đối soát ngân hàng thông minh  (KHÔNG thuộc P2-ĐỦ)
+  Plan: docs/PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt · UC42
+  Rule engine khớp sao kê. AI chỉ ĐỌC summary sau này, không match.
+
+P4 — Customer Loyalty Intelligence  (sau P3)
+  Plan: docs/PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt · UC10 / UC23
+  RFM + chính sách ưu đãi cố định. AI không bịa %.
+
+Không song song OCR (#4) với cùng 1 người trong 1 tuần.
+
+
+================================================================================
+12. TEST BẮT BUỘC  (P2-MIN chưa xong nếu thiếu một dòng)
+================================================================================
+
+  [ ] Không JWT → POST /api/assistant/ask → 401
+  [ ] TN hỏi công nợ NCC → không có số CN / “tài khoản không xem mục này”
+  [ ] QL “Hôm nay cần chú ý gì?” → mã phiếu thật từ inbox/dashboard + Nguồn
+  [ ] “Trả NCC 10 triệu thì lãi giảm 10 triệu?” → Không. Trả 331. Dòng tiền.
+      Nguồn FAQ/cẩm nang. Không bịa số.
+  [ ] “Duyệt hộ PO00012” → template từ chối, không gọi LLM
+  [ ] NhatKy có dòng Trợ lý AI
+  [ ] ASSISTANT_API_KEY trống → 503/400 tiếng Việt; POS vẫn bán
+  [ ] test-assistant.js mock provider — CI không gọi mạng
+      (node --check assistant*.js trong npm test)
+
+Test tay 5 actor × ≥ 2 câu chip mục 10.
+
+
+================================================================================
+13. RANH GIỚI VỚI MODULE KHÁC
+================================================================================
+
+  Telegram duyệt     ĐÃ CÓ — telegramApprove.js + audit.
+                     AI không gọi, không hiện nút Duyệt.
+  Telegram /guide    ĐÃ CÓ — FAQ tĩnh telegramGuide.js. P2-MIN không đụng.
+  OCR HĐ NCC         CHƯA — module PLAN_12 #4. AI không đọc ảnh, không
+                     INSERT CongNoPhaiTra.
+  Replenishment A6   CHƯA công thức 7 ngày. AI được ĐỌC CanBoSung nếu UC15.
+                     Không ghi SL đề nghị, không lập PO.
+  MoMo / POS         AI giải thích TM vs MoMo / két. Không queryPayment,
+                     không tick Thành công.
+  Sổ cái UC34–43     ĐÃ CÓ. KT/QL đọc KQKD/CĐPS đúng UC. AI không
+                     postJournal, không khóa kỳ.
+  E-receipt token    CHƯA — ngoài scope chatbot.
+
+
+================================================================================
+PHỤ LỤC A — FILE P2-MIN (đã tạo)
+================================================================================
+
+  server/src/routes/assistantRoutes.js
+  server/src/controllers/assistantController.js
+  server/src/services/assistantService.js
+  server/src/services/assistantTools.js
+  server/src/services/assistantFaq.js
+  server/src/services/providers/codecraft.js  (mặc định)
+  server/src/services/providers/gemini.js
+  server/src/services/providers/openai.js
+  server/src/services/providers/ollama.js     (stub P2-MIN)
+  server/test-assistant.js
+  docs/ASSISTANT_FAQ.txt
+  desktop: dashboard.html #menuAssistant + assistant.css + assistant-panel.js
+  server/.env.example — khối ASSISTANT_*
+  app.js — mount /api/assistant
+
+Không tạo: n8n, Firebase, Sentry, payosController, module “AI local” tách.
+
+
+================================================================================
+PHỤ LỤC B — ENV  (thêm .env.example khi code; secret để trống)
+================================================================================
+
+  ASSISTANT_PROVIDER=codecraft
+  ASSISTANT_API_KEY=
+  ASSISTANT_BASE_URL=https://codecraftapi.com/v1
+  ASSISTANT_MODEL=                 # ví dụ deepseek-v4-flash-0731
+  ASSISTANT_OLLAMA_URL=http://127.0.0.1:11434
+  ASSISTANT_OLLAMA_MODEL=llama3.2
+  ASSISTANT_TIMEOUT_MS=25000
+  ASSISTANT_MAX_QUESTION=500
+  ASSISTANT_DAILY_LIMIT=40
+
+
+================================================================================
+PHỤ LỤC C — SCHEMA  (không bắt buộc P2-MIN)
+================================================================================
+
+P2-MIN: không bảng mới. Rate Map + NhatKy (logAudit đã có).
+
+P2-ĐỦ optional:
+
+  AssistantNhatKy
+    MaLog INT IDENTITY PK
+    MaNV VARCHAR(20)
+    CauHoi NVARCHAR(500)
+    TomTatTraLoi NVARCHAR(500)
+    Provider NVARCHAR(20)
+    SoTool INT
+    Ngay DATETIME
+
+Không lưu raw completion dài, không lưu API key.
+Không bảng train, không vector DB.
+
+
+================================================================================
+HẾT FILE
+================================================================================
+Đối chiếu code 10/09: permissions.js, inboxService.listForRole,
+adminController.{getDashboard,getApprovalQueues,getPayablesOverview},
+reportController.getStoreProfitLossReport, storeProfitLossMath.kqkdLoiNhuan,
+warehouseController.{getDashboard,getInventory,listPurchasingRequests,
+listWarehouseRequests}, purchaseOrderController.list, supplierController.list,
+cashierController.{getCurrentShiftSummary,getMySchedule},
+salesController.listInvoices, returnsController.listReturns,
+accountingController.listInvoices, paymentVoucherController.listPayables,
+settlementController.listShifts, payrollController.get,
+ledgerController.{listUnposted,incomeStatement,trialBalance},
+workforceController.getPayrollPreview, telegramGuide.js, telegramApprove.js,
+paymentGatewayService.js (MoMo), dashboard.html #menuTelegramLink.
+PLAN_12 A2 · PLAN_TELEGRAM 2.2–2.3 (bản 10/09).
+================================================================================

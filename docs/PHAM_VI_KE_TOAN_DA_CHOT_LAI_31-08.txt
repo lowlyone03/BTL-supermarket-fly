@@ -5,6 +5,10 @@ Nhom chot: VAT ban hang, TSCD, import sao ke, LCTT KHONG DUOC CAT.
 Chi cat chi phi tra truoc (242) vi cua hang thanh toan trong 30-45 ngay,
 khong tra truoc 12 thang. Kho theo lo/FEFO van cat (viet lai kho, khong phai bao cao).
 
+CAP NHAT 10/09/2026: pham vi nay DA TRIỂN KHAI (UC34-UC43). Doan "Hoa don BAN
+hien tai KHONG co ThueSuat" o muc 1 la moc 31/08 — POS da luu thue (vatSales.js).
+File nay van dung de biet GIU / CAT. Khong doc nhu "chua code".
+
 
 ================================================================================
 1. VI SAO LAN TRUOC TUNG DE XUAT CAT VAT BAN

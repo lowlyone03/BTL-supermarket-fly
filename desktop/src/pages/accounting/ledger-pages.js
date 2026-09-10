@@ -681,7 +681,13 @@
         body.push(lines[i]);
         i += 1;
       }
-      sections.push({ id: `hb-s${num}`, num, title, body, featured: /^3A$/i.test(num) || /^hạch toán/i.test(title) });
+      sections.push({
+        id: `hb-s${num}`,
+        num,
+        title,
+        body,
+        featured: /^3A$/i.test(num) || /^hạch toán/i.test(title) || /đối soát ngân hàng/i.test(title)
+      });
     }
     return { intro, sections };
   };
@@ -1140,6 +1146,12 @@
       tocNav.querySelectorAll('a').forEach(a => a.classList.toggle('is-active', a.dataset.hbJump === visible.target.id));
     }, { root: scroller, rootMargin: '-12% 0px -70% 0px', threshold: [0, 0.15, 0.4] });
     main.querySelectorAll('.hb-section').forEach(section => observer.observe(section));
+    let pendingJump = '';
+    try { pendingJump = sessionStorage.getItem('fly_hb_jump') || ''; } catch { pendingJump = ''; }
+    if (pendingJump && root.querySelector(`#${CSS.escape(pendingJump)}`)) {
+      try { sessionStorage.removeItem('fly_hb_jump'); } catch { /* ignore */ }
+      setTimeout(() => jump(pendingJump), 80);
+    }
   };
 
   const initCoa = async (root, context) => {
@@ -2265,7 +2277,7 @@
 
   const initBank = async (root, context) => {
     const current = await loadOpenPeriod(context);
-    root.innerHTML = `${header('Ngân hàng & sao kê CSV', 'Kế toán mini chỉ dùng 1 tài khoản ngân hàng đang sử dụng, luôn map TK 112. Chỉ nhập sao kê CSV — không nhập Excel.', periodChip(current))}
+    root.innerHTML = `${header('Ngân hàng & sao kê CSV', 'Kế toán mini chỉ dùng 1 tài khoản ngân hàng đang sử dụng, luôn map TK 112. Chỉ nhập sao kê CSV — không nhập Excel. Đối soát thông minh (điểm khớp, xác nhận KT) nằm menu riêng.', periodChip(current) + (typeof context.navigate === 'function' ? '<button type="button" class="lg-btn lg-btn-ghost" id="openSmartRecon">Mở đối soát thông minh</button>' : ''))}
       <div id="nhBox"></div>
       <article class="lg-card">
         <h2>Nhập sao kê CSV</h2>
@@ -2360,6 +2372,7 @@
       await openStatementModal(context, ma);
     }));
     await reload();
+    root.querySelector('#openSmartRecon')?.addEventListener('click', () => context.navigate('ledger-reconciliation'));
   };
 
   const inits = {

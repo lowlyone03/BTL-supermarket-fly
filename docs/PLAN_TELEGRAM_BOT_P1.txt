@@ -9,6 +9,15 @@ mọi theme Telegram, báo cáo quản trị tháng/quý/năm có so sánh kỳ 
 chứng từ ảnh phong cách mới và message effect tùy chọn. File này được giữ làm
 tài liệu thiết kế lịch sử; sự thật vận hành nằm trong mã server/src/services/telegram*.js.
 
+CẬP NHẬT 10/09/2026 — duyệt trên Telegram (lệch plan gốc 05/09 / mục 2.3 dưới):
+  CODE ĐÃ CÓ nút duyệt / từ chối inline (PO, phiếu xuất, kiểm kê, đổi trả,
+  phiếu chi NCC, chấm công) trong telegramApprove.js, gọi từ
+  telegramBotController.handleDecisionCallback. Có audit, khóa nút cũ,
+  TTL 15 phút, kiểm tra UC theo vai trò. Lệnh chữ /approve /reject /pay
+  /complete bị FORBIDDEN_TEXT. AI chatbot (chưa code) KHÔNG được duyệt —
+  xem PLAN_AI_CHATBOT_TRO_LY.txt. Câu “xem được; duyệt vẫn trong Fly”
+  ở mục 2.3 là thiết kế 07/09, KHÔNG còn đúng 100% với code.
+
 Ngày soạn (bản draft chat): 07/09/2026
 Ngày sửa: 07/09/2026
 Bản này: chỉnh theo review 07/09/2026 — 5 điểm + CSDL tối giản
@@ -109,6 +118,7 @@ GIỮ NGUYÊN (review xác nhận không đụng):
   - Lệnh: /fly, /today, /debt, /lowstock, /shifts, /payments, /pending, /payroll
   - Telegram hỏng không ảnh hưởng POS
   - Không nút Duyệt / Từ chối
+      ↑ thiết kế 07/09. CODE 10/09 ĐÃ CÓ nút (telegramApprove.js) — xem đầu file.
   - Kiến trúc: Telegram ↔ Express ↔ SQL Server; Electron JWT chỉ tạo OTP;
     Telegram xác thực ChatId → TelegramDangKy → TaiKhoan → VaiTro → UC
   - Không OAuth, Firebase, app mobile, AI trên Telegram
@@ -197,9 +207,8 @@ GIỮ NGUYÊN (review xác nhận không đụng):
   TaiLieu_Du_An/
       Không có mô tả Telegram riêng (chỉ bản copy bàn giao).
 
-Hiện trạng code: không có telegramNotify.js, telegramBotController.js, bảng
-TelegramDangKy. server/package.json không có thư viện Telegram.
-server/.env.example không có TELEGRAM_BOT_TOKEN.
+Hiện trạng code lúc soạn 07/09: không có telegramNotify.js, telegramBotController.js, bảng
+TelegramDangKy. (10/09: ĐÃ CÓ — telegram*.js, TelegramDangKy, TELEGRAM_BOT_TOKEN trong .env.example.)
 Firebase / n8n / email-SMS thật đã cắt.
 
 
@@ -240,13 +249,13 @@ Firebase / n8n / email-SMS thật đã cắt.
 2.2. Phân biệt với AI chatbot (P2 — A2)
 
   Telegram companion (P1, A3)
-      Pha: P1 — tuần 6
+      Pha: P1 — đã triển khai 08/09
       Kênh: Telegram (điện thoại)
-      Cơ chế: mẫu tin cố định + lệnh cố định
-      Hỏi tự do: không. Chỉ lệnh / nút menu
-      Ghi chứng từ nghiệp vụ: cấm
-      Duyệt PO / chi NCC / completeInvoice: cấm
-      File: telegramNotify.js, telegramBotController.js
+      Cơ chế: mẫu tin cố định + lệnh cố định + nút duyệt inline (code)
+      Hỏi tự do: không. Chỉ lệnh / nút menu. /guide = FAQ tĩnh (telegramGuide.js)
+      Ghi chứng từ bán / completeInvoice / chi NCC: cấm
+      Duyệt PO/PX/KK/đổi trả/PC/chấm công: CODE ĐÃ LÀM (telegramApprove.js)
+      File: telegramNotify.js, telegramBotController.js, telegramApprove.js
       Demo bảo vệ: bonus / video dự phòng
 
   AI trợ lý (P2, A2)
@@ -261,19 +270,21 @@ Firebase / n8n / email-SMS thật đã cắt.
   KHÔNG gộp hai thứ thành một bot. Telegram P1 không gọi LLM.
   Câu “giải thích vì sao lệch két” thuộc AI P2 trên Electron.
 
-2.3. Không phải “duyệt từ chat”
+2.3. Duyệt từ chat — thiết kế 07/09 vs code 10/09
 
-  PLAN_12 A3, ranh giới không đổi:
+  PLAN_12 A3 (05/09) và bản draft 07/09:
 
-      Xem qua Telegram: được (nếu vai trò đó xem được trong Fly).
-      Duyệt / ghi sổ / thanh toán / sửa dữ liệu nghiệp vụ: KHÔNG.
+      Xem qua Telegram: được. Duyệt / ghi sổ / thanh toán: KHÔNG.
 
-  Lý do ghi trong tài liệu: xác thực 2 lớp, replay, transaction, audit,
-  tài khoản Telegram bị chiếm — quá tầm đồ án.
+  CODE HIỆN TẠI (sau 08/09): CÓ duyệt bằng nút inline + audit
+  (telegramApprove.js). Không duyệt bằng lệnh chữ. Không completeInvoice,
+  không chi NCC / chi lương từ chat.
 
-  Câu demo: “Xem được; duyệt vẫn trong Fly để giữ phân quyền, transaction, audit.”
+  Khi bảo vệ: nói thẳng “bot xem + duyệt chứng từ chờ (đúng UC), có nhật ký;
+  không hoàn thành hóa đơn, không trả NCC.” Không nói “Telegram hoàn toàn
+  read-only” vì sẽ sai so với code.
 
-  Bàn giao 07/09 cũng cấm: “Chatbot duyệt đơn mua / chi NCC / hoàn thành hóa đơn”.
+  AI chatbot (P2, chưa code) vẫn CẤM duyệt — khác kênh Telegram.
 
 2.4. Ngày vận hành và ca đêm (đối chiếu code — chỉ sửa mốc, không thêm chức năng)
 

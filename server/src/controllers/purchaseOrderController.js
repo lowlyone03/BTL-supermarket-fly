@@ -103,13 +103,11 @@ const refreshRequestStatus = async (transaction, MaDN) => {
         .query(`UPDATE DeNghiMuaHang SET TrangThai=@TrangThai WHERE MaDN=@MaDN`);
 };
 
-const list = async (req, res) => {
-    try {
-        const keyword = clean(req.query.search, 150, '');
-        const status = clean(req.query.status, 40, '');
-        const pool = await poolPromise;
+const loadPurchaseOrders = async (pool, { search = '', status = '' } = {}) => {
+        const keyword = clean(search, 150, '');
+        const filter = clean(status, 40, '');
         const result = await pool.request().input('TuKhoa', sql.NVarChar, keyword).input('Mau', sql.NVarChar, `%${keyword}%`)
-            .input('TrangThai', sql.NVarChar, status).query(`
+            .input('TrangThai', sql.NVarChar, filter).query(`
                 SELECT po.MaPO,po.MaDN,po.MaNCC,ncc.TenNCC,po.MaNV_Lap,nv.TenNV AS NguoiLap,po.NgayLap,
                        po.NgayGiaoDuKien,po.SoNgayThanhToan,po.TongTien,po.TrangThai,
                        dn.TrangThai AS TrangThaiDeNghi,
@@ -123,7 +121,13 @@ const list = async (req, res) => {
                 GROUP BY po.MaPO,po.MaDN,po.MaNCC,ncc.TenNCC,po.MaNV_Lap,nv.TenNV,po.NgayLap,
                          po.NgayGiaoDuKien,po.SoNgayThanhToan,po.TongTien,po.TrangThai,dn.TrangThai
                 ORDER BY po.NgayLap DESC`);
-        res.json({ items: result.recordset });
+        return { items: result.recordset };
+};
+
+const list = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        res.json(await loadPurchaseOrders(pool, { search: req.query.search, status: req.query.status }));
     } catch (error) { console.error(error); res.status(500).json({ message: 'Không thể tải danh sách Đơn mua hàng.' }); }
 };
 
@@ -392,6 +396,7 @@ const recordShipment = async (req, res) => {
 };
 
 module.exports = {
+    loadPurchaseOrders,
     list, getDetail, create, update, submit,
     approve, requestChanges: decide('Yêu cầu chỉnh sửa'), reject: decide('Từ chối'),
     sendSupplier, confirmSupplier, recordShipment

@@ -4,7 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Điều hành - Supermarket Fly</title>
-  <link rel="stylesheet" href="dashboard.css?v=count-click-1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="dashboard.css?v=recon-nav-3">
   <link rel="stylesheet" href="../admin/admin.css?v=tax-ui-1">
   <link rel="stylesheet" href="../warehouse/warehouse.css?v=close-confirm-1">
   <link rel="stylesheet" href="../workforce/workforce.css?v=approve-fix-2">
@@ -13,9 +16,12 @@
   <link rel="stylesheet" href="../shared/ui-polish.css?v=count-click-1">
   <link rel="stylesheet" href="../shared/report-charts.css?v=wh-report-5">
   <link rel="stylesheet" href="../shared/product-images.css?v=products-1">
-  <link rel="stylesheet" href="overview-modern.css?v=overview-1">
-  <link rel="stylesheet" href="../accounting/ledger.css?v=dinh-khoan-3">
+  <link rel="stylesheet" href="overview-modern.css?v=typo-widget-3">
+  <link rel="stylesheet" href="../accounting/ledger.css?v=recon-ui-2">
   <link rel="stylesheet" href="../accounting/ledger-print.css?v=ledger-print-1">
+  <link rel="stylesheet" href="../admin/loyalty.css?v=rfm-ui-2">
+  <link rel="stylesheet" href="assistant.css?v=intel-widget-2">
+  <link rel="stylesheet" href="chat.css?v=chat-p5-6">
 </head>
 <body>
   <svg class="svg-library" aria-hidden="true">
@@ -56,6 +62,10 @@
     <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M8 7h8M8 11h5"/></symbol>
     <symbol id="i-sound-on" viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16 9.2a3.6 3.6 0 0 1 0 5.6M18.6 7a7 7 0 0 1 0 10"/></symbol>
     <symbol id="i-sound-off" viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="m16.2 9.8 5 5M21.2 9.8l-5 5"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3.5 13.6 9l5.4 1.6L13.6 12.2 12 17.5 10.4 12.2 5 10.6 10.4 9 12 3.5Z"/><path d="M18.5 14.5 19.2 17l2.3.7-2.3.7-.7 2.5-.7-2.5-2.3-.7 2.3-.7.7-2.5Z"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/><path d="M8 10h8M8 13h5"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24"><path d="M21 8.5 10.2 19.3a4.2 4.2 0 0 1-6-6L15.1 2.4a2.8 2.8 0 0 1 4 4L8.2 17.2a1.4 1.4 0 0 1-2-2L16 5.4"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3h8l5 5v13H7z"/><path d="M15 3v5h5M10 13h7M10 17h5"/></symbol>
   </svg>
 
   <div class="app-shell">
@@ -80,11 +90,13 @@
         <a href="#" class="nav-item" id="managerWorkforceApproveNav" data-target="manager-workforce-approve"><svg><use href="#i-approve"/></svg><span>Duyệt công</span></a>
         <a href="#" class="nav-item" id="managerHolidaysNav" data-target="manager-holidays"><svg><use href="#i-calendar"/></svg><span>Ngày lễ năm</span></a>
         <a href="#" class="nav-item" id="managerReportNav" data-target="manager-reports"><svg><use href="#i-report"/></svg><span>Báo cáo cửa hàng</span></a>
+        <a href="#" class="nav-item" id="managerLoyaltyNav" data-target="manager-loyalty"><svg><use href="#i-users"/></svg><span>Khách hàng thân thiết</span></a>
         <a href="#" class="nav-item" id="managerWarehouseReportNav" data-target="admin-warehouse-reports"><svg><use href="#i-inventory"/></svg><span>Báo cáo Thủ kho</span></a>
         <a href="#" class="nav-item" id="managerLedgerKqkdNav" data-target="ledger-kqkd"><svg><use href="#i-report"/></svg><span>Kết quả kinh doanh</span></a>
         <a href="#" class="nav-item" id="managerLedgerCfNav" data-target="ledger-cf"><svg><use href="#i-report"/></svg><span>Lưu chuyển tiền tệ</span></a>
         <a href="#" class="nav-item" id="managerLedgerBsNav" data-target="ledger-bs"><svg><use href="#i-report"/></svg><span>Bảng cân đối kế toán</span></a>
         <a href="#" class="nav-item" id="managerLedgerHandbookNav" data-target="ledger-handbook"><svg><use href="#i-book"/></svg><span>Cẩm nang kế toán</span></a>
+        <a href="#" class="nav-item" id="managerReconNav" data-target="ledger-reconciliation"><svg><use href="#i-approve"/></svg><span>Đối soát ngân hàng thông minh</span></a>
 
         <div class="nav-group" id="navGroupWarehouse" style="display:none">
           <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span>Lịch làm việc</span></a>
@@ -139,6 +151,7 @@
           <div class="nav-group-title">KẾ TOÁN MỞ RỘNG</div>
           <a href="#" class="nav-item" data-target="ledger-assets"><svg><use href="#i-box"/></svg><span>Tài sản cố định</span></a>
           <a href="#" class="nav-item" data-target="ledger-bank"><svg><use href="#i-store"/></svg><span>Ngân hàng &amp; sao kê CSV</span></a>
+          <a href="#" class="nav-item" data-target="ledger-reconciliation"><svg><use href="#i-approve"/></svg><span>Đối soát ngân hàng thông minh</span></a>
         </div>
 
         <div class="nav-group" id="navGroupCashier" style="display:none">
@@ -189,6 +202,15 @@
             <button class="notification-button" id="notificationButton" type="button" title="Thông báo" aria-haspopup="true" aria-expanded="false"><svg><use href="#i-bell"/></svg><b id="notificationCount">0</b><i id="notificationDot"></i></button>
           </div>
           <span class="topbar-divider"></span>
+          <button type="button" class="chat-launch" id="menuInternalChat" aria-haspopup="dialog" aria-expanded="false" aria-controls="chatWidget" title="Chat nội bộ">
+            <svg aria-hidden="true"><use href="#i-chat"/></svg>
+            <span>Chat</span>
+            <b id="chatUnreadCount">0</b>
+          </button>
+          <button type="button" class="assistant-launch" id="menuAssistant" aria-haspopup="dialog" aria-expanded="false" aria-controls="assistantDrawer" title="Trợ lý Fly">
+            <svg aria-hidden="true"><use href="#i-sparkle"/></svg>
+            <span>Trợ lý</span>
+          </button>
           <button class="profile-button" id="profileButton">
             <span class="avatar" id="userInitials">QL</span>
             <span class="user-info"><strong id="userName">Đang tải...</strong><small id="userRole">...</small></span>
@@ -242,7 +264,7 @@
         <button type="button" class="close-btn" id="closeTelegramModal">×</button>
       </div>
       <div class="modal-body">
-        <p class="telegram-lead" id="telegramLead">Tạo mã 6 số, rồi gửi trong chat riêng với bot. Bot chỉ xem dữ liệu nghiệp vụ — không duyệt chứng từ.</p>
+        <p class="telegram-lead" id="telegramLead">Tạo mã 6 số, rồi gửi trong chat riêng với bot. Bot xem số liệu theo quyền; có thể duyệt chứng từ chờ (nút inline + nhật ký). Không hoàn thành hóa đơn, không trả NCC.</p>
         <p class="telegram-bot" id="telegramBotName">Bot: @supermarket_flybot</p>
         <div class="telegram-status" id="telegramStatusBox">Đang tải trạng thái...</div>
         <div class="telegram-otp-block" id="telegramOtpBlock" hidden>
@@ -261,6 +283,112 @@
       </div>
     </div>
   </div>
+
+  <div class="chat-backdrop" id="chatBackdrop" hidden data-escape-overlay="true"></div>
+  <button type="button" class="chat-fab" id="chatFab" aria-haspopup="dialog" aria-expanded="false" aria-controls="chatWidget" title="Chat nội bộ">
+    <svg aria-hidden="true"><use href="#i-chat"></use></svg>
+    <b id="chatFabCount">0</b>
+  </button>
+  <aside class="chat-shell" id="chatWidget" role="dialog" aria-labelledby="chatTitle">
+    <header class="chat-head">
+      <div>
+        <h2 id="chatTitle">Chat nội bộ</h2>
+        <p class="chat-sub" id="chatRoomLabel">Tin giữa các bộ phận</p>
+      </div>
+      <button type="button" class="chat-close" id="chatClose" aria-label="Đóng">×</button>
+    </header>
+    <div class="chat-body">
+      <nav class="chat-rooms" id="chatRooms" aria-label="Phòng chat"></nav>
+      <section class="chat-main">
+        <div class="chat-thread" id="chatThread"></div>
+        <p class="chat-warn" id="chatWarn" hidden></p>
+        <p class="chat-error" id="chatError" hidden></p>
+        <div class="chat-pending" id="chatPending" hidden></div>
+        <div class="chat-attach-pop" id="chatVoucherPop" hidden>
+          <div class="chat-attach-row">
+            <select id="chatVoucherType" data-keep-native="true">
+              <option value="">Mọi loại</option>
+              <option value="DeNghiMuaHang">Đề nghị mua</option>
+              <option value="DonMuaHang">Đơn mua hàng</option>
+              <option value="PhieuNhap">Phiếu nhập</option>
+              <option value="PhieuXuat">Phiếu xuất</option>
+              <option value="HoaDon">Hóa đơn bán</option>
+              <option value="HoaDonMuaHang">Hóa đơn mua</option>
+            </select>
+            <input id="chatVoucherQ" type="search" placeholder="Mã chứng từ…" autocomplete="off">
+          </div>
+          <ul id="chatVoucherList"></ul>
+        </div>
+        <div class="chat-composer">
+          <input id="chatFileInput" type="file" accept=".pdf,image/png,image/jpeg,image/webp,application/pdf" hidden>
+          <div class="chat-composer-box">
+            <textarea id="chatInput" rows="1" maxlength="1000" placeholder="Nhắn trong Cửa hàng…"></textarea>
+            <div class="chat-composer-actions">
+              <button type="button" class="chat-icon-btn" id="chatAttachVoucher" title="Đính chứng từ hệ thống">
+                <svg aria-hidden="true"><use href="#i-doc"></use></svg>
+              </button>
+              <button type="button" class="chat-icon-btn" id="chatAttachFile" title="Gửi tệp hoặc bản in (PDF, ảnh)">
+                <svg aria-hidden="true"><use href="#i-clip"></use></svg>
+              </button>
+              <button type="button" class="chat-send" id="chatSend">Gửi</button>
+            </div>
+          </div>
+          <p class="chat-hint">Enter gửi · Shift+Enter xuống dòng</p>
+        </div>
+      </section>
+    </div>
+  </aside>
+  <div class="chat-lightbox" id="chatLightbox" hidden>
+    <div class="chat-lightbox-card">
+      <button type="button" class="chat-lightbox-close" id="chatLightboxClose" aria-label="Đóng">×</button>
+      <div class="chat-lightbox-body" id="chatLightboxBody"></div>
+    </div>
+  </div>
+  <button type="button" class="chat-toast" id="chatToast" hidden>
+    <span class="chat-toast-kicker">Tin mới</span>
+    <strong id="chatToastTitle"></strong>
+    <span id="chatToastDetail"></span>
+  </button>
+
+  <div class="assistant-backdrop" id="assistantBackdrop" hidden data-escape-overlay="true"></div>
+  <button type="button" class="assistant-fab" id="assistantFab" aria-haspopup="dialog" aria-expanded="false" aria-controls="assistantDrawer" title="Trợ lý Fly">
+    <svg aria-hidden="true"><use href="#i-sparkle"></use></svg>
+  </button>
+  <aside class="assistant-widget" id="assistantDrawer" role="dialog" aria-labelledby="assistantTitle">
+    <header class="assistant-head">
+      <div>
+        <p class="assistant-kicker">Trợ lý nội bộ</p>
+        <h2 id="assistantTitle">Trợ lý Fly</h2>
+        <p>Số liệu hệ thống. AI chỉ diễn giải.</p>
+      </div>
+      <button type="button" class="assistant-close" id="assistantClose" aria-label="Đóng">×</button>
+    </header>
+    <nav class="assistant-tabs" id="assistantTabs" role="tablist">
+      <button type="button" class="is-active" data-tab="chat" role="tab" aria-selected="true">Chat</button>
+      <button type="button" data-tab="today" role="tab" aria-selected="false">Hôm nay</button>
+      <button type="button" data-tab="alerts" role="tab" aria-selected="false">Cảnh báo</button>
+      <button type="button" data-tab="insights" role="tab" aria-selected="false">Phân tích</button>
+      <button type="button" data-tab="scenario" role="tab" aria-selected="false">Kịch bản</button>
+    </nav>
+    <div class="assistant-panes">
+      <section class="assistant-pane is-active" data-pane="chat">
+        <div class="assistant-thread" id="assistantThread"></div>
+        <p class="assistant-error" id="assistantError" hidden></p>
+        <div class="assistant-chips" id="assistantChips"></div>
+        <div class="assistant-composer">
+          <div class="assistant-composer-box">
+            <textarea id="assistantInput" rows="1" placeholder="Hỏi Fly Intelligence…" maxlength="500"></textarea>
+            <button type="button" class="assistant-send" id="assistantSend">Gửi</button>
+          </div>
+          <p class="assistant-hint">Enter gửi · Shift+Enter xuống dòng · 3–6 lượt gần nhất được gửi kèm để hiểu “trong số đó…”.</p>
+        </div>
+      </section>
+      <section class="assistant-pane" data-pane="today" id="assistantToday"></section>
+      <section class="assistant-pane" data-pane="alerts" id="assistantAlerts"></section>
+      <section class="assistant-pane" data-pane="insights" id="assistantInsights"></section>
+      <section class="assistant-pane" data-pane="scenario" id="assistantScenario"></section>
+    </div>
+  </aside>
 
   <script src="../shared/escape-key.js"></script>
   <script src="../shared/api-config.js"></script>
@@ -284,11 +412,15 @@
   <script src="../accounting/store-pnl.js?v=store-pnl-1"></script>
   <script src="../accounting/accounting-pages.js?v=date-vn-1"></script>
   <script src="../accounting/ledger-print.js?v=ledger-print-1"></script>
-  <script src="../accounting/ledger-pages.js?v=queue-date-2"></script>
+  <script src="../accounting/ledger-pages.js?v=hb-recon-19"></script>
+  <script src="../accounting/reconciliation-pages.js?v=recon-2"></script>
+  <script src="../admin/loyalty-pages.js?v=rfm-ui-2"></script>
   <script src="../workforce/workforce-pages.js?v=close-confirm-1"></script>
   <script src="../cashier/cashier-pages.js?v=date-vn-2"></script>
   <script src="../shared/role-reports.js?v=wh-report-5"></script>
   <script src="../shared/warehouse-keeper-reports.js?v=wh-report-5"></script>
-  <script src="dashboard.js?v=handbook-1"></script>
+  <script src="dashboard.js?v=handbook-2"></script>
+  <script src="chat-panel.js?v=chat-p5-6"></script>
+  <script src="assistant-panel.js?v=intel-widget-2"></script>
 </body>
 </html>

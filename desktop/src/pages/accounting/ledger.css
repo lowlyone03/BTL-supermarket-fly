@@ -1188,3 +1188,355 @@
   .hb-toc-nav { max-height: 280px; }
   .hb-meta { grid-template-columns: 1fr; }
 }
+
+/* P3 đối soát ngân hàng thông minh — RFM đã chuyển sang admin/loyalty.css */
+.recon-page,
+.recon-page h1,
+.recon-page h2,
+.recon-page h3,
+.recon-page p,
+.recon-page span,
+.recon-page em,
+.recon-page small,
+.recon-page label,
+.recon-page button,
+.recon-page a,
+.recon-page td,
+.recon-page th,
+.recon-page input,
+.recon-page select {
+  letter-spacing: 0;
+  word-spacing: 0.045em;
+}
+.recon-page .lg-header h1 {
+  max-width: 820px;
+  letter-spacing: 0;
+  word-spacing: 0.06em;
+  font-weight: 650;
+  line-height: 1.28;
+}
+.recon-page .lg-kicker {
+  letter-spacing: 0.04em;
+  word-spacing: 0.14em;
+  text-transform: none;
+  font-size: 11px;
+  font-weight: 700;
+}
+.recon-page .lg-lead {
+  max-width: 680px;
+  line-height: 1.55;
+}
+.recon-page .recon-header { align-items: flex-start; }
+.recon-page .recon-stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(124px, 1fr));
+  gap: 12px;
+  margin: 0 0 16px;
+}
+.recon-page .recon-stats-ql {
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
+}
+.recon-page .recon-stats article {
+  background: #fff;
+  border: 1px solid #dce4de;
+  border-radius: 16px;
+  padding: 14px 16px 15px;
+  box-shadow: 0 8px 22px rgba(27, 62, 48, .045);
+}
+.recon-page .recon-stats span {
+  display: block;
+  color: #5f7168;
+  font-size: 12px;
+  font-weight: 650;
+}
+.recon-page .recon-stats strong {
+  display: block;
+  margin: 8px 0 4px;
+  color: #153228;
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  line-height: 1.1;
+}
+.recon-page .recon-stats em {
+  display: block;
+  color: #2c8565;
+  font-size: 12.5px;
+  font-style: normal;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.recon-page .recon-stats small {
+  display: block;
+  margin-top: 6px;
+  color: #7a8a82;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.recon-page .recon-import-head h2,
+.recon-page .recon-ql-note h2,
+.recon-page .recon-detail h2 {
+  letter-spacing: 0;
+  word-spacing: 0.04em;
+}
+.recon-page .recon-import-form {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(220px, 1fr) auto;
+  gap: 14px 16px;
+  align-items: end;
+}
+.recon-page .recon-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.recon-page .recon-field > span {
+  color: #5a6d64;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.recon-page .recon-field input,
+.recon-page .recon-field select {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #d3ddd6;
+  border-radius: 12px;
+  background: #fbfcfb;
+}
+.recon-page .recon-file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 10px;
+  border: 1px dashed #c5d4cb;
+  border-radius: 12px;
+  background: #f7faf8;
+}
+.recon-page .recon-file-row input[type="file"] {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  max-width: 220px;
+}
+.recon-page .recon-file-row em {
+  color: #5f7168;
+  font-style: normal;
+  font-size: 13px;
+}
+.recon-page .recon-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.recon-page .recon-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 14px;
+  margin-bottom: 14px;
+}
+.recon-page .recon-field-grow { flex: 1 1 220px; }
+.recon-page .recon-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+.recon-page .recon-work {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.85fr);
+  gap: 14px;
+  align-items: start;
+}
+.recon-page .recon-table-wrap {
+  overflow: auto;
+  border: 1px solid #dce4de;
+  border-radius: 14px;
+  background: #fff;
+}
+.recon-page .recon-line-table { margin: 0; }
+.recon-page .recon-line-table th {
+  letter-spacing: 0;
+  word-spacing: 0.04em;
+  text-transform: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: #5a6d64;
+}
+.recon-page .recon-money,
+.recon-page .recon-line-table .num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.recon-page .recon-line-table .is-diff { color: #9a3412; font-weight: 700; }
+.recon-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  word-spacing: 0.04em;
+  white-space: nowrap;
+}
+.recon-badge-ok { background: #d8f3e4; color: #146c43; }
+.recon-badge-suggest { background: #e7eefc; color: #1d4ed8; }
+.recon-badge-diff { background: #fde7d8; color: #9a3412; }
+.recon-badge-wait { background: #f4f1e6; color: #854d0e; }
+.recon-badge-muted { background: #eef1ef; color: #5b675f; }
+.recon-page .recon-row { cursor: pointer; }
+.recon-page .recon-row:hover { background: #f7fbf8; }
+.recon-page .recon-row.is-active { background: #eef7f2; box-shadow: inset 3px 0 0 #2c8565; }
+.recon-page .recon-detail {
+  position: sticky;
+  top: 12px;
+  padding: 16px 18px 18px;
+  border: 1px solid #dce4de;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(27, 62, 48, .045);
+}
+.recon-page .recon-detail-empty h2,
+.recon-page .recon-detail-head h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 650;
+}
+.recon-page .recon-detail-desc,
+.recon-page .recon-detail-empty p:last-child {
+  margin: 0;
+  color: #4a5b53;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.recon-page .recon-detail-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.recon-page .recon-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.recon-page .recon-chip-row.is-tight { margin: 0; }
+.recon-page .recon-chip {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #eef6f1;
+  color: #1c4a3d;
+  font-size: 11.5px;
+  font-weight: 650;
+}
+.recon-page .recon-chip.is-muted { background: #eef1ef; color: #6b7a72; }
+.recon-page .recon-diff-pair {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.recon-page .recon-diff-pair article {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f4f7f5;
+  border: 1px solid #dce4de;
+}
+.recon-page .recon-diff-pair article.is-gap {
+  background: #fff4ea;
+  border-color: #f0d2bc;
+}
+.recon-page .recon-diff-pair span {
+  display: block;
+  color: #6b7a72;
+  font-size: 11.5px;
+}
+.recon-page .recon-diff-pair strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.recon-page .recon-meta {
+  margin: 0 0 12px;
+  color: #5f7168;
+  font-size: 12.5px;
+}
+.recon-page .recon-subhead {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.recon-page .recon-cand-wrap { overflow: auto; margin-bottom: 4px; }
+.recon-page .recon-pick-btn { min-height: 34px; padding: 0 10px; }
+.recon-page .recon-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.recon-page .recon-empty {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  min-height: 280px;
+  padding: 36px 28px;
+}
+.recon-page .recon-empty-mark {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 12px;
+  border-radius: 16px;
+  background: #e7f4ee;
+  color: #1c4a3d;
+  font-size: 15px;
+  font-weight: 800;
+}
+.recon-page .recon-empty h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 650;
+}
+.recon-page .recon-empty p {
+  margin: 0;
+  max-width: 420px;
+  color: #5f7168;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.recon-page .recon-note-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #3f4d46;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.recon-page .recon-note-list li + li { margin-top: 6px; }
+@media (max-width: 1180px) {
+  .recon-page .recon-stats,
+  .recon-page .recon-stats-ql,
+  .recon-page .recon-import-form,
+  .recon-page .recon-work,
+  .recon-page .recon-diff-pair { grid-template-columns: 1fr 1fr; }
+  .recon-page .recon-toolbar-actions { margin-left: 0; }
+}
+@media (max-width: 720px) {
+  .recon-page .recon-stats,
+  .recon-page .recon-stats-ql,
+  .recon-page .recon-import-form,
+  .recon-page .recon-work,
+  .recon-page .recon-diff-pair { grid-template-columns: 1fr; }
+}

@@ -170,9 +170,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const holidaysNav = document.getElementById('managerHolidaysNav');
   if (holidaysNav) holidaysNav.style.display = isManager ? '' : 'none';
   document.getElementById('managerReportNav').style.display = isManager ? '' : 'none';
+  const loyaltyNav = document.getElementById('managerLoyaltyNav');
+  if (loyaltyNav) loyaltyNav.style.display = isManager ? '' : 'none';
   const warehouseReportNav = document.getElementById('managerWarehouseReportNav');
   if (warehouseReportNav) warehouseReportNav.style.display = isManager ? '' : 'none';
-  ['managerLedgerKqkdNav', 'managerLedgerCfNav', 'managerLedgerBsNav', 'managerLedgerHandbookNav'].forEach(id => {
+  ['managerLedgerKqkdNav', 'managerLedgerCfNav', 'managerLedgerBsNav', 'managerLedgerHandbookNav', 'managerReconNav'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = isManager ? '' : 'none';
   });
@@ -750,6 +752,16 @@ document.addEventListener('DOMContentLoaded', () => {
     event.preventDefault();
     openPage(item);
   }));
+
+  window.FLY_NAV = {
+    open(target) {
+      const nextNav = pageNavItems.find(item => item.dataset.target === target);
+      if (!nextNav) return false;
+      openPage(nextNav);
+      return true;
+    }
+  };
+
   document.querySelectorAll('[data-coming-soon]').forEach(item => item.addEventListener('click', event => {
     event.preventDefault();
     window.showToast(`${item.dataset.comingSoon} đang nằm trong lộ trình tiếp theo.`, 'success');

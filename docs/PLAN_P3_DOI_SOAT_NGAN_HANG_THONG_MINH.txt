@@ -1,0 +1,163 @@
+================================================================================
+PLAN P3 — ĐỐI SOÁT NGÂN HÀNG THÔNG MINH (Smart Bank Reconciliation)
+BẢN THIẾT KẾ + HIỆN TRẠNG CODE  (10/09/2026)
+KHÔNG NHÉT VÀO P2-ĐỦ. AI KHÔNG MATCH.
+================================================================================
+
+Vị trí     : supermarket-fly/docs/PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt
+Repo       : supermarket-fly
+UC         : UC42 (đã có — Tài khoản ngân hàng và sao kê CSV). KHÔNG tạo UC mới.
+Đọc trước  : PLAN_HE_THONG_KE_TOAN_MINI_CHI_TIET.txt mục UC42
+             PHUONG_AN_KE_TOAN_DA_CHOT.txt (MoMo → 112, không két)
+             PLAN_MOMO_TEST_P1.txt
+Master bảo vệ: Engine rule tính điểm. Kế toán xác nhận. Không postJournal.
+
+Câu bảo vệ
+  “Đối soát ngân hàng thông minh khớp sao kê CSV với MoMo, phiếu chi NCC,
+   chi lương CK và bút toán TK 112 theo thang điểm cố định. LLM không được
+   quyết định khớp. Kế toán bấm Xác nhận đối soát; hệ thống không tự sửa sổ
+   và không tự ghi thanh toán.”
+
+
+================================================================================
+0. PHẠM VI / KHÔNG LÀM
+================================================================================
+
+Làm
+  Sao kê NH + GD MoMo (ThanhToan QR / NguonXacNhan=MoMo) + Phiếu chi NCC CK
+  + Chi lương CK + bút toán 112
+  → Auto Matched | Suggested | Difference | Unmatched
+  Import CSV (KT). UI KT. Xác nhận từng dòng / hàng loạt khớp tự động.
+  QL: chỉ summary số dòng + tổng tiền (UC10), không dump sao kê.
+
+Không làm
+  LLM quyết định match / AI tự trả NCC / AI postJournal
+  OCR sao kê giấy, Open Banking, nhiều TKNH (mini vẫn 1 TKNH map 112)
+  Tự sửa sổ, tự ghi thanh toán khi điểm ≥95
+  P2-ĐỦ FAQ+Telegram /ask, P4 RFM
+  Phá POS / MoMo / Telegram
+
+
+================================================================================
+1. ĐIỂM KHỚP (CHỐT — reconciliationEngine.js)
+================================================================================
+
+  Số tiền khớp (abs)                         +50
+  Ngày ±1 (lịch VN)                          +20
+  Mã PC / MaGiaoDich / MaThamChieu trong ND  +25
+  NCC (tên/mã) xuất hiện trong nội dung      +5
+  Tổng tối đa 100.
+
+  ≥95–100  → Khớp tự động   (vẫn CHỜ KT xác nhận — không auto post)
+  ~70      → Gợi ý          (tiền + ngày, không mã)
+  Tiền lệch + có mã hoặc cùng ngày → Chênh lệch (hiện 2 số + chênh)
+  Không ứng viên               → Chưa khớp
+
+  Greedy: một chứng từ không gán hai dòng sao kê.
+
+
+================================================================================
+2. SCHEMA
+================================================================================
+
+  Tái dùng SaoKeNganHang + DongSaoKe (UC42 đã có).
+  Thêm:
+    DongSaoKe.MaThamChieu NVARCHAR(80)
+    KetQuaDoiSoatNganHang  (trạng thái gợi ý, trạng thái KT, điểm, lý do, mã CT, chênh)
+    UngVienDoiSoat         (tối đa vài ứng viên / dòng)
+
+  Migration: server/migrations/SupermarketFly_Migration_20260910_SmartBankReconciliation.sql
+  ensureReconciliationSchema() chạy khi API start (CodeCraft chết vẫn lên được sau migrate/ensure).
+
+
+================================================================================
+3. API  (JWT)
+================================================================================
+
+  KT UC42 — /api/accounting/reconciliation/
+    GET  /template.csv
+    GET  /summary
+    GET  /statements
+    POST /statements/import          multipart CSV
+    GET  /statements/:id?trangThai=&search=
+    POST /statements/:id/run
+    POST /statements/:id/confirm-auto
+    GET  /lines/:maDong
+    POST /lines/:maDong/confirm      body { MaUngVien? LoaiChungTu? MaChungTu? }
+    POST /lines/:maDong/reject
+
+  QL UC10 — GET /api/admin/reconciliation/summary
+    Chỉ: soDongChuaDoiSoat, tongTienChuaDoiSoat, soDongGoiY, soDongChenhLech.
+    CẤM dump dòng sao kê.
+
+  Hàm thuần: (pool, user, opts) trong reconciliationService.js
+  CẤM fetch localhost.
+
+
+================================================================================
+4. UI KT
+================================================================================
+
+  Menu Kế toán mở rộng: “Đối soát ngân hàng thông minh”
+  (dashboard.html nav — không đụng widget trợ lý góc phải)
+  File: desktop/src/pages/accounting/reconciliation-pages.js
+  Badge trạng thái, chi tiết ứng viên, xác nhận / bỏ gợi ý, filter, hiện chênh lệch.
+
+
+================================================================================
+5. DEMO KT (5–8 PHÚT)
+================================================================================
+
+  1. Đăng nhập Kế toán. Nếu chưa có TKNH: menu “Ngân hàng & sao kê CSV” thêm 1 TK.
+  2. Menu Đối soát ngân hàng thông minh → Tải mẫu CSV
+     (docs/templates/sao-ke-doi-soat-mau.csv).
+  3. Nhập CSV → engine chạy. Kỳ vọng:
+       dòng MoMo mã GD     → Khớp tự động (điểm 95–100)
+       dòng không mã       → Gợi ý ~70 nếu có HĐ/TT cùng tiền+ngày trên DB
+       dòng lệch tiền      → Chênh lệch
+       phí dịch vụ         → Chưa khớp
+  4. Bấm dòng → xem ứng viên. “Xác nhận đối soát” hoặc “Xác nhận hàng loạt khớp tự động”.
+  5. Mở sổ cái / bút toán: KHÔNG có bút toán mới sinh từ bước 4.
+  6. QL hỏi trợ lý: chỉ nghe số đếm, không nghe nội dung CK.
+
+
+================================================================================
+6. MoMo
+================================================================================
+
+  ThanhToan PhuongThuc=QR, NguonXacNhan=MoMo, MaGiaoDich, số tiền, ngày
+  ↔ dòng sao kê (nội dung CK chứa transId).
+  112 không vào két. Chuỗi: POS MoMo → confirm → 112 → sao kê → đối soát → KT ngoại lệ.
+
+
+================================================================================
+7. AI
+================================================================================
+
+  CẤM LLM match. assistantTools.loadReconciliationSummary():
+    KT = đếm + phân loại; QL = chỉ đếm.
+  Gắn collectContext (không sửa assistant-panel.js / assistant.css / layout widget).
+
+
+================================================================================
+8. TEST
+================================================================================
+
+  cd supermarket-fly/server
+  npm run test:recon
+  (cũng nằm trong npm test)
+
+  Cover: 100%, suggested 70%, difference, MoMo vs sao kê, không LLM trong source.
+
+
+================================================================================
+9. CHỖ CỐ Ý MỎNG
+================================================================================
+
+  Không Open Banking / không đọc PDF NH.
+  Không tự đảo bút toán khi chênh.
+  Khớp tay gắn chứng từ lạ: KT chọn ứng viên có sẵn, không form tìm toàn bộ CSDL.
+  Sao kê cũ (nhập từ màn ledger-bank) cần “Chạy lại engine” trên màn P3.
+
+HẾT FILE
+================================================================================
