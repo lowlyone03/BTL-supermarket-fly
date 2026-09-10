@@ -43,6 +43,7 @@ const ledgerRoutes = require('./routes/ledgerRoutes');
 const cashierRoutes = require('./routes/cashierRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const telegramRoutes = require('./routes/telegramRoutes');
+const paymentGatewayRoutes = require('./routes/paymentGatewayRoutes');
 
 // Định tuyến API
 app.use('/api/auth', authRoutes);
@@ -58,6 +59,8 @@ app.use('/api/accounting', accountingRoutes);
 app.use('/api/ledger', ledgerRoutes);
 app.use('/api/cashier', cashierRoutes);
 app.use('/api/telegram', telegramRoutes);
+// IPN/return MoMo: public, mount TRƯỚC catch-all 404. Không payment.routes / momoController.
+app.use('/api/payments/gateway', paymentGatewayRoutes);
 
 // API Kiểm tra trạng thái Server
 app.get('/api/health', (req, res) => {

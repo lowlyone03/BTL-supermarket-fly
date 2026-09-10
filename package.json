@@ -1,11 +1,13 @@
 {
   "name": "supermarket-fly-root",
   "version": "1.0.0",
-  "description": "Root package for Supermarket Fly",
+  "description": "Root package for Supermarket Fly. npm start = API+Electron, khong can cloudflared. Test MoMo IPN: npm run start:momo (hoac 7_CHAY_APP_VA_TUNNEL_MOMO.bat).",
   "scripts": {
     "start": "concurrently \"npm run start:server\" \"npm run start:desktop\"",
     "start:server": "cd server && node src/app.js",
     "start:desktop": "cd desktop && npm start",
+    "start:momo": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-app-with-momo-tunnel.ps1",
+    "start:tunnel": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-app-with-momo-tunnel.ps1",
     "setup:next": "cd server && npm run migrate:next && npm run seed:permissions && npm run seed:accounts && npm run cleanup:demo-products && npm run cleanup:extra-cashier && npm run prepare:warehouse",
     "test:next": "cd server && npm test && npm run test:business && npm run test:product-images && npm run test:product-upload && npm run test:search && npm run test:print-report && npm run test:scheduler"
   },

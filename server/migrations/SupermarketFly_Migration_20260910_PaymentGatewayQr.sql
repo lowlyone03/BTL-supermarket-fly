@@ -1,0 +1,21 @@
+/* P1: luu payUrl + qrCodeUrl de mo lai nhap ve duoc QR (khong tao QR2).
+   GhiChu NVARCHAR(200) chi giu req:requestId — URL MoMo dai hon 200. */
+USE SupermarketFlyDB;
+GO
+
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET NUMERIC_ROUNDABORT OFF;
+GO
+
+IF COL_LENGTH(N'dbo.ThanhToan', N'PayUrl') IS NULL
+    ALTER TABLE dbo.ThanhToan ADD PayUrl NVARCHAR(1000) NULL;
+GO
+
+IF COL_LENGTH(N'dbo.ThanhToan', N'QrCodeUrl') IS NULL
+    ALTER TABLE dbo.ThanhToan ADD QrCodeUrl NVARCHAR(1000) NULL;
+GO

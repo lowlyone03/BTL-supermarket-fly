@@ -1,6 +1,7 @@
 const express = require('express');
 const controller = require('../controllers/cashierController');
 const sales = require('../controllers/salesController');
+const gateway = require('../controllers/paymentGatewayController');
 const returns = require('../controllers/returnsController');
 const reportController = require('../controllers/reportController');
 const { verifyToken, requirePermission, requireAnyPermission } = require('../middlewares/authMiddleware');
@@ -25,6 +26,10 @@ router.get('/invoices', requirePermission('UC24'), sales.listInvoices);
 router.post('/invoices', requirePermission('UC24'), sales.createInvoice);
 router.get('/invoices/:id', requirePermission('UC24'), sales.getInvoice);
 router.post('/invoices/:id/cancel', requirePermission('UC24'), sales.cancelInvoice);
+router.post('/invoices/:id/payments/qr', requirePermission('UC25'), gateway.createQr);
+router.get('/invoices/:id/payments/:maTT', requirePermission('UC25'), gateway.paymentStatus);
+router.post('/invoices/:id/payments/:maTT/query', requirePermission('UC25'), gateway.queryPayment);
+router.post('/invoices/:id/payments/:maTT/fail', requirePermission('UC25'), gateway.resolvePayment);
 router.post('/invoices/:id/payments', requirePermission('UC25'), sales.addPayment);
 router.post('/invoices/:id/complete', requirePermission('UC25'), sales.completeInvoice);
 router.get('/returns/search-invoices', requirePermission('UC26'), returns.searchInvoices);

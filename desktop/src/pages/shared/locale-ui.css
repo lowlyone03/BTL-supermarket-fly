@@ -156,6 +156,9 @@
   gap: 8px;
   margin-bottom: 14px;
 }
+.pay-method-grid-p1 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 .pay-method {
   display: flex;
   flex-direction: column;

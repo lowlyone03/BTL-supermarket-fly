@@ -1,0 +1,104 @@
+PLAN MOMO TEST P1 — FINAL (gọn)
+================================
+POS P1 chỉ TIỀN MẶT | MOMO. Không Thẻ, CK, nút QR, QR thủ công.
+Ngày: 10/09/2026. Adapter: paymentGatewayService → providers/momo.js
+PAYMENT_PROVIDER=momo. Không payment.routes.js / momoController.
+
+0. Chốt nghiệp vụ
+-----------------
+UI "MoMo" → DB PhuongThuc='QR', NguonXacNhan='MoMo' → không vào két, TK 112.
+UI "Tiền mặt" → PhuongThuc='Tiền mặt' → TK 111, vào két.
+MoMo sandbox lỗi → toast, khách chuyển TM (sau khi resolve nếu đang Chờ).
+Cấm nhập mã + tick Thành công.
+
+1. Sample key — trung thực
+--------------------------
+3 mã đọc từ server/.env (local). .env.example để TRỐNG + chú thích.
+Nguồn sample công khai: github.com/momo-wallet/payment  nodejs/MoMo.js
+Đây KHÔNG phải M4B / merchant riêng của nhóm. Sandbox test-payment.momo.vn.
+CẤM hardcode secret vào repo. CẤM commit .env. CẤM payment.momo.vn (prod).
+
+2. Test App
+-----------
+Demo: MoMo Test App (developers.momo.vn/v3/download) quét QR trên modal POS.
+Gỡ app MoMo production trước. OTP/MK theo docs test-instructions.
+Return URL chỉ UX. IPN/query mới ghi sổ.
+
+3. Invariant 4.7 — INSERT rồi mới create
+----------------------------------------
+1) Kiểm HĐ Nháp + remaining + không có MoMo Chờ
+2) Sinh MaTT + orderId
+3) INSERT ThanhToan Chờ xác nhận, MaThamChieuCong=orderId
+4) COMMIT local
+5) Gọi MoMo create (HMAC captureWallet, amount ĐỒNG, không ×100)
+6) OK → trả QR / payUrl
+7) Fail RÕ (HTTP 4xx, resultCode ≠ 0, thiếu key/URL) → UPDATE đúng dòng Thất bại
+8) Không rõ (timeout, mất mạng, HTTP 5xx) → GIỮ Chờ, POS bấm Query lại
+Lý do: IPN có thể tới trước khi INSERT nếu gọi MoMo trước.
+
+4. Invariant 4.8 — tối đa 1 QR+MoMo+Chờ / HĐ
+--------------------------------------------
+Server 409 nếu còn dòng chờ. Unique filtered index UX_ThanhToan_MotQrMoMoCho.
+remaining không trừ dòng Chờ — không tin một mình công thức đó.
+"Làm mới mã" phải Query/resolve dòng cũ trước.
+
+5. Invariant 4.9 — không fail mù
+--------------------------------
+Timeout / mất mạng / hết countdown UI KHÔNG tự Thất bại.
+Chỉ fail khi query/IPN/provider xác nhận fail hoặc hết hạn.
+Chưa query được → giữ Chờ + Query lại.
+POST .../fail cũng không mù: failIfFinal, vẫn query trước.
+
+6. Invariant 4.10 / T20 — chặn addPayment khi còn MoMo Chờ
+----------------------------------------------------------
+Còn PhuongThuc=QR AND NguonXacNhan=MoMo AND TrangThai=Chờ xác nhận:
+- Mọi addPayment mới (kể cả TM) → HTTP 409, không INSERT
+- Chỉ sau Thất bại / hết hạn ĐÃ XÁC MINH mới thu TM
+Case: HĐ 100k, 80k TM thành công, 20k MoMo Chờ → POST 20k TM = 409.
+Nếu MoMo sau đó success mà đã thu thêm TM = thực thu 120k.
+
+7. Invariant 4.11 — IPN/query lặp cùng transId
+----------------------------------------------
+Không UPDATE payment lần hai.
+Nếu HĐ còn Nháp + SUM(Thành công)==TongThanhToan + không còn Chờ
+→ retry completeInvoiceInternal (idempotent, tồn trừ một lần).
+Cấm stop ở lớp payment khi HĐ chưa Hoàn thành.
+amount IPN phải == ThanhToan.SoTien. resultCode 9000 = authorized, không success.
+
+8. API
+------
+Public (app.js, TRƯỚC 404):
+  POST /api/payments/gateway/ipn     → 204 đã nhận; 500 để MoMo retry
+  GET  /api/payments/gateway/return  → HTML UX
+JWT cashierRoutes (UC25):
+  POST /api/cashier/invoices/:id/payments/qr
+  GET  /api/cashier/invoices/:id/payments/:maTT
+  POST /api/cashier/invoices/:id/payments/:maTT/query
+  POST /api/cashier/invoices/:id/payments/:maTT/fail
+
+9. DB / kế toán / ca
+--------------------
+Migration 20260910_PaymentGateway: NguonXacNhan, MaThamChieuCong,
+  unique orderId, unique 1 QR+MoMo+Chờ / HĐ.
+Idempotent: IF COL_LENGTH / IF NOT EXISTS (revert không drop cột).
+Không phá 3 cột tiền (TongTienHang, TienGiamGia, TongThanhToan).
+completeInvoiceInternal + postSaleJournals giữ.
+closeShift đã chặn còn dòng Chờ xác nhận — giữ.
+
+10. Chạy
+--------
+npm start          = API + Electron, KHÔNG bắt cloudflared
+npm run start:momo = 7_CHAY_APP_VA_TUNNEL_MOMO.bat
+  tunnel lấy https://….trycloudflare.com
+  ghi PAYMENT_IPN_URL / PAYMENT_RETURN_URL vào server/.env
+  rồi mới npm start
+Chưa tunnel: POS vẫn tạo QR; IPN không vào. Bấm Query lại sau khi khách trả.
+Test: cd server && node test-payment-gateway.js
+  (T20, amount lệch, IPN duplicate, 1 pending, INSERT-trước-create)
+
+11. Phụ lục — Plan B simulator (KHÔNG mặc định P1)
+--------------------------------------------------
+Khi sample key chết hoặc Test App không quét được:
+  PAYMENT_PROVIDER=momo_simulator (P1 hiện throw "chưa bật")
+Không thay 4.7–4.11 / T20. Không phải đường demo hội đồng nếu sample+Test App chạy.
+)

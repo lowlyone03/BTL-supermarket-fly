@@ -347,7 +347,7 @@ const getShiftSummary = async (source, maCa, lock = false) => {
         FROM HoaDon WHERE MaCa=@MaCa`);
     const pending = await next().input('MaCa', sql.VarChar, maCa).query(`
         SELECT COUNT(*) Tong FROM ThanhToan tt JOIN HoaDon hd ON hd.MaHD=tt.MaHD
-        WHERE hd.MaCa=@MaCa AND tt.TrangThai=N'Chờ xác nhận'`);
+        WHERE hd.MaCa=@MaCa AND tt.TrangThai=N'Chờ xác nhận' AND hd.TrangThai=N'Nháp'`);
     const cost = await next().input('MaCa', sql.VarChar, maCa).query(`
         SELECT COALESCE(SUM(ct.ThanhTienVon),0) GiaVon
         FROM ChiTietHoaDon ct JOIN HoaDon hd ON hd.MaHD=ct.MaHD

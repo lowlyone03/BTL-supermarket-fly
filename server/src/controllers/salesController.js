@@ -8,6 +8,11 @@ const { hasVatColumns } = require('../services/journalEngine');
 const { assertChosenRate } = require('../services/vatSales');
 const { postSaleJournals } = require('../services/accountingHooks');
 const { calendarizeRow } = require('../services/reportingPeriod');
+const {
+    assertAddPaymentAllowed,
+    findPendingMomoQr,
+    failPendingPaymentsForInvoice
+} = require('../services/paymentGatewayService');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 const POINT_EARN_UNIT = Math.max(1, Number(process.env.POINT_EARN_UNIT || 10000));
@@ -385,22 +390,66 @@ const getInvoice = async (req, res) => {
 };
 
 const cancelInvoice = async (req, res) => {
+    const transaction = new sql.Transaction(await poolPromise);
     try {
-        const pool = await poolPromise;
-        const result = await pool.request().input('MaHD', sql.VarChar, clean(req.params.id, 20))
+        const maHD = clean(req.params.id, 20);
+        const lyDo = clean(req.body.LyDo, 300) || null;
+        await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        const header = await new sql.Request(transaction)
+            .input('MaHD', sql.VarChar, maHD)
             .input('MaNV', sql.VarChar, req.user.MaNV)
-            .input('LyDo', sql.NVarChar, clean(req.body.LyDo, 300) || null).query(`
-                UPDATE HoaDon SET TrangThai=N'Đã hủy',GhiChu=@LyDo
-                WHERE MaHD=@MaHD AND MaNV=@MaNV AND TrangThai=N'Nháp'
-                  AND NOT EXISTS(SELECT 1 FROM ThanhToan WHERE MaHD=@MaHD AND TrangThai=N'Thành công');
+            .query(`
+                SELECT hd.MaHD, hd.TrangThai
+                FROM HoaDon hd WITH (UPDLOCK, HOLDLOCK)
+                WHERE hd.MaHD=@MaHD AND hd.MaNV=@MaNV`);
+        if (!header.recordset.length) {
+            await transaction.rollback();
+            return res.status(404).json({ message: 'Không tìm thấy hóa đơn.' });
+        }
+        const invoice = header.recordset[0];
+        if (invoice.TrangThai !== 'Nháp') {
+            await transaction.rollback();
+            return res.status(400).json({ message: 'Không thể hủy hóa đơn đã thanh toán hoặc không còn ở trạng thái Nháp.' });
+        }
+        const paid = await new sql.Request(transaction)
+            .input('MaHD', sql.VarChar, maHD)
+            .query(`
+                SELECT SUM(CASE WHEN TrangThai=N'Thành công' THEN 1 ELSE 0 END) DaThanhCong
+                FROM ThanhToan WITH (UPDLOCK, HOLDLOCK)
+                WHERE MaHD=@MaHD`);
+        if (Number(paid.recordset[0].DaThanhCong || 0) > 0) {
+            await transaction.rollback();
+            return res.status(400).json({ message: 'Không thể hủy hóa đơn đã thanh toán hoặc không còn ở trạng thái Nháp.' });
+        }
+        const clearedPending = await failPendingPaymentsForInvoice(
+            transaction,
+            maHD,
+            'Hủy nháp hóa đơn — không ghi sổ'
+        );
+        const updated = await new sql.Request(transaction)
+            .input('MaHD', sql.VarChar, maHD)
+            .input('MaNV', sql.VarChar, req.user.MaNV)
+            .input('LyDo', sql.NVarChar, lyDo)
+            .query(`
+                UPDATE HoaDon SET TrangThai=N'Đã hủy', GhiChu=@LyDo
+                WHERE MaHD=@MaHD AND MaNV=@MaNV AND TrangThai=N'Nháp';
                 SELECT @@ROWCOUNT affected;`);
-        if (!result.recordset[0].affected) return res.status(400).json({ message: 'Không thể hủy hóa đơn đã thanh toán hoặc không còn ở trạng thái Nháp.' });
-        await logAudit(pool, {
-            user: req.user, req, action: 'Hủy hóa đơn nháp', table: 'HoaDon', recordId: req.params.id, uc: 'UC24',
-            severity: 'Cảnh báo', content: req.body.LyDo ? `Lý do: ${clean(req.body.LyDo, 300)}` : 'Hủy hóa đơn nháp, tiền và tồn không đổi.'
+        if (!updated.recordset[0].affected) {
+            await transaction.rollback();
+            return res.status(400).json({ message: 'Không thể hủy hóa đơn đã thanh toán hoặc không còn ở trạng thái Nháp.' });
+        }
+        await logAudit(transaction, {
+            user: req.user, req, action: 'Hủy hóa đơn nháp', table: 'HoaDon', recordId: maHD, uc: 'UC24',
+            severity: 'Cảnh báo',
+            content: `${lyDo ? `Lý do: ${lyDo}. ` : ''}Hủy nháp, tiền và tồn không đổi.${clearedPending ? ` Đã hủy ${clearedPending} thanh toán chờ.` : ''}`
         });
-        res.json({ message: 'Đã hủy hóa đơn nháp.' });
+        await transaction.commit();
+        const message = clearedPending
+            ? `Đã hủy hóa đơn nháp và ${clearedPending} thanh toán đang chờ. Không ghi sổ / không trừ kho. Có thể đóng ca.`
+            : 'Đã hủy hóa đơn nháp.';
+        res.json({ message, MaHD: maHD, clearedPending });
     } catch (error) {
+        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         res.status(400).json({ message: error.message });
     }
 };
@@ -413,6 +462,7 @@ const addPayment = async (req, res) => {
         const status = clean(req.body.TrangThai, 20) || 'Thành công';
         const transactionCode = clean(req.body.MaGiaoDich, 50) || null;
         if (!['Tiền mặt', 'QR', 'Thẻ', 'Chuyển khoản'].includes(method)) throw new Error('Phương thức thanh toán không hợp lệ.');
+        if (method === 'Thẻ' || method === 'Chuyển khoản') throw Object.assign(new Error('P1 chỉ thu Tiền mặt hoặc MoMo.'), { status: 400 });
         if (!Number.isFinite(amount) || amount <= 0) throw new Error('Số tiền thanh toán phải lớn hơn 0.');
         if (!['Thành công', 'Thất bại'].includes(status)) throw new Error('Trạng thái thanh toán không hợp lệ.');
         if (method !== 'Tiền mặt' && status === 'Thành công' && !transactionCode) throw new Error('Thanh toán điện tử thành công phải có mã giao dịch.');
@@ -424,6 +474,8 @@ const addPayment = async (req, res) => {
                 JOIN CaLamViec ca ON ca.MaCa=hd.MaCa
                 WHERE hd.MaHD=@MaHD AND hd.MaNV=@MaNV AND hd.TrangThai=N'Nháp' AND ca.TrangThai=N'Đang mở'`);
         if (!invoice.recordset.length) throw new Error('Hóa đơn không còn khả dụng để thanh toán.');
+        const pendingMomo = await findPendingMomoQr(transaction, req.params.id);
+        assertAddPaymentAllowed(pendingMomo, { status, method });
         const paid = await new sql.Request(transaction).input('MaHD', sql.VarChar, req.params.id).query(`
             SELECT COALESCE(SUM(SoTien),0) DaThanhToan FROM ThanhToan WITH(UPDLOCK,HOLDLOCK)
             WHERE MaHD=@MaHD AND TrangThai=N'Thành công'`);
@@ -435,10 +487,11 @@ const addPayment = async (req, res) => {
         await new sql.Request(transaction).input('MaTT', sql.VarChar, maTT)
             .input('MaHD', sql.VarChar, req.params.id).input('PhuongThuc', sql.NVarChar, method)
             .input('MaGiaoDich', sql.VarChar, transactionCode).input('SoTien', sql.Decimal(18, 2), amount)
-            .input('TrangThai', sql.NVarChar, status).query(`
-                INSERT ThanhToan(MaTT,MaHD,PhuongThuc,MaGiaoDich,SoTien,NgayTT,TrangThai,NgayXacNhan)
+            .input('TrangThai', sql.NVarChar, status)
+            .input('NguonXacNhan', sql.NVarChar, 'ThuCong').query(`
+                INSERT ThanhToan(MaTT,MaHD,PhuongThuc,MaGiaoDich,SoTien,NgayTT,TrangThai,NgayXacNhan,NguonXacNhan)
                 VALUES(@MaTT,@MaHD,@PhuongThuc,@MaGiaoDich,@SoTien,GETDATE(),@TrangThai,
-                    CASE WHEN @TrangThai IN(N'Thành công',N'Thất bại') THEN GETDATE() END)`);
+                    CASE WHEN @TrangThai IN(N'Thành công',N'Thất bại') THEN GETDATE() END,@NguonXacNhan)`);
         await logAudit(transaction, {
             user: req.user, req, action: 'Thu tiền hóa đơn', table: 'HoaDon', recordId: req.params.id, uc: 'UC25',
             result: status === 'Thành công' ? 'Thành công' : 'Thất bại',
@@ -454,85 +507,119 @@ const addPayment = async (req, res) => {
     }
 };
 
+const completeInvoiceInternal = async (transaction, {
+    maHD,
+    actorMaNV,
+    user,
+    req,
+    requireOwnerShift = true,
+    auditNote = ''
+}) => {
+    if (requireOwnerShift) {
+        await getActiveShift(transaction, actorMaNV, true);
+    }
+    const invoiceQuery = new sql.Request(transaction).input('MaHD', sql.VarChar, clean(maHD, 20));
+    if (requireOwnerShift) invoiceQuery.input('MaNV', sql.VarChar, actorMaNV);
+    const invoiceResult = await invoiceQuery.query(`
+        SELECT hd.* FROM HoaDon hd WITH(UPDLOCK,HOLDLOCK)
+        JOIN CaLamViec ca WITH(UPDLOCK,HOLDLOCK) ON ca.MaCa=hd.MaCa
+        WHERE hd.MaHD=@MaHD
+          ${requireOwnerShift ? 'AND hd.MaNV=@MaNV AND ca.TrangThai=N\'Đang mở\'' : ''}`);
+    if (!invoiceResult.recordset.length) {
+        throw new Error(requireOwnerShift
+            ? 'Hóa đơn không thuộc ca đang mở của bạn.'
+            : 'Không tìm thấy hóa đơn để hoàn thành.');
+    }
+    const invoice = invoiceResult.recordset[0];
+    if (invoice.TrangThai === 'Hoàn thành') {
+        return { alreadyCompleted: true, completed: true, MaHD: invoice.MaHD, DiemCong: invoice.DiemCong };
+    }
+    if (invoice.TrangThai !== 'Nháp') throw new Error('Chỉ hóa đơn Nháp mới được hoàn thành.');
+    const payments = await new sql.Request(transaction).input('MaHD', sql.VarChar, invoice.MaHD).query(`
+        SELECT COALESCE(SUM(CASE WHEN TrangThai=N'Thành công' THEN SoTien ELSE 0 END),0) DaThanhToan,
+               SUM(CASE WHEN TrangThai=N'Chờ xác nhận' THEN 1 ELSE 0 END) DangCho
+        FROM ThanhToan WITH(UPDLOCK,HOLDLOCK) WHERE MaHD=@MaHD`);
+    if (Number(payments.recordset[0].DangCho || 0) > 0) throw new Error('Hóa đơn còn thanh toán chờ xác nhận.');
+    if (Math.round(Number(payments.recordset[0].DaThanhToan)) !== Math.round(Number(invoice.TongThanhToan))) {
+        throw new Error(`Khách phải thanh toán đủ ${Number(invoice.TongThanhToan).toLocaleString('vi-VN')} đồng.`);
+    }
+    const lines = await new sql.Request(transaction).input('MaHD', sql.VarChar, invoice.MaHD)
+        .input('MaKho', sql.VarChar, invoice.MaKho).query(`
+        SELECT ct.MaSP,ct.SoLuong,tk.SLTon,tk.DonGiaBinhQuan,tk.MaKho,sp.TenSP
+        FROM ChiTietHoaDon ct
+        JOIN SanPham sp ON sp.MaSP=ct.MaSP
+        JOIN TonKho tk WITH(UPDLOCK,HOLDLOCK) ON tk.MaSP=ct.MaSP AND tk.MaKho=@MaKho
+        WHERE ct.MaHD=@MaHD ORDER BY ct.MaSP`);
+    if (!lines.recordset.length) throw new Error('Hóa đơn không có dòng hàng.');
+    const stockMaNV = actorMaNV || invoice.MaNV;
+    for (let index = 0; index < lines.recordset.length; index += 1) {
+        const line = lines.recordset[index];
+        if (Number(line.SLTon) < Number(line.SoLuong)) throw new Error(`${line.TenSP} không đủ tồn để hoàn thành.`);
+        const cost = Number(line.DonGiaBinhQuan || 0);
+        await new sql.Request(transaction).input('MaHD', sql.VarChar, invoice.MaHD)
+            .input('MaSP', sql.VarChar, line.MaSP).input('DonGiaVon', sql.Decimal(18, 2), cost)
+            .input('ThanhTienVon', sql.Decimal(18, 2), cost * Number(line.SoLuong)).query(`
+                UPDATE ChiTietHoaDon SET DonGiaVon=@DonGiaVon,ThanhTienVon=@ThanhTienVon
+                WHERE MaHD=@MaHD AND MaSP=@MaSP`);
+        await new sql.Request(transaction).input('MaKho', sql.VarChar, invoice.MaKho)
+            .input('MaSP', sql.VarChar, line.MaSP).input('SoLuong', sql.Int, line.SoLuong)
+            .query(`UPDATE TonKho SET SLTon=SLTon-@SoLuong,GiaTriTon=(SLTon-@SoLuong)*DonGiaBinhQuan,NgayCapNhat=GETDATE()
+                    WHERE MaKho=@MaKho AND MaSP=@MaSP AND SLTon>=@SoLuong`);
+        const maGD = `GD${Date.now()}${String(index).padStart(2, '0')}`.slice(0, 20);
+        await new sql.Request(transaction).input('MaGD', sql.VarChar, maGD)
+            .input('MaKho', sql.VarChar, invoice.MaKho).input('MaSP', sql.VarChar, line.MaSP)
+            .input('MaNV', sql.VarChar, stockMaNV).input('SoLuong', sql.Int, -Number(line.SoLuong))
+            .input('DonGiaVon', sql.Decimal(18, 2), cost)
+            .input('ThanhTienVon', sql.Decimal(18, 2), cost * Number(line.SoLuong))
+            .input('MaHD', sql.VarChar, invoice.MaHD).query(`
+                INSERT GiaoDichKho(MaGD,MaKho,MaSP,MaNV,LoaiGD,SoLuong,DonGiaVon,ThanhTienVon,LoaiChungTu,MaChungTu,NgayGD,GhiChu)
+                VALUES(@MaGD,@MaKho,@MaSP,@MaNV,N'Xuất',@SoLuong,@DonGiaVon,@ThanhTienVon,N'HoaDon',@MaHD,GETDATE(),N'Xuất bán tại quầy')`);
+    }
+    const diemCong = invoice.MaKH ? Math.floor(Number(invoice.TongThanhToan) / POINT_EARN_UNIT) : 0;
+    await new sql.Request(transaction).input('MaHD', sql.VarChar, invoice.MaHD).input('DiemCong', sql.Int, diemCong)
+        .query(`UPDATE HoaDon SET TrangThai=N'Hoàn thành',DiemCong=@DiemCong WHERE MaHD=@MaHD`);
+    if (invoice.MaKH) {
+        await new sql.Request(transaction).input('MaKH', sql.VarChar, invoice.MaKH)
+            .input('DiemSuDung', sql.Int, invoice.DiemSuDung).input('DiemCong', sql.Int, diemCong)
+            .query(`UPDATE KhachHang SET
+                        DiemTichLuy=DiemTichLuy-@DiemSuDung+@DiemCong,
+                        HangThanhVien=CASE
+                            WHEN DiemTichLuy-@DiemSuDung+@DiemCong>=500 THEN N'Vàng'
+                            WHEN DiemTichLuy-@DiemSuDung+@DiemCong>=100 THEN N'Bạc'
+                            ELSE N'Thường' END
+                    WHERE MaKH=@MaKH`);
+    }
+    const actor = user || { MaNV: stockMaNV, TenDangNhap: 'momo-gateway' };
+    const note = auditNote
+        ? `${auditNote}. Đã thu đủ ${Number(invoice.TongThanhToan).toLocaleString('vi-VN')}đ; tồn kho đã trừ; ghi doanh thu ca.`
+        : `Đã thu đủ ${Number(invoice.TongThanhToan).toLocaleString('vi-VN')}đ; tồn kho đã trừ; ghi doanh thu ca.`;
+    await logAudit(transaction, {
+        user: actor, req, action: 'Hoàn thành hóa đơn bán hàng', table: 'HoaDon', recordId: invoice.MaHD,
+        uc: 'UC25', severity: 'Quan trọng',
+        content: note,
+        after: { MaHD: invoice.MaHD, TongThanhToan: invoice.TongThanhToan, TrangThai: 'Hoàn thành' }
+    });
+    await postSaleJournals(transaction, { maHD: invoice.MaHD, maNV: stockMaNV, user: actor });
+    return { alreadyCompleted: false, completed: true, MaHD: invoice.MaHD, DiemCong: diemCong };
+};
+
 const completeInvoice = async (req, res) => {
     const transaction = new sql.Transaction(await poolPromise);
     try {
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
-        await getActiveShift(transaction, req.user.MaNV, true);
-        const invoiceResult = await new sql.Request(transaction).input('MaHD', sql.VarChar, clean(req.params.id, 20))
-            .input('MaNV', sql.VarChar, req.user.MaNV).query(`
-                SELECT hd.* FROM HoaDon hd WITH(UPDLOCK,HOLDLOCK)
-                JOIN CaLamViec ca WITH(UPDLOCK,HOLDLOCK) ON ca.MaCa=hd.MaCa
-                WHERE hd.MaHD=@MaHD AND hd.MaNV=@MaNV AND ca.TrangThai=N'Đang mở'`);
-        if (!invoiceResult.recordset.length) throw new Error('Hóa đơn không thuộc ca đang mở của bạn.');
-        const invoice = invoiceResult.recordset[0];
-        if (invoice.TrangThai === 'Hoàn thành') {
-            await transaction.rollback();
-            return res.json({ message: 'Hóa đơn đã hoàn thành trước đó.', MaHD: invoice.MaHD, alreadyCompleted: true });
-        }
-        if (invoice.TrangThai !== 'Nháp') throw new Error('Chỉ hóa đơn Nháp mới được hoàn thành.');
-        const payments = await new sql.Request(transaction).input('MaHD', sql.VarChar, invoice.MaHD).query(`
-            SELECT COALESCE(SUM(CASE WHEN TrangThai=N'Thành công' THEN SoTien ELSE 0 END),0) DaThanhToan,
-                   SUM(CASE WHEN TrangThai=N'Chờ xác nhận' THEN 1 ELSE 0 END) DangCho
-            FROM ThanhToan WITH(UPDLOCK,HOLDLOCK) WHERE MaHD=@MaHD`);
-        if (Number(payments.recordset[0].DangCho || 0) > 0) throw new Error('Hóa đơn còn thanh toán chờ xác nhận.');
-        if (Math.round(Number(payments.recordset[0].DaThanhToan)) !== Math.round(Number(invoice.TongThanhToan))) {
-            throw new Error(`Khách phải thanh toán đủ ${Number(invoice.TongThanhToan).toLocaleString('vi-VN')} đồng.`);
-        }
-        const lines = await new sql.Request(transaction).input('MaHD', sql.VarChar, invoice.MaHD)
-            .input('MaKho', sql.VarChar, invoice.MaKho).query(`
-            SELECT ct.MaSP,ct.SoLuong,tk.SLTon,tk.DonGiaBinhQuan,tk.MaKho,sp.TenSP
-            FROM ChiTietHoaDon ct
-            JOIN SanPham sp ON sp.MaSP=ct.MaSP
-            JOIN TonKho tk WITH(UPDLOCK,HOLDLOCK) ON tk.MaSP=ct.MaSP AND tk.MaKho=@MaKho
-            WHERE ct.MaHD=@MaHD ORDER BY ct.MaSP`);
-        if (!lines.recordset.length) throw new Error('Hóa đơn không có dòng hàng.');
-        for (let index = 0; index < lines.recordset.length; index += 1) {
-            const line = lines.recordset[index];
-            if (Number(line.SLTon) < Number(line.SoLuong)) throw new Error(`${line.TenSP} không đủ tồn để hoàn thành.`);
-            const cost = Number(line.DonGiaBinhQuan || 0);
-            await new sql.Request(transaction).input('MaHD', sql.VarChar, invoice.MaHD)
-                .input('MaSP', sql.VarChar, line.MaSP).input('DonGiaVon', sql.Decimal(18, 2), cost)
-                .input('ThanhTienVon', sql.Decimal(18, 2), cost * Number(line.SoLuong)).query(`
-                    UPDATE ChiTietHoaDon SET DonGiaVon=@DonGiaVon,ThanhTienVon=@ThanhTienVon
-                    WHERE MaHD=@MaHD AND MaSP=@MaSP`);
-            await new sql.Request(transaction).input('MaKho', sql.VarChar, invoice.MaKho)
-                .input('MaSP', sql.VarChar, line.MaSP).input('SoLuong', sql.Int, line.SoLuong)
-                .query(`UPDATE TonKho SET SLTon=SLTon-@SoLuong,GiaTriTon=(SLTon-@SoLuong)*DonGiaBinhQuan,NgayCapNhat=GETDATE()
-                        WHERE MaKho=@MaKho AND MaSP=@MaSP AND SLTon>=@SoLuong`);
-            const maGD = `GD${Date.now()}${String(index).padStart(2, '0')}`.slice(0, 20);
-            await new sql.Request(transaction).input('MaGD', sql.VarChar, maGD)
-                .input('MaKho', sql.VarChar, invoice.MaKho).input('MaSP', sql.VarChar, line.MaSP)
-                .input('MaNV', sql.VarChar, req.user.MaNV).input('SoLuong', sql.Int, -Number(line.SoLuong))
-                .input('DonGiaVon', sql.Decimal(18, 2), cost)
-                .input('ThanhTienVon', sql.Decimal(18, 2), cost * Number(line.SoLuong))
-                .input('MaHD', sql.VarChar, invoice.MaHD).query(`
-                    INSERT GiaoDichKho(MaGD,MaKho,MaSP,MaNV,LoaiGD,SoLuong,DonGiaVon,ThanhTienVon,LoaiChungTu,MaChungTu,NgayGD,GhiChu)
-                    VALUES(@MaGD,@MaKho,@MaSP,@MaNV,N'Xuất',@SoLuong,@DonGiaVon,@ThanhTienVon,N'HoaDon',@MaHD,GETDATE(),N'Xuất bán tại quầy')`);
-        }
-        const diemCong = invoice.MaKH ? Math.floor(Number(invoice.TongThanhToan) / POINT_EARN_UNIT) : 0;
-        await new sql.Request(transaction).input('MaHD', sql.VarChar, invoice.MaHD).input('DiemCong', sql.Int, diemCong)
-            .query(`UPDATE HoaDon SET TrangThai=N'Hoàn thành',DiemCong=@DiemCong WHERE MaHD=@MaHD`);
-        if (invoice.MaKH) {
-            await new sql.Request(transaction).input('MaKH', sql.VarChar, invoice.MaKH)
-                .input('DiemSuDung', sql.Int, invoice.DiemSuDung).input('DiemCong', sql.Int, diemCong)
-                .query(`UPDATE KhachHang SET
-                            DiemTichLuy=DiemTichLuy-@DiemSuDung+@DiemCong,
-                            HangThanhVien=CASE
-                                WHEN DiemTichLuy-@DiemSuDung+@DiemCong>=500 THEN N'Vàng'
-                                WHEN DiemTichLuy-@DiemSuDung+@DiemCong>=100 THEN N'Bạc'
-                                ELSE N'Thường' END
-                        WHERE MaKH=@MaKH`);
-        }
-        await logAudit(transaction, {
-            user: req.user, req, action: 'Hoàn thành hóa đơn bán hàng', table: 'HoaDon', recordId: invoice.MaHD,
-            uc: 'UC25', severity: 'Quan trọng',
-            content: `Đã thu đủ ${Number(invoice.TongThanhToan).toLocaleString('vi-VN')}đ; tồn kho đã trừ; ghi doanh thu ca.`,
-            after: { MaHD: invoice.MaHD, TongThanhToan: invoice.TongThanhToan, TrangThai: 'Hoàn thành' }
+        const result = await completeInvoiceInternal(transaction, {
+            maHD: clean(req.params.id, 20),
+            actorMaNV: req.user.MaNV,
+            user: req.user,
+            req,
+            requireOwnerShift: true
         });
-        await postSaleJournals(transaction, { maHD: invoice.MaHD, maNV: req.user.MaNV, user: req.user });
+        if (result.alreadyCompleted) {
+            await transaction.rollback();
+            return res.json({ message: 'Hóa đơn đã hoàn thành trước đó.', MaHD: result.MaHD, alreadyCompleted: true });
+        }
         await transaction.commit();
-        res.json({ message: `Hóa đơn ${invoice.MaHD} đã hoàn thành.`, MaHD: invoice.MaHD, DiemCong: diemCong });
+        res.json({ message: `Hóa đơn ${result.MaHD} đã hoàn thành.`, MaHD: result.MaHD, DiemCong: result.DiemCong });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);
@@ -542,6 +629,7 @@ const completeInvoice = async (req, res) => {
 
 module.exports = {
     getCatalog, listCustomers, saveCustomer, updateCustomer, listInvoices, quoteInvoice,
-    createInvoice, getInvoice, cancelInvoice, addPayment, completeInvoice,
+    createInvoice, getInvoice, cancelInvoice, addPayment, completeInvoice, completeInvoiceInternal,
+    generateId, getActiveShift, findPendingMomoQr, assertAddPaymentAllowed,
     invoiceListMatchSql, resolveInvoiceListScope
 };

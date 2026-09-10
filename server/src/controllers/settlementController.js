@@ -62,10 +62,21 @@ const getShift = async (req, res) => {
         const [invoices, payments] = await Promise.all([
             pool.request().input('MaCa', sql.VarChar, maCa).query(`
                 SELECT MaHD,NgayLap,TongThanhToan,TrangThai FROM HoaDon WHERE MaCa=@MaCa ORDER BY NgayLap`),
-            pool.request().input('MaCa', sql.VarChar, maCa).query(`
-                SELECT tt.MaTT,tt.MaHD,tt.PhuongThuc,tt.MaGiaoDich,tt.SoTien,tt.TrangThai,tt.NgayTT
-                FROM ThanhToan tt JOIN HoaDon hd ON hd.MaHD=tt.MaHD
-                WHERE hd.MaCa=@MaCa ORDER BY tt.NgayTT`)
+            (async () => {
+                try {
+                    return await pool.request().input('MaCa', sql.VarChar, maCa).query(`
+                        SELECT tt.MaTT,tt.MaHD,tt.PhuongThuc,tt.MaGiaoDich,tt.SoTien,tt.TrangThai,tt.NgayTT,
+                               tt.NguonXacNhan,tt.NgayXacNhan,tt.MaThamChieuCong
+                        FROM ThanhToan tt JOIN HoaDon hd ON hd.MaHD=tt.MaHD
+                        WHERE hd.MaCa=@MaCa ORDER BY tt.NgayTT`);
+                } catch (error) {
+                    if (!/Invalid column name|NguonXacNhan|MaThamChieuCong/i.test(error.message || '')) throw error;
+                    return pool.request().input('MaCa', sql.VarChar, maCa).query(`
+                        SELECT tt.MaTT,tt.MaHD,tt.PhuongThuc,tt.MaGiaoDich,tt.SoTien,tt.TrangThai,tt.NgayTT
+                        FROM ThanhToan tt JOIN HoaDon hd ON hd.MaHD=tt.MaHD
+                        WHERE hd.MaCa=@MaCa ORDER BY tt.NgayTT`);
+                }
+            })()
         ]);
         let refunds = [];
         try {

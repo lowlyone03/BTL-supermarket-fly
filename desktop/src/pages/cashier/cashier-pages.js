@@ -72,6 +72,7 @@
   const statusClass = status => ({
     'Đang mở': 'ok', 'Hoàn thành': 'ok', 'Nháp': 'draft', 'Đã hủy': 'cancelled', 'Thành công': 'ok',
     'Thất bại': 'cancelled', 'Chờ kiểm tra': 'sent', 'Chờ duyệt': 'sent', 'Đã duyệt': 'ok', 'Từ chối': 'cancelled',
+    'Chờ xác nhận': 'sent',
     'Đang đổi trả': 'sent', 'Hoàn một phần': 'returned', 'Đã hoàn hết': 'cancelled', 'Đã đổi hàng': 'returned',
     'Đổi và hoàn': 'returned', 'Có đổi trả': 'returned'
   }[status] || 'draft');
@@ -602,8 +603,8 @@
       });
       root.querySelector('#cancelDraft')?.addEventListener('click', async () => {
         try {
-          await api(context, `/cashier/invoices/${draftId}/cancel`, { method: 'POST', body: JSON.stringify({ LyDo: 'Hủy hóa đơn nháp tại quầy' }) });
-          draftId = null; context.showToast('Đã hủy hóa đơn nháp.', 'success'); render();
+          const result = await api(context, `/cashier/invoices/${draftId}/cancel`, { method: 'POST', body: JSON.stringify({ LyDo: 'Hủy hóa đơn nháp tại quầy' }) });
+          draftId = null; context.showToast(result.message || 'Đã hủy hóa đơn nháp.', 'success'); render();
         } catch (error) { context.showToast(error.message, 'error'); }
       });
       root.querySelector('#checkout')?.addEventListener('click', () => openPayment());
@@ -617,8 +618,18 @@
           const detail = await api(context, `/cashier/invoices/${draftId}`);
           const invoiceTotal = Math.round(Number(detail.invoice.TongThanhToan));
           if (invoiceTotal !== Math.round(cartTotal()) || detail.invoice.TrangThai !== 'Nháp') {
-            await api(context, `/cashier/invoices/${draftId}/cancel`, { method: 'POST', body: JSON.stringify({ LyDo: 'Làm lại hóa đơn trước khi thanh toán' }) });
-            draftId = null; quote = null;
+            const hasPaid = (detail.payments || []).some(item => item.TrangThai === 'Thành công' || item.TrangThai === 'Chờ xác nhận');
+            if (hasPaid) {
+              quote = {
+                TongTienHang: Number(detail.invoice.TongTienHang),
+                TienGiamGia: Number(detail.invoice.TienGiamGia),
+                TienDiemQuyDoi: Number(detail.invoice.TienDiemQuyDoi),
+                TongThanhToan: invoiceTotal
+              };
+            } else {
+              await api(context, `/cashier/invoices/${draftId}/cancel`, { method: 'POST', body: JSON.stringify({ LyDo: 'Làm lại hóa đơn trước khi thanh toán' }) });
+              draftId = null; quote = null;
+            }
           } else {
             quote = {
               TongTienHang: Number(detail.invoice.TongTienHang),
@@ -633,80 +644,238 @@
       const payable = payableAmount();
       if (payable <= 0) return context.showToast('Số tiền phải thanh toán không hợp lệ.', 'error');
       const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
-      overlay.innerHTML = `<div class="warehouse-modal cashier-payment-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">THANH TOÁN ĐỦ · NHIỀU PHƯƠNG THỨC</p><h2>${money(payable)}</h2></div><button type="button" class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="pay-method-grid"><button type="button" class="pay-method active" data-method="Tiền mặt"><svg><use href="#i-cash"/></svg><small>Tiền mặt</small></button><button type="button" class="pay-method" data-method="QR"><svg><use href="#i-qr"/></svg><small>QR</small></button><button type="button" class="pay-method" data-method="Thẻ"><svg><use href="#i-card"/></svg><small>Thẻ</small></button><button type="button" class="pay-method" data-method="Chuyển khoản"><svg><use href="#i-bank"/></svg><small>Chuyển khoản</small></button></div><div class="cashier-payment-head"><span>Phương thức</span><span>Số tiền</span><span>Mã giao dịch điện tử</span><span>Kết quả</span><span></span></div><div id="paymentRows"></div><button type="button" class="warehouse-secondary" id="addPaymentRow">+ Thêm phương thức (tiền mặt + CK/QR/thẻ)</button><p id="paymentRemain" class="cashier-payment-help"></p></div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Hủy</button><button type="button" class="warehouse-primary" id="confirmPayment">Hoàn thành &amp; in hóa đơn</button></div></div>`;
+      overlay.innerHTML = `<div class="warehouse-modal cashier-payment-modal cashier-payment-p1"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">THANH TOÁN · TIỀN MẶT + MOMO</p><h2>${money(payable)}</h2></div><button type="button" class="warehouse-icon-button close" aria-label="Đóng">×</button></div><div class="warehouse-modal-body"><div class="cashier-momo-banner"><strong>MoMo sandbox / Test App</strong><span>Không dùng app MoMo thật. POS không bấm Thành công giúp khách. Còn MoMo chờ thì phải Query/resolve trước khi thu tiền mặt.</span></div><div class="pay-method-grid pay-method-grid-p1"><button type="button" class="pay-method active" id="payCashBtn" data-method="Tiền mặt"><svg><use href="#i-cash"/></svg><small>Tiền mặt</small></button><button type="button" class="pay-method" id="payMomoBtn" data-method="MoMo"><svg><use href="#i-qr"/></svg><small>MoMo</small></button></div><p id="paymentRemain" class="cashier-payment-help"></p><div id="paymentList" class="cashier-payment-list"></div><div id="cashPanel" class="cashier-cash-panel"><label>Số tiền mặt<input id="cashAmount" type="number" min="1" step="1000"></label><button type="button" class="warehouse-primary" id="collectCash">Thu tiền mặt</button></div><div id="momoPanel" class="cashier-momo-panel" hidden><p class="cashier-momo-hint">Mở app MoMo Test (không phải app MoMo thật) → Quét mã. POS không bấm Thành công giúp khách.</p><div class="cashier-momo-qr-wrap"><img id="momoQr" alt="Mã QR MoMo Test" hidden><img id="momoPayUrlQr" alt="QR payUrl" hidden></div><p id="momoStatus" class="cashier-payment-help"></p><div class="cashier-momo-actions"><button type="button" class="warehouse-secondary" id="momoQuery">Query lại</button><button type="button" class="warehouse-secondary" id="momoRefresh">Làm mới mã</button><button type="button" class="warehouse-secondary" id="momoOpenApp">Mở bằng Test App</button><button type="button" class="warehouse-secondary" id="momoOpenPay">Mở trang thanh toán</button></div></div></div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Đóng</button></div></div>`;
       document.body.appendChild(overlay);
-      const rows = overlay.querySelector('#paymentRows');
-      const syncRemain = () => {
-        const successTotal = [...rows.querySelectorAll('.cashier-payment-row')].reduce((sum, row) => {
-          if (row.querySelector('.pay-status').value !== 'Thành công') return sum;
-          return sum + (Number(row.querySelector('.amount').value) || 0);
-        }, 0);
-        const remain = Math.round(payable - successTotal);
-        overlay.querySelector('#paymentRemain').innerHTML = remain === 0
-          ? `Đã đủ ${money(payable)}. Tiền mặt vào két ca; CK/QR/thẻ không vào két.`
-          : remain > 0
-            ? `Còn phải thu <strong>${money(remain)}</strong>. Có thể thêm dòng chuyển khoản hoặc tiền mặt.`
-            : `Tổng thành công đang vượt ${money(-remain)}.`;
+      let invoiceId = draftId;
+      let pollTimer = null;
+      let momoRow = null;
+      const methodLabel = item => item.PhuongThuc === 'QR' && item.NguonXacNhan === 'MoMo' ? 'MoMo' : item.PhuongThuc;
+      const successPaid = payments => Math.round((payments || []).filter(item => item.TrangThai === 'Thành công').reduce((sum, item) => sum + Number(item.SoTien || 0), 0));
+      const pendingMomo = payments => (payments || []).find(item => item.PhuongThuc === 'QR' && item.NguonXacNhan === 'MoMo' && item.TrangThai === 'Chờ xác nhận');
+      const finishSale = async (detail) => {
+        clearInterval(pollTimer);
+        printInvoice(detail);
+        cart = new Map(); customer = null; maKM = ''; diemSuDung = 0; quote = null; draftId = null;
+        overlay.remove(); render();
+        context.showToast(`Đã hoàn thành hóa đơn ${detail.invoice.MaHD}.`, 'success');
       };
-      const addRow = (amount = '', method = 'Tiền mặt') => {
-        const row = document.createElement('div'); row.className = 'cashier-payment-row cashier-payment-row-full';
-        row.innerHTML = `<select class="method"><option${method === 'Tiền mặt' ? ' selected' : ''}>Tiền mặt</option><option${method === 'QR' ? ' selected' : ''}>QR</option><option${method === 'Thẻ' ? ' selected' : ''}>Thẻ</option><option${method === 'Chuyển khoản' ? ' selected' : ''}>Chuyển khoản</option></select><input class="amount" type="number" min="1" step="1000" value="${amount}"><input class="code" placeholder="Bắt buộc nếu không phải tiền mặt"><select class="pay-status"><option>Thành công</option><option>Thất bại</option></select><button type="button" class="warehouse-icon-button remove">×</button>`;
-        rows.appendChild(row);
-        row.querySelector('.remove').addEventListener('click', () => { row.remove(); syncRemain(); });
-        row.querySelector('.amount').addEventListener('input', syncRemain);
-        row.querySelector('.pay-status').addEventListener('change', syncRemain);
+      const ensureInvoice = async () => {
+        if (invoiceId) return invoiceId;
+        const invoice = await api(context, '/cashier/invoices', { method: 'POST', body: JSON.stringify({ MaKH: customer?.MaKH || null, MaKM: maKM || null, DiemSuDung: Number(diemSuDung) || 0, lines: linesPayload() }) });
+        invoiceId = invoice.MaHD;
+        draftId = invoiceId;
+        return invoiceId;
       };
-      addRow(payable, 'Tiền mặt');
-      overlay.querySelectorAll('.pay-method').forEach(button => button.addEventListener('click', () => {
-        overlay.querySelectorAll('.pay-method').forEach(item => item.classList.toggle('active', item === button));
-        const row = rows.querySelector('.cashier-payment-row');
-        if (row) row.querySelector('.method').value = button.dataset.method;
-      }));
-      overlay.querySelector('#addPaymentRow').addEventListener('click', () => {
-        const successTotal = [...rows.querySelectorAll('.cashier-payment-row')].reduce((sum, row) => row.querySelector('.pay-status').value === 'Thành công' ? sum + (Number(row.querySelector('.amount').value) || 0) : sum, 0);
-        addRow(Math.max(0, Math.round(payable - successTotal)) || '', 'Chuyển khoản');
-        syncRemain();
-      });
-      syncRemain();
-      overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', () => overlay.remove()));
-      overlay.querySelector('#confirmPayment').addEventListener('click', async () => {
-        const confirmBtn = overlay.querySelector('#confirmPayment');
-        if (confirmBtn.disabled) return;
-        const payments = [...rows.querySelectorAll('.cashier-payment-row')].map(row => ({
-          PhuongThuc: row.querySelector('.method').value,
-          SoTien: Number(row.querySelector('.amount').value),
-          MaGiaoDich: row.querySelector('.code').value.trim() || null,
-          TrangThai: row.querySelector('.pay-status').value
-        })).filter(item => Number.isFinite(item.SoTien) && item.SoTien > 0);
-        const successTotal = Math.round(payments.filter(item => item.TrangThai === 'Thành công').reduce((sum, item) => sum + item.SoTien, 0));
-        if (successTotal !== payable) return context.showToast('Tổng thanh toán thành công chưa bằng tiền hóa đơn.', 'error');
-        if (payments.some(item => item.TrangThai === 'Thành công' && item.PhuongThuc !== 'Tiền mặt' && !item.MaGiaoDich)) {
-          return context.showToast('Thanh toán điện tử thành công phải có mã giao dịch.', 'error');
+      const paint = (detail) => {
+        const payments = detail.payments || [];
+        const remain = Math.max(0, Math.round(Number(detail.invoice.TongThanhToan) - successPaid(payments)));
+        const waiting = pendingMomo(payments);
+        overlay.querySelector('#paymentRemain').innerHTML = remain === 0 && !waiting
+          ? `Đã đủ ${money(detail.invoice.TongThanhToan)}. Tiền mặt vào két; MoMo (QR) không vào két.`
+          : waiting
+            ? `Còn MoMo <strong>${money(waiting.SoTien)}</strong> đang chờ. Query/resolve trước khi thu thêm tiền mặt.`
+            : `Còn phải thu <strong>${money(remain)}</strong>.`;
+        overlay.querySelector('#paymentList').innerHTML = payments.length
+          ? payments.map(item => `<div class="cashier-pay-chip"><strong>${esc(methodLabel(item))}</strong> ${money(item.SoTien)} <span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></div>`).join('')
+          : '<p class="cashier-payment-help">Chưa thu dòng nào.</p>';
+        overlay.querySelector('#cashAmount').value = remain || '';
+        overlay.querySelector('#payCashBtn').disabled = Boolean(waiting) || remain <= 0;
+        overlay.querySelector('#payMomoBtn').disabled = Boolean(waiting) || remain < 1000;
+        overlay.querySelector('#collectCash').disabled = Boolean(waiting) || remain <= 0;
+        overlay.querySelector('#cashPanel').hidden = Boolean(waiting);
+        return { remain, waiting, payments };
+      };
+      const showMomoPanel = (payload, statusText) => {
+        const panel = overlay.querySelector('#momoPanel');
+        panel.hidden = false;
+        const qr = overlay.querySelector('#momoQr');
+        const extra = overlay.querySelector('#momoPayUrlQr');
+        if (payload?.qrImageDataUrl) { qr.src = payload.qrImageDataUrl; qr.hidden = false; }
+        else qr.hidden = true;
+        if (payload?.payUrlQrImageDataUrl) { extra.src = payload.payUrlQrImageDataUrl; extra.hidden = false; }
+        else extra.hidden = true;
+        overlay.querySelector('#momoStatus').textContent = statusText || 'Đang chờ khách thanh toán trên MoMo Test App.';
+        momoRow = { ...(momoRow || {}), ...payload };
+      };
+      const stopPoll = () => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } };
+      const hydrateMomoQr = async (waiting) => {
+        overlay.querySelectorAll('.pay-method').forEach(item => item.classList.toggle('active', item.id === 'payMomoBtn'));
+        const same = momoRow && momoRow.MaTT === waiting.MaTT;
+        if (same && (momoRow.qrImageDataUrl || momoRow.payUrl || momoRow.qrCodeUrl)) {
+          showMomoPanel(momoRow, 'Đang chờ khách thanh toán trên MoMo Test App.');
+          return;
         }
-        let invoiceId = draftId;
-        confirmBtn.disabled = true;
         try {
-          if (!invoiceId) {
-            const invoice = await api(context, '/cashier/invoices', { method: 'POST', body: JSON.stringify({ MaKH: customer?.MaKH || null, MaKM: maKM || null, DiemSuDung: Number(diemSuDung) || 0, lines: linesPayload() }) });
-            invoiceId = invoice.MaHD;
+          const status = await api(context, `/cashier/invoices/${invoiceId}/payments/${waiting.MaTT}`);
+          showMomoPanel({ MaTT: waiting.MaTT, SoTien: waiting.SoTien, ...status }, 'Đang chờ khách thanh toán trên MoMo Test App.');
+          if (!status.qrImageDataUrl && !status.payUrl && !status.qrCodeUrl) {
+            overlay.querySelector('#momoStatus').textContent = 'Dòng MoMo còn Chờ — Query lại. Không tạo mã mới.';
           }
-          const existing = await api(context, `/cashier/invoices/${invoiceId}`);
-          const alreadyPaid = (existing.payments || []).some(item => item.TrangThai === 'Thành công');
-          if (!alreadyPaid) {
-            for (const payment of payments) await api(context, `/cashier/invoices/${invoiceId}/payments`, { method: 'POST', body: JSON.stringify(payment) });
+        } catch {
+          showMomoPanel({ MaTT: waiting.MaTT }, 'Đang chờ khách thanh toán trên MoMo Test App.');
+        }
+      };
+      const refresh = async () => {
+        const detail = await api(context, `/cashier/invoices/${invoiceId}`);
+        if (detail.invoice.TrangThai === 'Hoàn thành') { await finishSale(detail); return detail; }
+        const state = paint(detail);
+        if (state.waiting) {
+          await hydrateMomoQr(state.waiting);
+        } else if (momoRow && !state.waiting) {
+          const last = (detail.payments || []).find(item => item.MaTT === momoRow.MaTT);
+          if (last?.TrangThai === 'Thất bại') {
+            overlay.querySelector('#momoStatus').textContent = 'MoMo thất bại / hết hạn đã xác minh. Chuyển Tiền mặt.';
+            context.showToast('Không thanh toán được MoMo — chuyển Tiền mặt.', 'error');
           }
-          await api(context, `/cashier/invoices/${invoiceId}/complete`, { method: 'POST' });
-          const detail = await api(context, `/cashier/invoices/${invoiceId}`);
-          printInvoice(detail);
-          cart = new Map(); customer = null; maKM = ''; diemSuDung = 0; quote = null; draftId = null;
-          overlay.remove(); render();
-          context.showToast(`Đã hoàn thành hóa đơn ${invoiceId}.`, 'success');
+        }
+        return detail;
+      };
+      const startPoll = (maTT) => {
+        stopPoll();
+        pollTimer = setInterval(async () => {
+          try {
+            const status = await api(context, `/cashier/invoices/${invoiceId}/payments/${maTT}`);
+            if (status.qrImageDataUrl && (!momoRow?.qrImageDataUrl || momoRow.MaTT !== maTT)) {
+              showMomoPanel({ ...(momoRow || {}), ...status, MaTT: maTT }, 'Đang chờ khách thanh toán trên MoMo Test App.');
+            }
+            if (status.HoaDonTrangThai === 'Hoàn thành' || status.alreadyCompleted) {
+              const detail = await api(context, `/cashier/invoices/${invoiceId}`);
+              await finishSale(detail);
+              return;
+            }
+            if (status.TrangThai === 'Thành công') {
+              const detail = await refresh();
+              if (detail?.invoice.TrangThai === 'Nháp') {
+                const remain = Math.max(0, Math.round(Number(detail.invoice.TongThanhToan) - successPaid(detail.payments)));
+                if (remain === 0 && !pendingMomo(detail.payments)) {
+                  await api(context, `/cashier/invoices/${invoiceId}/complete`, { method: 'POST' });
+                  await finishSale(await api(context, `/cashier/invoices/${invoiceId}`));
+                }
+              }
+              return;
+            }
+            if (status.TrangThai === 'Thất bại') {
+              stopPoll();
+              await refresh();
+            }
+          } catch { /* poll im lặng, thu ngân bấm Query lại */ }
+        }, 2000);
+      };
+      overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', () => { stopPoll(); overlay.remove(); }));
+      overlay.querySelector('#payCashBtn').addEventListener('click', () => {
+        overlay.querySelectorAll('.pay-method').forEach(item => item.classList.toggle('active', item.id === 'payCashBtn'));
+        overlay.querySelector('#cashPanel').hidden = false;
+      });
+      overlay.querySelector('#collectCash').addEventListener('click', async () => {
+        const btn = overlay.querySelector('#collectCash');
+        if (btn.disabled) return;
+        const amount = Number(overlay.querySelector('#cashAmount').value);
+        if (!Number.isFinite(amount) || amount <= 0) return context.showToast('Nhập số tiền mặt hợp lệ.', 'error');
+        btn.disabled = true;
+        try {
+          await ensureInvoice();
+          await api(context, `/cashier/invoices/${invoiceId}/payments`, {
+            method: 'POST',
+            body: JSON.stringify({ PhuongThuc: 'Tiền mặt', SoTien: amount, TrangThai: 'Thành công' })
+          });
+          const detail = await refresh();
+          const remain = Math.max(0, Math.round(Number(detail.invoice.TongThanhToan) - successPaid(detail.payments)));
+          if (remain === 0 && !pendingMomo(detail.payments)) {
+            await api(context, `/cashier/invoices/${invoiceId}/complete`, { method: 'POST' });
+            await finishSale(await api(context, `/cashier/invoices/${invoiceId}`));
+          }
         } catch (error) {
-          draftId = invoiceId || draftId;
-          confirmBtn.disabled = false;
           context.showToast(`${error.message}${invoiceId ? ` Hóa đơn nháp: ${invoiceId}.` : ''}`, 'error');
+        } finally {
+          if (document.body.contains(overlay) && invoiceId) await refresh().catch(() => {});
         }
       });
+      overlay.querySelector('#payMomoBtn').addEventListener('click', async () => {
+        overlay.querySelectorAll('.pay-method').forEach(item => item.classList.toggle('active', item.id === 'payMomoBtn'));
+        const btn = overlay.querySelector('#payMomoBtn');
+        if (btn.disabled) return;
+        btn.disabled = true;
+        try {
+          await ensureInvoice();
+          const current = await api(context, `/cashier/invoices/${invoiceId}`);
+          const waiting = pendingMomo(current.payments || []);
+          if (waiting) {
+            await hydrateMomoQr(waiting);
+            if (waiting.MaTT) startPoll(waiting.MaTT);
+            return;
+          }
+          const created = await api(context, `/cashier/invoices/${invoiceId}/payments/qr`, { method: 'POST', body: JSON.stringify({}) });
+          if (!created.qrImageDataUrl && created.TrangThai === 'Chờ xác nhận') {
+            context.showToast(created.message || 'Chưa rõ trạng thái MoMo. Bấm Query lại.', 'error');
+            showMomoPanel({ MaTT: created.MaTT }, created.message || 'Giữ Chờ — Query lại.');
+          } else {
+            showMomoPanel(created, 'Đang chờ khách thanh toán trên MoMo Test App.');
+          }
+          if (created.MaTT) startPoll(created.MaTT);
+          await refresh();
+        } catch (error) {
+          const keepWaiting = /Query lại|Giữ Chờ|chưa rõ/i.test(error.message || '');
+          context.showToast(`${keepWaiting || error.message.includes('1.000') ? (error.message || 'Chưa rõ trạng thái MoMo. Giữ Chờ — Query lại.') : (error.message || 'Không thanh toán được MoMo — chuyển Tiền mặt.')}${invoiceId ? ` Hóa đơn nháp: ${invoiceId}.` : ''}`, 'error');
+        } finally {
+          if (document.body.contains(overlay) && invoiceId) {
+            const detail = await refresh().catch(() => null);
+            const waiting = detail && pendingMomo(detail.payments || []);
+            if (waiting?.MaTT) startPoll(waiting.MaTT);
+          }
+        }
+      });
+      overlay.querySelector('#momoQuery').addEventListener('click', async () => {
+        if (!momoRow?.MaTT || !invoiceId) return;
+        try {
+          const result = await api(context, `/cashier/invoices/${invoiceId}/payments/${momoRow.MaTT}/query`, { method: 'POST' });
+          context.showToast(result.TrangThai === 'Thành công' ? 'MoMo đã xác nhận.' : (result.message || `Trạng thái: ${result.TrangThai}`), result.TrangThai === 'Thất bại' ? 'error' : 'success');
+          const detail = await refresh();
+          if (detail?.invoice.TrangThai === 'Hoàn thành') return;
+          if (result.alreadyCompleted || result.completed) {
+            await finishSale(await api(context, `/cashier/invoices/${invoiceId}`));
+          }
+        } catch (error) { context.showToast(error.message, 'error'); }
+      });
+      overlay.querySelector('#momoRefresh').addEventListener('click', async () => {
+        if (!momoRow?.MaTT || !invoiceId) return;
+        try {
+          const resolved = await api(context, `/cashier/invoices/${invoiceId}/payments/${momoRow.MaTT}/fail`, { method: 'POST' });
+          if (resolved.TrangThai === 'Thành công' || resolved.completed || resolved.alreadyCompleted) {
+            const detail = await refresh();
+            if (detail?.invoice.TrangThai === 'Hoàn thành') return;
+            await finishSale(await api(context, `/cashier/invoices/${invoiceId}`));
+            return;
+          }
+          if (resolved.TrangThai !== 'Thất bại') {
+            context.showToast(resolved.message || 'Chưa xác minh được MoMo. Giữ Chờ — Query lại.', 'error');
+            await refresh();
+            return;
+          }
+          stopPoll();
+          momoRow = null;
+          await refresh();
+          overlay.querySelector('#payMomoBtn').click();
+        } catch (error) { context.showToast(error.message, 'error'); }
+      });
+      overlay.querySelector('#momoOpenApp').addEventListener('click', async () => {
+        const link = momoRow?.qrCodeUrl || momoRow?.qrPayload || '';
+        if (!link) return context.showToast('Chưa có deeplink MoMo. Dùng QR trên màn hình hoặc payUrl.', 'error');
+        try { await navigator.clipboard?.writeText(link); } catch { /* ignore */ }
+        context.showToast('Đã copy deeplink. Mở trên điện thoại cài MoMo Test App.', 'success');
+      });
+      overlay.querySelector('#momoOpenPay').addEventListener('click', () => {
+        if (!momoRow?.payUrl) return context.showToast('Chưa có payUrl.', 'error');
+        window.open(momoRow.payUrl, '_blank', 'noopener');
+      });
+      if (invoiceId) {
+        try {
+          const detail = await refresh();
+          const waiting = pendingMomo(detail.payments || []);
+          if (waiting) startPoll(waiting.MaTT);
+        } catch (error) { context.showToast(error.message, 'error'); }
+      } else {
+        paint({ invoice: { TongThanhToan: payable }, payments: [] });
+      }
     };
     try {
       const resumeId = sessionStorage.getItem('fly_pos_draft');
@@ -827,7 +996,7 @@
         if (cancelBtn) {
           try {
             const result = await api(context, `/cashier/invoices/${cancelBtn.dataset.cancel}/cancel`, { method: 'POST', body: JSON.stringify({ LyDo: 'Hủy nháp từ danh sách hóa đơn' }) });
-            context.showToast(result.message, 'success'); await load();
+            context.showToast(result.message || 'Đã hủy hóa đơn nháp.', 'success'); await load();
           } catch (error) { context.showToast(error.message, 'error'); }
         }
       });
