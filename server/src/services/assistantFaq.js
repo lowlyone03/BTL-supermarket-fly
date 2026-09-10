@@ -60,7 +60,8 @@ const pickFaq = (question, limit = 3) => {
     }).filter((row) => row.score > 0);
     scored.sort((a, b) => b.score - a.score);
     const picked = (scored.length ? scored.slice(0, limit) : items.slice(0, limit)).map((row) => row.item || row);
-    return picked.map((item) => `- ${item.q}\n  ${item.a}`).join('\n');
+    const { sanitizeAssistantText } = require('./assistantCopy');
+    return picked.map((item) => `- ${sanitizeAssistantText(item.q)}\n  ${sanitizeAssistantText(item.a)}`).join('\n');
 };
 
 module.exports = { loadFaq, pickFaq, parseFaqFile, fold };

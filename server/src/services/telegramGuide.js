@@ -1,5 +1,6 @@
 const {
-    escapeHtml, textCode, moneyCode, headerBlock, splitTelegramText, t, RULE
+    escapeHtml, textCode, moneyCode, headerBlock, splitTelegramText, t, RULE,
+    isTelegramAskEnabled
 } = require('./telegramMessages');
 
 const GUIDE_SOURCE = 'PHUONG_AN_KE_TOAN_DA_CHOT.txt mục 3 · PLAN_TELEGRAM_BOT_P1.txt mục 4 (3 cột tiền) · README.md';
@@ -171,12 +172,18 @@ const BUILDERS = {
     payroll: topicPayroll
 };
 
-const buildGuideMenu = (lang = 'vi') => [
-    headerBlock(`📚 <b>${escapeHtml(t(lang, 'guidePickTitle'))}</b>`),
-    `<i>${escapeHtml(t(lang, 'guidePickHint'))}</i>`,
-    '',
-    sourceLine(lang)
-].join('\n');
+const buildGuideMenu = (lang = 'vi') => {
+    const lines = [
+        headerBlock(`📚 <b>${escapeHtml(t(lang, 'guidePickTitle'))}</b>`),
+        `<i>${escapeHtml(t(lang, 'guidePickHint'))}</i>`,
+        '',
+        sourceLine(lang)
+    ];
+    if (isTelegramAskEnabled()) {
+        lines.push('', escapeHtml(t(lang, 'guideAskHint')));
+    }
+    return lines.join('\n');
+};
 
 const guideMenuKeyboard = (lang = 'vi') => ({
     inline_keyboard: GUIDE_TOPICS.map(item => ([{

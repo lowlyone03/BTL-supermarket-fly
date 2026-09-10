@@ -1,6 +1,13 @@
-# Tunnel truoc -> ghi PAYMENT_* vao server/.env -> moi npm start.
+﻿# Tunnel truoc -> ghi PAYMENT_* vao server/.env -> moi npm start.
 # Node chi nap .env luc process start (loadEnv), khong doc lai moi request.
+# Restart: tu tat node Fly dang LISTEN 3000 (khong cho 2 phut, khong dung cloudflared).
 $ErrorActionPreference = 'Stop'
+try {
+    [Console]::InputEncoding = [System.Text.Encoding]::UTF8
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    $OutputEncoding = [System.Text.Encoding]::UTF8
+} catch {
+}
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot 'package.json'))) {
@@ -61,6 +68,146 @@ function Test-LocalPortOpen {
     } finally {
         $client.Close()
     }
+}
+
+function Get-ProcessCommandLine {
+    param([int]$ProcessId)
+    $cim = Get-CimInstance Win32_Process -Filter "ProcessId=$ProcessId" -ErrorAction SilentlyContinue
+    if ($cim -and $cim.CommandLine) { return [string]$cim.CommandLine }
+    return ''
+}
+
+function Get-ListeningPids {
+    param([int]$Port)
+    $ids = New-Object System.Collections.Generic.List[int]
+    try {
+        $conns = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction Stop)
+        foreach ($c in $conns) {
+            $owning = [int]$c.OwningProcess
+            if ($owning -gt 4) { $ids.Add($owning) }
+        }
+    } catch {
+        $lines = @()
+        try { $lines = @(netstat -ano -p TCP) } catch { $lines = @() }
+        $pattern = '^\s*TCP\s+\S+:' + [regex]::Escape([string]$Port) + '\s+\S+\s+LISTENING\s+(\d+)\s*$'
+        foreach ($line in $lines) {
+            $m = [regex]::Match([string]$line, $pattern)
+            if ($m.Success) {
+                $owning = [int]$m.Groups[1].Value
+                if ($owning -gt 4) { $ids.Add($owning) }
+            }
+        }
+    }
+    return @($ids | Sort-Object -Unique)
+}
+
+function Test-IsFlyNodePid {
+    param([int]$ProcessId)
+    $proc = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    if (-not $proc) { return $false }
+    if ([string]$proc.ProcessName -notmatch '^(?i:node|nodejs)$') { return $false }
+    $cmd = Get-ProcessCommandLine -ProcessId $ProcessId
+    if (-not $cmd) { return $false }
+    if ($cmd -match '(?i)supermarket-fly') { return $true }
+    if ($cmd -match '(?i)src[/\\]app\.js') { return $true }
+    return $false
+}
+
+function Test-FlyHealthOnPort {
+    param([int]$Port)
+    foreach ($name in @('127.0.0.1', 'localhost')) {
+        try {
+            $r = Invoke-RestMethod -Uri ("http://{0}:{1}/api/health" -f $name, $Port) -TimeoutSec 2
+            if ($r -and $r.status -eq 'ok' -and ([string]$r.message -match 'Supermarket Fly')) {
+                return $true
+            }
+        } catch {
+        }
+    }
+    return $false
+}
+
+function Test-ShouldStopListener {
+    param(
+        [int]$ProcessId,
+        [bool]$HealthLooksFly
+    )
+    $proc = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    if (-not $proc) { return $false }
+    if ([string]$proc.ProcessName -notmatch '^(?i:node|nodejs)$') { return $false }
+    if (Test-IsFlyNodePid -ProcessId $ProcessId) { return $true }
+    if ($HealthLooksFly) { return $true }
+    return $false
+}
+
+function Stop-FlyNodeTree {
+    param([int]$ProcessId)
+    $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$ProcessId" -ErrorAction SilentlyContinue)
+    foreach ($ch in $children) {
+        if ([string]$ch.Name -notmatch '(?i)^node(\.exe)?$') { continue }
+        try {
+            Stop-Process -Id ([int]$ch.ProcessId) -Force -ErrorAction Stop
+            Write-Host ("Đã tắt process con Node (PID {0})." -f $ch.ProcessId)
+        } catch {
+        }
+    }
+    Stop-Process -Id $ProcessId -Force -ErrorAction Stop
+}
+
+function Stop-StaleFlyListeners {
+    param([int]$Port)
+    if (-not (Test-LocalPortOpen $Port)) { return $true }
+
+    $pids = @(Get-ListeningPids -Port $Port)
+    if ($pids.Count -eq 0) {
+        if (Test-FlyHealthOnPort -Port $Port) {
+            Write-Host ("[LỖI] Cổng {0} còn API Fly nhưng không lấy được PID. Đóng cửa sổ npm start / file 2 cũ rồi chạy lại." -f $Port)
+            return $false
+        }
+        $waitUntil = (Get-Date).AddSeconds(5)
+        while ((Test-LocalPortOpen $Port) -and ((Get-Date) -lt $waitUntil)) {
+            Start-Sleep -Milliseconds 200
+        }
+        return -not (Test-LocalPortOpen $Port)
+    }
+
+    $healthLooksFly = Test-FlyHealthOnPort -Port $Port
+    $toStop = New-Object System.Collections.Generic.List[int]
+    $unknown = New-Object System.Collections.Generic.List[string]
+    foreach ($listenPid in $pids) {
+        $proc = Get-Process -Id $listenPid -ErrorAction SilentlyContinue
+        $label = if ($proc) { '{0} ({1})' -f $listenPid, $proc.ProcessName } else { [string]$listenPid }
+        if (Test-ShouldStopListener -ProcessId $listenPid -HealthLooksFly $healthLooksFly) {
+            $toStop.Add($listenPid)
+        } else {
+            $unknown.Add($label)
+        }
+    }
+
+    if ($toStop.Count -eq 0) {
+        Write-Host ("[LỖI] Cổng {0} đang bị process khác giữ (PID {1}). Không tắt vì không chắc là Node của Fly." -f $Port, ($unknown -join ', '))
+        return $false
+    }
+
+    foreach ($procId in $toStop) {
+        try {
+            Stop-FlyNodeTree -ProcessId $procId
+            Write-Host ("Cổng {0} còn process cũ (PID {1}). Đã tắt để đọc .env mới." -f $Port, $procId)
+        } catch {
+            Write-Host ("[LỖI] Không tắt được PID {0}: {1}" -f $procId, $_.Exception.Message)
+            return $false
+        }
+    }
+
+    $waitUntil = (Get-Date).AddSeconds(8)
+    while ((Test-LocalPortOpen $Port) -and ((Get-Date) -lt $waitUntil)) {
+        Start-Sleep -Milliseconds 200
+    }
+    if (Test-LocalPortOpen $Port) {
+        Write-Host ("[LỖI] Cổng {0} vẫn bận sau khi tắt PID {1}." -f $Port, ($toStop -join ', '))
+        return $false
+    }
+    return $true
 }
 
 function Update-DotEnvKey {
@@ -212,22 +359,10 @@ Write-Host ('  PAYMENT_RETURN_URL=' + $returnUrl)
 Write-Host '=============================================='
 Write-Host ''
 
-if (Test-LocalPortOpen 3000) {
-    Write-Host '[CANH BAO] Cong 3000 dang mo. Node CU khong doc .env vua ghi.'
-    Write-Host 'Dong cua so API/app cu (file 2 / file 4 / npm start).'
-    Write-Host 'Dang doi toi da 2 phut de cong 3000 trong...'
-    $freeDeadline = (Get-Date).AddMinutes(2)
-    while ((Test-LocalPortOpen 3000) -and ((Get-Date) -lt $freeDeadline)) {
-        Write-Host -NoNewline '.'
-        Start-Sleep -Seconds 2
-    }
-    Write-Host ''
-    if (Test-LocalPortOpen 3000) {
-        Write-Host '[LOI] Cong 3000 van mo - khong start app thu hai.'
-        Write-Host 'Giu cua so tunnel. Dong API cu, roi chay: npm start'
-        Write-Host '(.env da co URL moi; chi can start lai Node.)'
-        exit 1
-    }
+if (-not (Stop-StaleFlyListeners -Port 3000)) {
+    Write-Host 'Giữ cửa sổ tunnel. Đóng process lạ trên cổng 3000, rồi chạy: npm start'
+    Write-Host '(.env đã có URL mới; chỉ cần start lại Node.)'
+    exit 1
 }
 
 Write-Host 'Dang npm start (API + Electron) de Node nap URL moi...'

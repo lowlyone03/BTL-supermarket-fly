@@ -268,5 +268,47 @@
     });
   };
 
-  window.FLY_STORE_PNL = { nativeToolbar, render };
+  const printConfig = (data) => {
+    const op = data?.hoatDong || {};
+    const sale = op.banHang || {};
+    const kqkd = data?.kqkd || {};
+    const hasNumbers = Number(sale.soHoaDon || 0) > 0
+      || Number(sale.doanhThuThuan || 0) !== 0
+      || Number(kqkd.loiNhuan || 0) !== 0;
+    return {
+      variant: 'report',
+      title: 'BÁO CÁO CỬA HÀNG THEO THÁNG',
+      number: data?.period?.period || data?.period?.label || '',
+      documentDate: new Date(),
+      status: data?.period?.label || '',
+      watermark: hasNumbers ? '' : 'CHƯA CÓ SỐ LIỆU',
+      fields: [
+        { label: 'Kỳ', value: data?.period?.label || '—' },
+        { label: 'Từ ngày', value: data?.period?.from || '—' },
+        { label: 'Đến ngày', value: data?.period?.to || '—' }
+      ],
+      columns: [
+        { key: 'chiTieu', label: 'Chỉ tiêu' },
+        { key: 'soTien', label: 'Số tiền', format: 'money', align: 'right' }
+      ],
+      rows: [
+        { chiTieu: 'Doanh thu thuần', soTien: sale.doanhThuThuan },
+        { chiTieu: 'Giá vốn thuần', soTien: op.giaVon?.giaVonThuan },
+        { chiTieu: 'Lãi gộp', soTien: op.laiGop?.soTien },
+        { chiTieu: 'Cước vận chuyển', soTien: data?.dongTien?.cuocVanChuyen },
+        { chiTieu: 'Lương đã khóa', soTien: op.nhanVien?.tongLuongKhoa },
+        { chiTieu: 'Lãi/lỗ KQKD (không trừ trả NCC)', soTien: kqkd.loiNhuan },
+        { chiTieu: 'Chi NCC (dòng tiền, không trừ KQKD)', soTien: data?.dongTien?.chiNcc }
+      ],
+      totals: [
+        { label: 'Doanh thu thuần', value: sale.doanhThuThuan, format: 'money' },
+        { label: 'Lãi gộp', value: op.laiGop?.soTien, format: 'money' },
+        { label: 'Lãi/lỗ KQKD', value: kqkd.loiNhuan, format: 'money' }
+      ],
+      note: 'Báo cáo điều hành cửa hàng. Tiền trả NCC là dòng tiền, không trừ lãi kế toán.',
+      signatures: ['Kế toán', 'Quản lý cửa hàng']
+    };
+  };
+
+  window.FLY_STORE_PNL = { nativeToolbar, render, printConfig };
 })();

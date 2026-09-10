@@ -16,6 +16,7 @@ const {
     replyKeyboard, matchReplyCommand, removeKeyboardMarkup, showMenuInlineKeyboard
 } = require('../services/telegramMessages');
 const teleGuide = require('../services/telegramGuide');
+const teleAsk = require('../services/telegramAsk');
 const teleDecision = require('../services/telegramApprove');
 const teleDocs = require('../services/telegramDocuments');
 const voucherImage = require('../services/telegramVoucherImage');
@@ -33,8 +34,10 @@ const FORBIDDEN_TEXT = /\/(approve|reject|pay|complete)\b/;
 const READ_CALLBACK = /^(cmd|cmd:)\w+$/i;
 const PUBLIC_CALLBACKS = new Set(['linkguide', 'help']);
 const pendingLangByChat = new Map();
+const pendingAskByChat = new Map();
 const kbBoundByChat = new Map();
 const seenUpdateIds = new Map();
+const PENDING_ASK_TTL_MS = 10 * 60 * 1000;
 const SEEN_UPDATE_TTL_MS = 2 * 60 * 1000;
 
 const rememberUpdateId = (updateId) => {
@@ -86,6 +89,16 @@ const BOT_NATIVE_COMMANDS = [
     { command: 'payroll', description: 'Lương (tóm tắt)' },
     { command: 'unlink', description: 'Hủy liên kết' }
 ];
+
+const nativeTelegramCommands = () => {
+    const cmds = BOT_NATIVE_COMMANDS.filter((item) => item.command !== 'ask');
+    if (!teleAsk.isTelegramAskEnabled()) return cmds;
+    const askCmd = { command: 'ask', description: 'Hỏi trợ lý Fly (đúng quyền QL)' };
+    const unlinkAt = cmds.findIndex((item) => item.command === 'unlink');
+    if (unlinkAt >= 0) cmds.splice(unlinkAt, 0, askCmd);
+    else cmds.push(askCmd);
+    return cmds;
+};
 
 const FLY_BUTTONS = [
     { id: 'today', key: 'flyToday', uc: ['UC10'] },
@@ -422,7 +435,7 @@ const startBoundText = (user, lang = 'vi') => buildStartWelcomeBound(user, lang)
 const startBoundKeyboard = (user, lang = 'vi') => flyKeyboard(user, lang);
 
 const registerNativeTelegramMenu = async (fetchFn) => {
-    await notify.telegramApi('setMyCommands', { commands: BOT_NATIVE_COMMANDS }, { fetchFn });
+    await notify.telegramApi('setMyCommands', { commands: nativeTelegramCommands() }, { fetchFn });
     await notify.telegramApi('setChatMenuButton', { menu_button: { type: 'commands' } }, { fetchFn });
 };
 
@@ -527,6 +540,45 @@ const cmdFly = async (pool, user, lang = 'vi', chatId) => {
 };
 
 const cmdGuide = (arg, lang = 'vi') => teleGuide.buildGuideResult(arg, lang);
+
+const cmdAsk = async (user, pool, arg) => {
+    if (!teleAsk.isTelegramAskEnabled()) return teleAsk.ASK_DISABLED;
+    if (!String(arg || '').trim()) return teleAsk.ASK_USAGE;
+    const out = await teleAsk.runTelegramAsk({ user, question: arg, pool, req: null });
+    if (out.texts?.length === 1) return out.texts[0];
+    return { texts: out.texts };
+};
+
+const handleAskCommand = async (bound, chatId, arg, message) => {
+    const lang = bound.lang || langOf(chatId);
+    if (message?.message_id) {
+        await notify.sendChatAction(chatId, 'typing').catch(() => {});
+    }
+    if (!teleAsk.isTelegramAskEnabled()) {
+        await reply(chatId, teleAsk.ASK_DISABLED);
+        return { ok: true, command: 'ask', disabled: true };
+    }
+    if (!String(arg || '').trim()) {
+        await reply(chatId, t(lang, 'askUsage'));
+        return { ok: true, command: 'ask', usage: true };
+    }
+    await reply(chatId, teleAsk.ASK_WORKING);
+    const user = bound.user;
+    const pool = bound.pool;
+    const question = String(arg).trim();
+    teleAsk.enqueueAsk(async () => {
+        try {
+            const out = await teleAsk.runTelegramAsk({ user, question, pool, req: null });
+            for (const text of out.texts || []) {
+                await reply(chatId, text);
+            }
+        } catch (error) {
+            console.error('Telegram /ask:', error.message);
+            await reply(chatId, teleAsk.ASK_TIMEOUT).catch(() => {});
+        }
+    });
+    return { ok: true, command: 'ask', queued: true };
+};
 
 const cmdToday = async (pool, user, lang = 'vi') => {
     const denied = denyIfNoUc(user, ['UC10'], lang);
@@ -837,12 +889,17 @@ const runCommand = async (name, user, pool, chatId, arg, lang = 'vi') => {
         case 'alerts': return cmdAlerts(pool, user, lang);
         case 'payroll': return cmdPayroll(pool, user, arg, lang);
         case 'unlink': return cmdUnlink(pool, user, chatId, lang);
+        case 'ask': return cmdAsk(user, pool, arg);
         default: return t(lang, 'unknownCmd');
     }
 };
 
 const parseCommand = (text) => {
-    const raw = String(text || '').replace(/\u00a0/g, ' ').trim().replace(/^\/([A-Za-z0-9_]+)@[\w_]+/i, '/$1');
+    const raw = String(text || '')
+        .replace(/\u00a0/g, ' ')
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .trim()
+        .replace(/^\/([A-Za-z0-9_]+)@[\w]+/i, '/$1');
     const startOtp = raw.match(/^\/(?:start|bind)(?:\s+|_|)(\d{6})\s*$/i);
     if (startOtp) return { name: 'bind', otp: startOtp[1] };
     if (/^\/start\s*$/i.test(raw)) return { name: 'start' };
@@ -850,13 +907,31 @@ const parseCommand = (text) => {
     if (payroll) return { name: 'payroll', arg: payroll[1] ? payroll[1].toUpperCase() : '' };
     const docs = raw.match(/^\/docs(?:\s+(.+))?$/i);
     if (docs) return { name: 'docs', arg: String(docs[1] || '').trim() };
+    const ask = raw.match(/^\/ask(?:\s+(.+))?$/i);
+    if (ask) return { name: 'ask', arg: String(ask[1] || '').trim() };
     const guide = raw.match(/^\/(?:guide|rules)(?:\s+(.+))?$/i);
     if (guide) return { name: 'guide', arg: String(guide[1] || '').trim() };
     const simple = raw.match(/^\/(help|fly|today|debt|lowstock|shifts|payments|pending|reports|alerts|unlink|revenue)\s*$/i);
     if (simple) return { name: simple[1].toLowerCase() };
+    if (/^\/[A-Za-z0-9_]+/i.test(raw)) return { name: 'unknown', raw };
     const fromReply = matchReplyCommand(raw);
     if (fromReply) return fromReply;
     return { name: 'unknown', raw };
+};
+
+const rememberAskWait = (chatId) => {
+    pendingAskByChat.set(String(chatId), Date.now());
+};
+
+const peekAskWait = (chatId) => {
+    const at = pendingAskByChat.get(String(chatId));
+    return Boolean(at && (Date.now() - at) <= PENDING_ASK_TTL_MS);
+};
+
+const consumeAskWait = (chatId) => {
+    const ok = peekAskWait(chatId);
+    pendingAskByChat.delete(String(chatId));
+    return ok;
 };
 
 const handleStartCommand = async (chatId) => {
@@ -1106,7 +1181,21 @@ const handlePrivateMessage = async (message) => {
         }
         return handleRejectReasonMessage(chatId, text, bound);
     }
-    if (FORBIDDEN_TEXT.test(text) && !matchReplyCommand(text) && !/^\/(today|pending|reports|help|fly)/i.test(text)) {
+    if (peekAskWait(chatId) && text && !/^\/[A-Za-z0-9_]+/i.test(text) && !matchReplyCommand(text)) {
+        consumeAskWait(chatId);
+        const boundAsk = await requireBound(chatId).catch(() => ({ error: t(lang, 'denyStranger'), errorCode: 'stranger', lang }));
+        if (boundAsk.error) {
+            const deny = boundAsk.errorCode === 'muted' || boundAsk.errorCode === 'locked' ? boundAsk.error : t(boundAsk.lang || lang, 'denyStranger');
+            await reply(chatId, deny);
+            return { unbound: true };
+        }
+        if (!isManagerRole(boundAsk.user.TenVaiTro)) {
+            await reply(chatId, t(boundAsk.lang || lang, 'denyNotManagerCmd'));
+            return { forbidden: true, notManager: true };
+        }
+        return handleAskCommand(boundAsk, chatId, text, message);
+    }
+    if (FORBIDDEN_TEXT.test(text) && !/^\/ask\b/i.test(text) && !matchReplyCommand(text) && !/^\/(today|pending|reports|help|fly)/i.test(text)) {
         await reply(chatId, t(lang, 'denyWrite'));
         return { forbidden: true };
     }
@@ -1157,9 +1246,24 @@ const handlePrivateMessage = async (message) => {
         await reply(chatId, t(live, 'denyNotManagerCmd'));
         return { forbidden: true, notManager: true };
     }
+    if (parsed.name !== 'ask' && parsed.name !== 'askwait') {
+        pendingAskByChat.delete(String(chatId));
+    }
     if (parsed.name === 'unknown') {
         await reply(chatId, t(live, 'unknownCmd'));
         return { unknown: true };
+    }
+    if (parsed.name === 'askwait') {
+        if (!teleAsk.isTelegramAskEnabled()) {
+            await reply(chatId, teleAsk.ASK_DISABLED);
+            return { ok: true, command: 'askwait', disabled: true };
+        }
+        rememberAskWait(chatId);
+        await reply(chatId, t(live, 'askPrompt'));
+        return { ok: true, command: 'askwait' };
+    }
+    if (parsed.name === 'ask') {
+        return handleAskCommand(bound, chatId, parsed.arg, message);
     }
     if (message.message_id) {
         const activity = parsed.name === 'docs' ? 'upload_photo' : 'typing';
@@ -1554,6 +1658,7 @@ module.exports = {
     flyKeyboard,
     startUnboundKeyboard,
     BOT_NATIVE_COMMANDS,
+    nativeTelegramCommands,
     cmdHelp,
     cmdFly,
     handleUpdate,
@@ -1562,6 +1667,7 @@ module.exports = {
     getChatLang: (chatId) => pendingLangByChat.get(String(chatId)) || 'vi',
     resetChatLangCache: () => {
         pendingLangByChat.clear();
+        pendingAskByChat.clear();
         kbBoundByChat.clear();
         seenUpdateIds.clear();
         teleDecision.resetDecisionState();
@@ -1593,5 +1699,7 @@ module.exports = {
     READ_CALLBACK,
     runFlyDecision: teleDecision.runFlyDecision,
     setFlyHandlerOverride: teleDecision.setFlyHandlerOverride,
-    parseDecisionCallback: teleDecision.parseDecisionCallback
+    parseDecisionCallback: teleDecision.parseDecisionCallback,
+    setAskOverride: teleAsk.setAskOverride,
+    isTelegramAskEnabled: teleAsk.isTelegramAskEnabled
 };

@@ -94,11 +94,11 @@ button { color: inherit; }
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0;
-  word-spacing: 0.14em;
+  word-spacing: 0.2em;
   transition: background .18s ease, color .18s ease;
 }
 .nav-item svg { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.7; }
-.nav-item span { flex: 1; min-width: 0; letter-spacing: 0; word-spacing: 0.14em; }
+.nav-item span { flex: 1; min-width: 0; letter-spacing: 0; word-spacing: 0.2em; }
 .nav-item:hover { color: #fff; background: rgba(255,255,255,.055); }
 .nav-item.active { color: #fff; background: var(--green-700); }
 .nav-item.is-coming { cursor: pointer; }

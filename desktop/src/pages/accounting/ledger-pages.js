@@ -1599,7 +1599,7 @@
         ${extraToolbar}
         <div class="lg-actions">
           <button type="button" class="lg-btn lg-btn-primary" id="rpLoad">Lập báo cáo</button>
-          ${printLib()?.buttonHtml('rpPrint') || ''}
+          ${printLib()?.buttonHtml('rpPrint', 'In báo cáo tháng') || ''}
         </div>
       </div>
       <div id="rpOut">${loadingBox('Đang lập báo cáo...')}</div>`;

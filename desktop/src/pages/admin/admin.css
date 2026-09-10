@@ -1,7 +1,7 @@
 .admin-module { width: 100%; max-width: none; min-width: 0; margin: 0; display: flex; flex-direction: column; gap: 22px; }
 .module-heading { min-height: 82px; display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
 .module-heading .module-kicker { margin-bottom: 8px; }
-.module-heading h1 { margin: 0; color: #17231d; font-size: 31px; font-weight: 600; letter-spacing: -.035em; }
+.module-heading h1 { margin: 0; color: #17231d; font-size: 31px; font-weight: 600; letter-spacing: 0; word-spacing: 0.08em; }
 .module-heading > div:first-child > p:last-child { margin: 8px 0 0; max-width: 720px; color: #68766e; font-size: 13px; line-height: 1.5; }
 .heading-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
 .record-count { padding: 8px 12px; border: 1px solid #d3e1d8; border-radius: 18px; color: var(--green-700); background: #edf5f0; font-size: 11px; font-weight: 800; white-space: nowrap; }

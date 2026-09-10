@@ -573,7 +573,8 @@
   color: #172d23;
   font-size: clamp(31px, 2.45vw, 42px);
   font-weight: 760;
-  letter-spacing: -.052em;
+  letter-spacing: 0;
+  word-spacing: 0.08em;
 }
 .financial-reports > .warehouse-heading > div > p:last-child {
   max-width: 900px;
@@ -984,7 +985,8 @@
 .financial-reports > .warehouse-heading h1 {
   margin-top: 4px;
   font-size: clamp(28px, 2.3vw, 38px);
-  letter-spacing: -.045em;
+  letter-spacing: 0;
+  word-spacing: 0.08em;
 }
 .financial-reports > .warehouse-heading > div > p:last-child {
   max-width: 900px;

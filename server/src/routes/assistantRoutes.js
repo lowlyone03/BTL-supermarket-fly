@@ -9,5 +9,11 @@ router.get('/brief', requirePermission('UC01'), controller.getToday);
 router.get('/alerts', requirePermission('UC01'), controller.getAlerts);
 router.get('/insights', requirePermission('UC01'), controller.getInsights);
 router.post('/scenario', requirePermission('UC01'), controller.postScenario);
+router.get('/invoices/purchase', requirePermission('UC01'), controller.getPurchaseInvoices);
+router.get('/invoices/purchase/:id', requirePermission('UC01'), controller.getPurchaseInvoice);
+router.get('/invoices/sales', requirePermission('UC01'), controller.getSalesInvoices);
+router.get('/invoices/sales/:id', requirePermission('UC01'), controller.getSalesInvoice);
+router.get('/docs/:kind/:id', requirePermission('UC01'), controller.getDocument);
+router.get('/docs/:kind', requirePermission('UC01'), controller.getDocument);
 
 module.exports = router;

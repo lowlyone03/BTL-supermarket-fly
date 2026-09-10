@@ -17,7 +17,7 @@ const n = (value) => {
     return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const money = (value) => `${Math.round(n(value)).toLocaleString('vi-VN')}đ`;
+const money = (value) => `${Math.round(n(value)).toLocaleString('vi-VN')} đ`;
 
 const redact = (row) => {
     if (!row || typeof row !== 'object') return row;
@@ -173,31 +173,31 @@ const stripPiiPayables = (pack) => {
 const collectFacts = async (pool, user) => {
     const facts = { role: user?.TenVaiTro, permissions: codesOf(user), sources: [] };
     facts.inbox = await safe('inbox', () => listForRole(pool, user));
-    if (!facts.inbox?.failed) facts.sources.push('GET /api/notifications');
+    if (!facts.inbox?.failed) facts.sources.push('Hộp thư');
 
     if (isRole(user, 'Quản lý') && (hasUc(user, 'UC10') || hasUc(user, 'UC04'))) {
         const { loadAdminDashboard, loadApprovalQueues, loadPayablesOverview, loadSalesShifts } = require('../controllers/adminController');
         facts.admin = await safe('dashboard quản lý', () => loadAdminDashboard(pool));
-        if (!facts.admin?.failed) facts.sources.push('GET /api/admin/dashboard (tồn thấp TOP, không UC15)');
+        if (!facts.admin?.failed) facts.sources.push('Dashboard quản lý');
         facts.approvals = await safe('hàng chờ duyệt', () => loadApprovalQueues(pool));
-        if (!facts.approvals?.failed) facts.sources.push('GET /api/admin/approvals/queues');
+        if (!facts.approvals?.failed) facts.sources.push('Hàng chờ duyệt');
         if (hasUc(user, 'UC10')) {
             facts.payables = stripPiiPayables(await safe('công nợ QL', () => loadPayablesOverview(pool, {})));
-            if (!facts.payables?.failed) facts.sources.push('GET /api/admin/finance/payables');
+            if (!facts.payables?.failed) facts.sources.push('Công nợ');
             facts.shifts = await safe('ca bán hàng', () => loadSalesShifts(pool, {}));
-            if (!facts.shifts?.failed) facts.sources.push('GET /api/admin/reports/sales-shifts');
+            if (!facts.shifts?.failed) facts.sources.push('Báo cáo ca');
         }
     }
 
     if (isRole(user, 'Nhân viên mua hàng') && hasUc(user, 'UC12')) {
         const { loadPurchaseRequests } = require('../controllers/warehouseController');
         facts.requests = await safe('đề nghị mua', () => loadPurchaseRequests(pool, user, { purchasing: true }));
-        if (!facts.requests?.failed) facts.sources.push('GET /api/purchasing/purchase-requests');
+        if (!facts.requests?.failed) facts.sources.push('Đề nghị mua hàng');
     }
     if ((isRole(user, 'Nhân viên mua hàng') && hasUc(user, 'UC13')) || (isRole(user, 'Quản lý') && hasUc(user, 'UC05'))) {
         const { loadPurchaseOrders } = require('../controllers/purchaseOrderController');
         facts.orders = await safe('đơn mua', () => loadPurchaseOrders(pool, {}));
-        if (!facts.orders?.failed) facts.sources.push('GET /api/purchasing/purchase-orders');
+        if (!facts.orders?.failed) facts.sources.push('Đơn mua hàng');
         facts.poPrices = await safe('giá PO', () => loadPoPriceSignals(pool));
         if (!facts.poPrices?.failed) facts.sources.push('Chi tiết đơn mua vs đơn trước');
     }
@@ -205,36 +205,36 @@ const collectFacts = async (pool, user) => {
     if (isRole(user, 'Thủ kho') && hasUc(user, 'UC15')) {
         const { loadWarehouseDashboard, loadInventory } = require('../controllers/warehouseController');
         facts.warehouse = await safe('tổng quan kho', () => loadWarehouseDashboard(pool, user));
-        if (!facts.warehouse?.failed) facts.sources.push('GET /api/warehouse/dashboard');
+        if (!facts.warehouse?.failed) facts.sources.push('Tổng quan kho');
         facts.inventory = await safe('tồn kho', () => loadInventory(pool, user, { lowOnly: true }));
-        if (!facts.inventory?.failed) facts.sources.push('GET /api/warehouse/inventory');
+        if (!facts.inventory?.failed) facts.sources.push('Tồn kho');
     }
 
     if (isRole(user, 'Thu ngân') && hasUc(user, 'UC22')) {
         const { loadCurrentShiftSummary } = require('../controllers/cashierController');
         facts.shift = await safe('ca hiện tại', () => loadCurrentShiftSummary(pool, user));
-        if (!facts.shift?.failed) facts.sources.push('GET /api/cashier/shifts/current/summary');
+        if (!facts.shift?.failed) facts.sources.push('Ca bán hàng');
     }
 
     if (isRole(user, 'Kế toán') && hasUc(user, 'UC37')) {
         const { loadUnpostedQueue } = require('../controllers/ledgerController');
         facts.unposted = await safe('chờ ghi sổ', () => loadUnpostedQueue(pool));
-        if (!facts.unposted?.failed) facts.sources.push('GET /api/ledger/unposted');
+        if (!facts.unposted?.failed) facts.sources.push('Chờ ghi sổ');
     }
     if (isRole(user, 'Kế toán') && hasUc(user, 'UC28')) {
         const { loadPayablesList } = require('../controllers/paymentVoucherController');
         facts.payables = stripPiiPayables(await safe('công nợ KT', () => loadPayablesList(pool, {})));
-        if (!facts.payables?.failed) facts.sources.push('GET /api/accounting/payables');
+        if (!facts.payables?.failed) facts.sources.push('Công nợ');
     }
     if (isRole(user, 'Kế toán') && hasUc(user, 'UC27')) {
         const { loadPurchaseInvoices } = require('../controllers/accountingController');
         facts.purchaseInvoices = await safe('HĐMH', () => loadPurchaseInvoices(pool, { match: 'Chưa đối chiếu' }));
-        if (!facts.purchaseInvoices?.failed) facts.sources.push('GET /api/accounting/purchase-invoices');
+        if (!facts.purchaseInvoices?.failed) facts.sources.push('Hóa đơn mua hàng');
     }
     if (isRole(user, 'Kế toán') && hasUc(user, 'UC29')) {
         const { loadClosedShifts } = require('../controllers/settlementController');
         facts.settlements = await safe('ca chờ phiếu thu', () => loadClosedShifts(pool, {}));
-        if (!facts.settlements?.failed) facts.sources.push('GET /api/accounting/shift-settlements');
+        if (!facts.settlements?.failed) facts.sources.push('Ca và phiếu thu');
     }
 
     if ((hasUc(user, 'UC10') && isRole(user, 'Quản lý')) || (hasUc(user, 'UC38') || hasUc(user, 'UC43'))) {
@@ -242,14 +242,14 @@ const collectFacts = async (pool, user) => {
             const resolved = { period: resolveReportingPeriod({ periodType: 'month' }) };
             if (hasUc(user, 'UC10') || hasUc(user, 'UC43')) {
                 facts.pnl = await safe('KQKD cửa hàng', () => storeProfitLoss.buildReport(pool, resolved));
-                if (!facts.pnl?.failed) facts.sources.push('GET /api/admin/reports/store-profit-loss');
+                if (!facts.pnl?.failed) facts.sources.push('KQKD');
             }
             if (hasUc(user, 'UC38') || hasUc(user, 'UC43')) {
                 const { loadIncomeStatement, loadCashFlow } = require('../controllers/ledgerController');
                 facts.income = await safe('KQKD sổ cái', () => loadIncomeStatement(pool, resolved.period));
                 facts.cashflow = await safe('dòng tiền', () => loadCashFlow(pool, resolved.period));
-                if (!facts.income?.failed) facts.sources.push('GET /api/ledger/reports/income-statement');
-                if (!facts.cashflow?.failed) facts.sources.push('GET /api/ledger/reports/cash-flow');
+                if (!facts.income?.failed) facts.sources.push('KQKD');
+                if (!facts.cashflow?.failed) facts.sources.push('Lưu chuyển tiền tệ');
             }
         } catch {
             facts.pnl = facts.pnl || { failed: true, message: 'không lấy được KQKD, không bịa' };
@@ -305,13 +305,13 @@ const kpisFromFacts = (facts, user) => {
         chips.push({ id: 'kqkd', label: `KQKD ${facts.pnl.kqkd.trangThai || ''}`.trim(), value: money(facts.pnl.kqkd.loiNhuan), source: 'Báo cáo lãi lỗ cửa hàng — không trừ trả NCC' });
     }
     if (facts.unposted && !facts.unposted.failed && Array.isArray(facts.unposted)) {
-        chips.push({ id: 'unposted', label: 'Chờ ghi sổ', value: String(facts.unposted.length), source: 'UC37 — không phải QL' });
+        chips.push({ id: 'unposted', label: 'Chờ ghi sổ', value: String(facts.unposted.length), source: 'Chờ ghi sổ — Kế toán' });
     }
     if (facts.warehouse && !facts.warehouse.failed) {
-        chips.push({ id: 'restock', label: 'Cần bổ sung', value: String(facts.warehouse.summary?.CanBoSung || 0), source: 'Tổng quan kho UC15' });
+        chips.push({ id: 'restock', label: 'Cần bổ sung', value: String(facts.warehouse.summary?.CanBoSung || 0), source: 'Tổng quan kho' });
     }
     if (facts.admin?.lowStock && !hasUc(user, 'UC15')) {
-        chips.push({ id: 'low', label: 'Tồn thấp TOP', value: String(facts.admin.lowStock.length), source: 'Dashboard QL — không UC15' });
+        chips.push({ id: 'low', label: 'Tồn thấp TOP', value: String(facts.admin.lowStock.length), source: 'Dashboard quản lý' });
     }
     return chips.slice(0, 8);
 };
@@ -371,7 +371,7 @@ const anomaliesFromFacts = (facts, user) => {
             evidence: sold7 > 0
                 ? `${row.MaSP} tồn ${row.SLTon} / min ${row.TonKhoToiThieu}; bán 7 ngày ${sold7}. Cần bổ sung — không lập PO.`
                 : `${row.MaSP} tồn ${row.SLTon} / min ${row.TonKhoToiThieu}. Chưa thấy tốc độ bán 7 ngày.`,
-            source: hasUc(user, 'UC15') ? 'Tồn kho UC15' : 'Dashboard tồn thấp TOP (không UC15)',
+            source: hasUc(user, 'UC15') ? 'Tồn kho' : 'Dashboard quản lý',
             nextAction: action(hasUc(user, 'UC15') ? 'inventory' : 'home')
         });
     }
@@ -410,7 +410,7 @@ const anomaliesFromFacts = (facts, user) => {
             severity: n(row.SoNgayConLai) < 0 ? 'High' : 'Medium',
             confidence: 'high',
             evidence: `${row.MaCNPTra} còn ${money(row.SoTienConLai)}, hạn ${String(row.HanThanhToan || '').slice(0, 10)} (${row.SoNgayConLai} ngày).`,
-            source: hasUc(user, 'UC28') ? 'Công nợ KT UC28' : 'Công nợ QL UC10',
+            source: hasUc(user, 'UC28') ? 'Công nợ' : 'Công nợ',
             nextAction: action(hasUc(user, 'UC28') ? 'accountingPayables' : 'managerPayables')
         });
     }
@@ -453,7 +453,7 @@ const anomaliesFromFacts = (facts, user) => {
             severity: Math.abs(n(row.ChenhLech)) >= 50000 ? 'High' : 'Medium',
             confidence: 'high',
             evidence: `Ca ${row.MaCa} lệch két ${money(row.ChenhLech)} (TM hệ thống ${money(row.TienMatHeThong)}).`,
-            source: isRole(user, 'Kế toán') ? 'Ca chờ phiếu thu UC29' : 'Báo cáo ca QL',
+            source: isRole(user, 'Kế toán') ? 'Ca và phiếu thu' : 'Báo cáo ca',
             nextAction: action(isRole(user, 'Kế toán') ? 'settlements' : 'managerReports')
         });
     }
@@ -478,8 +478,8 @@ const anomaliesFromFacts = (facts, user) => {
             object: 'Chờ ghi sổ',
             severity: facts.unposted.length >= 5 ? 'High' : 'Medium',
             confidence: 'high',
-            evidence: `${facts.unposted.length} chứng từ chờ ghi sổ (UC37).`,
-            source: 'GET /api/ledger/unposted',
+            evidence: `${facts.unposted.length} chứng từ chờ ghi sổ.`,
+            source: 'Chờ ghi sổ',
             nextAction: action('unposted')
         });
     }
@@ -653,7 +653,7 @@ const insightsFromFacts = (facts, user) => {
             id: 'top-payable',
             title: 'NCC công nợ lớn nhất (trong quyền)',
             body: `${biggest.TenNCC}: còn ${money(biggest.SoTienConLai)} · ${biggest.MaCNPTra}`,
-            evidence: [{ claim: 'Số còn lại', numbers: [money(biggest.SoTienConLai)], source: hasUc(user, 'UC28') ? 'UC28' : 'UC10', confidence: 'high' }],
+            evidence: [{ claim: 'Số còn lại', numbers: [money(biggest.SoTienConLai)], source: 'Công nợ', confidence: 'high' }],
             nextAction: action(hasUc(user, 'UC28') ? 'accountingPayables' : 'managerPayables')
         });
     }
@@ -685,7 +685,7 @@ const scenarioSnapshot = (facts, user) => {
         ? { items: facts.inventory.items || [] }
         : (facts.admin?.lowStock
             ? { items: facts.admin.lowStock, scope: 'dashboard-top' }
-            : { unavailable: true, reason: 'Không có tồn trong phạm vi quyền (QL không UC15 đầy đủ).' });
+            : { unavailable: true, reason: 'Không có tồn trong phạm vi quyền (Quản lý không xem tồn chi tiết toàn hàng).' });
     const velocity = Array.isArray(facts.velocity) ? facts.velocity : [];
     const velMap = new Map(velocity.map((row) => [row.MaSP, row]));
     const demandItems = stockItems.unavailable

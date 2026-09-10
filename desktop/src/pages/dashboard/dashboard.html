@@ -7,20 +7,20 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="dashboard.css?v=recon-nav-3">
-  <link rel="stylesheet" href="../admin/admin.css?v=tax-ui-1">
-  <link rel="stylesheet" href="../warehouse/warehouse.css?v=close-confirm-1">
+  <link rel="stylesheet" href="dashboard.css?v=recon-nav-4">
+  <link rel="stylesheet" href="../admin/admin.css?v=tax-ui-2">
+  <link rel="stylesheet" href="../warehouse/warehouse.css?v=typo-heading-1">
   <link rel="stylesheet" href="../workforce/workforce.css?v=approve-fix-2">
   <link rel="stylesheet" href="../cashier/cashier.css?v=qty-step-1">
   <link rel="stylesheet" href="../shared/locale-ui.css?v=vi-date-3">
   <link rel="stylesheet" href="../shared/ui-polish.css?v=count-click-1">
-  <link rel="stylesheet" href="../shared/report-charts.css?v=wh-report-5">
+  <link rel="stylesheet" href="../shared/report-charts.css?v=wh-report-6">
   <link rel="stylesheet" href="../shared/product-images.css?v=products-1">
   <link rel="stylesheet" href="overview-modern.css?v=typo-widget-3">
-  <link rel="stylesheet" href="../accounting/ledger.css?v=recon-ui-2">
+  <link rel="stylesheet" href="../accounting/ledger.css?v=recon-ui-3">
   <link rel="stylesheet" href="../accounting/ledger-print.css?v=ledger-print-1">
   <link rel="stylesheet" href="../admin/loyalty.css?v=rfm-ui-2">
-  <link rel="stylesheet" href="assistant.css?v=intel-widget-2">
+  <link rel="stylesheet" href="assistant.css?v=assist-ui-9">
   <link rel="stylesheet" href="chat.css?v=chat-p5-6">
 </head>
 <body>
@@ -357,9 +357,8 @@
   <aside class="assistant-widget" id="assistantDrawer" role="dialog" aria-labelledby="assistantTitle">
     <header class="assistant-head">
       <div>
-        <p class="assistant-kicker">Trợ lý nội bộ</p>
         <h2 id="assistantTitle">Trợ lý Fly</h2>
-        <p>Số liệu hệ thống. AI chỉ diễn giải.</p>
+        <p>Hỏi số liệu cửa hàng</p>
       </div>
       <button type="button" class="assistant-close" id="assistantClose" aria-label="Đóng">×</button>
     </header>
@@ -375,9 +374,13 @@
         <div class="assistant-thread" id="assistantThread"></div>
         <p class="assistant-error" id="assistantError" hidden></p>
         <div class="assistant-chips" id="assistantChips"></div>
+        <div class="assistant-month-bar">
+          <label for="assistantMonth">Tháng</label>
+          <select id="assistantMonth" aria-label="Chọn tháng"></select>
+        </div>
         <div class="assistant-composer">
           <div class="assistant-composer-box">
-            <textarea id="assistantInput" rows="1" placeholder="Hỏi Fly Intelligence…" maxlength="500"></textarea>
+            <textarea id="assistantInput" rows="1" placeholder="Hỏi số liệu cửa hàng…" maxlength="500"></textarea>
             <button type="button" class="assistant-send" id="assistantSend">Gửi</button>
           </div>
           <p class="assistant-hint">Enter gửi · Shift+Enter xuống dòng · 3–6 lượt gần nhất được gửi kèm để hiểu “trong số đó…”.</p>
@@ -409,18 +412,18 @@
   <script src="../warehouse/purchase-order-pages.js?v=scrap-qty-1"></script>
   <script src="../warehouse/receipt-pages.js?v=search-2"></script>
   <script src="../warehouse/stock-issue-pages.js?v=scrap-qty-1"></script>
-  <script src="../accounting/store-pnl.js?v=store-pnl-1"></script>
-  <script src="../accounting/accounting-pages.js?v=date-vn-1"></script>
+  <script src="../accounting/store-pnl.js?v=store-pnl-2"></script>
+  <script src="../accounting/accounting-pages.js?v=date-vn-2"></script>
   <script src="../accounting/ledger-print.js?v=ledger-print-1"></script>
-  <script src="../accounting/ledger-pages.js?v=hb-recon-19"></script>
-  <script src="../accounting/reconciliation-pages.js?v=recon-2"></script>
-  <script src="../admin/loyalty-pages.js?v=rfm-ui-2"></script>
+  <script src="../accounting/ledger-pages.js?v=hb-recon-20"></script>
+  <script src="../accounting/reconciliation-pages.js?v=recon-3"></script>
+  <script src="../admin/loyalty-pages.js?v=rfm-ui-3"></script>
   <script src="../workforce/workforce-pages.js?v=close-confirm-1"></script>
   <script src="../cashier/cashier-pages.js?v=date-vn-2"></script>
   <script src="../shared/role-reports.js?v=wh-report-5"></script>
   <script src="../shared/warehouse-keeper-reports.js?v=wh-report-5"></script>
   <script src="dashboard.js?v=handbook-2"></script>
   <script src="chat-panel.js?v=chat-p5-6"></script>
-  <script src="assistant-panel.js?v=intel-widget-2"></script>
+  <script src="assistant-panel.js?v=assist-ui-9"></script>
 </body>
 </html>

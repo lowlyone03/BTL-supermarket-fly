@@ -146,11 +146,11 @@
 .assistant-widget .assistant-kicker {
   margin: 0;
   color: #5f8f78;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  word-spacing: .12em;
+  letter-spacing: 0;
+  text-transform: none;
+  word-spacing: 0.08em;
 }
 .assistant-widget .assistant-head h2 {
   margin: 2px 0 0;
@@ -182,8 +182,8 @@
 .assistant-widget .assistant-tabs {
   flex: 0 0 auto;
   display: flex;
-  gap: 0;
-  padding: 0 8px;
+  gap: 4px;
+  padding: 0 10px;
   overflow-x: auto;
   border-bottom: 1px solid #e6eee9;
   background: #fff;
@@ -191,15 +191,17 @@
 }
 .assistant-widget .assistant-tabs button {
   flex: 0 0 auto;
-  padding: 8px 8px 9px;
+  padding: 10px 10px 11px;
   border: 0;
   background: transparent;
   color: #5d7268;
   cursor: pointer;
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.35;
+  letter-spacing: 0;
+  word-spacing: 0.08em;
   white-space: nowrap;
   border-bottom: 2px solid transparent;
 }
@@ -210,6 +212,7 @@
 
 .assistant-widget .assistant-panes {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -220,10 +223,11 @@
   min-height: 0;
   overflow: auto;
 }
-.assistant-widget .assistant-pane.is-active { display: flex; flex-direction: column; }
+.assistant-widget .assistant-pane.is-active { display: flex; flex-direction: column; min-width: 0; }
 
 .assistant-widget .assistant-thread {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
   padding: 12px 12px 6px;
   overflow-y: auto;
@@ -261,16 +265,19 @@
   line-height: 1.5;
 }
 
-.assistant-widget .assistant-turn { margin: 0 0 10px; display: flex; }
+.assistant-widget .assistant-turn { margin: 0 0 10px; display: flex; min-width: 0; width: 100%; }
 .assistant-widget .assistant-turn.is-user { justify-content: flex-end; }
 .assistant-widget .assistant-bubble {
   max-width: 92%;
+  min-width: 0;
   padding: 9px 12px;
   border-radius: 14px;
   font-size: 13px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+  letter-spacing: 0;
+  word-spacing: normal;
 }
 .assistant-widget .assistant-turn.is-user .assistant-bubble {
   color: #f4fbf7;
@@ -278,10 +285,213 @@
   border-bottom-right-radius: 5px;
 }
 .assistant-widget .assistant-turn.is-bot .assistant-bubble {
+  max-width: 100%;
   color: #1d2c26;
   background: #fff;
   border: 1px solid #e3ebe6;
   border-bottom-left-radius: 5px;
+  white-space: normal;
+  word-break: normal;
+  overflow: hidden;
+}
+.assistant-widget .assistant-md p { margin: 0 0 8px; }
+.assistant-widget .assistant-md p:last-child { margin-bottom: 0; }
+.assistant-widget .assistant-md-title {
+  margin: 0 0 8px;
+  color: #14352c;
+  font-size: 13.5px;
+  font-weight: 650;
+}
+.assistant-widget .assistant-md-list {
+  margin: 0 0 8px;
+  padding-left: 1.2em;
+}
+.assistant-widget .assistant-money {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: 0;
+  word-spacing: normal;
+}
+.assistant-widget .assistant-report-head {
+  padding: 10px 10px 0;
+  color: #14352c;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
+  word-spacing: normal;
+  text-transform: none;
+}
+.assistant-widget .assistant-metric-row {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  min-width: 0;
+}
+.assistant-widget .assistant-metric {
+  padding: 8px 10px;
+  border: 1px solid #e3ebe6;
+  border-radius: 10px;
+  background: #f7faf8;
+  min-width: 0;
+}
+.assistant-widget .assistant-metric small {
+  display: block;
+  color: #5f8f78;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  word-spacing: normal;
+  text-transform: none;
+}
+.assistant-widget .assistant-metric strong {
+  display: block;
+  margin-top: 3px;
+  color: #14352c;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  word-spacing: normal;
+  white-space: nowrap;
+}
+.assistant-widget .assistant-source-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.assistant-widget .assistant-source-chip {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #e7f2ec;
+  color: #1c4a3d;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  word-spacing: 0.06em;
+}
+.assistant-widget .assistant-invoice-box {
+  margin-top: 10px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e3ebe6;
+  border-radius: 12px;
+}
+.assistant-widget .assistant-doc-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.assistant-widget .assistant-doc-card {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid #eef3f0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  letter-spacing: 0;
+  word-spacing: normal;
+  text-transform: none;
+}
+.assistant-widget .assistant-doc-card:last-child { border-bottom: 0; }
+.assistant-widget .assistant-doc-card.is-selected {
+  background: #e8f4ee;
+}
+.assistant-widget .assistant-doc-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.assistant-widget .assistant-doc-id {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #14352c;
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0;
+  word-spacing: normal;
+}
+.assistant-widget .assistant-doc-money {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+}
+.assistant-widget .assistant-doc-partner {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #31463d;
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0;
+  word-spacing: normal;
+}
+.assistant-widget .assistant-doc-meta {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #5d7268;
+  font-size: 11px;
+  letter-spacing: 0;
+  word-spacing: normal;
+}
+.assistant-widget .assistant-doc-date {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.assistant-widget .assistant-doc-status {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #eef6f1;
+  color: #1c4a3d;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  word-spacing: normal;
+  text-transform: none;
+}
+.assistant-widget .assistant-invoice-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 8px;
+  min-width: 0;
+  border-top: 1px solid #eef3f0;
+  background: #fff;
+}
+.assistant-widget .assistant-invoice-actions .assistant-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  text-align: center;
+}
+.assistant-widget .assistant-report-box {
+  margin-top: 10px;
+  border: 1px solid #e3ebe6;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f7fbf8;
+}
+.assistant-widget .assistant-report-box .assistant-metric-row {
+  padding: 8px 8px 0;
 }
 .assistant-widget .assistant-sources,
 .assistant-widget .assistant-evidence {
@@ -335,12 +545,46 @@
 
 .assistant-widget .assistant-chips {
   flex: 0 0 auto;
+  min-width: 0;
   padding: 4px 12px 8px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   max-height: 88px;
   overflow: auto;
+}
+.assistant-widget .assistant-month-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 12px;
+  border-top: 1px solid #e6eee9;
+  background: #fff;
+}
+.assistant-widget .assistant-month-bar label {
+  flex: 0 0 auto;
+  color: #5f8f78;
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0;
+  word-spacing: normal;
+  text-transform: none;
+}
+.assistant-widget .assistant-month-bar select {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #d5e3db;
+  border-radius: 8px;
+  background: #fff;
+  color: #1d2c26;
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0;
 }
 .assistant-widget .assistant-chip {
   max-width: 100%;

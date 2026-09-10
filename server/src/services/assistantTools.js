@@ -11,7 +11,7 @@ const hasUc = (user, code) => codesOf(user).includes(code);
 const money = (value) => {
     const number = Number(value);
     if (!Number.isFinite(number)) return '';
-    return `${Math.round(number).toLocaleString('vi-VN')}đ`;
+    return `${Math.round(number).toLocaleString('vi-VN')} đ`;
 };
 
 const withTimeout = (promise, label, ms = 2000) => Promise.race([
@@ -49,7 +49,7 @@ const formatAdminDashboard = (data) => {
         `Ca đang mở: ${data.summary?.CaDangMo ?? '—'}.`
     ];
     if (stock.length) {
-        lines.push('Tồn thấp TOP (dashboard QL, không phải UC15):');
+        lines.push('Tồn thấp TOP (dashboard quản lý, không phải tồn chi tiết toàn hàng):');
         for (const row of stock) {
             lines.push(`- ${row.MaSP} ${row.TenSP}: còn ${row.SLTon} / min ${row.TonKhoToiThieu}`);
         }
@@ -100,7 +100,7 @@ const formatUnposted = (rows) => {
     if (!rows || rows.failed) return rows?.message || 'không lấy được chờ ghi sổ, không bịa';
     const list = Array.isArray(rows) ? rows : [];
     const top = list.slice(0, 8);
-    const lines = [`Chờ ghi sổ: ${list.length} chứng từ (UC37 — không phải QL).`];
+    const lines = [`Chờ ghi sổ: ${list.length} chứng từ (Kế toán — không phải Quản lý).`];
     for (const row of top) {
         lines.push(`- ${row.MaChungTu} · ${row.LoaiChungTu} · ${row.LyDo || ''}`);
     }
@@ -114,7 +114,7 @@ const formatReconSummary = (data) => {
         return `Đối soát NH (QL, chỉ đếm): ${data.soDongChuaDoiSoat || 0} dòng chưa đối soát, tổng ${tien || '0đ'}. Không dump sao kê chi tiết.`;
     }
     return [
-        `Đối soát NH (KT UC42): chưa xác nhận ${data.soDongChuaDoiSoat || 0} dòng · ${tien || '0đ'}.`,
+        `Đối soát NH (Kế toán): chưa xác nhận ${data.soDongChuaDoiSoat || 0} dòng · ${tien || '0 đ'}.`,
         `Khớp tự động chờ KT: ${data.soDongAutoChoXacNhan || 0}. Gợi ý: ${data.soDongGoiY || 0}. Chênh lệch: ${data.soDongChenhLech || 0}. Chưa khớp: ${data.soDongChuaKhop || 0}.`
     ].join('\n');
 };
@@ -148,12 +148,12 @@ const collectContext = async (pool, user) => {
         const recon = await safeTool('đối soát NH', () => loadReconciliationSummary(pool, user));
         if (recon && !recon.failed && !recon.skipped) {
             extras.push(formatReconSummary(recon));
-            extraSources.push(recon.scope === 'ql' ? 'GET /api/admin/reconciliation/summary (chỉ đếm)' : 'GET /api/accounting/reconciliation/summary');
+            extraSources.push('Đối soát ngân hàng');
         }
         const loyalty = await safeTool('RFM khách', () => loadLoyaltySummary(pool, user));
         if (loyalty && !loyalty.failed && !loyalty.skipped) {
             extras.push(formatLoyaltySummary(loyalty));
-            extraSources.push('GET /api/admin/loyalty/overview (QL UC10, không dump TN)');
+            extraSources.push('Khách hàng thân thiết');
         }
         return {
             soLieu: [pack.soLieu, ...extras].filter(Boolean).join('\n'),
@@ -169,33 +169,33 @@ const collectContext = async (pool, user) => {
         if (inbox?.failed) blocks.push(inbox.message);
         else {
             blocks.push(formatInbox(inbox));
-            sources.push('GET /api/notifications');
+            sources.push('Hộp thư');
         }
         if (isRole(user, 'Quản lý') && (hasUc(user, 'UC10') || hasUc(user, 'UC04'))) {
             const { loadAdminDashboard } = require('../controllers/adminController');
             const dash = await safeTool('dashboard quản lý', () => loadAdminDashboard(pool));
             blocks.push(formatAdminDashboard(dash));
-            if (!dash?.failed) sources.push('GET /api/admin/dashboard (tồn thấp TOP, không UC15)');
+            if (!dash?.failed) sources.push('Dashboard quản lý');
         } else if (isRole(user, 'Nhân viên mua hàng') && hasUc(user, 'UC12')) {
             const { loadPurchaseRequests } = require('../controllers/warehouseController');
             const reqs = await safeTool('đề nghị mua', () => loadPurchaseRequests(pool, user, { purchasing: true }));
             blocks.push(formatPurchaseRequests(reqs));
-            if (!reqs?.failed) sources.push('GET /api/purchasing/purchase-requests');
+            if (!reqs?.failed) sources.push('Đề nghị mua hàng');
         } else if (isRole(user, 'Thủ kho') && hasUc(user, 'UC15')) {
             const { loadWarehouseDashboard } = require('../controllers/warehouseController');
             const dash = await safeTool('tổng quan kho', () => loadWarehouseDashboard(pool, user));
             blocks.push(formatWarehouseDashboard(dash));
-            if (!dash?.failed) sources.push('GET /api/warehouse/dashboard');
+            if (!dash?.failed) sources.push('Tổng quan kho');
         } else if (isRole(user, 'Thu ngân') && hasUc(user, 'UC22')) {
             const { loadCurrentShiftSummary } = require('../controllers/cashierController');
             const shift = await safeTool('ca hiện tại', () => loadCurrentShiftSummary(pool, user));
             blocks.push(formatShift(shift));
-            if (!shift?.failed) sources.push('GET /api/cashier/shifts/current/summary');
+            if (!shift?.failed) sources.push('Ca bán hàng');
         } else if (isRole(user, 'Kế toán') && hasUc(user, 'UC37')) {
             const { loadUnpostedQueue } = require('../controllers/ledgerController');
             const queue = await safeTool('chờ ghi sổ', () => loadUnpostedQueue(pool));
             blocks.push(formatUnposted(queue));
-            if (!queue?.failed) sources.push('GET /api/ledger/unposted');
+            if (!queue?.failed) sources.push('Chờ ghi sổ');
         }
         return {
             soLieu: blocks.join('\n'),

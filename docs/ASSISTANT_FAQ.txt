@@ -24,11 +24,11 @@ A: Chỉ phần tiền mặt vào két và phiếu thu. Phần MoMo không vào 
 
 Q: Quản lý có xem tồn kho chi tiết toàn cửa hàng không?
 Tags: quan ly ton kho uc15 dashboard
-A: Không. QL không có UC15. Trợ lý chỉ được nêu tồn thấp dạng TOP trên dashboard quản lý, không mở tồn chi tiết thủ kho.
+A: Không. Quản lý không xem tồn kho chi tiết toàn hàng. Trợ lý chỉ được nêu tồn thấp dạng TOP trên dashboard quản lý, không mở tồn chi tiết thủ kho.
 
 Q: Chứng từ chờ ghi sổ thuộc ai?
 Tags: cho ghi so uc37 ke toan unposted
-A: UC37 thuộc Kế toán. Quản lý không gọi danh sách chờ ghi sổ. KT hỏi trợ lý mới được đọc số lượng / mã chờ.
+A: Chờ ghi sổ thuộc Kế toán. Quản lý không gọi danh sách chờ ghi sổ. Kế toán hỏi trợ lý mới được đọc số lượng / mã chờ.
 
 Q: Thu ngân có được hỏi công nợ nhà cung cấp không?
 Tags: thu ngan cong no ncc so cai
@@ -36,7 +36,7 @@ A: Không. Công nợ NCC và sổ cái nằm ngoài quyền thu ngân. Trợ l�
 
 Q: Mua hàng có xem tồn toàn cửa hàng không?
 Tags: mua hang ton kho uc15 de nghi
-A: Không. MH không có UC15. Được hỏi đề nghị mua, đơn mua, nhà cung cấp, báo cáo mua.
+A: Không. Mua hàng không xem tồn kho chi tiết toàn hàng. Được hỏi đề nghị mua, đơn mua, nhà cung cấp, báo cáo mua.
 
 Q: Duyệt đơn mua trên chat trợ lý được không?
 Tags: duyet po telegram tro ly
@@ -72,11 +72,11 @@ A: Có. Thiếu API key hoặc lỗi nhà cung cấp LLM không chặn POS, ca, 
 
 Q: Nhật ký trợ lý ghi gì?
 Tags: audit nhat ky uc01
-A: Ghi hành động Trợ lý AI, mã UC01, khoảng 120 ký tự đầu câu hỏi. Không ghi mật khẩu, khóa API, hay câu trả lời đầy đủ.
+A: Ghi hành động Trợ lý AI, khoảng 120 ký tự đầu câu hỏi. Không ghi mật khẩu, khóa API, hay câu trả lời đầy đủ.
 
 Q: Tồn cần bổ sung trên dashboard quản lý khác tồn thủ kho thế nào?
 Tags: ton thap top can bo sung
-A: Dashboard QL chỉ TOP mặt hàng dưới định mức để chú ý. Thủ kho (UC15) mới xem tồn đầy đủ, SL đặt mua, chưa nhập lần đầu.
+A: Dashboard quản lý chỉ TOP mặt hàng dưới định mức để chú ý. Thủ kho mới xem tồn đầy đủ, SL đặt mua, chưa nhập lần đầu.
 
 Q: Mở màn nào khi trợ lý bảo thiếu quyền?
 Tags: man hinh menu dashboard

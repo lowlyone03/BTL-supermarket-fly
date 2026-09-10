@@ -49,9 +49,9 @@
     root.innerHTML = `
       <header class="lg-header recon-header">
         <div>
-          <p class="lg-kicker">Quản lý · Tóm tắt UC10</p>
+          <p class="lg-kicker">Quản lý · Tóm tắt đối soát</p>
           <h1>Đối soát ngân hàng thông minh</h1>
-          <p class="lg-lead">Bạn xem số dòng còn chờ và tổng tiền chưa đối soát. Không xem từng dòng sao kê, không nhập CSV và không xác nhận khớp — việc đó thuộc Kế toán (UC42).</p>
+          <p class="lg-lead">Bạn xem số dòng còn chờ và tổng tiền chưa đối soát. Không xem từng dòng sao kê, không nhập CSV và không xác nhận khớp — việc đó thuộc Kế toán (sao kê ngân hàng).</p>
         </div>
         <button type="button" class="lg-btn lg-btn-ghost" id="reconOpenHb">Mở cẩm nang · mục 19</button>
       </header>
@@ -443,7 +443,7 @@
                 <div>
                   <p class="lg-kicker">Đối soát ngân hàng</p>
                   <h1>Đối soát ngân hàng thông minh</h1>
-                  <p class="lg-lead">Tài khoản này không có quyền nhập sao kê (UC42) hay xem tóm tắt quản lý (UC10).</p>
+                  <p class="lg-lead">Tài khoản này không có quyền nhập sao kê ngân hàng hay xem tóm tắt quản lý.</p>
                 </div>
               </header>
               <article class="lg-card"><p class="lg-help" style="margin:0">Nhờ Quản lý kiểm tra phân quyền, hoặc mở Cẩm nang kế toán — mục 19.</p></article>`;

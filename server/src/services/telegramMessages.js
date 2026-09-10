@@ -262,6 +262,9 @@ const I18N = {
         kbFly: '📋 Tóm tắt /fly',
         kbLang: '🌐 Ngôn ngữ',
         kbHelp: '❓ Trợ giúp',
+        kbAsk: '💬 Hỏi trợ lý',
+        askPrompt: 'Bạn muốn hỏi gì? Gõ câu hỏi ở tin tiếp theo, ví dụ: hôm nay cần chú ý gì?',
+        askUsage: 'Hỏi Trợ lý Fly. Gõ: /ask hôm nay cần chú ý gì?\nTrợ lý không duyệt chứng từ. Việc chờ: nút trên tin, hoặc /pending.',
         kbLink: '🔗 Liên kết / Hướng dẫn OTP',
         kbGuide: '📚 Tài liệu / Quy tắc',
         kbHide: '⬆️ Ẩn menu',
@@ -425,6 +428,8 @@ const I18N = {
         helpDocs: '/docs — Chứng từ / giấy tờ (đơn mua, phiếu nhập, HĐ, xuất, KK, đổi trả, phiếu chi, công, BCK)',
         helpReports: '/reports — Báo cáo cửa hàng + Báo cáo Thủ kho đã gửi (đủ NXT, hàng rời kho bán) — QL',
         helpGuide: '/guide — Tài liệu / quy tắc (DT, lãi gộp, VAT, công nợ, két, lương) — alias /rules',
+        helpAsk: '/ask … — Hỏi tự do (thử nghiệm): số liệu đúng quyền QL, có Nguồn. Không duyệt hộ. /guide vẫn là quy tắc cố định.',
+        guideAskHint: 'Hỏi tự do (thử nghiệm): /ask … — số liệu đúng quyền QL, có Nguồn. Không duyệt hộ. /guide vẫn là quy tắc cố định.',
         helpPayroll: '/payroll — Lương tóm tắt kỳ — QL (không mã NV)',
         helpPayrollNv: '/payroll NV008 — Lương 1 người — CHỈ kế toán',
         helpUnlink: '/unlink — Hủy liên kết Telegram',
@@ -604,6 +609,9 @@ const I18N = {
         kbFly: '📋 Summary /fly',
         kbLang: '🌐 Language',
         kbHelp: '❓ Help',
+        kbAsk: '💬 Ask assistant',
+        askPrompt: 'What do you want to ask? Type the next message, e.g. what needs attention today?',
+        askUsage: 'Ask Fly Assistant. Type: /ask what needs attention today?\nThe assistant does not approve documents. Pending work: buttons on the card, or /pending.',
         kbLink: '🔗 Link / OTP guide',
         kbGuide: '📚 Docs / Rules',
         kbHide: '⬆️ Hide menu',
@@ -767,6 +775,8 @@ const I18N = {
         helpDocs: '/docs — Papers / documents (PO, receipt, invoice, issue, count, return, payout, attendance, BCK)',
         helpReports: '/reports — Store report + submitted warehouse-keeper report — Manager',
         helpGuide: '/guide — Rules (revenue, gross profit, VAT, AP, cash, payroll) — alias /rules',
+        helpAsk: '/ask … — Free question (trial): figures match manager rights, with Sources. Does not approve. /guide stays static.',
+        guideAskHint: 'Free question (trial): /ask … — figures match manager rights, with Sources. Does not approve. /guide stays static.',
         helpPayroll: '/payroll — Period payroll summary — Manager (no staff id)',
         helpPayrollNv: '/payroll NV008 — One person payroll — ACCOUNTANT ONLY',
         helpUnlink: '/unlink — Unlink Telegram',
@@ -946,6 +956,9 @@ const I18N = {
         kbFly: '📋 摘要 /fly',
         kbLang: '🌐 语言',
         kbHelp: '❓ 帮助',
+        kbAsk: '💬 问助手',
+        askPrompt: '您想问什么？请在下一条消息输入，例如：今天要注意什么？',
+        askUsage: '问 Fly 助手。输入：/ask 今天要注意什么？\n助手不代审批。待办：卡片上的按钮，或 /pending。',
         kbLink: '🔗 关联 / OTP 说明',
         kbGuide: '📚 文档 / 规则',
         kbHide: '⬆️ 隐藏菜单',
@@ -1026,6 +1039,8 @@ const I18N = {
         helpDocs: '/docs — 单据 / 证件（采购、入库、发票、出库、盘点、退换、付款、考勤、BCK）',
         helpReports: '/reports — 门店报表 + 仓管已提交库存报告 — 店长',
         helpGuide: '/guide — 规则（销售、毛利、VAT、应付、钱箱、工资）— 别名 /rules',
+        helpAsk: '/ask … — 自由提问（试用）：按店长权限给数字，含来源。不代审批。/guide 仍是固定规则。',
+        guideAskHint: '自由提问（试用）：/ask … — 按店长权限给数字，含来源。不代审批。/guide 仍是固定规则。',
         helpPayroll: '/payroll — 本期工资摘要 — 店长（不含员工编号）',
         helpPayrollNv: '/payroll NV008 — 单人工资 — 仅会计',
         helpUnlink: '/unlink — 取消 Telegram 关联',
@@ -1234,6 +1249,7 @@ const HELP_LINE_KEYS = [
     { key: 'helpDocs' },
     { key: 'helpReports', uc: ['UC10'] },
     { key: 'helpGuide' },
+    { key: 'helpAsk', ask: true },
     { key: 'helpPayroll', uc: ['UC10'] },
     { key: 'helpPayrollNv', uc: ['UC33'] },
     { key: 'helpUnlink' }
@@ -1244,6 +1260,8 @@ const HELP_LINES = HELP_LINE_KEYS.map(item => ({
     uc: item.uc
 }));
 
+const isTelegramAskEnabled = () => String(process.env.TELEGRAM_ASK || '').trim() === '1';
+
 const buildHelpMessage = (hasCommand, lang = DEFAULT_LANG) => {
     const allowed = typeof hasCommand === 'function' ? hasCommand : () => true;
     const lines = [
@@ -1252,6 +1270,7 @@ const buildHelpMessage = (hasCommand, lang = DEFAULT_LANG) => {
         ''
     ];
     for (const item of HELP_LINE_KEYS) {
+        if (item.ask && !isTelegramAskEnabled()) continue;
         if (!item.uc?.length || allowed(item.uc)) lines.push(escapeHtml(t(lang, item.key)));
     }
     lines.push('', `<i>${escapeHtml(t(lang, 'helpNoWrite'))}</i>`, escapeHtml(t(lang, 'denyWrite')));
@@ -1773,6 +1792,7 @@ const REPLY_CMD_KEYS = [
     { key: 'kbFly', name: 'fly' },
     { key: 'kbLang', name: 'langmenu' },
     { key: 'kbHelp', name: 'help' },
+    { key: 'kbAsk', name: 'askwait' },
     { key: 'kbLink', name: 'linkguide' }
 ];
 
@@ -1812,6 +1832,7 @@ const REPLY_NEEDLES = [
     { name: 'fly', needles: ['tóm tắt /fly', 'summary /fly', '摘要 /fly', 'tóm tắt', 'summary'] },
     { name: 'langmenu', needles: ['ngôn ngữ', 'language', '语言'] },
     { name: 'help', needles: ['trợ giúp', 'help', '帮助'] },
+    { name: 'askwait', needles: ['hỏi trợ lý', 'ask assistant', '问助手'] },
     { name: 'linkguide', needles: ['hướng dẫn otp', 'otp guide', 'otp 说明', 'liên kết', '关联'] }
 ];
 
@@ -1831,6 +1852,7 @@ const REPLY_FALLBACK = [
     { name: 'fly', re: /tóm tắt|summary\s*\/fly|摘要\s*\/fly/i },
     { name: 'langmenu', re: /ngôn ngữ|language|语言/i },
     { name: 'help', re: /trợ giúp|\/help|帮助/i },
+    { name: 'askwait', re: /hỏi trợ lý|ask assistant|问助手/i },
     { name: 'linkguide', re: /hướng dẫn otp|otp guide|otp 说明|liên kết/i }
 ];
 
@@ -1881,6 +1903,7 @@ const matchReplyNeedles = (norm) => {
 const matchReplyCommand = (text) => {
     const raw = String(text || '').replace(/\u00a0/g, ' ').trim();
     if (!raw || FORBIDDEN_REPLY.test(raw)) return null;
+    if (/^\/[A-Za-z0-9_]+/i.test(raw)) return null;
     if (LABEL_TO_CMD.has(raw)) return { name: LABEL_TO_CMD.get(raw), via: 'reply' };
     const norm = normalizeReplyText(raw);
     if (norm && LABEL_TO_CMD.has(norm)) return { name: LABEL_TO_CMD.get(norm), via: 'reply' };
@@ -2092,7 +2115,9 @@ const replyKeyboard = (lang = DEFAULT_LANG, { bound = false } = {}) => {
             ['kbDebt', 'kbShifts'],
             ['kbPayments', 'kbLowstock'],
             ['kbGuide', 'kbFly'],
-            ['kbHelp', 'kbHide']
+            ...(isTelegramAskEnabled()
+                ? [['kbAsk', 'kbHelp'], ['kbHide', 'kbLang']]
+                : [['kbHelp', 'kbHide']])
         ]
         : [
             ['kbLang', 'kbHelp'],
@@ -2160,6 +2185,7 @@ module.exports = {
     buildStartWelcomeGuest,
     START_LINK_GUIDE,
     HELP_LINES,
+    isTelegramAskEnabled,
     buildHelpMessage,
     buildA1Message,
     buildA2Message,

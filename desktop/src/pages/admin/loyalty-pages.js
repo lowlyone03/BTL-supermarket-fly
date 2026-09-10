@@ -63,7 +63,7 @@
     root.innerHTML = `
       <header class="loyalty-header">
         <div class="loyalty-header-copy">
-          <p class="loyalty-kicker">Quản lý · UC10</p>
+          <p class="loyalty-kicker">Quản lý · Khách hàng thân thiết</p>
           <h1>Khách hàng thân thiết — RFM</h1>
           <p class="loyalty-lead">Phân khúc theo hóa đơn hoàn thành và điểm thành viên. Gợi ý ưu đãi theo chính sách cửa hàng.</p>
         </div>

@@ -1208,12 +1208,14 @@
     let currentReport = null;
     let currentPnl = null;
     let activeTab = 'pnl';
-    const extraButtons = '<button class="warehouse-secondary" id="exportReportCsv" hidden disabled>Xuất CSV</button><button class="warehouse-secondary" id="printFinancialReport" hidden disabled>Xem bản in / PDF</button>';
+    const extraButtons = '<button class="warehouse-secondary" id="printStoreMonth" type="button">In báo cáo tháng</button><button class="warehouse-secondary" id="exportReportCsv" hidden disabled>Xuất CSV</button><button class="warehouse-secondary" id="printFinancialReport" hidden disabled>Xem bản in / PDF</button>';
     root.innerHTML = `${heading('QUẢN LÝ / BÁO CÁO', 'Báo cáo cửa hàng', 'Xem cửa hàng đang lãi hay lỗ sau chi phí nhà cung cấp và lương đã khóa. Lãi gộp kế toán không bị trừ lương.')}${window.FLY_STORE_PNL?.nativeToolbar(reportDefaults(), extraButtons) || periodFilterCard(extraButtons)}<div id="financialReportBody">${reportIdleHtml}</div>`;
     const selectedPeriod = bindPeriodUi(root, () => { load(); });
     const syncTabButtons = () => {
       root.querySelectorAll('[data-store-tab]').forEach(button => button.classList.toggle('active', button.dataset.storeTab === activeTab));
       root.querySelectorAll('#exportReportCsv, #printFinancialReport').forEach(button => { button.hidden = activeTab === 'pnl'; });
+      const monthBtn = root.querySelector('#printStoreMonth');
+      if (monthBtn) monthBtn.hidden = activeTab !== 'pnl';
     };
     const renderPnl = () => {
       const body = root.querySelector('#financialReportBody');
@@ -1325,6 +1327,18 @@
         if (printBtn) printBtn.disabled = false;
         if (exportBtn) exportBtn.disabled = false;
     };
+    root.querySelector('#printStoreMonth')?.addEventListener('click', () => {
+      if (!currentPnl) {
+        context.showToast('Bấm Lập báo cáo trước khi in.', 'error');
+        return;
+      }
+      const config = window.FLY_STORE_PNL?.printConfig?.(currentPnl);
+      if (!config || !window.FLY_PRINT?.show) {
+        context.showToast('Chưa tải được máy in báo cáo.', 'error');
+        return;
+      }
+      window.FLY_PRINT.show(config);
+    });
     root.querySelector('#printFinancialReport').addEventListener('click', () => {
       if (!currentReport) return;
       window.FLY_PRINT.show({

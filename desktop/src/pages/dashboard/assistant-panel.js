@@ -7,10 +7,10 @@
   const roleKey = String(user.TenVaiTro || '').trim().toLocaleLowerCase('vi-VN');
   const chipsByRole = {
     'quản lý': [
-      'Hôm nay cần chú ý gì?',
-      'Vì sao tháng này có lãi nhưng tiền mặt giảm?',
-      'Phiếu PO nào đáng chú ý trước khi duyệt?',
-      'Nếu doanh thu giảm 10% thì lãi gộp thế nào?'
+      'In báo cáo tháng này',
+      'Danh sách đơn mua tháng này',
+      'In phiếu nhập tháng 8',
+      'Công nợ NCC'
     ],
     'nhân viên mua hàng': [
       'Đề nghị kho nào chưa lập đơn?',
@@ -24,16 +24,53 @@
     ],
     'thu ngân': [
       'Ca này tiền mặt hệ thống là bao nhiêu? MoMo có vào két không?',
-      'Tôi còn hóa đơn nháp không?',
+      'Danh sách hóa đơn bán tháng này',
       'Bao nhiêu hóa đơn MoMo trong ca?'
     ],
     'kế toán': [
-      'Tại sao trả NCC không làm giảm LN lần nữa?',
+      'Danh sách hóa đơn mua tháng này',
       'Chứng từ nào chờ ghi sổ?',
-      'NCC công nợ lớn nhất?',
-      'Vì sao MoMo không vào két?'
+      'NCC công nợ lớn nhất?'
     ]
   };
+
+  const UC_LABELS = {
+    UC01: 'đăng nhập', UC02: 'quản lý tài khoản', UC03: 'nhật ký hệ thống',
+    UC04: 'nhân viên, sản phẩm, khuyến mãi', UC05: 'duyệt đơn mua', UC06: 'duyệt phiếu xuất',
+    UC07: 'duyệt điều chỉnh tồn', UC08: 'duyệt đổi trả', UC09: 'duyệt phiếu chi',
+    UC10: 'dashboard và báo cáo', UC11: 'nhà cung cấp', UC12: 'đề nghị mua từ kho',
+    UC13: 'đơn mua hàng', UC14: 'theo dõi giao hàng', UC15: 'tồn kho chi tiết',
+    UC16: 'lập đề nghị mua', UC17: 'nhận hàng', UC18: 'phiếu nhập kho',
+    UC19: 'phiếu xuất kho', UC20: 'kiểm kê', UC21: 'kiểm tra đổi trả',
+    UC22: 'ca bán hàng', UC23: 'khách hàng tại quầy', UC24: 'lập hóa đơn',
+    UC25: 'thanh toán hóa đơn', UC26: 'đổi trả tại quầy', UC27: 'đối chiếu hóa đơn mua',
+    UC28: 'công nợ nhà cung cấp', UC29: 'phiếu thu ca', UC30: 'phân ca',
+    UC31: 'lịch và chấm công', UC32: 'duyệt công', UC33: 'bảng lương',
+    UC34: 'hệ thống tài khoản', UC35: 'kỳ kế toán', UC36: 'chi phí vận hành',
+    UC37: 'chờ ghi sổ', UC38: 'sổ kế toán', UC39: 'khóa kỳ',
+    UC40: 'bảng kê VAT', UC41: 'tài sản cố định', UC42: 'sao kê ngân hàng',
+    UC43: 'kết quả kinh doanh'
+  };
+
+  const SOURCE_RULES = [
+    [/notifications/i, 'Hộp thư'],
+    [/admin\/dashboard|dashboard quản lý/i, 'Dashboard quản lý'],
+    [/approvals/i, 'Hàng chờ duyệt'],
+    [/store-profit-loss|income-statement|\bkqkd\b|lãi lỗ/i, 'KQKD'],
+    [/payables|công nợ/i, 'Công nợ'],
+    [/cash-flow|lưu chuyển/i, 'Lưu chuyển tiền tệ'],
+    [/sales-shifts|báo cáo ca/i, 'Báo cáo ca'],
+    [/purchase-requests|đề nghị mua/i, 'Đề nghị mua hàng'],
+    [/purchase-orders|đơn mua/i, 'Đơn mua hàng'],
+    [/warehouse\/dashboard|tổng quan kho/i, 'Tổng quan kho'],
+    [/warehouse\/inventory|tồn kho/i, 'Tồn kho'],
+    [/shifts\/current|ca bán|tóm tắt ca/i, 'Ca bán hàng'],
+    [/unposted|chờ ghi sổ/i, 'Chờ ghi sổ'],
+    [/purchase-invoices|hóa đơn mua/i, 'Hóa đơn mua hàng'],
+    [/shift-settlements|phiếu thu/i, 'Ca và phiếu thu'],
+    [/reconciliation|đối soát/i, 'Đối soát ngân hàng'],
+    [/loyalty|khách hàng thân thiết|rfm/i, 'Khách hàng thân thiết']
+  ];
 
   const escapeHtml = (value) => String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -41,10 +78,217 @@
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
 
+  const padUc = (num) => `UC${String(Number(num)).padStart(2, '0')}`;
+
+  const replaceUc = (value) => {
+    let out = String(value ?? '');
+    out = out.replace(/\bUC\s*0*(\d{1,2})\s*[–—−-]\s*UC\s*0*(\d{1,2})\b/gi, (_, a, b) => {
+      const start = UC_LABELS[padUc(a)];
+      const end = UC_LABELS[padUc(b)];
+      return start && end ? `${start} đến ${end}` : 'các chức năng được cấp';
+    });
+    out = out.replace(/\bUC\s*0*(\d{1,2})\b/gi, (_, n) => UC_LABELS[padUc(n)] || 'chức năng được cấp');
+    out = out.replace(/\buse[\s-]*cases?\b/gi, '');
+    out = out.replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ').replace(/\s+([,.;:!?])/g, '$1');
+    return out.trim();
+  };
+
+  const hideApi = (value) => String(value ?? '')
+    .replace(/\bGET\s+\/api\/[^\s,;)]+/gi, '')
+    .replace(/\/api\/[a-z0-9/_\-?=&%.]+/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  const cleanText = (value) => hideApi(replaceUc(value));
+
+  const sourceChip = (raw) => {
+    const text = String(raw || '').trim();
+    if (!text) return '';
+    for (const [re, label] of SOURCE_RULES) {
+      if (re.test(text)) return label;
+    }
+    if (/\/api\//i.test(text) || /^GET\s+/i.test(text)) return 'Số liệu hệ thống';
+    return cleanText(text);
+  };
+
+  const vndInt = (value) => {
+    if (typeof value === 'number') return Number.isFinite(value) ? Math.round(value) : 0;
+    const raw = String(value ?? '').trim().replace(/\s*(đ|₫|VND|VNĐ)\s*$/i, '');
+    if (!raw) return 0;
+    if (/^-?\d{1,3}(\.\d{3})+$/.test(raw)) return Math.round(Number(raw.replace(/\./g, '')));
+    const parsed = Number(raw.replace(',', '.'));
+    return Number.isFinite(parsed) ? Math.round(parsed) : 0;
+  };
+
+  const prettyMoney = (value) => `${vndInt(value).toLocaleString('vi-VN')} đ`;
+
+  const moneyText = (value) => {
+    const raw = String(value ?? '');
+    if (/đ|₫|VND|VNĐ/i.test(raw) || /^-?\d{1,3}(\.\d{3})+/.test(raw.trim()) || typeof value === 'number') {
+      return prettyMoney(value);
+    }
+    return raw.replace(/(\d)đ$/i, '$1 đ').replace(/(\d)₫$/i, '$1 ₫');
+  };
+
+  const decorateInline = (escaped) => {
+    let html = escaped
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/__(.+?)__/g, '<strong>$1</strong>')
+      .replace(/\*\*/g, '')
+      .replace(/__/g, '')
+      .replace(/(^|\s)#{1,6}\s+/g, '$1');
+    html = html.replace(/(\d{1,3}(?:\.\d{3})+)(?:\s*)(đ|₫|VNĐ|VND)?/gi, (_, num) =>
+      `<span class="assistant-money">${prettyMoney(num)}</span>`);
+    html = html.replace(/(\d+)(?:\s*)(đ|₫)\b/gi, (_, num) =>
+      `<span class="assistant-money">${prettyMoney(num)}</span>`);
+    return html;
+  };
+
+  const renderTable = (lines) => {
+    const rows = lines
+      .map((line) => line.replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim()))
+      .filter((cells) => cells.length && !cells.every((cell) => /^:?-{2,}:?$/.test(cell)));
+    if (!rows.length) return '';
+    const hasHeader = rows[0].every((cell) => !/\d{3,}/.test(cell));
+    const body = hasHeader ? rows.slice(1) : rows;
+    return `<div class="assistant-metric-row">${body.map((cells) => {
+      const [label, ...rest] = cells;
+      const amount = rest.join(' · ');
+      return `<article class="assistant-metric"><small>${decorateInline(escapeHtml(cleanText(label)))}</small><strong class="assistant-money">${escapeHtml(moneyText(amount || '—'))}</strong></article>`;
+    }).join('')}</div>`;
+  };
+
+  const renderBotText = (raw) => {
+    const text = cleanText(raw).replace(/\r\n/g, '\n').trim();
+    if (!text) return '';
+    const lines = text.split('\n');
+    const out = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (/^\s*\|/.test(line) || (line.includes('|') && /^\s*\|?\s*[-:| ]+\s*\|/.test(lines[i + 1] || ''))) {
+        const block = [];
+        while (i < lines.length && (lines[i].includes('|') || (!lines[i].trim() && lines[i + 1]?.includes('|')))) {
+          if (lines[i].trim()) block.push(lines[i]);
+          i += 1;
+          if (i < lines.length && !lines[i].includes('|') && lines[i].trim()) break;
+        }
+        out.push(renderTable(block));
+        continue;
+      }
+      if (/^\s*---+\s*$/.test(line)) { i += 1; continue; }
+      if (/^\s*#{1,6}\s+/.test(line)) {
+        out.push(`<p class="assistant-md-title">${decorateInline(escapeHtml(cleanText(line.replace(/^\s*#{1,6}\s+/, ''))))}</p>`);
+        i += 1;
+        continue;
+      }
+      if (/^\s*(?:[-*•]|\d+[.)])\s+/.test(line)) {
+        const items = [];
+        while (i < lines.length && /^\s*(?:[-*•]|\d+[.)])\s+/.test(lines[i])) {
+          items.push(lines[i].replace(/^\s*(?:[-*•]|\d+[.)])\s+/, ''));
+          i += 1;
+        }
+        out.push(`<ul class="assistant-md-list">${items.map((item) => `<li>${decorateInline(escapeHtml(cleanText(item)))}</li>`).join('')}</ul>`);
+        continue;
+      }
+      if (!line.trim()) { i += 1; continue; }
+      out.push(`<p>${decorateInline(escapeHtml(cleanText(line)))}</p>`);
+      i += 1;
+    }
+    return `<div class="assistant-md">${out.join('')}</div>`;
+  };
+
   const history = [];
   let sending = false;
+  let lastKind = null;
+  let syncingMonth = false;
   let activeTab = 'chat';
   let loaded = { today: false, alerts: false, insights: false };
+
+  const KIND_ASK = {
+    po: 'danh sách đơn mua',
+    purchase: 'danh sách hóa đơn mua',
+    sales: 'danh sách hóa đơn bán',
+    receipt: 'danh sách phiếu nhập',
+    issue: 'danh sách phiếu xuất',
+    request: 'danh sách đề nghị mua',
+    return: 'danh sách đổi trả',
+    count: 'danh sách kiểm kê',
+    'receipt-cash': 'danh sách phiếu thu ca',
+    payment: 'danh sách phiếu chi',
+    payables: 'công nợ NCC',
+    payroll: 'lương gộp',
+    'low-stock': 'tồn thấp',
+    'warehouse-report': 'báo cáo thủ kho',
+    'trial-balance': 'cân đối phát sinh',
+    kqkd: 'tải KQKD',
+    'cash-flow': 'lưu chuyển tiền tệ',
+    'balance-sheet': 'bảng cân đối kế toán',
+    'store-report': 'in báo cáo'
+  };
+
+  const padMonth = (value) => String(value).padStart(2, '0');
+  const hanoiNow = () => {
+    const key = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
+    return new Date(`${key}T12:00:00+07:00`);
+  };
+  const currentMonthKey = () => {
+    const now = hanoiNow();
+    return `${now.getFullYear()}-${padMonth(now.getMonth() + 1)}`;
+  };
+  const monthSelect = () => document.getElementById('assistantMonth');
+  const selectedMonthKey = () => {
+    const value = monthSelect()?.value;
+    if (!value || value === 'this') return currentMonthKey();
+    return value;
+  };
+  const monthPhrase = () => {
+    if (monthSelect()?.value === 'this') return 'tháng này';
+    const [year, month] = selectedMonthKey().split('-');
+    return `tháng ${Number(month)}/${year}`;
+  };
+  const hasPeriodHint = (text) => {
+    const folded = String(text || '').toLocaleLowerCase('vi-VN').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return /thang\s*(nay|truoc|\d)|hom\s*(nay|qua)|\b20\d{2}-0?[1-9]\b|\b20\d{2}-1[0-2]\b|\b(0?[1-9]|1[0-2])\s*[/\-]\s*20\d{2}\b/.test(folded);
+  };
+  const withSelectedMonth = (question) => {
+    if (!question || hasPeriodHint(question)) return question;
+    return `${question} ${monthPhrase()}`;
+  };
+  const fillMonthSelect = () => {
+    const select = monthSelect();
+    if (!select) return;
+    const now = hanoiNow();
+    const parts = ['<option value="this">Tháng này</option>'];
+    for (let i = 0; i < 12; i += 1) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1;
+      parts.push(`<option value="${year}-${padMonth(month)}">Tháng ${month}/${year}</option>`);
+    }
+    select.innerHTML = parts.join('');
+    select.value = 'this';
+  };
+  const syncMonthSelect = (period) => {
+    const select = monthSelect();
+    if (!select || !period) return;
+    const key = period.key && String(period.key).length >= 7
+      ? String(period.key).slice(0, 7)
+      : (period.year && period.month ? `${period.year}-${padMonth(period.month)}` : '');
+    if (!key) return;
+    syncingMonth = true;
+    if (key === currentMonthKey()) select.value = 'this';
+    else if ([...select.options].some((option) => option.value === key)) select.value = key;
+    else {
+      const [year, month] = key.split('-');
+      const extra = document.createElement('option');
+      extra.value = key;
+      extra.textContent = `Tháng ${Number(month)}/${year}`;
+      select.appendChild(extra);
+      select.value = key;
+    }
+    syncingMonth = false;
+  };
 
   const drawer = () => document.getElementById('assistantDrawer');
   const backdrop = () => document.getElementById('assistantBackdrop');
@@ -54,8 +298,6 @@
   const sendBtn = () => document.getElementById('assistantSend');
   const fab = () => document.getElementById('assistantFab');
   const isOpen = () => drawer()?.classList.contains('is-open');
-
-  const moneyText = (value) => String(value ?? '').replace(/(\d)đ$/i, '$1 đ').replace(/(\d)₫$/i, '$1 ₫');
 
   const syncTriggers = (open) => {
     const expanded = open ? 'true' : 'false';
@@ -69,8 +311,19 @@
     Authorization: `Bearer ${token}`
   });
 
-  const handleAuth = (response) => {
+  const isAssistantProviderError = (response, data) => {
+    const code = String(data?.code || '');
+    const message = String(data?.message || '');
+    if (response.status === 429 && (code === 'ASSISTANT_RATE' || /giới hạn tốc độ|hết .*câu hỏi trợ lý/i.test(message))) return true;
     if (response.status !== 401) return false;
+    return code === 'ASSISTANT_AUTH'
+      || code === 'ASSISTANT_NOT_CONFIGURED'
+      || /ASSISTANT_API_KEY|Khóa Genspark|Khóa CodeCraft/i.test(message);
+  };
+
+  const handleAuth = (response, data) => {
+    if (response.status !== 401) return false;
+    if (isAssistantProviderError(response, data)) return false;
     localStorage.removeItem('fly_token');
     localStorage.removeItem('fly_user');
     window.location.href = '../login/login.html';
@@ -95,19 +348,164 @@
     const list = (actions || []).filter((item) => item?.target && item?.label);
     if (!list.length) return '';
     return `<div class="assistant-actions">${list.map((item) =>
-      `<button type="button" class="assistant-pill" data-nav="${escapeHtml(item.target)}">${escapeHtml(item.label)}</button>`
+      `<button type="button" class="assistant-pill" data-nav="${escapeHtml(item.target)}">${escapeHtml(cleanText(item.label))}</button>`
     ).join('')}</div>`;
   };
 
   const evidenceHtml = (rows) => {
     const list = (rows || []).filter(Boolean);
     if (!list.length) return '';
-    return `<div class="assistant-evidence"><strong>Nhận định · Bằng chứng · Nguồn · Độ tin cậy</strong>${
+    return `<div class="assistant-evidence"><strong>Bằng chứng</strong><div class="assistant-metric-row">${
       list.map((row) => {
-        const nums = Array.isArray(row.numbers) ? row.numbers.join(' · ') : (row.evidence || '');
-        return `${escapeHtml(row.claim || 'Nhận định')} — ${escapeHtml(nums)} — ${escapeHtml(row.source || '')} — ${escapeHtml(row.confidence || '')}`;
-      }).join('<br>')
-    }</div>`;
+        const nums = Array.isArray(row.numbers) ? row.numbers : (row.evidence ? [row.evidence] : []);
+        const src = sourceChip(row.source);
+        return `<article class="assistant-metric">
+          <small>${escapeHtml(cleanText(row.claim || 'Nhận định'))}</small>
+          ${nums.map((num) => `<strong class="assistant-money">${escapeHtml(moneyText(num))}</strong>`).join('')}
+          ${src ? `<span class="assistant-source-chip">${escapeHtml(src)}</span>` : ''}
+        </article>`;
+      }).join('')
+    }</div></div>`;
+  };
+
+  const sourcesHtml = (items) => {
+    const chips = [...new Set((items || []).map(sourceChip).filter(Boolean))];
+    if (!chips.length) return '';
+    return `<div class="assistant-sources"><strong>Nguồn</strong><div class="assistant-source-chips">${
+      chips.map((chip) => `<span class="assistant-source-chip">${escapeHtml(chip)}</span>`).join('')
+    }</div></div>`;
+  };
+
+  const fmtDate = (value) => {
+    if (!value) return '—';
+    try {
+      return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value));
+    } catch {
+      return String(value).slice(0, 10);
+    }
+  };
+
+  const actionButtons = () => `<div class="assistant-invoice-actions">
+        <button type="button" class="assistant-pill" data-doc-action="view">Xem</button>
+        <button type="button" class="assistant-pill" data-doc-action="system">In hệ thống</button>
+        <button type="button" class="assistant-pill" data-doc-action="official">In giấy trắng</button>
+        <button type="button" class="assistant-pill" data-doc-action="download">Tải PDF</button>
+      </div>`;
+
+  const docsHtml = (turn) => {
+    const kind = turn.kind || turn.invoiceKind;
+    const loai = turn.loai || '';
+    const rows = turn.items || turn.invoices || [];
+    const report = turn.report;
+    const print = turn.print?.mau || turn.print || null;
+    if (!kind && !report && !print && !rows.length) return '';
+    const printAttr = print ? encodeURIComponent(JSON.stringify(print)) : '';
+    const reportName = {
+      'store-report': 'Báo cáo cửa hàng', kqkd: 'KQKD', payroll: 'Lương gộp',
+      'warehouse-report': 'Báo cáo thủ kho', 'trial-balance': 'Cân đối phát sinh',
+      'cash-flow': 'Lưu chuyển tiền tệ', 'balance-sheet': 'Bảng cân đối kế toán'
+    }[kind] || 'Báo cáo';
+    const periodLabel = report?.period?.label || '';
+    const metrics = report?.kpis ? `<header class="assistant-report-head">${escapeHtml(reportName)}${periodLabel ? ` · ${escapeHtml(periodLabel)}` : ''}</header>
+      <div class="assistant-metric-row">
+        <article class="assistant-metric"><small>Doanh thu thuần</small><strong class="assistant-money">${escapeHtml(prettyMoney(report.kpis.doanhThuThuan))}</strong></article>
+        <article class="assistant-metric"><small>Lãi gộp</small><strong class="assistant-money">${escapeHtml(prettyMoney(report.kpis.laiGop))}</strong></article>
+        <article class="assistant-metric"><small>KQKD</small><strong class="assistant-money">${escapeHtml(prettyMoney(report.kpis.kqkdLoiNhuan))}</strong></article>
+      </div>` : '';
+    const list = rows.length ? `<div class="assistant-doc-list">${rows.map((row, index) => `<article class="assistant-doc-card${index === 0 ? ' is-selected' : ''}" data-doc-id="${escapeHtml(row.id)}" data-loai="${escapeHtml(row.loai || loai)}">
+          <div class="assistant-doc-top">
+            <strong class="assistant-doc-id">${escapeHtml(row.soHd || row.id)}</strong>
+            <span class="assistant-doc-money assistant-money">${escapeHtml(prettyMoney(row.tien))}</span>
+          </div>
+          <p class="assistant-doc-partner">${escapeHtml(row.ncc || '—')}</p>
+          <p class="assistant-doc-meta"><span class="assistant-doc-date">${escapeHtml(fmtDate(row.ngay))}</span><span class="assistant-doc-status">${escapeHtml(cleanText(row.trangThai || '—'))}</span></p>
+        </article>`).join('')}</div>` : '';
+    return `<div class="assistant-invoice-box assistant-report-box" data-kind="${escapeHtml(kind || '')}" data-loai="${escapeHtml(loai)}" data-print="${printAttr}">
+      ${metrics}${list}${actionButtons()}
+    </div>`;
+  };
+
+  const downloadPrint = async (config, skin = 'system') => {
+    if (!window.FLY_PRINT?.build) throw new Error('Chưa tải được máy in chứng từ.');
+    const resolved = { ...config, skin };
+    const html = window.FLY_PRINT.build(resolved);
+    const defaultName = window.FLY_PRINT.pdfFileName?.(resolved) || 'bao-cao.pdf';
+    if (window.flyDesktop?.savePrintPdf) {
+      const result = await window.flyDesktop.savePrintPdf({ html, defaultName, landscape: false });
+      if (result?.canceled) return;
+      window.showToast?.('Đã tải PDF.', 'success');
+      return;
+    }
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = String(defaultName).replace(/\.pdf$/i, '.html');
+    link.click();
+    URL.revokeObjectURL(link.href);
+    window.showToast?.('Đã tải bản in.', 'success');
+  };
+
+  const loadDocPrintConfig = async (box) => {
+    const selected = box.querySelector('.assistant-doc-card.is-selected') || box.querySelector('.assistant-doc-card');
+    const id = selected?.dataset.docId;
+    const kind = box.dataset.kind;
+    if (id && kind) {
+      const response = await fetch(`${API_BASE}/assistant/docs/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, {
+        headers: authHeaders()
+      });
+      const data = await response.json().catch(() => ({}));
+      if (handleAuth(response, data)) return null;
+      if (!response.ok) throw new Error(friendlyPrintError(data.message || 'Không tải được chứng từ.'));
+      return data.print || data.mau || null;
+    }
+    if (!box.dataset.print) throw new Error('Chưa có mẫu in.');
+    try {
+      return JSON.parse(decodeURIComponent(box.dataset.print));
+    } catch {
+      throw new Error('Chưa có mẫu in.');
+    }
+  };
+
+  const friendlyPrintError = (error) => {
+    const raw = String(error?.message || error || '');
+    if (/poolPromise/i.test(raw) || (/pool/i.test(raw) && /is not defined/i.test(raw))) {
+      return 'Không in được chứng từ. Chạy lại npm start rồi thử lại.';
+    }
+    return raw || 'Không in được chứng từ.';
+  };
+
+  const bindDocsOnce = () => {
+    const root = thread();
+    if (!root || root.dataset.docBound === '1') return;
+    root.dataset.docBound = '1';
+    root.addEventListener('click', async (event) => {
+      const row = event.target.closest('.assistant-doc-card[data-doc-id]');
+      if (row && !event.target.closest('[data-doc-action]')) {
+        const box = row.closest('.assistant-invoice-box');
+        if (!box) return;
+        box.querySelectorAll('.assistant-doc-card.is-selected').forEach((item) => item.classList.remove('is-selected'));
+        row.classList.add('is-selected');
+        return;
+      }
+      const button = event.target.closest('[data-doc-action]');
+      if (!button) return;
+      const box = button.closest('.assistant-invoice-box');
+      if (!box) return;
+      try {
+        const config = await loadDocPrintConfig(box);
+        if (!config) return;
+        const action = button.dataset.docAction;
+        if (action === 'download') {
+          await downloadPrint(config, 'system');
+          return;
+        }
+        if (!window.FLY_PRINT?.show) throw new Error('Chưa tải được máy in chứng từ.');
+        const skin = action === 'official' ? 'official' : 'system';
+        await window.FLY_PRINT.show({ ...config, skin });
+      } catch (error) {
+        window.showToast?.(friendlyPrintError(error), 'error');
+      }
+    });
   };
 
   const renderThread = () => {
@@ -117,7 +515,7 @@
       root.innerHTML = `<div class="assistant-empty">
         <div class="assistant-orb" aria-hidden="true"><svg><use href="#i-sparkle"></use></svg></div>
         <h3>Chào ${escapeHtml(user.TenNV || 'bạn')}</h3>
-        <p>Trợ lý Fly đọc số liệu đúng quyền ${escapeHtml(user.TenVaiTro || '')}. Tab Hôm nay tự tổng hợp — không cần hỏi từng câu.</p>
+        <p>Trợ lý Fly đọc số liệu đúng quyền ${escapeHtml(user.TenVaiTro || '')}. Hỏi danh sách chứng từ hoặc báo cáo theo tháng để xem / in / tải ngay trong khung chat.</p>
       </div>`;
       return;
     }
@@ -125,18 +523,16 @@
       if (turn.role === 'user') {
         return `<div class="assistant-turn is-user"><div class="assistant-bubble">${escapeHtml(turn.text)}</div></div>`;
       }
+      const hideReportBlurb = turn.report?.kpis && !turn.report.empty;
       const body = turn.typing
         ? `<span class="assistant-typing" aria-label="Đang soạn"><i></i><i></i><i></i></span>`
-        : `${escapeHtml(turn.text)}${evidenceHtml(turn.evidence)}${pillsHtml(turn.nextActions)}${
-          (turn.sources || []).length
-            ? `<div class="assistant-sources"><strong>Nguồn</strong>${turn.sources.map((item) => escapeHtml(item)).join('<br>')}</div>`
-            : ''
-        }`;
+        : `${hideReportBlurb ? '' : renderBotText(turn.text)}${docsHtml(turn)}${turn.report || turn.print ? '' : evidenceHtml(turn.evidence)}${pillsHtml(turn.nextActions)}${sourcesHtml(turn.sources)}`;
       return `<div class="assistant-turn is-bot"><div class="assistant-bubble">${body}</div></div>`;
     }).join('');
     root.querySelectorAll('[data-nav]').forEach((button) => {
       button.addEventListener('click', () => goScreen(button.dataset.nav));
     });
+    bindDocsOnce();
     root.scrollTop = root.scrollHeight;
   };
 
@@ -160,13 +556,13 @@
     root.innerHTML = `<div class="assistant-workspace">
       ${pack.llmConfigured === false ? '<p class="assistant-muted">Chưa cấu hình LLM — số liệu engine vẫn hiện. Điền ASSISTANT_API_KEY rồi restart npm start nếu cần diễn giải chat.</p>' : ''}
       <div class="assistant-kpi-row">${kpis.map((chip) =>
-        `<div class="assistant-kpi"><small>${escapeHtml(chip.label)}</small><strong>${escapeHtml(moneyText(chip.value))}</strong></div>`
+        `<div class="assistant-kpi"><small>${escapeHtml(cleanText(chip.label))}</small><strong class="assistant-money">${escapeHtml(moneyText(chip.value))}</strong></div>`
       ).join('') || '<p class="assistant-muted">Không lấy được KPI trong phạm vi quyền.</p>'}</div>
       <div class="assistant-card">
         <h3>3 việc ưu tiên</h3>
         <div class="assistant-priority">${priorities.map((item) =>
-          `<article><b>${item.order}</b><div><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.why)}</p></div>${
-            item.nextAction ? `<button type="button" class="assistant-pill" data-nav="${escapeHtml(item.nextAction.target)}">${escapeHtml(item.nextAction.label)}</button>` : ''
+          `<article><b>${item.order}</b><div><strong>${escapeHtml(cleanText(item.title))}</strong><p>${escapeHtml(cleanText(item.why))}</p></div>${
+            item.nextAction ? `<button type="button" class="assistant-pill" data-nav="${escapeHtml(item.nextAction.target)}">${escapeHtml(cleanText(item.nextAction.label))}</button>` : ''
           }</article>`
         ).join('')}</div>
       </div>
@@ -181,16 +577,16 @@
     const risks = pack.risks || [];
     const card = (item, kind) => `<div class="assistant-card">
       <span class="assistant-badge ${escapeHtml(item.severity || item.band || 'Low')}">${escapeHtml(item.severity || item.band || 'Low')}</span>
-      <h3>${escapeHtml(item.object || item.type)}</h3>
-      <p>${escapeHtml(item.evidence)}</p>
+      <h3>${escapeHtml(cleanText(item.object || item.type))}</h3>
+      <p>${escapeHtml(cleanText(item.evidence))}</p>
       ${evidenceHtml([{ claim: kind, numbers: [item.evidence], source: item.source, confidence: item.confidence || item.band }])}
       ${pillsHtml(item.nextAction ? [item.nextAction] : [])}
     </div>`;
     root.innerHTML = `<div class="assistant-workspace">
       <div class="assistant-card"><h3>Cảnh báo</h3><p class="assistant-muted">${anomalies.length ? '' : 'Không có tín hiệu bất thường trong dữ liệu hiện có.'}</p></div>
-      ${anomalies.map((item) => card(item, 'Anomaly')).join('')}
-      <div class="assistant-card"><h3>Risk score</h3><p class="assistant-muted">Điểm 0–100 do engine; AI không tự chấm.</p></div>
-      ${risks.map((item) => card(item, 'Risk')).join('') || '<p class="assistant-muted">Chưa đủ tín hiệu để chấm rủi ro.</p>'}
+      ${anomalies.map((item) => card(item, 'Cảnh báo')).join('')}
+      <div class="assistant-card"><h3>Điểm rủi ro</h3><p class="assistant-muted">Điểm 0–100 do engine; AI không tự chấm.</p></div>
+      ${risks.map((item) => card(item, 'Rủi ro')).join('') || '<p class="assistant-muted">Chưa đủ tín hiệu để chấm rủi ro.</p>'}
     </div>`;
     root.querySelectorAll('[data-nav]').forEach((button) => button.addEventListener('click', () => goScreen(button.dataset.nav)));
   };
@@ -200,16 +596,16 @@
     if (!root) return;
     const cards = pack.insights || [];
     root.innerHTML = `<div class="assistant-workspace">${cards.map((card) =>
-      `<div class="assistant-card"><h3>${escapeHtml(card.title)}</h3><p style="white-space:pre-wrap">${escapeHtml(card.body)}</p>${evidenceHtml(card.evidence)}${pillsHtml(card.nextAction ? [card.nextAction] : [])}</div>`
+      `<div class="assistant-card"><h3>${escapeHtml(cleanText(card.title))}</h3>${renderBotText(card.body)}${evidenceHtml(card.evidence)}${pillsHtml(card.nextAction ? [card.nextAction] : [])}</div>`
     ).join('') || '<p class="assistant-muted">Chưa có thẻ phân tích cho vai trò này.</p>'}</div>`;
     root.querySelectorAll('[data-nav]').forEach((button) => button.addEventListener('click', () => goScreen(button.dataset.nav)));
   };
 
   const apiGet = async (path) => {
     const response = await fetch(`${API_BASE}${path}`, { headers: authHeaders() });
-    if (handleAuth(response)) return null;
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.message || 'Không tải được Intelligence Center.');
+    if (handleAuth(response, data)) return null;
+    if (!response.ok) throw new Error(data.message || 'Không tải được số liệu trợ lý.');
     return data;
   };
 
@@ -228,7 +624,7 @@
       spec.render(await apiGet(spec.path));
       loaded[spec.key] = true;
     } catch (error) {
-      if (root) root.innerHTML = `<div class="assistant-workspace"><div class="assistant-card"><p>${escapeHtml(error.message)}</p></div></div>`;
+      if (root) root.innerHTML = `<div class="assistant-workspace"><div class="assistant-card"><p>${escapeHtml(cleanText(error.message))}</p></div></div>`;
     }
   };
 
@@ -279,26 +675,28 @@
           headers: authHeaders(),
           body: JSON.stringify({ type, params })
         });
-        if (handleAuth(response)) return;
         const data = await response.json().catch(() => ({}));
+        if (handleAuth(response, data)) return;
         if (!response.ok) throw new Error(data.message || 'Không chạy được kịch bản.');
         const projected = data.projected || {};
         const projHtml = Object.keys(projected).length
-          ? `<p>${Object.entries(projected).map(([key, value]) => `<strong>${escapeHtml(key)}</strong>: ${escapeHtml(typeof value === 'number' ? value.toLocaleString('vi-VN') : value)}`).join('<br>')}</p>`
+          ? `<div class="assistant-metric-row">${Object.entries(projected).map(([key, value]) =>
+            `<article class="assistant-metric"><small>${escapeHtml(cleanText(key))}</small><strong class="assistant-money">${escapeHtml(typeof value === 'number' ? prettyMoney(value) : moneyText(value))}</strong></article>`
+          ).join('')}</div>`
           : '';
         const lines = (data.lines || []).slice(0, 8).map((row) =>
           `<li>${escapeHtml(row.MaSP || '')} ${escapeHtml(row.TenSP || '')} — ${escapeHtml(row.canNhapThem ?? row.daysLeft ?? '')}</li>`
         ).join('');
         box.innerHTML = `<div class="assistant-card">
-          <h3>${escapeHtml(data.title || 'Kết quả')}</h3>
-          <p>${escapeHtml(data.assumption || '')}</p>
-          ${data.fallback ? `<p class="assistant-muted">${escapeHtml(data.fallback)}</p>` : ''}
+          <h3>${escapeHtml(cleanText(data.title || 'Kết quả'))}</h3>
+          <p>${escapeHtml(cleanText(data.assumption || ''))}</p>
+          ${data.fallback ? `<p class="assistant-muted">${escapeHtml(cleanText(data.fallback))}</p>` : ''}
           ${projHtml}
-          ${lines ? `<ul>${lines}</ul>` : ''}
+          ${lines ? `<ul class="assistant-md-list">${lines}</ul>` : ''}
           ${evidenceHtml(data.evidence)}
         </div>`;
       } catch (error) {
-        box.innerHTML = `<div class="assistant-card"><p>${escapeHtml(error.message)}</p></div>`;
+        box.innerHTML = `<div class="assistant-card"><p>${escapeHtml(cleanText(error.message))}</p></div>`;
       }
     });
   };
@@ -342,7 +740,7 @@
   };
 
   const sendQuestion = async (raw) => {
-    const question = String(raw || input()?.value || '').trim();
+    const question = withSelectedMonth(String(raw || input()?.value || '').trim());
     if (!question || sending) return;
     setTab('chat');
     sending = true;
@@ -363,19 +761,33 @@
         body: JSON.stringify({ question, history: payloadHistory.slice(0, -1) })
       });
       const data = await response.json().catch(() => ({}));
-      if (handleAuth(response)) return;
+      if (handleAuth(response, data)) return;
       history.pop();
       if (!response.ok) {
-        const message = data.message || 'Trợ lý tạm không trả lời được.';
+        const message = data.message
+          || (response.status === 401 ? 'Khóa Genspark không hợp lệ hoặc đã thu hồi. Kiểm tra ASSISTANT_API_KEY rồi chạy lại npm start.' : '')
+          || (response.status === 429 ? 'Genspark đang giới hạn tốc độ. Đợi một lát rồi hỏi lại, hoặc mở đúng màn hình dashboard.' : '')
+          || 'Trợ lý tạm không trả lời được.';
         history.push({ role: 'bot', text: message, sources: [] });
         setError(message);
       } else {
+        const kind = data.kind || data.invoiceKind || null;
+        if (kind) lastKind = kind;
+        syncMonthSelect(data.period);
         history.push({
           role: 'bot',
           text: data.answer || 'Không có nội dung trả lời.',
           sources: data.sources || [],
           evidence: data.evidence || [],
-          nextActions: data.nextActions || []
+          nextActions: data.nextActions || [],
+          invoices: data.invoices || data.items || [],
+          invoiceKind: data.invoiceKind || data.kind || null,
+          kind,
+          loai: data.loai || null,
+          items: data.items || data.invoices || [],
+          report: data.report || null,
+          print: data.print || null,
+          period: data.period || null
         });
       }
     } catch {
@@ -393,7 +805,13 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     fillChips();
+    fillMonthSelect();
+    bindDocsOnce();
     renderThread();
+    monthSelect()?.addEventListener('change', () => {
+      if (syncingMonth || sending || !lastKind) return;
+      sendQuestion(`${KIND_ASK[lastKind] || 'danh sách'} ${monthPhrase()}`);
+    });
     const toggleWidget = (event) => {
       event.preventDefault();
       if (isOpen()) closeDrawer();
