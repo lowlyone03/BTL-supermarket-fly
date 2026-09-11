@@ -886,7 +886,14 @@ const logAudit = async (source, opts = {}) => {
     const record = recordId == null ? null : String(recordId).slice(0, 50);
     const noiDung = content ? String(content).slice(0, 1000) : null;
     const diaChiIP = (ip || clientIp(req) || '').slice(0, 45) || null;
-    request.input('LogMaTK', sql.Int, user?.MaTK || null);
+    let maTK = user?.MaTK == null || user?.MaTK === '' ? null : Number(user.MaTK);
+    if (!Number.isFinite(maTK) && user?.MaNV) {
+        const lookup = makeRequest(options.source || options.transaction || options.pool || source) || pool.request();
+        const found = await lookup.input('AuditNv', sql.VarChar, String(user.MaNV).slice(0, 20))
+            .query('SELECT TOP 1 MaTK FROM TaiKhoan WHERE MaNV=@AuditNv');
+        maTK = found.recordset[0]?.MaTK ?? null;
+    }
+    request.input('LogMaTK', sql.Int, Number.isFinite(maTK) ? maTK : null);
     request.input('LogHanhDong', sql.NVarChar, hanhDong);
     request.input('LogBang', sql.NVarChar, table || null);
     request.input('LogMaBanGhi', sql.VarChar, record);
@@ -921,10 +928,12 @@ const logAudit = async (source, opts = {}) => {
     } catch { /* chuông trực tiếp không được thì client tự tải lại */ }
     try {
         const telegramNotify = require('./telegramNotify');
+        const payload = {
+            action: hanhDong, table, recordId: record, user, content: noiDung, result
+        };
         setImmediate(() => {
-            Promise.resolve(telegramNotify.onAudit({
-                action: hanhDong, table, recordId: record, user, content: noiDung, result
-            })).catch(error => console.error('Telegram:', error.message));
+            Promise.resolve(telegramNotify.onAudit(payload))
+                .catch(error => console.error('Telegram:', error.message));
         });
     } catch { /* bot lỗi không được làm hỏng nghiệp vụ */ }
 };

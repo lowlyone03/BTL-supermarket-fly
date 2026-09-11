@@ -49,7 +49,7 @@ Quản lý xem **hai báo cáo tách nhau**: KQKD / lãi kế toán (`kqkdLoiNhu
 | MISA / FAST đầy đủ | Sổ cái **mini** (18 TK, 1 TKNH); không BHXH, không tờ khai thuế nhà nước |
 | Phần mềm BHXH – bảng lương nhà nước | Không tính BHXH/BHYT; lương theo giờ công + ngày lễ luật VN |
 
-Cổng QR POS đang chạy: **MoMo sandbox** (`PAYMENT_PROVIDER=momo`), không phải VNPay. VNPay/PayOS là stub `Provider chưa bật`. Telegram companion **đã có**, gồm nút duyệt inline + audit (`telegramApprove.js`). Trợ lý AI **P2-MIN đã có** (nút Trợ lý trên dashboard, `POST /api/assistant/ask`). Chưa có: OCR HĐ NCC, e-receipt token, webcam barcode, replenishment theo doanh số 7 ngày. **P3 đối soát NH thông minh** và **P4 RFM khách** đã có plan + code demo (không nhét vào P2-ĐỦ).
+Cổng QR POS đang chạy: **ZaloPay sandbox** (`PAYMENT_PROVIDER=zalopay`), không phải VNPay/MoMo. VNPay/PayOS/MoMo là stub `Provider chưa bật`. Telegram companion **đã có**, gồm nút duyệt inline + audit (`telegramApprove.js`). Trợ lý AI **P2-MIN đã có** (nút Trợ lý trên dashboard, `POST /api/assistant/ask`). Chưa có: OCR HĐ NCC, e-receipt token, webcam barcode, replenishment theo doanh số 7 ngày. **P3 đối soát NH thông minh** và **P4 RFM khách** đã có plan + code demo (không nhét vào P2-ĐỦ).
 
 ---
 
@@ -540,8 +540,8 @@ Prefix `/api`. Health: `GET /api/health`.
 | `/api/ledger` | Kế toán mini UC34–UC43: COA, kỳ, bút toán, NKC/sổ cái/CĐPS, KQKD/LCTT/BCĐKT, TSCĐ, sao kê |
 | `/api/accounting/reconciliation` | P3 đối soát NH thông minh (UC42): import CSV, chạy engine, KT xác nhận |
 | `/api/admin/loyalty` | P4 RFM thành viên (QL UC10). TN: `GET /api/cashier/customers/:id/loyalty` |
-| `/api/cashier` | Ca, POS, HĐ, đổi trả, thanh toán MoMo QR |
-| `/api/payments/gateway` | IPN/return MoMo (không JWT) |
+| `/api/cashier` | Ca, POS, HĐ, đổi trả, thanh toán ZaloPay QR |
+| `/api/payments/gateway` | IPN/return ZaloPay (không JWT) |
 | `/api/notifications` | Chuông |
 | `/api/telegram` | Liên kết OTP, trạng thái kênh và webhook Telegram |
 
@@ -608,7 +608,7 @@ Một số controller còn `ensure*Schema()` lúc gọi API (máy cũ tự ALTER
 | E-receipt token / QR xem HĐ trên điện thoại | PLAN_12 #8 — chưa; in PDF nội bộ đã có |
 | Webcam / ZXing trên POS | PLAN_12 #5 — mới gõ tay + USB HID vào ô tìm |
 | Smart replenishment (TB bán 7 ngày) | PLAN_12 #6 — mới cảnh báo tồn min + `SLDatMua` |
-| VNPay / PayOS chạy thật | Stub; cổng đang dùng = **MoMo sandbox** |
+| VNPay / PayOS / MoMo chạy thật | Stub; cổng đang dùng = **ZaloPay sandbox** |
 | Sentry, n8n, Firebase, Ollama riêng, thời tiết | Cắt hoặc không slide (PLAN_12 #7, #9–#12) |
 | BHXH / BHYT / BHTN / công đoàn | Ngoài phạm vi BTL |
 | Cước vận chuyển 4.000 đ/km, bồi thường 20% (NCC + nhà xe cùng chịu) khi hư ≥ 1/3 | **Đã chốt plan, chưa code** |
@@ -641,7 +641,8 @@ Cước giao hàng (plan): siêu thị trả cước cho đơn vị NCC thuê; c
 | [docs/README.md](docs/README.md) | Mục lục toàn bộ file trong `docs/` |
 | [docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt](docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt) | Luật P0 đang chạy (tiền–hàng–nợ); đoạn “chưa sổ cái” là mốc 02/09 |
 | [docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt](docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt) | Plan A: giữ / cắt (đã triển khai 09/09) |
-| [docs/PLAN_MOMO_TEST_P1.txt](docs/PLAN_MOMO_TEST_P1.txt) | Cổng QR **đang dùng**: MoMo sandbox |
+| [docs/PLAN_ZALOPAY_TEST_P1.txt](docs/PLAN_ZALOPAY_TEST_P1.txt) | Cổng QR **đang dùng**: ZaloPay sandbox |
+| [docs/PLAN_MOMO_TEST_P1.txt](docs/PLAN_MOMO_TEST_P1.txt) | Lịch sử cổng MoMo (10/09) |
 | [docs/PLAN_AI_CHATBOT_TRO_LY.txt](docs/PLAN_AI_CHATBOT_TRO_LY.txt) | Plan + P2-MIN đã chạy (chưa P2-ĐỦ) |
 | [docs/PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt](docs/PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt) | P3 đối soát NH thông minh |
 | [docs/PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt](docs/PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt) | P4 RFM khách thành viên |

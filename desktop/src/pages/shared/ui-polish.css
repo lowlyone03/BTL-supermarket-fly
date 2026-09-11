@@ -723,19 +723,21 @@ select:disabled,
   font-size: 14px;
   align-self: center;
 }
-.gross-profit-steps .mid {
+.gross-profit-steps .step > div.mid {
   border-color: rgba(45, 106, 79, .15);
   background: linear-gradient(135deg, #eef6f2 0%, #e5f1ea 100%);
 }
-.gross-profit-steps .result {
-  border-color: transparent;
-  background: linear-gradient(135deg, #2d6a4f 0%, #1b4332 100%);
-  box-shadow: 0 4px 14px rgba(45, 106, 79, .25);
-  color: #fff;
+.gross-profit-steps .step > div.result {
+  border-color: #c5ddd2;
+  background: #e8f4ee;
+  box-shadow: 0 1px 4px rgba(35, 63, 48, .03);
+  color: var(--ink, #1e392d);
 }
-.gross-profit-steps .result span,
+.gross-profit-steps .result span {
+  color: #5f7469;
+}
 .gross-profit-steps .result strong {
-  color: #fff;
+  color: var(--ink, #1b4332);
 }
 
 /* ── 6. Financial Report – summary metric cards ── */

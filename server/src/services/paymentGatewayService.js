@@ -1,13 +1,39 @@
 const crypto = require('node:crypto');
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('./auditLog');
-const momo = require('./providers/momo');
+const zalopay = require('./providers/zalopay');
 
-const PENDING_MOMO_CASH_MESSAGE = 'Hóa đơn còn thanh toán MoMo đang chờ xác nhận. Hãy Query hoặc resolve MoMo trước khi thu Tiền mặt.';
-const QR_MANUAL_MESSAGE = 'P1 không thu QR thủ công. Dùng nút MoMo hoặc Tiền mặt sau khi MoMo đã Thất bại / hết hạn.';
+const PENDING_QR_CASH_MESSAGE = 'Hóa đơn còn thanh toán ZaloPay đang chờ xác nhận. Hãy Query hoặc resolve trước khi thu Tiền mặt.';
+const PENDING_MOMO_CASH_MESSAGE = PENDING_QR_CASH_MESSAGE;
+const QR_MANUAL_MESSAGE = 'P1 không thu QR thủ công. Dùng nút ZaloPay hoặc Tiền mặt sau khi ZaloPay đã Thất bại / hết hạn.';
 const WAITING_STATUS = 'Chờ xác nhận';
-const MIN_MOMO = 1000;
-const MAX_MOMO = 50000000;
+const MIN_QR = 1000;
+const MAX_QR = 50000000;
+const MIN_MOMO = MIN_QR;
+const MAX_MOMO = MAX_QR;
+const GATEWAY_ACTOR = 'zalopay-gateway';
+
+const actorForNv = async (connection, maNV) => {
+    const result = await new sql.Request(connection)
+        .input('MaNV', sql.VarChar, maNV)
+        .query('SELECT TOP 1 MaTK, TenDangNhap FROM TaiKhoan WHERE MaNV=@MaNV');
+    const row = result.recordset[0] || {};
+    return {
+        MaNV: maNV,
+        MaTK: row.MaTK,
+        TenDangNhap: row.TenDangNhap || GATEWAY_ACTOR
+    };
+};
+
+/** Callback ZaloPay: luôn HTTP 200 + JSON.
+ *  return_code 1 = dừng retry (success, type!==1 ignore, idempotent).
+ *  return_code -1 = MAC/schema sai.
+ *  return_code 0 = lỗi nội bộ / chưa map được đơn → ZaloPay retry. */
+const ipnAck = (message = 'success') => ({ return_code: 1, return_message: message });
+const ipnIgnored = () => ({ return_code: 1, return_message: 'ignored' });
+const ipnIdempotent = () => ({ return_code: 1, return_message: 'success' });
+const ipnBadMac = () => ({ return_code: -1, return_message: 'mac not equal' });
+const ipnRetry = (message = 'internal error') => ({ return_code: 0, return_message: String(message || 'internal error').slice(0, 200) });
 
 const gatewayError = (message, status = 400, extra = {}) => {
     const error = new Error(message);
@@ -55,39 +81,51 @@ const decideGatewayAction = ({
 
 const assertAddPaymentAllowed = (pending, { status, method } = {}) => {
     if (status === WAITING_STATUS) {
-        throw gatewayError('Chờ xác nhận chỉ được tạo từ cổng thanh toán MoMo.', 400);
+        throw gatewayError('Chờ xác nhận chỉ được tạo từ cổng thanh toán ZaloPay.', 400);
     }
     if (pending) {
-        throw gatewayError(PENDING_MOMO_CASH_MESSAGE, 409);
+        throw gatewayError(PENDING_QR_CASH_MESSAGE, 409);
     }
     if (method === 'QR') {
         throw gatewayError(QR_MANUAL_MESSAGE, 409);
     }
     if (method === 'Thẻ' || method === 'Chuyển khoản') {
-        throw gatewayError('P1 chỉ thu Tiền mặt hoặc MoMo.', 400);
+        throw gatewayError('P1 chỉ thu Tiền mặt hoặc ZaloPay.', 400);
     }
 };
 
 const randomHex = (bytes = 4) => crypto.randomBytes(bytes).toString('hex');
 
 const getProvider = (name) => {
-    const key = String(name || process.env.PAYMENT_PROVIDER || 'momo').trim().toLowerCase();
+    const key = String(name || process.env.PAYMENT_PROVIDER || 'zalopay').trim().toLowerCase();
+    if (key === 'zalopay') return require('./providers/zalopay');
     if (key === 'momo') return require('./providers/momo');
     if (key === 'vnpay') return require('./providers/vnpay');
     if (key === 'payos') return require('./providers/payos');
     if (key === 'momo_simulator') {
-        throw gatewayError('Payment Simulator chưa bật (Plan B). Đặt PAYMENT_PROVIDER=momo.', 400, { clearFailure: true });
+        throw gatewayError('Payment Simulator chưa bật. Đặt PAYMENT_PROVIDER=zalopay.', 400, { clearFailure: true });
     }
     throw gatewayError('Provider chưa bật', 400, { clearFailure: true });
 };
 
-const findPendingMomoQr = async (connection, maHD) => {
+const findPendingQr = async (connection, maHD) => {
     const result = await new sql.Request(connection).input('MaHD', sql.VarChar, maHD).query(`
         SELECT TOP 1 MaTT, SoTien, TrangThai, NguonXacNhan, MaThamChieuCong, MaGiaoDich, GhiChu
         FROM ThanhToan WITH (UPDLOCK, HOLDLOCK)
-        WHERE MaHD=@MaHD AND PhuongThuc=N'QR' AND NguonXacNhan=N'MoMo' AND TrangThai=N'Chờ xác nhận'`);
+        WHERE MaHD=@MaHD AND PhuongThuc=N'QR' AND TrangThai=N'Chờ xác nhận'`);
     return result.recordset[0] || null;
 };
+
+const findPendingMomoQr = findPendingQr;
+
+const vietnamYymmdd = () => {
+    const iso = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).format(new Date());
+    return iso.slice(2).replaceAll('-', '');
+};
+
+const buildAppTransId = (maTT) => `${vietnamYymmdd()}_${maTT}${randomHex(4)}`.slice(0, 40);
 
 const loadPaymentOnInvoice = async (connection, maHD, maTT) => {
     const result = await new sql.Request(connection)
@@ -132,8 +170,10 @@ const emptyQrImages = () => ({
 });
 
 const buildQrImages = async (created) => {
-    const chosen = momo.chooseQrPayload({
+    const chosen = zalopay.chooseQrPayload({
+        qrCode: created.qrCodeUrl || created.deeplink,
         qrCodeUrl: created.qrCodeUrl || created.deeplink,
+        orderUrl: created.payUrl,
         payUrl: created.payUrl
     });
     const qrImageDataUrl = chosen.qrPayload ? await toQrDataUrl(chosen.qrPayload) : '';
@@ -203,7 +243,7 @@ const failPendingPaymentsForInvoice = async (connection, maHD, note) => {
 const markPaymentFailed = async (connection, maTT, note) => {
     await new sql.Request(connection)
         .input('MaTT', sql.VarChar, maTT)
-        .input('GhiChu', sql.NVarChar, String(note || 'MoMo thất bại').slice(0, 200))
+        .input('GhiChu', sql.NVarChar, String(note || 'ZaloPay thất bại').slice(0, 200))
         .query(`
             UPDATE ThanhToan
             SET TrangThai=N'Thất bại', NgayXacNhan=GETDATE(), GhiChu=@GhiChu
@@ -239,46 +279,48 @@ const createQrPayment = async ({ maHD, soTien, user, req, provider }) => {
                     JOIN CaLamViec ca ON ca.MaCa=hd.MaCa
                     WHERE hd.MaHD=@MaHD AND hd.MaNV=@MaNV AND hd.TrangThai=N'Nháp' AND ca.TrangThai=N'Đang mở'`);
             if (!invoice.recordset.length) throw gatewayError('Hóa đơn không còn khả dụng để thanh toán.', 400);
-            const pending = await findPendingMomoQr(transaction, maHD);
+            const pending = await findPendingQr(transaction, maHD);
             if (pending) {
-                throw gatewayError('Đã có thanh toán MoMo đang chờ. Hãy Query/resolve trước khi tạo mã mới.', 409);
+                throw gatewayError('Đã có thanh toán QR đang chờ. Hãy Query/resolve trước khi tạo mã mới.', 409);
             }
             const totals = await paymentTotals(transaction, maHD);
             const remaining = remainingOf(invoice.recordset[0].TongThanhToan, totals.paid);
-            if (remaining < MIN_MOMO) {
-                throw gatewayError('MoMo Test tối thiểu 1.000đ — dùng Tiền mặt.', 400);
+            if (remaining < MIN_QR) {
+                throw gatewayError('ZaloPay tối thiểu 1.000đ — dùng Tiền mặt.', 400);
             }
             const requested = soTien == null || soTien === '' ? remaining : Math.round(Number(soTien));
-            if (!Number.isFinite(requested) || requested <= 0) throw gatewayError('Số tiền MoMo không hợp lệ.', 400);
+            if (!Number.isFinite(requested) || requested <= 0) throw gatewayError('Số tiền ZaloPay không hợp lệ.', 400);
             const amount = Math.min(requested, remaining);
-            if (amount < MIN_MOMO) throw gatewayError('MoMo Test tối thiểu 1.000đ — dùng Tiền mặt.', 400);
-            if (amount > MAX_MOMO) throw gatewayError('Số tiền MoMo vượt hạn mức sandbox.', 400);
+            if (amount < MIN_QR) throw gatewayError('ZaloPay tối thiểu 1.000đ — dùng Tiền mặt.', 400);
+            if (amount > MAX_QR) throw gatewayError('Số tiền ZaloPay vượt hạn mức sandbox.', 400);
             const prefix = `TT${new Date().toISOString().slice(2, 10).replaceAll('-', '')}`;
             const maTT = await sales.generateId(transaction, 'ThanhToan', 'MaTT', prefix);
-            const orderId = `FLY-${maTT}-${randomHex(4)}`;
-            const requestId = `REQ${maTT}${randomHex(4)}`;
+            const appTime = Date.now();
+            const orderId = buildAppTransId(maTT);
+            const requestId = String(appTime);
             await new sql.Request(transaction)
                 .input('MaTT', sql.VarChar, maTT)
                 .input('MaHD', sql.VarChar, maHD)
                 .input('SoTien', sql.Decimal(18, 2), amount)
                 .input('MaThamChieuCong', sql.VarChar, orderId)
-                .input('GhiChu', sql.NVarChar, `req:${requestId}`.slice(0, 200))
+                .input('GhiChu', sql.NVarChar, `time:${appTime}`.slice(0, 200))
                 .query(`
                     INSERT ThanhToan(MaTT,MaHD,PhuongThuc,MaGiaoDich,SoTien,NgayTT,TrangThai,NgayXacNhan,
                         GhiChu,NguonXacNhan,MaThamChieuCong)
                     VALUES(@MaTT,@MaHD,N'QR',NULL,@SoTien,GETDATE(),N'Chờ xác nhận',NULL,
-                        @GhiChu,N'MoMo',@MaThamChieuCong)`);
+                        @GhiChu,N'ZaloPay',@MaThamChieuCong)`);
             await logAudit(transaction, {
                 user, req, action: 'Thu tiền hóa đơn', table: 'HoaDon', recordId: maHD, uc: 'UC25',
                 severity: 'Quan trọng',
-                content: `Tạo thanh toán gateway ${maTT} provider momo ${amount.toLocaleString('vi-VN')}đ. orderId ${orderId}.`
+                content: `Tạo thanh toán gateway ${maTT} provider zalopay ${amount.toLocaleString('vi-VN')}đ. app_trans_id ${orderId}.`
             });
             await transaction.commit();
-            return { maTT, orderId, requestId, amount, maHD };
+            return { maTT, orderId, requestId, amount, maHD, appTime };
         } catch (error) {
             if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
-            if (String(error.message || '').includes('UX_ThanhToan_MotQrMoMoCho')) {
-                throw gatewayError('Đã có thanh toán MoMo đang chờ. Hãy Query/resolve trước khi tạo mã mới.', 409);
+            if (String(error.message || '').includes('UX_ThanhToan_MotQrMoMoCho')
+                || String(error.message || '').includes('UX_ThanhToan_MotQrCho')) {
+                throw gatewayError('Đã có thanh toán QR đang chờ. Hãy Query/resolve trước khi tạo mã mới.', 409);
             }
             throw error;
         }
@@ -292,12 +334,13 @@ const createQrPayment = async ({ maHD, soTien, user, req, provider }) => {
         returnUrl: process.env.PAYMENT_RETURN_URL,
         ipnUrl: process.env.PAYMENT_IPN_URL,
         orderId: row.orderId,
-        requestId: row.requestId
+        requestId: row.requestId,
+        appTime: row.appTime
     });
 
     const onClearFail = async (row, error) => {
         const pool = await poolPromise;
-        await markPaymentFailed(pool, row.maTT, error.message || 'MoMo create thất bại');
+        await markPaymentFailed(pool, row.maTT, error.message || 'ZaloPay create thất bại');
     };
 
     try {
@@ -331,11 +374,11 @@ const createQrPayment = async ({ maHD, soTien, user, req, provider }) => {
             body: {
                 MaTT: row.maTT,
                 PhuongThuc: 'QR',
-                NguonXacNhan: 'MoMo',
+                NguonXacNhan: 'ZaloPay',
                 TrangThai: WAITING_STATUS,
                 SoTien: row.amount,
                 MaThamChieuCong: row.orderId,
-                provider: 'momo',
+                provider: 'zalopay',
                 expiredAt: null,
                 ...images
             }
@@ -344,9 +387,9 @@ const createQrPayment = async ({ maHD, soTien, user, req, provider }) => {
         inserted = error.insertedRow || inserted;
         if (error.clearFailure) {
             throw gatewayError(
-                error.message.includes('MOMO_*') || error.message.includes('Provider')
+                error.message.includes('ZALOPAY_') || error.message.includes('Provider')
                     ? error.message
-                    : 'Không thanh toán được MoMo — chuyển Tiền mặt.',
+                    : 'Không thanh toán được ZaloPay — chuyển Tiền mặt.',
                 error.status || 400,
                 { clearFailure: true, MaTT: inserted?.maTT || error.MaTT }
             );
@@ -356,11 +399,11 @@ const createQrPayment = async ({ maHD, soTien, user, req, provider }) => {
             body: {
                 MaTT: inserted?.maTT || null,
                 PhuongThuc: 'QR',
-                NguonXacNhan: 'MoMo',
+                NguonXacNhan: 'ZaloPay',
                 TrangThai: WAITING_STATUS,
                 SoTien: inserted?.amount,
-                provider: 'momo',
-                message: 'Chưa rõ trạng thái MoMo. Giữ Chờ — bấm Query lại. Không tạo mã mới.'
+                provider: 'zalopay',
+                message: 'Chưa rõ trạng thái ZaloPay. Giữ Chờ — bấm Query lại. Không tạo mã mới.'
             }
         };
     }
@@ -389,10 +432,10 @@ const completeIfReady = async (transaction, invoice, req, source) => {
     const result = await sales.completeInvoiceInternal(transaction, {
         maHD: current.MaHD,
         actorMaNV: current.MaNV,
-        user: { MaNV: current.MaNV, TenDangNhap: 'momo-gateway' },
+        user: await actorForNv(transaction, current.MaNV),
         req,
         requireOwnerShift: false,
-        auditNote: source === 'query' ? 'Query MoMo retry completeInvoice' : 'IPN MoMo'
+        auditNote: source === 'query' ? 'Query ZaloPay retry completeInvoice' : 'IPN ZaloPay'
     });
     return result;
 };
@@ -427,7 +470,7 @@ const applyGatewayResult = async (transaction, { payment, verified, req, source 
         return { action };
     }
     if (action === 'transid_conflict') {
-        console.error('MoMo transId lệch trên dòng đã Thành công', payment.MaTT, payment.MaGiaoDich, verified.MaGiaoDich);
+        console.error('ZaloPay transId lệch trên dòng đã Thành công', payment.MaTT, payment.MaGiaoDich, verified.MaGiaoDich);
         return { action };
     }
     if (action === 'amount_mismatch_fail') {
@@ -435,7 +478,7 @@ const applyGatewayResult = async (transaction, { payment, verified, req, source 
         return { action };
     }
     if (action === 'mark_failed') {
-        await markPaymentFailed(transaction, payment.MaTT, verified.message || `MoMo resultCode ${verified.resultCode}`);
+        await markPaymentFailed(transaction, payment.MaTT, verified.message || `ZaloPay resultCode ${verified.resultCode}`);
         return { action };
     }
 
@@ -448,15 +491,16 @@ const applyGatewayResult = async (transaction, { payment, verified, req, source 
                     UPDATE ThanhToan
                     SET TrangThai=N'Thành công', NgayXacNhan=GETDATE(), MaGiaoDich=@MaGiaoDich
                     WHERE MaTT=@MaTT AND TrangThai=N'Chờ xác nhận'`);
+            // MaGiaoDich lúc Thành công = zp_trans_id (IPN + Query). Hoàn ZaloPay đọc mã này — không bịa.
         } catch (error) {
             if (String(error.message || '').includes('UX_ThanhToan_MaGiaoDich')) {
-                console.error('MoMo transId trùng MaGiaoDich', verified.MaGiaoDich);
+                console.error('ZaloPay transId trùng MaGiaoDich', verified.MaGiaoDich);
                 return { action: 'transid_unique_conflict' };
             }
             throw error;
         }
         await logAudit(transaction, {
-            user: { MaNV: payment.MaNV, TenDangNhap: 'momo-gateway' },
+            user: await actorForNv(transaction, payment.MaNV),
             req, action: 'Thu tiền hóa đơn', table: 'HoaDon', recordId: payment.MaHD, uc: 'UC25',
             result: 'Thành công', severity: 'Quan trọng',
             content: `${source} xác nhận MaGD ${verified.MaGiaoDich} cho ${payment.MaTT}.`
@@ -473,11 +517,33 @@ const applyGatewayResult = async (transaction, { payment, verified, req, source 
     return { action, ...completed };
 };
 
+const ipnReplyForInvalidCallback = (verified) => {
+    if (verified.ignore || verified.reason === 'ignored_type') return ipnIgnored();
+    return ipnBadMac();
+};
+
+const ipnReplyForApplied = (applied) => {
+    const action = applied?.action;
+    // Idempotent / ignore / HĐ hủy: return_code 1 — ZaloPay không retry.
+    if (action === 'keep_success' || action === 'retry_complete' || action === 'ignore'
+        || action === 'transid_conflict' || action === 'transid_unique_conflict'
+        || action === 'invoice_cancelled') {
+        return ipnIdempotent();
+    }
+    return ipnAck();
+};
+
 const handleIpn = async (payload, req) => {
-    const verified = momo.verifyCallback(payload);
+    const prov = getProvider();
+    const verified = prov.verifyCallback(payload);
     if (!verified.ok) {
-        console.error('MoMo IPN bỏ qua:', verified.reason);
-        return { accepted: true, ignored: true, reason: verified.reason };
+        console.error('ZaloPay IPN bỏ qua:', verified.reason);
+        return {
+            accepted: true,
+            ignored: true,
+            reason: verified.reason,
+            merchantReply: ipnReplyForInvalidCallback(verified)
+        };
     }
     const transaction = new sql.Transaction(await poolPromise);
     try {
@@ -491,8 +557,13 @@ const handleIpn = async (payload, req) => {
                 WHERE tt.MaThamChieuCong=@OrderId`);
         if (!found.recordset.length) {
             await transaction.rollback();
-            console.error('MoMo IPN không map orderId', verified.MaThamChieuCong);
-            return { accepted: true, ignored: true, reason: 'order_not_found' };
+            console.error('ZaloPay IPN không map app_trans_id', verified.MaThamChieuCong);
+            return {
+                accepted: true,
+                ignored: true,
+                reason: 'order_not_found',
+                merchantReply: ipnRetry('order_not_found')
+            };
         }
         const payment = found.recordset[0];
         const applied = await applyGatewayResult(transaction, {
@@ -502,7 +573,7 @@ const handleIpn = async (payload, req) => {
             source: 'IPN'
         });
         await transaction.commit();
-        return { accepted: true, ...applied };
+        return { accepted: true, ...applied, merchantReply: ipnReplyForApplied(applied) };
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         throw error;
@@ -554,8 +625,14 @@ const queryOrResolve = async ({ maHD, maTT, user, req, failIfFinal = false, prov
             WHERE tt.MaHD=@MaHD AND tt.MaTT=@MaTT AND hd.MaNV=@MaNV`);
     if (!snapshot.recordset.length) throw gatewayError('Không tìm thấy dòng thanh toán.', 404);
     const current = snapshot.recordset[0];
-    if (current.PhuongThuc !== 'QR' || current.NguonXacNhan !== 'MoMo') {
-        throw gatewayError('Dòng này không phải thanh toán MoMo cổng.', 400);
+    if (current.PhuongThuc !== 'QR') {
+        throw gatewayError('Dòng này không phải thanh toán QR cổng.', 400);
+    }
+    if (current.NguonXacNhan && current.NguonXacNhan !== 'ZaloPay') {
+        throw gatewayError(
+            'Dòng QR không phải ZaloPay. Cổng MoMo đã tắt — không Query/tạo mã mới trên dòng này (4.13).',
+            400
+        );
     }
     if (current.HoaDonTrangThai === 'Đã hủy') {
         if (current.TrangThai === WAITING_STATUS) {
@@ -576,18 +653,18 @@ const queryOrResolve = async ({ maHD, maTT, user, req, failIfFinal = false, prov
     let queried = null;
     if (current.TrangThai === WAITING_STATUS) {
         try {
-            queried = await prov.queryPayment(current.MaThamChieuCong, requestIdFromNote(current.GhiChu));
+            queried = await prov.queryPayment(current.MaThamChieuCong);
         } catch (error) {
             if (failIfFinal) {
-                throw gatewayError('Chưa xác minh được MoMo. Giữ Chờ — Query lại. Không đánh Thất bại.', 409);
+                throw gatewayError('Chưa xác minh được ZaloPay. Giữ Chờ — Query lại. Không đánh Thất bại. Không tạo mã mới.', 409);
             }
-            throw gatewayError(error.message || 'Không query được MoMo. Giữ Chờ.', error.status || 503);
+            throw gatewayError(error.message || 'Không query được ZaloPay. Giữ Chờ.', error.status || 503);
         }
         if (queried.classification === 'success' && (queried.transId === undefined || queried.transId === null)) {
-            throw gatewayError('Query MoMo thiếu transId. Giữ Chờ.', 409);
+            throw gatewayError('Query ZaloPay thiếu zp_trans_id. Giữ Chờ.', 409);
         }
         if (failIfFinal && (queried.classification === 'pending' || queried.classification === 'authorized')) {
-            throw gatewayError('MoMo vẫn đang chờ. Giữ Chờ — Query lại. Không đánh Thất bại.', 409);
+            throw gatewayError('ZaloPay vẫn đang chờ. Giữ Chờ — Query lại. Không đánh Thất bại. Không tạo mã mới.', 409);
         }
     }
 
@@ -633,6 +710,7 @@ const queryOrResolve = async ({ maHD, maTT, user, req, failIfFinal = false, prov
 
 module.exports = {
     PENDING_MOMO_CASH_MESSAGE,
+    PENDING_QR_CASH_MESSAGE,
     QR_MANUAL_MESSAGE,
     compareVnd,
     remainingOf,
@@ -640,6 +718,7 @@ module.exports = {
     decideGatewayAction,
     decideCancelledInvoiceAction,
     assertAddPaymentAllowed,
+    findPendingQr,
     findPendingMomoQr,
     failPendingPaymentsForInvoice,
     getProvider,
@@ -651,5 +730,13 @@ module.exports = {
     applyGatewayResult,
     paymentTotals,
     qrImagesFromPaymentRow,
-    buildQrImages
+    buildQrImages,
+    buildAppTransId,
+    ipnAck,
+    ipnIgnored,
+    ipnIdempotent,
+    ipnBadMac,
+    ipnRetry,
+    ipnReplyForInvalidCallback,
+    ipnReplyForApplied
 };

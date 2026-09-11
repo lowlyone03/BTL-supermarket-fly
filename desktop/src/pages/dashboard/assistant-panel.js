@@ -10,7 +10,8 @@
       'In báo cáo tháng này',
       'Danh sách đơn mua tháng này',
       'In phiếu nhập tháng 8',
-      'Công nợ NCC'
+      'Công nợ NCC',
+      'Hôm nay có ca nào thu tiền mặt / QR?'
     ],
     'nhân viên mua hàng': [
       'Đề nghị kho nào chưa lập đơn?',
@@ -23,9 +24,9 @@
       'Nếu tăng tồn an toàn 20% thì cần nhập thêm bao nhiêu?'
     ],
     'thu ngân': [
-      'Ca này tiền mặt hệ thống là bao nhiêu? MoMo có vào két không?',
+      'Ca này tiền mặt hệ thống là bao nhiêu? ZaloPay/QR có vào két không?',
       'Danh sách hóa đơn bán tháng này',
-      'Bao nhiêu hóa đơn MoMo trong ca?'
+      'Bao nhiêu hóa đơn QR trong ca?'
     ],
     'kế toán': [
       'Danh sách hóa đơn mua tháng này',
@@ -683,7 +684,7 @@
     purchase_price: { label: 'Giá mua NCC tăng X%', hint: 'GV thuần tăng theo %. DT giữ nguyên. Lãi gộp và KQKD giảm đúng phần vốn tăng.', max: 80, value: 5, param: 'X (%)' },
     safety_stock: { label: 'Tăng tồn an toàn X%', hint: 'Định mức mới = ceil(định mức × hệ số). Chỉ hàng trong quyền tồn. Không lập PO.', max: 200, value: 20, param: 'X (%)' },
     demand_4w: { label: 'Nhu cầu = TB 4 tuần', hint: 'Nhu cầu = bán 28 ngày / 4 tuần. Nguy cơ khi ngày tồn còn lại < 7. Không ghi đề nghị.', max: 0, value: 0, param: '' },
-    tender_mix: { label: 'Tỷ trọng TM → MoMo X%', hint: 'Chuyển X% tiền mặt phiếu thu sang MoMo/QR. Két giảm, 112 tăng cùng số. DT không đổi.', max: 80, value: 20, param: 'X (%) TM→MoMo' }
+    tender_mix: { label: 'Tỷ trọng TM → QR X%', hint: 'Chuyển X% tiền mặt phiếu thu sang ZaloPay/QR. Két giảm, 112 tăng cùng số. DT không đổi.', max: 80, value: 20, param: 'X (%) TM→QR' }
   };
 
   const scenarioParamsOf = (type, pct) => {
@@ -704,7 +705,7 @@
     const labels = {
       doanhThuThuan: 'Doanh thu thuần', loiNhuanGop: 'Lãi gộp', kqkdLoiNhuan: 'KQKD',
       giaVonThuan: 'Giá vốn thuần', bienLaiGop: 'Biên lãi gộp (%)',
-      tienMat: 'Két (TM)', momo: 'MoMo / QR', nganHang112: '112 ước',
+      tienMat: 'Két (TM)', momo: 'QR / 112', nganHang112: '112 ước',
       tongCanNhap: 'SL cần nhập thêm', tongTienUoc: 'Tiền ước nhập thêm', soMatHangThieu: 'Số MH thiếu',
       soNguyCo: 'Số MH nguy cơ'
     };

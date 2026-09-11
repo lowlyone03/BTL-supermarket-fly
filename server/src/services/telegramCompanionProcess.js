@@ -38,7 +38,7 @@ const startTelegramCompanion = ({ boundExclusivePort = false } = {}) => {
         stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
         detached: false
     });
-    console.log(`Telegram companion fork PID ${child.pid} (parent ${process.pid}) — chỉ 1 process getUpdates. Nếu 409 Conflict: tắt HẾT node cổng 3000 rồi npm start một lần.`);
+    require('../config/termLog').info(`Telegram bot PID ${child.pid} (nếu 409: tắt hết Node cổng 3000 rồi start lại một lần)`);
     child.on('exit', () => {
         child = null;
         applyChildStatus('off');

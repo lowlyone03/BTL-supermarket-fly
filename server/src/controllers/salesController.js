@@ -10,6 +10,7 @@ const { postSaleJournals } = require('../services/accountingHooks');
 const { calendarizeRow } = require('../services/reportingPeriod');
 const {
     assertAddPaymentAllowed,
+    findPendingQr,
     findPendingMomoQr,
     failPendingPaymentsForInvoice
 } = require('../services/paymentGatewayService');
@@ -504,7 +505,7 @@ const addPayment = async (req, res) => {
         const status = clean(req.body.TrangThai, 20) || 'Thành công';
         const transactionCode = clean(req.body.MaGiaoDich, 50) || null;
         if (!['Tiền mặt', 'QR', 'Thẻ', 'Chuyển khoản'].includes(method)) throw new Error('Phương thức thanh toán không hợp lệ.');
-        if (method === 'Thẻ' || method === 'Chuyển khoản') throw Object.assign(new Error('P1 chỉ thu Tiền mặt hoặc MoMo.'), { status: 400 });
+        if (method === 'Thẻ' || method === 'Chuyển khoản') throw Object.assign(new Error('P1 chỉ thu Tiền mặt hoặc ZaloPay.'), { status: 400 });
         if (!Number.isFinite(amount) || amount <= 0) throw new Error('Số tiền thanh toán phải lớn hơn 0.');
         if (!['Thành công', 'Thất bại'].includes(status)) throw new Error('Trạng thái thanh toán không hợp lệ.');
         if (method !== 'Tiền mặt' && status === 'Thành công' && !transactionCode) throw new Error('Thanh toán điện tử thành công phải có mã giao dịch.');
@@ -516,8 +517,8 @@ const addPayment = async (req, res) => {
                 JOIN CaLamViec ca ON ca.MaCa=hd.MaCa
                 WHERE hd.MaHD=@MaHD AND hd.MaNV=@MaNV AND hd.TrangThai=N'Nháp' AND ca.TrangThai=N'Đang mở'`);
         if (!invoice.recordset.length) throw new Error('Hóa đơn không còn khả dụng để thanh toán.');
-        const pendingMomo = await findPendingMomoQr(transaction, req.params.id);
-        assertAddPaymentAllowed(pendingMomo, { status, method });
+        const pendingQr = await findPendingQr(transaction, req.params.id);
+        assertAddPaymentAllowed(pendingQr, { status, method });
         const paid = await new sql.Request(transaction).input('MaHD', sql.VarChar, req.params.id).query(`
             SELECT COALESCE(SUM(SoTien),0) DaThanhToan FROM ThanhToan WITH(UPDLOCK,HOLDLOCK)
             WHERE MaHD=@MaHD AND TrangThai=N'Thành công'`);
@@ -637,7 +638,7 @@ const completeInvoiceInternal = async (transaction, {
                             ELSE N'Thường' END
                     WHERE MaKH=@MaKH`);
     }
-    const actor = user || { MaNV: stockMaNV, TenDangNhap: 'momo-gateway' };
+    const actor = user || { MaNV: stockMaNV, TenDangNhap: 'zalopay-gateway' };
     const note = auditNote
         ? `${auditNote}. Đã thu đủ ${Number(invoice.TongThanhToan).toLocaleString('vi-VN')}đ; tồn kho đã trừ; ghi doanh thu ca.`
         : `Đã thu đủ ${Number(invoice.TongThanhToan).toLocaleString('vi-VN')}đ; tồn kho đã trừ; ghi doanh thu ca.`;
@@ -678,6 +679,6 @@ const completeInvoice = async (req, res) => {
 module.exports = {
     getCatalog, listCustomers, saveCustomer, updateCustomer, listInvoices, quoteInvoice,
     createInvoice, getInvoice, cancelInvoice, addPayment, completeInvoice, completeInvoiceInternal,
-    generateId, getActiveShift, findPendingMomoQr, assertAddPaymentAllowed,
+    generateId, getActiveShift, findPendingQr, findPendingMomoQr, assertAddPaymentAllowed,
     invoiceListMatchSql, resolveInvoiceListScope
 };

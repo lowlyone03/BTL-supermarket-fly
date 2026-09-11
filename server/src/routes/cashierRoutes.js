@@ -47,5 +47,7 @@ router.post('/returns', requirePermission('UC26'), returns.createReturn);
 router.post('/returns/:id/submit', requirePermission('UC26'), returns.submitReturn);
 router.post('/returns/:id/claim', requirePermission('UC26'), returns.claimReturn);
 router.post('/returns/:id/complete', requirePermission('UC26'), returns.completeReturn);
+router.post('/returns/:id/refund/query', requirePermission('UC26'), returns.queryReturnRefund);
+router.post('/returns/:id/refund/retry', requirePermission('UC26'), returns.retryReturnRefund);
 
 module.exports = router;

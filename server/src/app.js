@@ -3,6 +3,7 @@ const cors = require('cors');
 const os = require('node:os');
 const path = require('node:path');
 require('./config/loadEnv').loadEnv();
+const term = require('./config/termLog');
 const { poolPromise } = require('./config/db'); // Đảm bảo gọi file db.js để khởi tạo kết nối
 
 const app = express();
@@ -68,7 +69,7 @@ app.use('/api/telegram', telegramRoutes);
 app.use('/api/assistant', assistantRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/me', preferenceRoutes);
-// IPN/return MoMo: public, mount TRƯỚC catch-all 404. Không payment.routes / momoController.
+// IPN/return ZaloPay: public, mount TRƯỚC catch-all 404. Không payment.routes / momoController.
 app.use('/api/payments/gateway', paymentGatewayRoutes);
 
 // API Kiểm tra trạng thái Server
@@ -110,24 +111,32 @@ const startHttp = (host, onListening) => {
     const server = app.listen({ port: Number(PORT), host, exclusive: true }, onListening);
     server.on('error', (error) => {
         if (error.code === 'EADDRINUSE') {
-            console.error(`Cổng ${PORT} đang bị chiếm. Đóng process cũ rồi chạy lại npm start.`);
+            term.err(`Cổng ${PORT} đang bị chiếm. Đóng process cũ rồi chạy lại npm start.`);
             return;
         }
-        console.error(`Không listen ${host}:${PORT}:`, error.message);
+        term.err(`Không listen ${host}:${PORT}: ${error.message}`);
     });
     return server;
 };
 
 // 0.0.0.0 = IPv4 (LAN + 127.0.0.1). ::1 = Electron/Chromium gọi localhost.
 startHttp(HOST, () => {
-    console.log(`🚀 Server đang chạy tại http://localhost:${PORT}`);
     const lan = listLanIPv4();
+    const rows = [
+        { label: 'API', value: `http://localhost:${PORT}` }
+    ];
     if (lan.length) {
-        console.log('Cùng Wi-Fi: thành viên nhập IP này ở màn đăng nhập (ô Máy chủ nhóm):');
-        lan.forEach((ip) => console.log(`   ${ip}`));
+        lan.forEach((ip) => rows.push({ label: 'LAN', value: ip }));
     } else {
-        console.log('Không thấy IP LAN. Kiểm tra Wi-Fi / Ethernet rồi chạy lại.');
+        rows.push({ label: 'LAN', value: 'không thấy IP — kiểm tra Wi-Fi' });
     }
+    const tunnel = String(process.env.TELEGRAM_PUBLIC_BASE_URL || process.env.PAYMENT_IPN_URL || '')
+        .replace(/\/api\/.*$/, '')
+        .replace(/\/$/, '');
+    if (/^https:\/\//i.test(tunnel)) {
+        rows.push({ label: 'Tunnel', value: tunnel });
+    }
+    term.banner('Supermarket Fly - API', rows);
     poolPromise.then(async (pool) => {
         try {
             const { ensureStoreProfitLossSchema } = require('./services/storeProfitLoss');
@@ -137,6 +146,8 @@ startHttp(HOST, () => {
             const { syncRejectedCountSuccessors } = require('./services/countLifecycle');
             await ensureStoreProfitLossSchema(pool);
             await ensureReturnHandoverSchema(pool);
+            const { ensureReturnRefundSchema } = require('./services/returnRefundSchema');
+            await ensureReturnRefundSchema(pool);
             await healParkedReturns(pool);
             await ensureTelegramSchema(pool);
             await ensureCountSuccessorSchema(pool);
@@ -155,16 +166,16 @@ startHttp(HOST, () => {
             console.error('Không thể bổ sung schema thông báo / bàn giao / Telegram:', error.message);
         }
     }).catch((error) => {
-        console.error('SQL chưa sẵn sàng (API vẫn listen):', error.message);
+        term.err(`SQL chưa sẵn sàng (API vẫn listen): ${error.message}`);
     });
     try {
         startTelegramCompanion({ boundExclusivePort: true });
     } catch (error) {
-        console.error('Telegram:', error.message);
+        term.err(`Telegram: ${error.message}`);
     }
 });
 if (HOST !== '::1' && HOST !== '::') {
     startHttp('::1', () => {
-        console.log(`Cũng lắng nghe http://[::1]:${PORT} (localhost IPv6)`);
+        term.info(`IPv6  http://[::1]:${PORT}`);
     });
 }

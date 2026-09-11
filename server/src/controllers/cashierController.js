@@ -1,6 +1,7 @@
 const { sql, poolPromise } = require('../config/db');
 const { closeOpenAttendance } = require('../services/attendanceSync');
-const { calculateGrossProfit, RESTOCK_ACCEPTED_SQL, expectedDrawerCash, cashHandoverExcludingOpening } = require('../services/financialRules');
+const { calculateGrossProfit, RESTOCK_ACCEPTED_SQL, expectedDrawerCash, cashHandoverExcludingOpening, dongTmThuan, qrNet } = require('../services/financialRules');
+const { ensureReturnRefundSchema } = require('../services/returnRefundSchema');
 const { validateClosingCash, validateCloseShiftConfirm, validateCheckOutConfirm } = require('../services/fieldValidators');
 const { logAudit } = require('../services/auditLog');
 const { snapshotDuty, assertCashierDuty, assertOwnerCloseShift, CashierDutyError, GRACE_AFTER_MINUTES, isBoostDuty, isOfficeShift } = require('../services/cashierDuty');
@@ -305,6 +306,7 @@ const openShift = async (req, res) => {
 };
 
 const getShiftSummary = async (source, maCa, lock = false) => {
+    await ensureReturnRefundSchema(source).catch(() => {});
     const next = () => (typeof source.request === 'function' ? source.request() : new sql.Request(source));
     const hint = lock ? 'WITH (UPDLOCK,HOLDLOCK)' : '';
     const shift = await next().input('MaCa', sql.VarChar, maCa).query(`
@@ -330,6 +332,9 @@ const getShiftSummary = async (source, maCa, lock = false) => {
             FROM ChiTietDoiTra ct GROUP BY ct.MaDT
         )
         SELECT COALESCE(SUM(CASE WHEN dt.PhuongThucHoan=N'Tiền mặt' THEN dt.SoTienHoan ELSE 0 END),0) TongTienHoanMat,
+               COALESCE(SUM(CASE WHEN dt.PhuongThucHoan=N'QR' THEN dt.SoTienHoan ELSE 0 END),0) TongTienHoanQR,
+               COALESCE(SUM(CASE WHEN dt.PhuongThucThuThem=N'Tiền mặt' THEN dt.SoTienThuThem ELSE 0 END),0) TongTienThuThemMat,
+               COALESCE(SUM(CASE WHEN dt.PhuongThucThuThem=N'QR' THEN dt.SoTienThuThem ELSE 0 END),0) TongTienThuThemQR,
                COALESCE(SUM(dt.SoTienHoan),0) TienHoan,
                COALESCE(SUM(CASE WHEN ${RESTOCK_ACCEPTED_SQL}
                                  THEN ct.GiaVonHangTra ELSE 0 END),0) GiaVonHangTraNhapLai,
@@ -360,7 +365,18 @@ const getShiftSummary = async (source, maCa, lock = false) => {
         GiaVonHoaDon: Number(cost.recordset[0].GiaVon || 0),
         ThanhToanChoXacNhan: Number(pending.recordset[0].Tong || 0)
     };
-    summary.TienMatHeThong = Number(summary.TongTienMat || 0) - Number(summary.TongTienHoanMat || 0);
+    summary.TongTienMat = Number(summary.TongTienMat || 0) + Number(summary.TongTienThuThemMat || 0);
+    summary.TongTienQR = Number(summary.TongTienQR || 0) + Number(summary.TongTienThuThemQR || 0);
+    summary.TongTienHoanQR = Number(summary.TongTienHoanQR || 0);
+    summary.TienMatHeThong = dongTmThuan({
+        TongTienMat: summary.TongTienMat,
+        TongTienHoanMat: summary.TongTienHoanMat
+    });
+    summary.DongTmThuan = summary.TienMatHeThong;
+    summary.QrRong = qrNet({
+        TongTienQR: summary.TongTienQR,
+        TongTienHoanQR: summary.TongTienHoanQR
+    });
     summary.TienMatTrongKet = expectedDrawerCash({
         TienDauCa: summary.TienDauCa,
         TongTienMat: summary.TongTienMat,
@@ -378,7 +394,7 @@ const getShiftSummary = async (source, maCa, lock = false) => {
         const pendingReturns = await next().input('MaNV', sql.VarChar, summary.MaNV).query(`
             SELECT dt.MaDT, dt.MaHD, dt.HinhThucXuLy, dt.SoTienHoan, dt.NgayBanGiao, dt.TrangThai
             FROM PhieuDoiTra dt
-            WHERE dt.TrangThai IN (N'Nháp', N'Chờ kiểm tra', N'Chờ duyệt', N'Đã duyệt')
+            WHERE dt.TrangThai IN (N'Nháp', N'Chờ kiểm tra', N'Chờ duyệt', N'Đã duyệt', N'Đang hoàn tiền', N'Hoàn tiền thất bại')
               AND dt.NgayHoan IS NULL
               AND COALESCE(dt.MaNV_XuLy, dt.MaNV_Lap)=@MaNV
             ORDER BY CASE dt.TrangThai
@@ -456,11 +472,13 @@ const closeShift = async (req, res) => {
             .input('TongTienThe', sql.Decimal(18, 2), summary.TongTienThe)
             .input('TongTienChuyenKhoan', sql.Decimal(18, 2), summary.TongTienChuyenKhoan)
             .input('TongTienHoanMat', sql.Decimal(18, 2), summary.TongTienHoanMat)
+            .input('TongTienHoanQR', sql.Decimal(18, 2), summary.TongTienHoanQR || 0)
             .input('TienMatHeThong', sql.Decimal(18, 2), summary.TienMatHeThong)
             .input('TienThucNop', sql.Decimal(18, 2), tienThucNop).query(`
                 UPDATE CaLamViec SET ThoiGianKetThuc=GETDATE(),NgayDongCa=GETDATE(),TienCuoiCa=@TienCuoiCa,
                     TongTienMat=@TongTienMat,TongTienQR=@TongTienQR,TongTienThe=@TongTienThe,
                     TongTienChuyenKhoan=@TongTienChuyenKhoan,TongTienHoanMat=@TongTienHoanMat,
+                    TongTienHoanQR=@TongTienHoanQR,
                     TienMatHeThong=@TienMatHeThong,TienThucNop=@TienThucNop,
                     TrangThai=N'Đã chốt',TrangThaiDoiSoat=N'Chờ Kế toán đối soát'
                 WHERE MaCa=@MaCa`);

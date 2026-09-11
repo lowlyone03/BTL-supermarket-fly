@@ -3,7 +3,7 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 echo ==============================================
-echo SUPERMARKET FLY - APP + TUNNEL MOMO
+echo SUPERMARKET FLY - APP + TUNNEL ZALOPAY
 echo Tunnel truoc, ghi .env, roi moi npm start.
 echo Giu 2 cua so: tunnel + app. Tat tunnel = link doi.
 echo ==============================================
@@ -22,7 +22,7 @@ set "APP_EXIT=%ERRORLEVEL%"
 
 if not "%APP_EXIT%"=="0" (
   echo.
-  echo [LOI] Khong khoi dong duoc app + tunnel MoMo.
+  echo [LOI] Khong khoi dong duoc app + tunnel ZaloPay.
   echo Thieu cloudflared.exe: xem docs\HUONG_DAN_CLOUDFLARE_TUNNEL.md phan A1.
   echo Hay chup toan bo cua so nay.
 )

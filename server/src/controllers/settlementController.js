@@ -10,7 +10,7 @@ const loadClosedShifts = async (pool, { status = '' } = {}) => {
         const result = await pool.request().input('Status', sql.NVarChar, filter).query(`
             SELECT ca.MaCa,ca.MaNV,nv.TenNV,ca.MaQuay,q.TenQuay,ca.ThoiGianBatDau,ca.ThoiGianKetThuc,
                    ca.TienDauCa,ca.TienCuoiCa,ca.TongTienMat,ca.TongTienQR,ca.TongTienThe,
-                   ca.TongTienChuyenKhoan,ca.TongTienHoanMat,ca.TienMatHeThong,ca.TienThucNop,
+                   ca.TongTienChuyenKhoan,ca.TongTienHoanMat,ca.TongTienHoanQR,ca.TienMatHeThong,ca.TienThucNop,
                    ca.TienThucNop-ca.TienMatHeThong ChenhLech,ca.TrangThaiDoiSoat,ca.TrangThai,
                    pt.MaPT,pt.TrangThai TrangThaiPhieuThu,
                    (SELECT COUNT(*) FROM HoaDon hd WHERE hd.MaCa=ca.MaCa AND hd.TrangThai=N'Hoàn thành') SoHoaDon,
@@ -118,6 +118,7 @@ const createReceipt = async (req, res) => {
         const maCa = clean(req.params.id, 20);
         const reason = clean(req.body.LyDoChenhLech, 500) || null;
         await ensurePhieuThuSchema(pool).catch((error) => console.error(error));
+        await require('../services/returnRefundSchema').ensureReturnRefundSchema(pool).catch(() => {});
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         const shift = await new sql.Request(transaction).input('MaCa', sql.VarChar, maCa).query(`
             SELECT * FROM CaLamViec WITH(UPDLOCK,HOLDLOCK)

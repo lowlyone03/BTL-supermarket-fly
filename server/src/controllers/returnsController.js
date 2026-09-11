@@ -1,7 +1,17 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
-const { isRestockAccepted, looksUnsellable, isEqualValueExchange, roundMoney } = require('../services/financialRules');
+const {
+    isRestockAccepted, looksUnsellable, roundMoney,
+    defaultRefundMethod, originalInvoicePayMethod,
+    exchangeMoneyDelta, RETURN_MONEY_PENDING, RETURN_MONEY_FAILED
+} = require('../services/financialRules');
 const { postReturnJournals } = require('../services/accountingHooks');
+const { ensureReturnRefundSchema } = require('../services/returnRefundSchema');
+const {
+    remainingQrRefundable, loadLatestRefundTx, loadOpenShiftDrawer, assertCashDrawerEnough,
+    resolveRefundMethod, sendZaloPayRefund, queryZaloPayRefund, retryZaloPayRefund,
+    startExchangeCollect, queryExchangeCollect, markTicketDone, zpTransIdOf
+} = require('../services/returnRefundService');
 const { calendarizeRow } = require('../services/reportingPeriod');
 const { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS } = require('../services/invoiceReturnSql');
 const { assertCashierDuty } = require('../services/cashierDuty');
@@ -76,7 +86,7 @@ const loadDetail = async (pool, maDT) => {
             WHERE ct.MaDT=@MaDT
             ORDER BY ct.LoaiDong, sp.TenSP`),
         bind().query(`
-            SELECT PhuongThuc, SoTien, TrangThai, MaGiaoDich, NgayTT
+            SELECT PhuongThuc, SoTien, TrangThai, MaGiaoDich, NguonXacNhan, GhiChu, NgayTT
             FROM ThanhToan
             WHERE MaHD=@MaHD AND TrangThai=N'Thành công'
             ORDER BY NgayTT`),
@@ -110,9 +120,18 @@ const loadDetail = async (pool, maDT) => {
         })
     ]);
     const scrapIssue = linkedIssue.recordset[0] || null;
+    await ensureReturnRefundSchema(pool).catch(() => {});
+    const cap = await remainingQrRefundable(pool, ticket.MaHD).catch(() => null);
+    const refundTx = await loadLatestRefundTx(pool, maDT).catch(() => null);
+    const originalPay = originalInvoicePayMethod(payments.recordset) || ticket.PhuongThucGoc || null;
+    const qrPay = cap?.originalQr || (payments.recordset || []).find(row =>
+        String(row.PhuongThuc || '') === 'QR' || /zalo|momo|^qr$/i.test(String(row.PhuongThuc || ''))
+    );
     return {
         ticket: {
             ...ticket,
+            PhuongThucGoc: originalPay,
+            ZpTransId: zpTransIdOf(qrPay || {}),
             LichSuBanGiao: ticket.MaNV_XuLy || ticket.NgayBanGiao ? historyOf(ticket) : '',
             MaPXHuy: scrapIssue?.MaPX || null,
             TrangThaiPXHuy: scrapIssue?.TrangThai || null
@@ -120,7 +139,13 @@ const loadDetail = async (pool, maDT) => {
         lines: lines.recordset,
         payments: payments.recordset,
         audit: audit.recordset,
-        stockMoves: stockMoves.recordset
+        stockMoves: stockMoves.recordset,
+        refundTx,
+        refundCap: cap ? {
+            paid: cap.paid,
+            already: cap.already,
+            remaining: cap.remaining
+        } : null
     };
 };
 
@@ -671,11 +696,85 @@ const decideReturn = (approved) => async (req, res) => {
     }
 };
 
+const COMPLETE_MONEY_STATUSES = ['Đã duyệt', RETURN_MONEY_PENDING, RETURN_MONEY_FAILED];
+
+const stockMovesExist = async (connection, maDT) => {
+    const result = await new sql.Request(connection).input('MaDT', sql.VarChar, maDT).query(`
+        SELECT COUNT(*) So FROM GiaoDichKho WHERE LoaiChungTu=N'DoiTra' AND MaChungTu=@MaDT`);
+    return Number(result.recordset[0]?.So || 0) > 0;
+};
+
+const applyReturnStockMoves = async (transaction, { ticket, returned, restock, maNV, maDT }) => {
+    if (restock) {
+        for (let index = 0; index < returned.length; index += 1) {
+            const line = returned[index];
+            await new sql.Request(transaction).input('MaKho', sql.VarChar, ticket.MaKho)
+                .input('MaSP', sql.VarChar, line.MaSP).input('SoLuong', sql.Int, line.SoLuong)
+                .input('DonGiaVon', sql.Decimal(18, 2), line.DonGiaVon).query(`
+                    UPDATE TonKho SET SLTon=SLTon+@SoLuong,
+                        GiaTriTon=(SLTon+@SoLuong)*CASE WHEN SLTon+@SoLuong=0 THEN 0
+                            ELSE ((SLTon*DonGiaBinhQuan)+(@SoLuong*@DonGiaVon))/(SLTon+@SoLuong) END,
+                        DonGiaBinhQuan=CASE WHEN SLTon+@SoLuong=0 THEN 0
+                            ELSE ((SLTon*DonGiaBinhQuan)+(@SoLuong*@DonGiaVon))/(SLTon+@SoLuong) END,
+                        NgayCapNhat=GETDATE()
+                    WHERE MaKho=@MaKho AND MaSP=@MaSP`);
+            const maGD = await generateId(transaction, 'GiaoDichKho', 'MaGD', `GD${new Date().toISOString().slice(2, 10).replaceAll('-', '')}`);
+            await new sql.Request(transaction).input('MaGD', sql.VarChar, maGD)
+                .input('MaKho', sql.VarChar, ticket.MaKho).input('MaSP', sql.VarChar, line.MaSP)
+                .input('MaNV', sql.VarChar, maNV).input('SoLuong', sql.Int, line.SoLuong)
+                .input('DonGiaVon', sql.Decimal(18, 2), line.DonGiaVon)
+                .input('ThanhTienVon', sql.Decimal(18, 2), line.ThanhTienVon)
+                .input('MaDT', sql.VarChar, maDT).query(`
+                    INSERT GiaoDichKho(MaGD,MaKho,MaSP,MaNV,LoaiGD,SoLuong,DonGiaVon,ThanhTienVon,LoaiChungTu,MaChungTu,NgayGD,GhiChu)
+                    VALUES(@MaGD,@MaKho,@MaSP,@MaNV,N'Nhập',@SoLuong,@DonGiaVon,@ThanhTienVon,N'DoiTra',@MaDT,GETDATE(),N'Nhập lại hàng khách trả đạt yêu cầu')`);
+        }
+        return;
+    }
+    for (let index = 0; index < returned.length; index += 1) {
+        const line = returned[index];
+        const maGD = await generateId(transaction, 'GiaoDichKho', 'MaGD', `GD${new Date().toISOString().slice(2, 10).replaceAll('-', '')}`);
+        await new sql.Request(transaction).input('MaGD', sql.VarChar, maGD)
+            .input('MaKho', sql.VarChar, ticket.MaKho).input('MaSP', sql.VarChar, line.MaSP)
+            .input('MaNV', sql.VarChar, maNV)
+            .input('DonGiaVon', sql.Decimal(18, 2), line.DonGiaVon)
+            .input('MaDT', sql.VarChar, maDT).query(`
+                INSERT GiaoDichKho(MaGD,MaKho,MaSP,MaNV,LoaiGD,SoLuong,DonGiaVon,ThanhTienVon,LoaiChungTu,MaChungTu,NgayGD,GhiChu)
+                VALUES(@MaGD,@MaKho,@MaSP,@MaNV,N'Điều chỉnh',0,@DonGiaVon,0,N'DoiTra',@MaDT,GETDATE(),
+                  N'Loại bỏ/vứt hàng khách trả — không cộng tồn (đã trừ lúc bán)')`);
+    }
+};
+
+const applyExchangeIssue = async (transaction, { ticket, preparedExchange, maNV, maDT }) => {
+    for (const { maSP, qty, price, cost } of preparedExchange) {
+        await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT).input('MaSP', sql.VarChar, maSP)
+            .input('SoLuong', sql.Int, qty).input('DonGia', sql.Decimal(18, 2), price)
+            .input('ThanhTien', sql.Decimal(18, 2), price * qty)
+            .input('DonGiaVon', sql.Decimal(18, 2), cost)
+            .input('ThanhTienVon', sql.Decimal(18, 2), cost * qty).query(`
+                INSERT ChiTietDoiTra(MaDT,MaSP,LoaiDong,SoLuong,DonGia,ThanhTien,DonGiaVon,ThanhTienVon,LyDo)
+                VALUES(@MaDT,@MaSP,N'Hàng giao đổi',@SoLuong,@DonGia,@ThanhTien,@DonGiaVon,@ThanhTienVon,N'Giao đổi cho khách')`);
+        await new sql.Request(transaction).input('MaKho', sql.VarChar, ticket.MaKho)
+            .input('MaSP', sql.VarChar, maSP).input('SoLuong', sql.Int, qty).query(`
+                UPDATE TonKho SET SLTon=SLTon-@SoLuong, GiaTriTon=(SLTon-@SoLuong)*DonGiaBinhQuan, NgayCapNhat=GETDATE()
+                WHERE MaKho=@MaKho AND MaSP=@MaSP AND SLTon>=@SoLuong`);
+        const maGD = await generateId(transaction, 'GiaoDichKho', 'MaGD', `GD${new Date().toISOString().slice(2, 10).replaceAll('-', '')}`);
+        await new sql.Request(transaction).input('MaGD', sql.VarChar, maGD)
+            .input('MaKho', sql.VarChar, ticket.MaKho).input('MaSP', sql.VarChar, maSP)
+            .input('MaNV', sql.VarChar, maNV).input('SoLuong', sql.Int, -qty)
+            .input('DonGiaVon', sql.Decimal(18, 2), cost)
+            .input('ThanhTienVon', sql.Decimal(18, 2), cost * qty)
+            .input('MaDT', sql.VarChar, maDT).query(`
+                INSERT GiaoDichKho(MaGD,MaKho,MaSP,MaNV,LoaiGD,SoLuong,DonGiaVon,ThanhTienVon,LoaiChungTu,MaChungTu,NgayGD,GhiChu)
+                VALUES(@MaGD,@MaKho,@MaSP,@MaNV,N'Xuất',@SoLuong,@DonGiaVon,@ThanhTienVon,N'DoiTra',@MaDT,GETDATE(),N'Xuất hàng giao đổi cho khách')`);
+    }
+};
+
 const completeReturn = async (req, res) => {
     const transaction = new sql.Transaction(await poolPromise);
     try {
         const maDT = clean(req.params.id, 20);
         await ensureReturnHandoverSchema(await poolPromise);
+        await ensureReturnRefundSchema(await poolPromise);
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         await healParkedReturns(transaction);
         const header = await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT).query(`
@@ -684,7 +783,9 @@ const completeReturn = async (req, res) => {
             WHERE dt.MaDT=@MaDT`);
         if (!header.recordset.length) throw new Error('Không tìm thấy phiếu đổi trả.');
         const ticket = header.recordset[0];
-        if (ticket.TrangThai !== 'Đã duyệt') throw new Error('Chỉ phiếu đã được Quản lý duyệt mới hoàn tất được.');
+        if (!COMPLETE_MONEY_STATUSES.includes(ticket.TrangThai)) {
+            throw new Error('Chỉ phiếu đã duyệt, đang hoàn tiền hoặc hoàn tiền thất bại mới xử lý được.');
+        }
         let dutyResult;
         try {
             dutyResult = await assertCashierDuty(transaction, req.user.MaNV, 'complete-return');
@@ -737,125 +838,79 @@ const completeReturn = async (req, res) => {
         const restock = isRestockAccepted(ticket.KetQuaKiemTra);
         const returned = await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT).query(`
             SELECT * FROM ChiTietDoiTra WITH(UPDLOCK,HOLDLOCK) WHERE MaDT=@MaDT AND LoaiDong=N'Hàng khách trả'`);
-        let refund = null;
+        const existingExchange = await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT).query(`
+            SELECT * FROM ChiTietDoiTra WITH(UPDLOCK,HOLDLOCK) WHERE MaDT=@MaDT AND LoaiDong=N'Hàng giao đổi'`);
+        const stockDone = await stockMovesExist(transaction, maDT);
+        const pays = await new sql.Request(transaction).input('MaHD', sql.VarChar, ticket.MaHD).query(`
+            SELECT PhuongThuc, SoTien, TrangThai, MaGiaoDich, NguonXacNhan, GhiChu
+            FROM ThanhToan WHERE MaHD=@MaHD AND TrangThai=N'Thành công'`);
+        const firstComplete = ticket.TrangThai === 'Đã duyệt';
         let preparedExchange = [];
-        if (ticket.HinhThucXuLy === 'Hoàn tiền') {
-            const method = clean(req.body.PhuongThucHoan, 30);
-            const code = clean(req.body.MaGiaoDichHoan, 50) || null;
-            if (!['Tiền mặt', 'QR', 'Thẻ', 'Chuyển khoản'].includes(method)) throw new Error('Phương thức hoàn tiền không hợp lệ.');
-            if (method !== 'Tiền mặt' && !code) throw new Error('Hoàn tiền điện tử phải có mã giao dịch.');
-            refund = { method, code };
-        } else if (ticket.HinhThucXuLy === 'Đổi hàng') {
-            const exchange = Array.isArray(req.body.exchange) ? req.body.exchange : [];
-            if (!exchange.length) throw new Error('Đổi hàng phải chọn sản phẩm giao cho khách.');
-            const exchangedProducts = new Set();
-            let exchangeValue = 0;
-            for (const raw of exchange) {
-                const maSP = clean(raw.MaSP, 20);
-                const qty = Number(raw.SoLuong);
-                if (!maSP || !Number.isInteger(qty) || qty <= 0) throw new Error('Dòng hàng giao đổi không hợp lệ.');
-                if (exchangedProducts.has(maSP)) throw new Error(`Sản phẩm ${maSP} bị lặp trong danh sách hàng giao đổi.`);
-                exchangedProducts.add(maSP);
-                const stock = await new sql.Request(transaction).input('MaKho', sql.VarChar, ticket.MaKho)
-                    .input('MaSP', sql.VarChar, maSP).query(`
-                        SELECT sp.TenSP, sp.GiaBan, tk.SLTon, tk.DonGiaBinhQuan
-                        FROM SanPham sp JOIN TonKho tk WITH(UPDLOCK,HOLDLOCK)
-                          ON tk.MaSP=sp.MaSP AND tk.MaKho=@MaKho
-                        WHERE sp.MaSP=@MaSP AND sp.TrangThai IN (N'Đang bán', N'Đang kinh doanh')`);
-                if (!stock.recordset.length) throw new Error(`Sản phẩm ${maSP} không còn kinh doanh.`);
-                if (Number(stock.recordset[0].SLTon) < qty) throw new Error(`${stock.recordset[0].TenSP} không đủ tồn để giao đổi.`);
-                const price = Number(stock.recordset[0].GiaBan);
-                const cost = Number(stock.recordset[0].DonGiaBinhQuan || 0);
-                exchangeValue = roundMoney(exchangeValue + price * qty);
-                preparedExchange.push({ maSP, qty, price, cost });
+        let moneyPlan = {
+            kind: Number(ticket.SoTienHoan) > 0 ? 'refund' : 'equal',
+            soTienHoan: Number(ticket.SoTienHoan || 0),
+            soTienThuThem: Number(ticket.SoTienThuThem || 0)
+        };
+
+        if (ticket.HinhThucXuLy === 'Đổi hàng') {
+            if (firstComplete && !existingExchange.recordset.length) {
+                const exchange = Array.isArray(req.body.exchange) ? req.body.exchange : [];
+                if (!exchange.length) throw new Error('Đổi hàng phải chọn sản phẩm giao cho khách.');
+                const exchangedProducts = new Set();
+                let exchangeValue = 0;
+                for (const raw of exchange) {
+                    const maSP = clean(raw.MaSP, 20);
+                    const qty = Number(raw.SoLuong);
+                    if (!maSP || !Number.isInteger(qty) || qty <= 0) throw new Error('Dòng hàng giao đổi không hợp lệ.');
+                    if (exchangedProducts.has(maSP)) throw new Error(`Sản phẩm ${maSP} bị lặp trong danh sách hàng giao đổi.`);
+                    exchangedProducts.add(maSP);
+                    const stock = await new sql.Request(transaction).input('MaKho', sql.VarChar, ticket.MaKho)
+                        .input('MaSP', sql.VarChar, maSP).query(`
+                            SELECT sp.TenSP, sp.GiaBan, tk.SLTon, tk.DonGiaBinhQuan
+                            FROM SanPham sp JOIN TonKho tk WITH(UPDLOCK,HOLDLOCK)
+                              ON tk.MaSP=sp.MaSP AND tk.MaKho=@MaKho
+                            WHERE sp.MaSP=@MaSP AND sp.TrangThai IN (N'Đang bán', N'Đang kinh doanh')`);
+                    if (!stock.recordset.length) throw new Error(`Sản phẩm ${maSP} không còn kinh doanh.`);
+                    if (Number(stock.recordset[0].SLTon) < qty) throw new Error(`${stock.recordset[0].TenSP} không đủ tồn để giao đổi.`);
+                    const price = Number(stock.recordset[0].GiaBan);
+                    const cost = Number(stock.recordset[0].DonGiaBinhQuan || 0);
+                    exchangeValue = roundMoney(exchangeValue + price * qty);
+                    preparedExchange.push({ maSP, qty, price, cost });
+                }
+                const returnedValue = roundMoney(returned.recordset.reduce((sum, line) => sum + Number(line.ThanhTien || 0), 0));
+                moneyPlan = exchangeMoneyDelta(returnedValue, exchangeValue);
+            } else {
+                const returnedValue = roundMoney(returned.recordset.reduce((sum, line) => sum + Number(line.ThanhTien || 0), 0));
+                const exchangeValue = roundMoney(existingExchange.recordset.reduce((sum, line) => sum + Number(line.ThanhTien || 0), 0));
+                moneyPlan = exchangeMoneyDelta(returnedValue, exchangeValue);
             }
-            const returnedValue = roundMoney(returned.recordset.reduce((sum, line) => sum + Number(line.ThanhTien || 0), 0));
-            if (!isEqualValueExchange(returnedValue, exchangeValue)) {
-                throw new Error(`Đổi trực tiếp chỉ áp dụng hàng ngang giá (${returnedValue.toLocaleString('vi-VN')} đ). Nếu khác giá, hãy hoàn hàng cũ và lập hóa đơn bán mới.`);
-            }
-        } else {
+        } else if (ticket.HinhThucXuLy !== 'Hoàn tiền') {
             throw new Error('Hình thức xử lý đổi trả không hợp lệ.');
         }
-        if (restock) {
-            for (let index = 0; index < returned.recordset.length; index += 1) {
-                const line = returned.recordset[index];
-                await new sql.Request(transaction).input('MaKho', sql.VarChar, ticket.MaKho)
-                    .input('MaSP', sql.VarChar, line.MaSP).input('SoLuong', sql.Int, line.SoLuong)
-                    .input('DonGiaVon', sql.Decimal(18, 2), line.DonGiaVon).query(`
-                        UPDATE TonKho SET SLTon=SLTon+@SoLuong,
-                            GiaTriTon=(SLTon+@SoLuong)*CASE WHEN SLTon+@SoLuong=0 THEN 0
-                                ELSE ((SLTon*DonGiaBinhQuan)+(@SoLuong*@DonGiaVon))/(SLTon+@SoLuong) END,
-                            DonGiaBinhQuan=CASE WHEN SLTon+@SoLuong=0 THEN 0
-                                ELSE ((SLTon*DonGiaBinhQuan)+(@SoLuong*@DonGiaVon))/(SLTon+@SoLuong) END,
-                            NgayCapNhat=GETDATE()
-                        WHERE MaKho=@MaKho AND MaSP=@MaSP`);
-                const maGD = await generateId(transaction, 'GiaoDichKho', 'MaGD', `GD${new Date().toISOString().slice(2, 10).replaceAll('-', '')}`);
-                await new sql.Request(transaction).input('MaGD', sql.VarChar, maGD)
-                    .input('MaKho', sql.VarChar, ticket.MaKho).input('MaSP', sql.VarChar, line.MaSP)
-                    .input('MaNV', sql.VarChar, req.user.MaNV).input('SoLuong', sql.Int, line.SoLuong)
-                    .input('DonGiaVon', sql.Decimal(18, 2), line.DonGiaVon)
-                    .input('ThanhTienVon', sql.Decimal(18, 2), line.ThanhTienVon)
-                    .input('MaDT', sql.VarChar, maDT).query(`
-                        INSERT GiaoDichKho(MaGD,MaKho,MaSP,MaNV,LoaiGD,SoLuong,DonGiaVon,ThanhTienVon,LoaiChungTu,MaChungTu,NgayGD,GhiChu)
-                        VALUES(@MaGD,@MaKho,@MaSP,@MaNV,N'Nhập',@SoLuong,@DonGiaVon,@ThanhTienVon,N'DoiTra',@MaDT,GETDATE(),N'Nhập lại hàng khách trả đạt yêu cầu')`);
+
+        if (firstComplete && !stockDone) {
+            await applyReturnStockMoves(transaction, {
+                ticket, returned: returned.recordset, restock, maNV: req.user.MaNV, maDT
+            });
+            if (preparedExchange.length) {
+                await applyExchangeIssue(transaction, {
+                    ticket, preparedExchange, maNV: req.user.MaNV, maDT
+                });
             }
-        } else {
-            for (let index = 0; index < returned.recordset.length; index += 1) {
-                const line = returned.recordset[index];
-                const maGD = await generateId(transaction, 'GiaoDichKho', 'MaGD', `GD${new Date().toISOString().slice(2, 10).replaceAll('-', '')}`);
-                await new sql.Request(transaction).input('MaGD', sql.VarChar, maGD)
-                    .input('MaKho', sql.VarChar, ticket.MaKho).input('MaSP', sql.VarChar, line.MaSP)
-                    .input('MaNV', sql.VarChar, req.user.MaNV)
-                    .input('DonGiaVon', sql.Decimal(18, 2), line.DonGiaVon)
-                    .input('MaDT', sql.VarChar, maDT).query(`
-                        INSERT GiaoDichKho(MaGD,MaKho,MaSP,MaNV,LoaiGD,SoLuong,DonGiaVon,ThanhTienVon,LoaiChungTu,MaChungTu,NgayGD,GhiChu)
-                        VALUES(@MaGD,@MaKho,@MaSP,@MaNV,N'Điều chỉnh',0,@DonGiaVon,0,N'DoiTra',@MaDT,GETDATE(),
-                          N'Loại bỏ/vứt hàng khách trả — không cộng tồn (đã trừ lúc bán)')`);
-            }
+            await new sql.Request(transaction)
+                .input('MaDT', sql.VarChar, maDT)
+                .input('SoTien', sql.Decimal(18, 2), moneyPlan.soTienHoan)
+                .input('ThuThem', sql.Decimal(18, 2), moneyPlan.soTienThuThem)
+                .query(`UPDATE PhieuDoiTra SET SoTienHoan=@SoTien, SoTienThuThem=@ThuThem WHERE MaDT=@MaDT`);
         }
-        if (ticket.HinhThucXuLy === 'Hoàn tiền') {
-            await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT)
-                .input('PhuongThuc', sql.NVarChar, refund.method).input('MaGD', sql.VarChar, refund.code)
-                .input('MaCa', sql.VarChar, maCaHoan).query(`
-                    UPDATE PhieuDoiTra SET PhuongThucHoan=@PhuongThuc, MaGiaoDichHoan=@MaGD,
-                        NgayHoan=GETDATE(), MaCaHoan=@MaCa
-                    WHERE MaDT=@MaDT`);
-        } else {
-            for (const { maSP, qty, price, cost } of preparedExchange) {
-                await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT).input('MaSP', sql.VarChar, maSP)
-                    .input('SoLuong', sql.Int, qty).input('DonGia', sql.Decimal(18, 2), price)
-                    .input('ThanhTien', sql.Decimal(18, 2), price * qty)
-                    .input('DonGiaVon', sql.Decimal(18, 2), cost)
-                    .input('ThanhTienVon', sql.Decimal(18, 2), cost * qty).query(`
-                        INSERT ChiTietDoiTra(MaDT,MaSP,LoaiDong,SoLuong,DonGia,ThanhTien,DonGiaVon,ThanhTienVon,LyDo)
-                        VALUES(@MaDT,@MaSP,N'Hàng giao đổi',@SoLuong,@DonGia,@ThanhTien,@DonGiaVon,@ThanhTienVon,N'Giao đổi cho khách')`);
-                await new sql.Request(transaction).input('MaKho', sql.VarChar, ticket.MaKho)
-                    .input('MaSP', sql.VarChar, maSP).input('SoLuong', sql.Int, qty).query(`
-                        UPDATE TonKho SET SLTon=SLTon-@SoLuong, GiaTriTon=(SLTon-@SoLuong)*DonGiaBinhQuan, NgayCapNhat=GETDATE()
-                        WHERE MaKho=@MaKho AND MaSP=@MaSP AND SLTon>=@SoLuong`);
-                const maGD = await generateId(transaction, 'GiaoDichKho', 'MaGD', `GD${new Date().toISOString().slice(2, 10).replaceAll('-', '')}`);
-                await new sql.Request(transaction).input('MaGD', sql.VarChar, maGD)
-                    .input('MaKho', sql.VarChar, ticket.MaKho).input('MaSP', sql.VarChar, maSP)
-                    .input('MaNV', sql.VarChar, req.user.MaNV).input('SoLuong', sql.Int, -qty)
-                    .input('DonGiaVon', sql.Decimal(18, 2), cost)
-                    .input('ThanhTienVon', sql.Decimal(18, 2), cost * qty)
-                    .input('MaDT', sql.VarChar, maDT).query(`
-                        INSERT GiaoDichKho(MaGD,MaKho,MaSP,MaNV,LoaiGD,SoLuong,DonGiaVon,ThanhTienVon,LoaiChungTu,MaChungTu,NgayGD,GhiChu)
-                        VALUES(@MaGD,@MaKho,@MaSP,@MaNV,N'Xuất',@SoLuong,@DonGiaVon,@ThanhTienVon,N'DoiTra',@MaDT,GETDATE(),N'Xuất hàng giao đổi cho khách')`);
-            }
-        }
-        await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT)
-            .input('MaCa', sql.VarChar, maCaHoan).query(`
-                UPDATE PhieuDoiTra SET TrangThai=N'Hoàn thành',
-                    NgayHoan=COALESCE(NgayHoan, GETDATE()), MaCaHoan=COALESCE(MaCaHoan, @MaCa)
-                WHERE MaDT=@MaDT`);
+
         const opener = await new sql.Request(transaction).input('MaNV', sql.VarChar, ticket.MaNV_Lap)
             .query('SELECT TenNV FROM NhanVien WHERE MaNV=@MaNV');
         const claimerRow = await new sql.Request(transaction).input('MaNV', sql.VarChar, req.user.MaNV)
             .query('SELECT TenNV FROM NhanVien WHERE MaNV=@MaNV');
         const customer = await new sql.Request(transaction).input('MaHD', sql.VarChar, ticket.MaHD)
             .query(`SELECT kh.TenKH FROM HoaDon hd LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH WHERE hd.MaHD=@MaHD`);
-        const completeNote = ticket.NgayBanGiao || (ticket.MaNV_Lap && ticket.MaNV_Lap !== req.user.MaNV)
+        const historyNote = ticket.NgayBanGiao || (ticket.MaNV_Lap && ticket.MaNV_Lap !== req.user.MaNV)
             ? describeReturnHandover({
                 openerMaNV: ticket.MaNV_Lap,
                 openerName: opener.recordset[0]?.TenNV,
@@ -865,16 +920,192 @@ const completeReturn = async (req, res) => {
                 claimerName: claimerRow.recordset[0]?.TenNV,
                 claimerAt: ticket.NgayTiepNhan || new Date(),
                 customerName: customer.recordset[0]?.TenKH,
-                completed: true,
-                completedAt: new Date()
+                completed: false
             })
             : ticket.HinhThucXuLy;
-        await writeAudit(new sql.Request(transaction), req.user, 'Hoàn thành đổi trả', maDT, completeNote);
-        await postReturnJournals(transaction, { maDT, maNV: req.user.MaNV, user: req.user });
+
+        if (ticket.TrangThai === RETURN_MONEY_PENDING) {
+            await transaction.commit();
+            const queried = await queryZaloPayRefund({
+                connection: await poolPromise, ticket, maCa: maCaHoan, user: req.user, req
+            });
+            return res.json({ MaDT: maDT, MaCaHoan: maCaHoan, history: historyNote, ...queried });
+        }
+        if (ticket.TrangThai === RETURN_MONEY_FAILED) {
+            await transaction.commit();
+            const retried = await retryZaloPayRefund({
+                connection: await poolPromise,
+                ticket,
+                amount: moneyPlan.soTienHoan || Number(ticket.SoTienHoan || 0),
+                maCa: maCaHoan,
+                user: req.user,
+                req
+            });
+            return res.json({ MaDT: maDT, MaCaHoan: maCaHoan, history: historyNote, ...retried });
+        }
+
+        if (moneyPlan.kind === 'collect') {
+            const collectMethod = clean(req.body.PhuongThucThuThem, 30)
+                || (defaultRefundMethod(null, pays.recordset) === 'QR' ? 'QR' : 'Tiền mặt');
+            if (collectMethod === 'Tiền mặt') {
+                await markTicketDone(transaction, {
+                    maDT, maCa: maCaHoan, method: 'Tiền mặt', amount: 0,
+                    soTienThuThem: moneyPlan.soTienThuThem, phuongThucThuThem: 'Tiền mặt'
+                });
+                await writeAudit(new sql.Request(transaction), req.user, 'Hoàn thành đổi trả', maDT,
+                    `${historyNote}. Thu thêm TM ${moneyPlan.soTienThuThem} — không hoàn rồi bán lại.`);
+                await postReturnJournals(transaction, {
+                    maDT, maNV: req.user.MaNV, user: req.user, includeMoney: false, includeStock: true
+                });
+                await transaction.commit();
+                return res.json({
+                    message: `Đã thu thêm tiền mặt và hoàn tất ${maDT}. Hóa đơn gốc không đổi.`,
+                    MaDT: maDT, MaCaHoan: maCaHoan, TrangThai: 'Hoàn thành', completed: true
+                });
+            }
+            await transaction.commit();
+            const started = await startExchangeCollect({
+                connection: await poolPromise,
+                ticket: { ...ticket, SoTienThuThem: moneyPlan.soTienThuThem },
+                amount: moneyPlan.soTienThuThem,
+                method: 'QR',
+                maCa: maCaHoan,
+                user: req.user,
+                req
+            });
+            return res.json({ MaDT: maDT, MaCaHoan: maCaHoan, TrangThai: 'Đã duyệt', ...started });
+        }
+
+        if (moneyPlan.kind === 'equal' || !(moneyPlan.soTienHoan > 0)) {
+            await markTicketDone(transaction, {
+                maDT, maCa: maCaHoan, method: defaultRefundMethod(null, pays.recordset) || 'Tiền mặt', amount: 0
+            });
+            await writeAudit(new sql.Request(transaction), req.user, 'Hoàn thành đổi trả', maDT,
+                `${historyNote}. Đổi ngang — không hoàn tiền.`);
+            await postReturnJournals(transaction, { maDT, maNV: req.user.MaNV, user: req.user });
+            await transaction.commit();
+            return res.json({
+                message: `Đã hoàn tất ${maDT}. Đổi ngang giá, không sinh hoàn tiền.`,
+                MaDT: maDT, MaCaHoan: maCaHoan, TrangThai: 'Hoàn thành', completed: true
+            });
+        }
+
+        const method = resolveRefundMethod({
+            originalMethod: defaultRefundMethod(null, pays.recordset),
+            payments: pays.recordset,
+            requested: req.body.PhuongThucHoan
+        });
+
+        if (method === 'Tiền mặt') {
+            const drawer = await loadOpenShiftDrawer(transaction, maCaHoan);
+            assertCashDrawerEnough(moneyPlan.soTienHoan, drawer.TienMatTrongKet);
+            await markTicketDone(transaction, {
+                maDT, maCa: maCaHoan, method: 'Tiền mặt', amount: moneyPlan.soTienHoan
+            });
+            await writeAudit(new sql.Request(transaction), req.user, 'Hoàn thành đổi trả', maDT,
+                `${historyNote}. Hoàn tiền mặt từ két ca đang mở.`);
+            await postReturnJournals(transaction, { maDT, maNV: req.user.MaNV, user: req.user });
+            await transaction.commit();
+            return res.json({
+                message: `Đã hoàn tiền mặt ${maDT}.`,
+                MaDT: maDT, MaCaHoan: maCaHoan, TrangThai: 'Hoàn thành', completed: true,
+                TienMatTrongKet: drawer.TienMatTrongKet
+            });
+        }
+
         await transaction.commit();
-        res.json({ message: `Đã hoàn thành phiếu đổi trả ${maDT}.`, MaDT: maDT, MaCaHoan: maCaHoan, history: completeNote });
+        const sent = await sendZaloPayRefund({
+            connection: await poolPromise,
+            ticket: { ...ticket, SoTienHoan: moneyPlan.soTienHoan },
+            amount: moneyPlan.soTienHoan,
+            maCa: maCaHoan,
+            user: req.user,
+            req
+        });
+        if (sent.queryOnly || sent.alreadyDone) {
+            const queried = await queryZaloPayRefund({
+                connection: await poolPromise, ticket, maCa: maCaHoan, user: req.user, req
+            });
+            return res.json({ MaDT: maDT, MaCaHoan: maCaHoan, history: historyNote, ...queried });
+        }
+        const journalTxn = new sql.Transaction(await poolPromise);
+        await journalTxn.begin();
+        try {
+            await postReturnJournals(journalTxn, {
+                maDT, maNV: req.user.MaNV, user: req.user, includeMoney: false, includeStock: true
+            });
+            await journalTxn.commit();
+        } catch (journalError) {
+            if (journalTxn._aborted !== true) await journalTxn.rollback().catch(() => {});
+            console.error(journalError);
+        }
+        return res.json({
+            MaDT: maDT,
+            MaCaHoan: maCaHoan,
+            history: historyNote,
+            TrangThai: sent.failed ? RETURN_MONEY_FAILED : RETURN_MONEY_PENDING,
+            pending: sent.pending,
+            failed: sent.failed,
+            mRefundId: sent.mRefundId,
+            message: sent.message
+        });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        res.status(error.status || 400).json({ message: error.message });
+    }
+};
+
+const queryReturnRefund = async (req, res) => {
+    try {
+        const maDT = clean(req.params.id, 20);
+        await ensureReturnRefundSchema(await poolPromise);
+        const duty = await assertCashierDuty(await poolPromise, req.user.MaNV, 'complete-return');
+        const header = await (await poolPromise).request().input('MaDT', sql.VarChar, maDT).query(`
+            SELECT dt.* FROM PhieuDoiTra dt WHERE dt.MaDT=@MaDT`);
+        if (!header.recordset.length) return res.status(404).json({ message: 'Không tìm thấy phiếu đổi trả.' });
+        const ticket = header.recordset[0];
+        if (ticket.MaThamChieuThuThem && Number(ticket.SoTienThuThem || 0) > 0 && ticket.TrangThai === 'Đã duyệt') {
+            const collected = await queryExchangeCollect({
+                connection: await poolPromise,
+                ticket,
+                maCa: duty.shift?.MaCa || ticket.MaCaHoan,
+                user: req.user,
+                req
+            });
+            return res.json({ MaDT: maDT, ...collected });
+        }
+        const queried = await queryZaloPayRefund({
+            connection: await poolPromise,
+            ticket,
+            maCa: duty.shift?.MaCa || ticket.MaCaHoan,
+            user: req.user,
+            req
+        });
+        res.json({ MaDT: maDT, ...queried });
+    } catch (error) {
+        res.status(error.status || 400).json({ message: error.message });
+    }
+};
+
+const retryReturnRefund = async (req, res) => {
+    try {
+        const maDT = clean(req.params.id, 20);
+        await ensureReturnRefundSchema(await poolPromise);
+        const duty = await assertCashierDuty(await poolPromise, req.user.MaNV, 'complete-return');
+        const header = await (await poolPromise).request().input('MaDT', sql.VarChar, maDT).query(`
+            SELECT dt.* FROM PhieuDoiTra dt WHERE dt.MaDT=@MaDT`);
+        if (!header.recordset.length) return res.status(404).json({ message: 'Không tìm thấy phiếu đổi trả.' });
+        const ticket = header.recordset[0];
+        const retried = await retryZaloPayRefund({
+            connection: await poolPromise,
+            ticket,
+            amount: Number(ticket.SoTienHoan || 0),
+            maCa: duty.shift?.MaCa || ticket.MaCaHoan,
+            user: req.user,
+            req
+        });
+        res.json({ MaDT: maDT, ...retried });
+    } catch (error) {
         res.status(error.status || 400).json({ message: error.message });
     }
 };
@@ -934,5 +1165,5 @@ const claimReturn = async (req, res) => {
 module.exports = {
     searchInvoices, listRecentInvoices, getInvoiceForReturn, listReturns, getReturn,
     createReturn, submitReturn, inspectReturn, flagInspectMistake, decideReturn,
-    claimReturn, completeReturn
+    claimReturn, completeReturn, queryReturnRefund, retryReturnRefund
 };

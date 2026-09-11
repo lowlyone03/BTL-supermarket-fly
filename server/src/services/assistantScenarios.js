@@ -23,18 +23,18 @@ const ALL = [
     { id: 'ql-loyalty', group: 'Quản lý / điều hành', title: 'Khách thân thiết có nguy cơ rời?', prompt: 'Phân khúc khách thành viên tháng này: giá trị cao, thân thiết, mới, nguy cơ rời. Không tự gắn khuyến mãi.', uc: ['UC04', 'UC10'] },
     { id: 'ql-telegram', group: 'Quản lý / điều hành', title: 'Bot Telegram đang làm được gì?', prompt: 'Nhắc tôi cách dùng Telegram: xem số liệu theo quyền, nút duyệt trên Telegram là bấm tay, trợ lý chat không được duyệt hộ.', uc: ['UC01'] },
 
-    { id: 'tn-ket-ca', group: 'Bán hàng / thu ngân', title: 'Két ca này là bao nhiêu? MoMo có vào két?', prompt: 'Ca đang mở: tiền mặt hệ thống (TM thu trừ hoàn TM) là bao nhiêu? MoMo/QR thành công bao nhiêu — MoMo có vào két không?', uc: ['UC22'] },
+    { id: 'tn-ket-ca', group: 'Bán hàng / thu ngân', title: 'Két ca này là bao nhiêu? ZaloPay có vào két?', prompt: 'Ca đang mở: tiền mặt hệ thống (TM thu trừ hoàn TM) là bao nhiêu? ZaloPay/QR thành công bao nhiêu — QR có vào két không?', uc: ['UC22'] },
     { id: 'tn-hoa-don-thang', group: 'Bán hàng / thu ngân', title: 'Danh sách hóa đơn bán tháng này', prompt: 'Danh sách hóa đơn bán tháng này (mã, giờ, tổng, phương thức, trạng thái). Gợi ý xem/in, không hoàn thành hộ.', uc: ['UC24', 'UC25'] },
-    { id: 'tn-momo-ca', group: 'Bán hàng / thu ngân', title: 'Ca này có bao nhiêu hóa đơn MoMo?', prompt: 'Trong ca đang mở, bao nhiêu hóa đơn thanh toán MoMo/QR thành công, tổng tiền, hóa đơn nào còn chờ xác nhận?', uc: ['UC22', 'UC25'] },
+    { id: 'tn-momo-ca', group: 'Bán hàng / thu ngân', title: 'Ca này có bao nhiêu hóa đơn QR?', prompt: 'Trong ca đang mở, bao nhiêu hóa đơn thanh toán ZaloPay/QR thành công, tổng tiền, hóa đơn nào còn chờ xác nhận?', uc: ['UC22', 'UC25'] },
     { id: 'tn-hd-nhap', group: 'Bán hàng / thu ngân', title: 'Hóa đơn nháp nào chưa xong?', prompt: 'Ca này còn hóa đơn nháp hoặc thanh toán chờ xác nhận không? Liệt kê mã để thu ngân xử lý trên POS, không hoàn thành hộ.', uc: ['UC24', 'UC25'] },
     { id: 'tn-doi-tra', group: 'Bán hàng / thu ngân', title: 'Yêu cầu đổi trả đang ở bước nào?', prompt: 'Các phiếu đổi trả đang xử lý: chờ kiểm tra kho, chờ duyệt, chờ thu ngân xác nhận. Không duyệt hộ, không hoàn tiền hộ.', uc: ['UC26'] },
     { id: 'tn-khach', group: 'Bán hàng / thu ngân', title: 'Tra cứu khách theo SĐT', prompt: 'Cách tra cứu khách hàng thân thiết tại quầy: SĐT, điểm, hạng. Không hỏi CCCD trong chat.', uc: ['UC23'] },
-    { id: 'tn-mo-ca', group: 'Bán hàng / thu ngân', title: 'Checklist mở ca', prompt: 'Checklist mở ca bán hàng: quỹ đầu ca, quầy, máy in, MoMo. Liệt kê bước, không mở ca hộ.', uc: ['UC22'] },
-    { id: 'tn-dong-ca', group: 'Bán hàng / thu ngân', title: 'Checklist đóng ca', prompt: 'Checklist đóng ca: đối chiếu TM hệ thống với két, MoMo không vào két, hóa đơn nháp, bàn giao kế toán. Không đóng ca hộ.', uc: ['UC22'] },
+    { id: 'tn-mo-ca', group: 'Bán hàng / thu ngân', title: 'Checklist mở ca', prompt: 'Checklist mở ca bán hàng: quỹ đầu ca, quầy, máy in, ZaloPay. Liệt kê bước, không mở ca hộ.', uc: ['UC22'] },
+    { id: 'tn-dong-ca', group: 'Bán hàng / thu ngân', title: 'Checklist đóng ca', prompt: 'Checklist đóng ca: đối chiếu TM hệ thống với két, QR/ZaloPay không vào két, hóa đơn nháp, bàn giao kế toán. Không đóng ca hộ.', uc: ['UC22'] },
     { id: 'tn-gia-ke', group: 'Bán hàng / thu ngân', title: 'Giá kệ đã gồm VAT chưa?', prompt: 'Giá kệ siêu thị Fly đã gồm VAT chưa? Khách hỏi xuất hóa đơn thì giải thích thế nào?', uc: ['UC24'] },
-    { id: 'tn-su-co-may', group: 'Bán hàng / thu ngân', title: 'Máy in / QR lỗi lúc cao điểm', prompt: 'SOP khi máy in hóa đơn hoặc QR MoMo lỗi lúc đông khách: giữ hàng, ghi nhận, báo quản lý. Không bịa số liệu.', uc: ['UC22'] },
+    { id: 'tn-su-co-may', group: 'Bán hàng / thu ngân', title: 'Máy in / QR lỗi lúc cao điểm', prompt: 'SOP khi máy in hóa đơn hoặc QR ZaloPay lỗi lúc đông khách: giữ hàng, ghi nhận, báo quản lý. Không bịa số liệu.', uc: ['UC22'] },
     { id: 'tn-khuyen-mai', group: 'Bán hàng / thu ngân', title: 'Khuyến mãi nào đang áp tại quầy?', prompt: 'Khuyến mãi / ưu đãi thành viên nào đang áp dụng tại POS tháng này? Không tự gắn thêm mã.', uc: ['UC23', 'UC24'] },
-    { id: 'tn-hoan-tien', group: 'Bán hàng / thu ngân', title: 'Khi nào được hoàn tiền mặt?', prompt: 'Quy trình hoàn tiền đổi trả: kho kiểm, quản lý duyệt, thu ngân xác nhận. Trợ lý không hoàn tiền hộ.', uc: ['UC26', 'UC08'] },
+    { id: 'tn-hoan-tien', group: 'Bán hàng / thu ngân', title: 'Khi nào được hoàn tiền mặt?', prompt: 'Cẩm nang hoàn: HĐ TM → hoàn két; HĐ ZaloPay → Refund API, két không đổi. Không hỏi QR khách, không đổi QR sang tiền mặt, không trả cash khi hoàn thất bại. Trợ lý không hoàn hộ.', uc: ['UC26', 'UC08'] },
 
     { id: 'kho-ton-thap', group: 'Kho / thủ kho', title: 'Mặt hàng nào dưới định mức?', prompt: 'Mặt hàng dưới định mức tồn: mã, tên, SL tồn, min, đang đặt mua. Không lập đề nghị hộ.', uc: ['UC15'] },
     { id: 'kho-het-hang', group: 'Kho / thủ kho', title: 'Hàng nào đã hết?', prompt: 'Danh sách hết hàng hoặc tồn 0. Gợi ý lập đề nghị, không ghi đề nghị hộ.', uc: ['UC15'] },
@@ -68,7 +68,7 @@ const ALL = [
     { id: 'kt-da-duyet-chua-chi', group: 'Kế toán / công nợ', title: 'Đã nhận quỹ, chưa chi NCC', prompt: 'Phiếu chi đã duyệt hoặc thanh toán thất bại: cần chi NCC. Nhắc còn lại = gốc − đã trả. Không tick thanh toán hộ.', uc: ['UC28'] },
     { id: 'kt-doi-chieu', group: 'Kế toán / công nợ', title: 'Hóa đơn mua chờ đối chiếu', prompt: 'Hóa đơn mua chờ đối chiếu 3 bên. Công nợ chỉ sinh khi khớp. Không đối chiếu hộ.', uc: ['UC27'] },
     { id: 'kt-hoa-don-mua', group: 'Kế toán / công nợ', title: 'Danh sách hóa đơn mua tháng này', prompt: 'Hóa đơn mua tháng này: số HĐ, NCC, tổng, đối chiếu, công nợ. Gợi ý xem/in.', uc: ['UC27'] },
-    { id: 'kt-phieu-thu', group: 'Kế toán / công nợ', title: 'Ca nào chưa lập phiếu thu?', prompt: 'Ca đã đóng chưa lập phiếu thu tiền mặt. MoMo không vào phiếu thu. Không lập hộ.', uc: ['UC29'] },
+    { id: 'kt-phieu-thu', group: 'Kế toán / công nợ', title: 'Ca nào chưa lập phiếu thu?', prompt: 'Ca đã đóng chưa lập phiếu thu tiền mặt. QR/ZaloPay không vào phiếu thu. Không lập hộ.', uc: ['UC29'] },
     { id: 'kt-ghi-so', group: 'Kế toán / công nợ', title: 'Chứng từ nào chờ ghi sổ?', prompt: 'Hàng chờ ghi sổ. Không ghi sổ hộ, không khóa kỳ hộ.', uc: ['UC37'] },
     { id: 'kt-luong', group: 'Kế toán / công nợ', title: 'Bảng lương tháng này đến bước nào?', prompt: 'Bảng lương tháng: lập, khóa, phiếu chi lương, quỹ. Không duyệt hộ, không chi hộ.', uc: ['UC33'] },
     { id: 'kt-doi-soat-nh', group: 'Kế toán / công nợ', title: 'Sao kê ngân hàng chưa khớp', prompt: 'Đối soát NH: dòng chưa xác nhận, gợi ý, chênh. Engine chỉ tính điểm — kế toán xác nhận. Máy không tự ghi sổ.', uc: ['UC42'] },
@@ -89,10 +89,11 @@ const ALL = [
 
     { id: 'bc-doanh-thu-giam', group: 'Báo cáo / kịch bản số', title: 'Nếu doanh thu giảm 10% thì lãi?', prompt: 'Kịch bản doanh thu giảm 10%: lãi gộp, KQKD. GV tỷ lệ theo DT, lương/cước giữ. Không trừ trả NCC.', uc: ['UC10', 'UC43'], engine: ENGINE.revenue_drop },
     { id: 'bc-doanh-thu-tang', group: 'Báo cáo / kịch bản số', title: 'Nếu doanh thu tăng 10% thì lãi?', prompt: 'Kịch bản doanh thu tăng 10%: lãi gộp, KQKD. Không lập PO, không ghi sổ.', uc: ['UC10', 'UC43'], engine: ENGINE.revenue_up },
-    { id: 'bc-tm-momo', group: 'Báo cáo / kịch bản số', title: 'Nếu chuyển 20% tiền mặt sang MoMo?', prompt: 'Kịch bản chuyển 20% TM phiếu thu sang MoMo: két giảm, 112 tăng, DT không đổi.', uc: ['UC10', 'UC29'], engine: ENGINE.tender_mix },
+    { id: 'bc-tm-momo', group: 'Báo cáo / kịch bản số', title: 'Nếu chuyển 20% tiền mặt sang ZaloPay?', prompt: 'Kịch bản chuyển 20% TM phiếu thu sang ZaloPay/QR: két giảm, 112 tăng, DT không đổi.', uc: ['UC10', 'UC29'], engine: ENGINE.tender_mix },
     { id: 'bc-lctt', group: 'Báo cáo / kịch bản số', title: 'Lưu chuyển tiền tệ tháng này', prompt: 'Tóm tắt LCTT tháng này: thu bán, chi NCC, lương. Trả NCC nằm dòng tiền, không trừ KQKD.', uc: ['UC43'] },
     { id: 'bc-cdkt', group: 'Báo cáo / kịch bản số', title: 'Bảng cân đối kế toán kỳ này', prompt: 'Tóm tắt BCĐKT / CĐPS kỳ này nếu có số. Không bịa số dư.', uc: ['UC38', 'UC43'] },
-    { id: 'bc-ca-ban', group: 'Báo cáo / kịch bản số', title: 'Báo cáo ca bán hôm nay', prompt: 'Doanh thu theo ca hôm nay, TM vs MoMo, số HĐ. MoMo không vào két.', uc: ['UC10', 'UC22', 'UC29'] },
+    { id: 'bc-ca-ban', group: 'Báo cáo / kịch bản số', title: 'Báo cáo ca bán hôm nay', prompt: 'Doanh thu theo ca hôm nay, TM vs QR, số HĐ. ZaloPay/QR không vào két.', uc: ['UC10', 'UC22', 'UC29'] },
+    { id: 'bc-tm-qr-hom-nay', group: 'Báo cáo / kịch bản số', title: 'Hôm nay ca nào thu TM / QR?', prompt: 'Hôm nay từng ca (MaCa) thu tiền mặt và QR bao nhiêu, mấy GD. Có ca nào bằng tiền mặt không. QR không vào két. Không bịa số.', uc: ['UC10', 'UC22', 'UC29'] },
 
     { id: 'sc-mat-dien', group: 'Sự cố / SOP', title: 'Mất điện giữa ca', prompt: 'SOP mất điện giữa ca: POS, két, hàng tủ mát, báo quản lý. Không bịa quy trình pháp lý.', uc: ['UC01'] },
     { id: 'sc-chay-hang-gio', group: 'Sự cố / SOP', title: 'Khách đông, hàng hotspot hết', prompt: 'SOP khi SKU hotspot hết lúc cao điểm: thông báo quầy, kho kiểm, mua hàng. Không lập PO hộ.', uc: ['UC15', 'UC22'] },
@@ -113,7 +114,7 @@ const ALL = [
     { id: 'tn-barcode', group: 'Bán hàng / thu ngân', title: 'Quét mã vạch không ra sản phẩm', prompt: 'SOP khi máy quét không nhận mã vạch: nhập tay, kiểm tra NGỪNG BÁN, báo quản lý. Không sửa giá hộ.', uc: ['UC24'] },
     { id: 'tn-khach-khong-diem', group: 'Bán hàng / thu ngân', title: 'Khách nói có điểm nhưng POS không thấy', prompt: 'Checklist tra SĐT, hạng, điểm. Không hỏi CCCD. Không cộng điểm hộ ngoài hóa đơn.', uc: ['UC23'] },
     { id: 'tn-huy-hd', group: 'Bán hàng / thu ngân', title: 'Khi nào được hủy hóa đơn nháp?', prompt: 'Hóa đơn nháp hủy thế nào, hóa đơn hoàn thành thì phải đổi trả. Trợ lý không hoàn thành/hủy hộ.', uc: ['UC24', 'UC26'] },
-    { id: 'tn-ca-lech', group: 'Bán hàng / thu ngân', title: 'Két lệch so với hệ thống lúc đóng', prompt: 'SOP két lệch: không sửa hóa đơn, ghi chênh, báo quản lý/kế toán. MoMo không vào két.', uc: ['UC22'] },
+    { id: 'tn-ca-lech', group: 'Bán hàng / thu ngân', title: 'Két lệch so với hệ thống lúc đóng', prompt: 'SOP két lệch: không sửa hóa đơn, ghi chênh, báo quản lý/kế toán. QR không vào két.', uc: ['UC22'] },
     { id: 'kho-fifo', group: 'Kho / thủ kho', title: 'Xuất theo lô / gần HSD trước', prompt: 'Nhắc FIFO/gần HSD khi xuất. Không lập phiếu xuất hộ.', uc: ['UC19', 'UC15'] },
     { id: 'kho-cho-pn', group: 'Kho / thủ kho', title: 'PO nào đã về bến chưa nhập?', prompt: 'Đơn đang giao / thông báo giao chờ lập phiếu nhập. Không xác nhận PN hộ.', uc: ['UC17', 'UC18'] },
     { id: 'kho-lech-kk', group: 'Kho / thủ kho', title: 'Kiểm kê lệch nhiều SKU', prompt: 'Đợt kiểm kê chênh lệch lớn: liệt kê SKU, SOP điều chỉnh. Không duyệt hộ.', uc: ['UC20', 'UC07'] },
@@ -125,7 +126,7 @@ const ALL = [
     { id: 'ns-doi-ca', group: 'Nhân sự / ca làm', title: 'Tôi muốn đổi ca với đồng nghiệp', prompt: 'Quy trình xin đổi ca: không tự sửa lịch hộ, báo quản lý phân ca.', uc: ['UC31', 'UC30'] },
     { id: 'ns-nghi-phep', group: 'Nhân sự / ca làm', title: 'Xin nghỉ phép thì báo ai?', prompt: 'SOP xin nghỉ: báo quản lý để xếp ca, không duyệt công hộ.', uc: ['UC31', 'UC30'] },
     { id: 'km-pos-khong-an', group: 'Khuyến mãi / khách thân thiết', title: 'KM không ăn trên POS', prompt: 'Checklist KM: hạn, trạng thái, điều kiện hạng. Không bật KM hộ.', uc: ['UC04', 'UC24'] },
-    { id: 'bc-so-sanh-tuan', group: 'Báo cáo / kịch bản số', title: 'Doanh thu tuần này vs tuần trước', prompt: 'So sánh doanh thu tuần này với tuần trước nếu có số. MoMo không vào két.', uc: ['UC10'] },
+    { id: 'bc-so-sanh-tuan', group: 'Báo cáo / kịch bản số', title: 'Doanh thu tuần này vs tuần trước', prompt: 'So sánh doanh thu tuần này với tuần trước nếu có số. QR không vào két.', uc: ['UC10'] },
     { id: 'sc-camera', group: 'Sự cố / SOP', title: 'Nghi ngờ thất thoát tại quầy', prompt: 'SOP nghi thất thoát: không tố trên chat công khai, báo quản lý, giữ hóa đơn. Không khóa tài khoản hộ.', uc: ['UC01', 'UC10'] },
     { id: 'sc-he-thong-cham', group: 'Sự cố / SOP', title: 'POS/mạng chậm giờ cao điểm', prompt: 'SOP hệ thống chậm: ưu tiên thu tiền, ghi tay nếu cần, không hoàn thành hóa đơn hộ.', uc: ['UC22', 'UC24'] },
     { id: 'nav-phan-quyen', group: 'Điều hướng / soạn thảo', title: 'Mở phân quyền nhân viên', prompt: 'Chỉ dẫn mở Phân quyền chức năng: vai trò là mẫu, nhân viên là cấp con, có thể tùy chỉnh riêng. Trợ lý không cấp quyền hộ.', uc: ['UC02'] },
@@ -164,7 +165,7 @@ const catalogFor = (user) => {
         total: items.length,
         groups: groupsOf(items),
         denyDuyet: true,
-        lead: 'Kịch bản nghiệp vụ siêu thị Fly. Bấm để hỏi trợ lý. Engine số (doanh thu, tồn, MoMo) tính công thức — không lập PO, không ghi sổ, không duyệt.'
+        lead: 'Kịch bản nghiệp vụ siêu thị Fly. Bấm để hỏi trợ lý. Engine số (doanh thu, tồn, QR) tính công thức — không lập PO, không ghi sổ, không duyệt.'
     };
 };
 

@@ -369,7 +369,7 @@ const listForRole = async (pool, user) => {
 
     if (isRole(user, 'Thu ngân')) {
         await ensureReturnHandoverSchema(pool).catch(() => {});
-        const [ready, leftover, waiting, rejected] = await Promise.all([
+        const [ready, leftover, waiting, rejected, refunding] = await Promise.all([
             safeRows(() => q().input('MaNV', sql.VarChar, maNV).query(`
                 SELECT TOP 8 MaDT, NgayDuyet, HinhThucXuLy FROM PhieuDoiTra
                 WHERE TrangThai=N'Đã duyệt'
@@ -395,14 +395,24 @@ const listForRole = async (pool, user) => {
             safeRows(() => q().input('MaNV', sql.VarChar, maNV).query(`
                 SELECT TOP 8 MaDT, NgayDuyet, HinhThucXuLy, GhiChu FROM PhieuDoiTra
                 WHERE MaNV_Lap=@MaNV AND TrangThai=N'Từ chối' AND NgayDuyet>=DATEADD(day,-3,GETDATE())
+                ORDER BY NgayDuyet DESC`)),
+            safeRows(() => q().input('MaNV', sql.VarChar, maNV).query(`
+                SELECT TOP 8 MaDT, NgayDuyet, HinhThucXuLy, TrangThai, MaGiaoDichHoan FROM PhieuDoiTra
+                WHERE TrangThai IN (N'Đang hoàn tiền', N'Hoàn tiền thất bại')
+                  AND (MaNV_XuLy=@MaNV OR ISNULL(MaNV_XuLy, MaNV_Lap)=@MaNV)
                 ORDER BY NgayDuyet DESC`))
         ]);
         items.push(
             ...many(leftover, r => row(`dt-left:${r.MaDT}`, 'cashier-returns',
                 'Phiếu đổi trả sót ca trước tại quầy — tự tiếp nhận và làm tiếp',
                 `${r.MaDT} · ${r.HinhThucXuLy} · không chờ người cũ`, r.NgayBanGiao, 'urgent')),
+            ...many(refunding, r => row(`dt-rf:${r.MaDT}`, 'cashier-returns',
+                r.TrangThai === 'Đang hoàn tiền'
+                    ? 'Đang hoàn ZaloPay — Query, khách đã có thể về'
+                    : 'Hoàn ZaloPay thất bại — Query rồi thử lại, không trả tiền mặt',
+                `${r.MaDT} · ${r.MaGiaoDichHoan || 'm_refund_id'}`, r.NgayDuyet, 'urgent')),
             ...many(ready, r => row(`dt-ok:${r.MaDT}`, 'cashier-returns',
-                r.HinhThucXuLy === 'Đổi hàng' ? 'Quản lý đã duyệt — xác nhận đổi hàng' : 'Quản lý đã duyệt — xác nhận hoàn tiền',
+                r.HinhThucXuLy === 'Đổi hàng' ? 'Quản lý đã duyệt — xác nhận đổi hàng' : 'Quản lý đã duyệt — gửi hoàn ZaloPay / tiền mặt',
                 `${r.MaDT} · xác nhận trên ca đang mở`, r.NgayDuyet, 'urgent')),
             ...many(waiting, r => row(`dt-wait:${r.MaDT}`, 'cashier-returns',
                 r.TrangThai === 'Chờ kiểm tra' ? 'Đổi trả đang chờ Thủ kho kiểm' : 'Đổi trả đang chờ Quản lý duyệt',

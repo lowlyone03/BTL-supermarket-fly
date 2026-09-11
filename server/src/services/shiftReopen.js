@@ -72,6 +72,7 @@ const reopenShift = async (transaction, {
     if (!code) throw new ShiftReopenError('Thiếu mã ca cần mở lại.');
 
     await ensureReturnHandoverSchema(transaction).catch(() => {});
+    await require('./returnRefundSchema').ensureReturnRefundSchema(transaction).catch(() => {});
 
     const shift = await new sql.Request(transaction).input('MaCa', sql.VarChar, code).query(`
         SELECT ca.*, nv.TenNV
@@ -159,6 +160,7 @@ const reopenShift = async (transaction, {
             TongTienThe=NULL,
             TongTienChuyenKhoan=NULL,
             TongTienHoanMat=NULL,
+            TongTienHoanQR=NULL,
             TienMatHeThong=NULL,
             TienThucNop=NULL,
             TrangThai=N'Đang mở',

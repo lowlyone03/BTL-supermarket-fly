@@ -24,6 +24,12 @@ OUTER APPLY (
       AND ct.LoaiDong = N'Hàng khách trả'
       AND p.TrangThai = N'Hoàn thành'
 ) tra
+OUTER APPLY (
+    SELECT TOP 1 tt.PhuongThuc AS PhuongThucGoc
+    FROM ThanhToan tt
+    WHERE tt.MaHD = hd.MaHD AND tt.TrangThai = N'Thành công'
+    ORDER BY tt.SoTien DESC, tt.NgayTT
+) ttgoc
 `;
 
 const INVOICE_RETURN_COLUMNS = `
@@ -33,7 +39,8 @@ const INVOICE_RETURN_COLUMNS = `
     COALESCE(dt.SoDoiHang, 0) AS SoPhieuDoiHang,
     COALESCE(dt.TienDaHoan, 0) AS TienDaHoan,
     COALESCE(ban.SLBan, 0) AS SLBan,
-    COALESCE(tra.SLDaTra, 0) AS SLDaTra
+    COALESCE(tra.SLDaTra, 0) AS SLDaTra,
+    ttgoc.PhuongThucGoc
 `;
 
 module.exports = { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS };

@@ -7,7 +7,7 @@ echo SUPERMARKET FLY - DUONG HAM CLOUDFLARE
 echo Chi TV1 chay file nay. Thanh vien khong can cai.
 echo Mo 4_CHAY_MAY_CHU_NHOM.bat TRUOC, roi moi mo file nay.
 echo Khong dong cua so nay trong luc ca nhom test.
-echo Test MoMo (ghi .env + start app): 7_CHAY_APP_VA_TUNNEL_MOMO.bat
+echo Test ZaloPay (ghi .env + start app): 7_CHAY_APP_VA_TUNNEL_MOMO.bat
 echo ==============================================
 echo.
 

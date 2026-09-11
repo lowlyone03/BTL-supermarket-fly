@@ -6,7 +6,7 @@ echo ==============================================
 echo SUPERMARKET FLY - DANG KHOI DONG
 echo Khong dong cua so nay trong luc test.
 echo Test thuong: file nay / npm start (khong can cloudflared).
-echo Test MoMo:   7_CHAY_APP_VA_TUNNEL_MOMO.bat / npm run start:momo
+echo Test ZaloPay:   7_CHAY_APP_VA_TUNNEL_MOMO.bat / npm run start:zalopay
 echo ==============================================
 
 call npm start

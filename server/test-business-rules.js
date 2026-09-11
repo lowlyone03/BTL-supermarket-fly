@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { calculateGrossProfit, evaluateThreeWayMatch, isRestockAccepted, looksUnsellable, isEqualValueExchange, expectedDrawerCash, cashHandoverExcludingOpening } = require('./src/services/financialRules');
+const { calculateGrossProfit, evaluateThreeWayMatch, isRestockAccepted, looksUnsellable, isEqualValueExchange, expectedDrawerCash, cashHandoverExcludingOpening, defaultRefundMethod, originalInvoicePayMethod, canonicalRefundMethod, cashRefundExceedsDrawer, cashRefundDrawerWarning, cashRefundDrawerBlock, cashierMayRefundCash, exchangeMoneyDelta, refundableQrRemaining, qrRefundWouldExceedCap, nextRefundSendAction, qrNet, zpTransIdOf } = require('./src/services/financialRules');
 const { resolveReportingPeriod } = require('./src/services/reportingPeriod');
 
 const test = (name, run) => {
@@ -71,10 +71,69 @@ test('Két dự kiến = quỹ đầu ca + thu TM − hoàn TM; được nhỏ h
     assert.equal(expectedDrawerCash({ TienDauCa: 1_000_000, TongTienMat: 500_000, TongTienHoanMat: 0 }), 1_500_000);
 });
 
-test('Đổi trực tiếp chỉ chấp nhận hàng giao đổi ngang giá', () => {
+test('Hoàn tiền mặc định cùng kênh hóa đơn gốc; QR/ZaloPay không mặc định tiền mặt', () => {
+    assert.equal(canonicalRefundMethod('ZaloPay'), 'QR');
+    assert.equal(defaultRefundMethod('QR'), 'QR');
+    assert.equal(defaultRefundMethod('Tiền mặt'), 'Tiền mặt');
+    assert.equal(defaultRefundMethod('Thẻ'), 'Thẻ');
+    assert.equal(defaultRefundMethod('Chuyển khoản'), 'Chuyển khoản');
+    assert.equal(defaultRefundMethod(''), 'Tiền mặt');
+    assert.equal(originalInvoicePayMethod([
+        { PhuongThuc: 'Tiền mặt', SoTien: 20_000, TrangThai: 'Thành công' },
+        { PhuongThuc: 'QR', SoTien: 180_000, TrangThai: 'Thành công' }
+    ]), 'QR');
+    assert.equal(defaultRefundMethod(null, [{ PhuongThuc: 'QR', SoTien: 90_000, TrangThai: 'Thành công' }]), 'QR');
+    assert.equal(defaultRefundMethod(null, [{ PhuongThuc: 'ZaloPay', SoTien: 50_000, TrangThai: 'Thành công' }]), 'QR');
+});
+
+test('Chặn cứng két thiếu khi hoàn TM — không cho phép két âm', () => {
+    assert.equal(cashRefundExceedsDrawer(300_000, 200_000), true);
+    assert.equal(cashRefundExceedsDrawer(200_000, 200_000), false);
+    const block = cashRefundDrawerBlock({ soTienHoan: 300_000, tienMatTrongKet: 200_000 });
+    assert.match(block, /200/);
+    assert.match(block, /300/);
+    assert.match(block, /két không đủ/i);
+    assert.match(block, /phương thức thanh toán ban đầu/i);
+    assert.equal(cashRefundDrawerWarning({ soTienHoan: 100_000, tienMatTrongKet: 200_000 }), '');
+    assert.equal(cashierMayRefundCash('QR'), false);
+    assert.equal(cashierMayRefundCash('Tiền mặt'), true);
+});
+
+test('Hoàn QR không đổi két dự kiến; expectedDrawerCash không được dùng để cho phép két âm', () => {
+    const before = expectedDrawerCash({ TienDauCa: 1_000_000, TongTienMat: 0, TongTienHoanMat: 0 });
+    const afterQrRefund = expectedDrawerCash({ TienDauCa: 1_000_000, TongTienMat: 0, TongTienHoanMat: 0 });
+    assert.equal(before, afterQrRefund);
+    assert.equal(qrNet({ TongTienQR: 5_000_000, TongTienHoanQR: 1_200_000 }), 3_800_000);
+    assert.ok(expectedDrawerCash({ TienDauCa: 1_000_000, TongTienMat: 0, TongTienHoanMat: 8_000_000 }) < 0);
+});
+
+test('Đổi ngang = 0 tiền; rẻ hơn = hoàn chênh; đắt hơn = thu chênh', () => {
+    assert.deepEqual(exchangeMoneyDelta(250_000, 250_000), { kind: 'equal', amount: 0, soTienHoan: 0, soTienThuThem: 0 });
     assert.equal(isEqualValueExchange(250_000, 250_000), true);
-    assert.equal(isEqualValueExchange(250_000, 249_000), false);
-    assert.equal(isEqualValueExchange(250_000, 251_000), false);
+    const cheaper = exchangeMoneyDelta(500_000, 300_000);
+    assert.equal(cheaper.kind, 'refund');
+    assert.equal(cheaper.soTienHoan, 200_000);
+    const dearer = exchangeMoneyDelta(500_000, 700_000);
+    assert.equal(dearer.kind, 'collect');
+    assert.equal(dearer.soTienThuThem, 200_000);
+});
+
+test('Trần hoàn QR = đã thu QR − đã hoàn thành công; không vượt HĐ', () => {
+    assert.equal(refundableQrRemaining(5_000_000, 1_200_000), 3_800_000);
+    assert.equal(qrRefundWouldExceedCap(800_000, 5_000_000, 1_200_000), false);
+    assert.equal(qrRefundWouldExceedCap(3_800_001, 5_000_000, 1_200_000), true);
+    assert.equal(qrRefundWouldExceedCap(5_000_000, 5_000_000, 0), false);
+    assert.equal(zpTransIdOf({ MaGiaoDich: '2609110001' }), '2609110001');
+    assert.equal(zpTransIdOf({ GhiChu: 'zp_trans_id:abc.1' }), 'abc.1');
+    assert.equal(zpTransIdOf({}), '');
+});
+
+test('PROCESSING chỉ Query — không mint m_refund_id mới', () => {
+    assert.equal(nextRefundSendAction({ currentTxStatus: 'DANG_XU_LY' }), 'query_only');
+    assert.equal(nextRefundSendAction({ queryClassification: 'pending' }), 'query_only');
+    assert.equal(nextRefundSendAction({ currentTxStatus: 'THANH_CONG' }), 'already_done');
+    assert.equal(nextRefundSendAction({ currentTxStatus: 'THAT_BAI' }), 'resend_after_fail');
+    assert.equal(nextRefundSendAction({ currentTxStatus: 'CHO_GUI' }), 'create');
 });
 
 const matchedInput = () => ({

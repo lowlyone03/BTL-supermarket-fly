@@ -1,3 +1,9 @@
+PLAN MOMO TEST P1 — LỊCH SỬ (đã thay 11/09/2026)
+================================================
+Cổng QR ĐANG CHẠY: ZaloPay sandbox — xem docs/PLAN_ZALOPAY_TEST_P1.txt.
+File này giữ để đối chiếu invariant 4.7–4.11 lúc còn MoMo. Không deploy theo file này.
+
+--- bản gốc 10/09/2026 ---
 PLAN MOMO TEST P1 — FINAL (gọn)
 ================================
 Đây là cổng QR ĐANG CHẠY trên POS (cập nhật 10/09/2026).

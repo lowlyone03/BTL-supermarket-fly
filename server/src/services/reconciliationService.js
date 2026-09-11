@@ -104,7 +104,7 @@ const ensureReconciliationSchema = async (connection) => {
 
 const csvTemplate = () => Buffer.from(
     '\uFEFFNgày,Số tiền,Nội dung,Mã tham chiếu\n'
-    + '10/09/2026,85000,"NAPAS MOMO 4088878653 SUPERMARKET FLY",4088878653\n'
+    + '10/09/2026,85000,"NAPAS ZALOPAY 260911000000389 SUPERMARKET FLY",260911000000389\n'
     + '10/09/2026,-1500000,"CK PC26090012 thanh toan NCC Rau Sach","PC26090012"\n'
     + '11/09/2026,200000,"Thu QR cung ngay khong ma",\n'
     + '11/09/2026,99000,"MoMo 4088879999 lech tien",4088879999\n'
@@ -115,9 +115,9 @@ const csvTemplate = () => Buffer.from(
 const loadCandidates = async (pool, { tuNgay, denNgay } = {}) => {
     const from = tuNgay || '2000-01-01';
     const to = denNgay || '2099-12-31';
-    let momo;
+    let qrRows;
     try {
-        momo = await pool.request().input('Tu', sql.Date, from).input('Den', sql.Date, to).query(`
+        qrRows = await pool.request().input('Tu', sql.Date, from).input('Den', sql.Date, to).query(`
             SELECT N'ThanhToan' LoaiChungTu, tt.MaTT MaChungTu, tt.SoTien,
                    CONVERT(date, COALESCE(tt.NgayXacNhan, tt.NgayTT)) Ngay,
                    tt.MaGiaoDich, COALESCE(tt.MaThamChieuCong, tt.MaGiaoDich) MaThamChieu,
@@ -125,11 +125,10 @@ const loadCandidates = async (pool, { tuNgay, denNgay } = {}) => {
             FROM ThanhToan tt
             WHERE tt.TrangThai = N'Thành công'
               AND tt.PhuongThuc = N'QR'
-              AND (tt.NguonXacNhan = N'MoMo' OR tt.NguonXacNhan IS NULL)
               AND CONVERT(date, COALESCE(tt.NgayXacNhan, tt.NgayTT)) BETWEEN @Tu AND DATEADD(day, 3, @Den)`);
     } catch (error) {
         if (!/Invalid column name|NguonXacNhan|MaThamChieuCong/i.test(error.message || '')) throw error;
-        momo = await pool.request().input('Tu', sql.Date, from).input('Den', sql.Date, to).query(`
+        qrRows = await pool.request().input('Tu', sql.Date, from).input('Den', sql.Date, to).query(`
             SELECT N'ThanhToan' LoaiChungTu, tt.MaTT MaChungTu, tt.SoTien,
                    CONVERT(date, COALESCE(tt.NgayXacNhan, tt.NgayTT)) Ngay,
                    tt.MaGiaoDich, tt.MaGiaoDich MaThamChieu,
@@ -166,7 +165,7 @@ const loadCandidates = async (pool, { tuNgay, denNgay } = {}) => {
     } catch {
         luong = { recordset: [] };
     }
-    const primary = [...momo.recordset, ...chiNcc.recordset, ...luong.recordset];
+    const primary = [...qrRows.recordset, ...chiNcc.recordset, ...luong.recordset];
     const taken = new Set(primary.map((row) => `${row.LoaiChungTu}:${row.MaChungTu}`));
     let journals = { recordset: [] };
     try {

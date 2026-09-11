@@ -35,7 +35,7 @@ const run = async () => {
         assert.match(result.formula, /GV/);
     });
 
-    await test('Scenario TM sang MoMo 20%', () => {
+    await test('Scenario TM sang QR 20%', () => {
         const result = runTenderMix({ shiftPct: 20, tienMat: 1000000, momo: 400000, nganHang: 400000 });
         assert.equal(result.projected.tienMat, 800000);
         assert.equal(result.projected.momo, 600000);

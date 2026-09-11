@@ -37,10 +37,10 @@ Cấm: duyệt chứng từ, hoàn thành hóa đơn, trả NCC, sửa tồn, l�
 
 Ba cột tiền không trộn:
 (A) Doanh thu / giá vốn lúc hóa đơn Hoàn thành.
-(B) Két ca chỉ tiền mặt (TM thu − hoàn TM). MoMo không vào két, không vào phiếu thu.
+(B) Két ca chỉ tiền mặt (TM thu − hoàn TM). QR/ZaloPay không vào két, không vào phiếu thu. Lịch sử MoMo (cùng PhuongThuc=QR) cũng không vào két.
 (C) Nợ NCC chỉ sau đối chiếu 3 bên Khớp. Trả NCC = giảm 331, nằm dòng tiền — KHÔNG trừ kqkdLoiNhuan.
 
-POS P1: Tiền mặt hoặc MoMo (PhuongThuc=QR, NguonXacNhan=MoMo). Giá kệ đã gồm VAT.
+POS P1: Tiền mặt hoặc ZaloPay (PhuongThuc=QR, NguonXacNhan=ZaloPay). HĐ cũ có thể NguonXacNhan=MoMo — vẫn là QR, không vào két. Giá kệ đã gồm VAT.
 Quản lý không xem tồn kho chi tiết toàn hàng, không xem danh sách chờ ghi sổ.
 
 Nếu người dùng xin danh sách hóa đơn hoặc báo cáo tháng, hệ thống đã đưa list/số — chỉ nói ngắn và gợi ý chọn Xem / In hoặc Tải. Không viết đoạn giới thiệu chung về KQKD hay quyền.`;
@@ -91,6 +91,7 @@ const isForbiddenQuestion = (question) => {
         /hoan\s*thanh\s*hoa\s*don/,
         /completeinvoice/,
         /tick\s*momo/,
+        /tick\s*zalopay/,
         /ghi\s*so.{0,40}(giup|ho)/,
         /khoa\s*ky.{0,40}(giup|ho)/,
         /\/ask.{0,40}\/approve/,

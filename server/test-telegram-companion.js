@@ -11,6 +11,7 @@ const {
     buildFlyDashboard, escapeHtml, buildInboxPushMessage, buildAttendancePendingMessage,
     buildPendingMessage, ATTENDANCE_NOTE_VI, prettyShiftName,
     buildReportsMessage, buildReportsMessages, splitTelegramText,
+    buildPaymentsMessage, matchPaymentsIntent, looksLikeTopicFollowUp,
     buildStartWelcomeBound,
     DENY_GROUP, DENY_VIEW, DENY_STRANGER, DENY_NOT_MANAGER, DENY_NOT_MANAGER_CMD,
     maskOtp, maskChatId, isManagerRole, telegramAudience, t, progressBar, statusBadge,
@@ -194,16 +195,18 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         assert.doesNotMatch(tn, /\/debt —/);
     });
 
-    await test('Reply keyboard đầy đủ 2 cột, chữ luôn rõ, đổi nhãn 3 ngôn ngữ', () => {
+    await test('Reply keyboard 3 cột, Ẩn menu hàng đầu, chữ luôn rõ, đổi nhãn 3 ngôn ngữ', () => {
         const vi = bot.replyKeyboard('vi', { bound: true });
         assert.equal(vi.resize_keyboard, true);
         assert.equal(vi.is_persistent, true);
         assert.equal(vi.one_time_keyboard, false);
         const askOn = String(process.env.TELEGRAM_ASK || '').trim() === '1';
-        assert.equal(vi.keyboard.length, askOn ? 7 : 6);
-        assert.ok(vi.keyboard.every(row => row.length === 2));
+        assert.equal(vi.keyboard.length, 5);
+        assert.equal(vi.keyboard[0].length, 3);
+        assert.ok(vi.keyboard.every(row => row.length >= 1 && row.length <= 3));
         const viText = vi.keyboard.flat().map(btn => btn.text);
-        assert.deepEqual(viText.slice(0, 4), [
+        assert.match(vi.keyboard[0][0].text, /Ẩn menu/);
+        assert.deepEqual(viText.slice(3, 7), [
             '📄 Chứng từ', '⏳ Việc chờ',
             '📊 Báo cáo', '💰 Doanh thu'
         ]);
@@ -223,16 +226,16 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         }
         assert.ok(!viText.some(text => /Game|Voucher|VietQR|Nạp|Mở shop|approve/i.test(text)));
         const guest = bot.replyKeyboard('vi', { bound: false });
-        assert.equal(guest.keyboard[1].length, 1);
-        assert.match(guest.keyboard[1][0].text, /Liên kết/);
+        assert.equal(guest.keyboard[0].length, 2);
+        assert.match(guest.keyboard[1][1].text, /Liên kết/);
         assert.ok(guest.keyboard.flat().some(btn => /Ẩn menu/.test(btn.text)));
         const en = bot.replyKeyboard('en', { bound: true }).keyboard.flat().map(btn => btn.text);
-        assert.equal(en.length, askOn ? 14 : 12);
+        assert.equal(en.length, askOn ? 14 : 13);
         assert.ok(en.some(text => /Refresh|Summary \/fly/.test(text)));
         assert.ok(en.some(text => /📄/.test(text) && /Documents/.test(text)));
         assert.ok(en.some(text => /Hide menu/.test(text)));
         const zh = bot.replyKeyboard('zh', { bound: true }).keyboard.flat().map(btn => btn.text);
-        assert.equal(zh.length, askOn ? 14 : 12);
+        assert.equal(zh.length, askOn ? 14 : 13);
         assert.ok(zh.some(text => /刷新|摘要 \/fly/.test(text)));
         assert.ok(zh.some(text => /📄/.test(text) && /单据/.test(text)));
         assert.ok(zh.some(text => /隐藏菜单/.test(text)));
@@ -721,6 +724,58 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         assert.equal(DENY_VIEW.includes('không xem'), true);
     });
 
+    await test('Câu hỏi TM/QR và follow-up ca không unknownCmd', () => {
+        const phrases = [
+            'hôm nay có bao nhiêu ca thanh toán bằng QR',
+            'có ca nào bằng tiền mặt không e',
+            'có ca nào bằng tiền mặt không',
+            'hôm nay có bán tiền mặt không',
+            'ca nào thu TM',
+            'QR hay tiền mặt'
+        ];
+        for (const text of phrases) {
+            assert.equal(bot.parseCommand(text).name, 'payments', text);
+            assert.equal(bot.matchReplyCommand(text).name, 'payments', text);
+            assert.equal(matchPaymentsIntent(text), true, text);
+        }
+        assert.equal(bot.parseCommand('📄 Chứng từ').name, 'docs');
+        assert.equal(bot.parseCommand('📊 Báo cáo').name, 'reports');
+        assert.equal(bot.parseCommand('hello world xyz').name, 'unknown');
+        assert.equal(matchPaymentsIntent('QR có vào két tiền mặt không'), false);
+        assert.match(t('vi', 'unknownCmd'), /Chứng từ/);
+        assert.match(t('vi', 'unknownCmd'), /Báo cáo/);
+        assert.match(t('vi', 'unknownCmd'), /\/help \/fly/);
+
+        const card = buildPaymentsMessage({
+            day: '2026-09-11',
+            channels: [
+                { PhuongThuc: 'QR', SoLuong: 4, Tong: 17415400, ChoXacNhan: 0 }
+            ],
+            shifts: [
+                { MaCa: 'CA001', TrangThai: 'Đã chốt', TienMat: 0, TienQR: 17415400, SoGdTm: 0, SoGdQr: 4 }
+            ]
+        }, 'vi');
+        assert.match(card, /THANH TOÁN ĐIỆN TỬ/);
+        assert.match(card, /Tiền mặt/);
+        assert.match(card, /Không có giao dịch tiền mặt/);
+        assert.match(card, /CA001/);
+        assert.match(card, /Đã chốt/);
+        assert.match(card, /17\.415\.400/);
+
+        bot.resetChatLangCache();
+        assert.equal(bot.parseCommand('còn không').name, 'unknown');
+        assert.equal(looksLikeTopicFollowUp('còn không'), true);
+        assert.equal(looksLikeTopicFollowUp('sao hỏi lại không được'), true);
+        bot.rememberLastReport(42, 'payments', 'today');
+        assert.equal(bot.resolveFollowUpCommand(42, 'còn không').name, 'payments');
+        assert.equal(bot.resolveFollowUpCommand(42, 'sao hỏi lại không được').name, 'payments');
+        assert.equal(bot.resolveFollowUpCommand(42, 'công nợ NCC quá hạn'), null);
+
+        const { pickFaq } = require('./src/services/assistantFaq');
+        const faq = pickFaq('hôm nay có ca nào bằng tiền mặt không', 3);
+        assert.match(faq, /tiền mặt|QR|ca/i);
+    });
+
     const mockPool = (row) => ({
         request() {
             return {
@@ -982,7 +1037,7 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
             message: { chat: { id: 42, type: 'private' }, text: '/start' }
         });
         assert.equal(result.start, true);
-        const welcomes = sent.filter(item => item.text && !/^\u2060$/.test(item.text));
+        const welcomes = sent.filter(item => item.text && !item.reply_markup?.keyboard);
         assert.equal(welcomes.length, 1);
         const msg = welcomes[0];
         assert.equal(msg.disable_notification, true);
@@ -1007,6 +1062,10 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         assert.match(replyLabels, /Liên kết/);
         assert.match(replyLabels, /Ẩn menu|Hide menu|隐藏菜单/);
         assert.match(replyLabels, /Trợ giúp|Help|帮助/);
+        assert.equal(sent.filter(item => item._method === 'deleteMessage').length, 0,
+            'không xóa tin gắn Reply Keyboard — Android/iOS sẽ mất menu');
+        const pin = sent.find(item => item.reply_markup?.keyboard);
+        assert.match(String(pin?.text || ''), /điện thoại|phone|手机/i);
     });
 
     await test('/start đã bind QL chào theo tên', async () => {
@@ -1020,7 +1079,7 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
             message: { chat: { id: 42, type: 'private' }, text: '/start' }
         });
         assert.equal(result.bound, true);
-        const welcomes = sent.filter(item => item.text && !/^\u2060$/.test(item.text));
+        const welcomes = sent.filter(item => item.text && !item.reply_markup?.keyboard);
         assert.equal(welcomes.length, 1);
         assert.equal(welcomes[0].disable_notification, true);
         assert.match(welcomes[0].text, /Kính chào Quản lý|[Cc]hào Quản lý/);
@@ -1068,6 +1127,8 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         assert.ok(chatPin, '/start phải setChatMenuButton theo chat_id');
         assert.equal(chatPin.menu_button?.type, 'commands');
         assertStartMenuPinnedAfterMarkup(sent, '/start QL');
+        assert.equal(sent.filter(item => item._method === 'deleteMessage').length, 0,
+            'không xóa tin gắn Reply Keyboard — Android/iOS sẽ mất menu');
     });
 
     await test('/start ghim menu SAU reply; /today /fly không setMyCommands', async () => {
@@ -1335,8 +1396,8 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         const second = await bot.handleUpdate(update);
         assert.equal(first.start, true);
         assert.equal(second.deduped, true);
-        assert.equal(sent.filter(item => item.text && !/^\u2060$/.test(item.text)).length, 1);
-        assert.equal(sent.find(item => item.text && !/^\u2060$/.test(item.text)).disable_notification, true);
+        assert.equal(sent.filter(item => item.text && !item.reply_markup?.keyboard).length, 1);
+        assert.equal(sent.find(item => item.text && !item.reply_markup?.keyboard).disable_notification, true);
     });
 
     await test('Webhook active không gọi getUpdates', async () => {
@@ -1942,6 +2003,39 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         assert.ok(callbacks.some(value => /^period:quarter:\d{4}-Q[1-4]$/.test(value)));
         assert.ok(callbacks.some(value => /^period:year:\d{4}$/.test(value)));
         assert.doesNotMatch(report.text, /câu hỏi tự do|câu tự do/i);
+    });
+
+    await test('Follow-up tiền mặt sau câu QR không unknownCmd', async () => {
+        bot.resetChatLangCache();
+        const qlRow = {
+            MaNV: 'NV001', ChatId: '42', MaTK: 1, Bat: 1, TenNV: 'Nguyễn Minh Anh',
+            MaTKLive: 1, MaVaiTro: 1, TrangThaiTK: 1, TenVaiTro: 'Quản lý'
+        };
+        const sent = collectSent(qlRow);
+        const first = await bot.handleUpdate({
+            update_id: 8401,
+            message: { chat: { id: 42, type: 'private' }, text: 'hôm nay có bao nhiêu ca thanh toán bằng QR' }
+        });
+        assert.equal(first.command, 'payments');
+        assert.equal(first.unknown, undefined);
+        assert.ok(sent.some(item => item.text && /THANH TOÁN|Tiền mặt|QR/.test(item.text)));
+        assert.ok(!sent.some(item => item.text && /Bấm .*Chứng từ/.test(item.text)));
+        sent.length = 0;
+        const follow = await bot.handleUpdate({
+            update_id: 8402,
+            message: { chat: { id: 42, type: 'private' }, text: 'có ca nào bằng tiền mặt không e' }
+        });
+        assert.equal(follow.command, 'payments');
+        assert.equal(follow.unknown, undefined);
+        assert.ok(sent.some(item => item.text && /Tiền mặt|QR/.test(item.text)));
+        assert.ok(!sent.some(item => item.text && /Bấm .*Chứng từ/.test(item.text)));
+        sent.length = 0;
+        const again = await bot.handleUpdate({
+            update_id: 8403,
+            message: { chat: { id: 42, type: 'private' }, text: 'còn không' }
+        });
+        assert.equal(again.command, 'payments');
+        assert.equal(again.unknown, undefined);
     });
 
     await test('Cần duyệt / pending chỉ 1 sendMessage', async () => {

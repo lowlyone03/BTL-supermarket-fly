@@ -1,17 +1,18 @@
 ﻿# Tunnel truoc -> ghi PAYMENT_* + TELEGRAM webhook (tunnel hien tai) vao server/.env -> moi npm start.
 # Node chi nap .env luc process start (loadEnv), khong doc lai moi request.
 # Restart: tu tat node Fly dang LISTEN 3000 (khong cho 2 phut, khong dung cloudflared).
+# ASCII-only strings: Windows PowerShell 5.1 reads no-BOM files as ANSI (CP1252/1258).
+# UTF-8 bytes of o/o/o/o/d (0x91-0x94) become smart quotes and break the parser.
 $ErrorActionPreference = 'Stop'
-try {
-    [Console]::InputEncoding = [System.Text.Encoding]::UTF8
-    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-    $OutputEncoding = [System.Text.Encoding]::UTF8
-} catch {
-}
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+$OutputEncoding = [System.Text.UTF8Encoding]::new()
+try { chcp 65001 | Out-Null } catch {}
+
+. (Join-Path $PSScriptRoot 'fly-term.ps1')
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot 'package.json'))) {
-    Write-Host '[LOI] Khong thay package.json. Chay tu thu muc supermarket-fly.'
+    Write-FlyErr 'Khong thay package.json. Chay tu thu muc supermarket-fly.'
     exit 1
 }
 Set-Location -LiteralPath $RepoRoot
@@ -42,16 +43,16 @@ function Find-Cloudflared {
 }
 
 function Show-CloudflaredHelp {
-    Write-Host '[LOI] Khong thay cloudflared.exe'
+    Write-FlyErr 'Khong thay cloudflared.exe'
     Write-Host ''
-    Write-Host 'Tai file nay bang trinh duyet:'
-    Write-Host $DownloadUrl
+    Write-FlyInfo 'Tai file nay bang trinh duyet:'
+    Write-FlyColor ("  $DownloadUrl") White
     Write-Host ''
-    Write-Host 'Doi ten thanh cloudflared.exe'
-    Write-Host ('Dat vao: ' + $RepoRoot)
-    Write-Host 'Xem docs/HUONG_DAN_CLOUDFLARE_TUNNEL.md phan A1.'
+    Write-FlyInfo 'Doi ten thanh cloudflared.exe'
+    Write-FlyInfo ("Dat vao: $RepoRoot")
+    Write-FlyInfo 'Xem docs/HUONG_DAN_CLOUDFLARE_TUNNEL.md phan A1.'
     Write-Host ''
-    Write-Host 'May thanh vien / khong test MoMo: dung npm start hoac 2_CHAY_SUPERMARKET_FLY.bat'
+    Write-FlyInfo 'May thanh vien / khong test ZaloPay: npm start hoac 2_CHAY_SUPERMARKET_FLY.bat'
 }
 
 function Test-LocalPortOpen {
@@ -147,7 +148,7 @@ function Stop-FlyNodeTree {
         if ([string]$ch.Name -notmatch '(?i)^node(\.exe)?$') { continue }
         try {
             Stop-Process -Id ([int]$ch.ProcessId) -Force -ErrorAction Stop
-            Write-Host ("Đã tắt process con Node (PID {0})." -f $ch.ProcessId)
+            Write-FlyOk ("Da tat process con Node (PID {0})." -f $ch.ProcessId)
         } catch {
         }
     }
@@ -161,7 +162,7 @@ function Stop-StaleFlyListeners {
     $pids = @(Get-ListeningPids -Port $Port)
     if ($pids.Count -eq 0) {
         if (Test-FlyHealthOnPort -Port $Port) {
-            Write-Host ("[LỖI] Cổng {0} còn API Fly nhưng không lấy được PID. Đóng cửa sổ npm start / file 2 cũ rồi chạy lại." -f $Port)
+            Write-FlyErr ("Cong {0} con API Fly nhung khong lay duoc PID. Dong cua so npm start / file 2 cu roi chay lai." -f $Port)
             return $false
         }
         $waitUntil = (Get-Date).AddSeconds(5)
@@ -185,16 +186,16 @@ function Stop-StaleFlyListeners {
     }
 
     if ($toStop.Count -eq 0) {
-        Write-Host ("[LỖI] Cổng {0} đang bị process khác giữ (PID {1}). Không tắt vì không chắc là Node của Fly." -f $Port, ($unknown -join ', '))
+        Write-FlyErr ("Cong {0} dang bi process khac giu (PID {1}). Khong tat vi khong chac la Node cua Fly." -f $Port, ($unknown -join ', '))
         return $false
     }
 
     foreach ($procId in $toStop) {
         try {
             Stop-FlyNodeTree -ProcessId $procId
-            Write-Host ("Cổng {0} còn process cũ (PID {1}). Đã tắt để đọc .env mới." -f $Port, $procId)
+            Write-FlyOk ("Cong {0} con process cu (PID {1}). Da tat de doc .env moi." -f $Port, $procId)
         } catch {
-            Write-Host ("[LỖI] Không tắt được PID {0}: {1}" -f $procId, $_.Exception.Message)
+            Write-FlyErr ("Khong tat duoc PID {0}: {1}" -f $procId, $_.Exception.Message)
             return $false
         }
     }
@@ -204,7 +205,7 @@ function Stop-StaleFlyListeners {
         Start-Sleep -Milliseconds 200
     }
     if (Test-LocalPortOpen $Port) {
-        Write-Host ("[LỖI] Cổng {0} vẫn bận sau khi tắt PID {1}." -f $Port, ($toStop -join ', '))
+        Write-FlyErr ("Cong {0} van ban sau khi tat PID {1}." -f $Port, ($toStop -join ', '))
         return $false
     }
     return $true
@@ -275,12 +276,13 @@ function Read-SharedText {
     }
 }
 
-Write-Host '=============================================='
-Write-Host 'SUPERMARKET FLY - APP + TUNNEL MOMO'
-Write-Host '1) Mo tunnel   2) Ghi server/.env   3) npm start'
-Write-Host 'Giu CUA SO TUNNEL mo trong luc test.'
-Write-Host '=============================================='
-Write-Host ''
+Write-FlyBanner 'SUPERMARKET FLY - ZaloPay tunnel' @(
+    '1  Mo Cloudflare tunnel',
+    '2  Ghi URL vao server/.env',
+    '3  Chay API + cua so ban hang',
+    '',
+    'Giu cua so tunnel mo khi test QR / Telegram.'
+)
 
 $cf = Find-Cloudflared
 if (-not $cf) {
@@ -288,7 +290,7 @@ if (-not $cf) {
     exit 1
 }
 
-Write-Host ('Dung file: ' + $cf)
+Write-FlyOk ('Dung ' + $cf)
 Write-Host ''
 
 $runId = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -296,21 +298,20 @@ $logFile = Join-Path $env:TEMP ("supermarket-fly-cloudflare-tunnel-" + $runId + 
 $urlStamp = Join-Path $env:TEMP ("supermarket-fly-cloudflare-tunnel-" + $runId + ".url")
 $runner = Join-Path $PSScriptRoot 'run-cloudflared-tunnel.ps1'
 if (-not (Test-Path -LiteralPath $runner)) {
-    Write-Host ('[LOI] Thieu file: ' + $runner)
+    Write-FlyErr ('Thieu file: ' + $runner)
     exit 1
 }
 
 $existingTunnel = Get-Process -Name 'cloudflared' -ErrorAction SilentlyContinue
 if ($existingTunnel) {
-    Write-Host '[CANH BAO] Da co cloudflared dang chay. Dong cua so tunnel cu neu khong dung.'
+    Write-FlyWarn 'Da co cloudflared dang chay. Dong cua so tunnel cu neu khong dung.'
     Write-Host ''
 }
 
-$arg = "-NoProfile -ExecutionPolicy Bypass -NoExit -File `"$runner`" -CloudflaredPath `"$cf`" -LogPath `"$logFile`""
+$arg = "-NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File `"$runner`" -CloudflaredPath `"$cf`" -LogPath `"$logFile`""
 Start-Process -FilePath 'powershell.exe' -ArgumentList $arg -WorkingDirectory $RepoRoot | Out-Null
 
-Write-Host 'Da mo cua so tunnel. Dang doi https://....trycloudflare.com'
-Write-Host '(thuong 5-15 giay, toi da 90 giay)'
+Write-FlyInfo 'Da mo cua so tunnel. Dang lay https://....trycloudflare.com'
 Write-Host ''
 
 $origin = $null
@@ -322,20 +323,20 @@ while ((Get-Date) -lt $deadline) {
     $alive = Get-Process -Name 'cloudflared' -ErrorAction SilentlyContinue
     $elapsed = [int]((Get-Date) - $startedAt).TotalSeconds
     if (-not $alive -and $elapsed -gt 8) {
-        Write-Host ''
-        Write-Host '[LOI] cloudflared da tat truoc khi in URL.'
-        Write-Host 'Xem cua so tunnel (SmartScreen / mang bi chan).'
-        Write-Host 'Tai lai: docs/HUONG_DAN_CLOUDFLARE_TUNNEL.md phan A + E.'
+        Write-FlyWaitDone
+        Write-FlyErr 'cloudflared da tat truoc khi in URL.'
+        Write-FlyInfo 'Xem cua so tunnel (SmartScreen / mang bi chan).'
+        Write-FlyInfo 'Tai lai: docs/HUONG_DAN_CLOUDFLARE_TUNNEL.md phan A + E.'
         exit 1
     }
-    Write-Host -NoNewline '.'
+    Write-FlyWait -Elapsed $elapsed -MaxSeconds $WaitSeconds
     Start-Sleep -Seconds 1
 }
-Write-Host ''
+Write-FlyWaitDone
 
 if (-not $origin) {
-    Write-Host '[LOI] Het gio, chua thay https://....trycloudflare.com'
-    Write-Host 'De cua so tunnel mo, doi them, hoac tat VPN roi chay lai file 7.'
+    Write-FlyErr 'Het gio, chua thay https://....trycloudflare.com'
+    Write-FlyInfo 'De cua so tunnel mo, doi them, hoac tat VPN roi chay lai.'
     exit 1
 }
 
@@ -352,32 +353,32 @@ Update-DotEnvKey -Path $envPath -Key 'TELEGRAM_WEBHOOK_URL' -Value $telegramWebh
 Update-DotEnvKey -Path $envPath -Key 'TELEGRAM_PUBLIC_BASE_URL' -Value $origin
 
 Write-Host ''
-Write-Host '=============================================='
-Write-Host 'LINK TUNNEL (copy gui nhom neu can):'
-Write-Host ('  ' + $origin)
+Write-FlyRule
+Write-FlyColor '  Tunnel san sang' Green
 Write-Host ''
-Write-Host 'Da ghi server/.env (khong query string):'
-Write-Host ('  PAYMENT_IPN_URL=' + $ipnUrl)
-Write-Host ('  PAYMENT_RETURN_URL=' + $returnUrl)
-Write-Host ('  TELEGRAM_WEBHOOK_URL=' + $telegramWebhook)
-Write-Host ('  TELEGRAM_PUBLIC_BASE_URL=' + $origin)
-Write-Host '=============================================='
+Write-FlyKeyValue 'Link' $origin Cyan
+Write-Host ''
+Write-FlyOk 'Da ghi server/.env'
+Write-FlyKeyValue 'IPN' $ipnUrl DarkGray
+Write-FlyKeyValue 'Return' $returnUrl DarkGray
+Write-FlyKeyValue 'Telegram' $telegramWebhook DarkGray
+Write-FlyRule
 Write-Host ''
 
 if (-not (Stop-StaleFlyListeners -Port 3000)) {
-    Write-Host 'Giữ cửa sổ tunnel. Đóng process lạ trên cổng 3000, rồi chạy: npm start'
-    Write-Host '(.env đã có URL mới; chỉ cần start lại Node.)'
+    Write-FlyWarn 'Giu cua so tunnel. Dong process la tren cong 3000, roi chay: npm start'
+    Write-FlyInfo '(.env da co URL moi; chi can start lai Node.)'
     exit 1
 }
 
-Write-Host 'Dang npm start (API + Electron) de Node nap URL moi...'
-Write-Host 'Khong dong cua so nay. Khong dong cua so tunnel.'
+Write-FlyInfo 'Dang mo API + cua so ban hang...'
+Write-FlyInfo 'Dung dong cua so nay. Dung dong cua so tunnel.'
 Write-Host ''
 
 $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
 if (-not $npm) { $npm = Get-Command npm -ErrorAction SilentlyContinue }
 if (-not $npm) {
-    Write-Host '[LOI] Khong thay npm. Cai Node.js 22+ roi chay lai.'
+    Write-FlyErr 'Khong thay npm. Cai Node.js 22+ roi chay lai.'
     exit 1
 }
 

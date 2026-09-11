@@ -1,0 +1,147 @@
+PLAN ZALOPAY TEST P1 — FINAL (gọn)
+==================================
+Đây là cổng QR ĐANG CHẠY trên POS (cập nhật 11/09/2026).
+PLAN_MOMO_TEST_P1.txt (10/09) = lịch sử. P1 đã ĐỔI hẳn sang ZaloPay sandbox.
+VNPay/PayOS/MoMo = stub "Provider chưa bật" trong providers/*.js.
+Adapter vẫn là paymentGatewayService (đổi provider không sửa POS).
+
+POS P1 chỉ TIỀN MẶT | ZALOPAY. Không Thẻ, CK, nút QR thủ công.
+Ngày: 11/09/2026. Adapter: paymentGatewayService → providers/zalopay.js
+PAYMENT_PROVIDER=zalopay. Không payment.routes.js / momoController.
+
+0. Chốt nghiệp vụ
+-----------------
+UI "ZaloPay" → DB PhuongThuc='QR', NguonXacNhan='ZaloPay' → không vào két, TK 112.
+UI "Tiền mặt" → PhuongThuc='Tiền mặt' → TK 111, vào két.
+HĐ cũ có thể NguonXacNhan='MoMo' — vẫn là QR, không vào két. Không đổi postSaleJournals.
+ZaloPay sandbox lỗi → toast, khách chuyển TM (sau khi resolve nếu đang Chờ).
+Cấm nhập mã + tick Thành công.
+Đối soát: mọi QR Thành công (PhuongThuc='QR'). NguonXacNhan chỉ hiển thị.
+
+1. Sample key — trung thực
+--------------------------
+3 mã đọc từ server/.env (local). .env.example để TRỐNG + chú thích.
+Nguồn sample công khai: docs.zalopay.vn / developers.zalopay.vn (sbmc).
+Đây KHÔNG phải merchant riêng của nhóm. Sandbox sb-openapi.zalopay.vn.
+CẤM hardcode secret vào repo. CẤM commit .env. CẤM openapi.zalopay.vn (prod).
+
+2. Ví test
+----------
+Không dùng app ZaloPay CH Play. Ví sandbox + OTP 111111 theo docs ZaloPay.
+Return URL chỉ UX. IPN/query mới ghi sổ.
+QR: ưu tiên qr_code EMV; fallback order_url.
+bank_code=zalopayapp, expire_duration_seconds=900.
+app_trans_id = yyMMdd_... GMT+7, max 40.
+
+3. Invariant 4.7 — INSERT rồi mới create
+----------------------------------------
+1) Kiểm HĐ Nháp + remaining + không có QR Chờ (mọi NguonXacNhan)
+2) Sinh MaTT + app_trans_id
+3) INSERT ThanhToan Chờ xác nhận, NguonXacNhan=ZaloPay, MaThamChieuCong=app_trans_id
+4) COMMIT local
+5) Gọi ZaloPay POST /v2/create (HMAC key1: app_id|app_trans_id|app_user|amount|app_time|embed_data|item)
+6) return_code=1 → trả QR / order_url (đơn đã tạo, chưa thanh toán)
+7) Fail RÕ → UPDATE đúng dòng Thất bại (clearFailure=true)
+
+3b. Invariant 4.7b — uncertain ≠ failure (clearFailure)
+-------------------------------------------------------
+clearFailure=true CHỈ khi:
+  (a) lỗi config local (thiếu ZALOPAY_APP_ID/KEY1/KEY2, thiếu IPN/return URL,
+      app_trans_id sai format, trỏ production), HOẶC
+  (b) ZaloPay xác nhận request bị từ chối cuối cùng (return_code === 2).
+
+HTTP 4xx và body parse được → CHƯA đủ để clearFailure=true.
+Phải kèm xác nhận request bị từ chối cuối cùng (return_code === 2).
+Ví dụ: HTTP 400 + return_code 2 → Thất bại.
+      HTTP 400 + body parse + return_code 1 / mã lạ / thiếu return_code → GIỮ Chờ + Query.
+Không hiểu mọi 4xx là final.
+
+HTTP 5xx / timeout / mất mạng / body không parse → GIỮ Chờ, POS bấm Query lại.
+Lý do: IPN có thể tới trước khi INSERT nếu gọi ZaloPay trước.
+
+4. Invariant 4.8 — tối đa 1 QR+Chờ / HĐ
+---------------------------------------
+Server 409 nếu còn dòng QR Chờ (không lọc NguonXacNhan).
+Unique filtered index UX_ThanhToan_MotQrCho.
+remaining không trừ dòng Chờ — không tin một mình công thức đó.
+
+4.12. Làm mới mã
+----------------
+Query/resolve dòng cũ TRƯỚC. Pending → không tạo app_trans_id mới.
+Success → complete invoice. Failure/expired ĐÃ XÁC MINH → rồi mới tạo mã mới.
+POST .../fail = failIfFinal (vẫn query trước, không fail mù).
+
+5. Invariant 4.9 — không fail mù
+--------------------------------
+Timeout / mất mạng / hết countdown UI KHÔNG tự Thất bại.
+Chỉ fail khi query/IPN/provider xác nhận fail hoặc hết hạn.
+Chưa query được → giữ Chờ + Query lại.
+
+6. Invariant 4.10 / T20 — chặn addPayment khi còn QR Chờ
+--------------------------------------------------------
+Còn PhuongThuc=QR AND TrangThai=Chờ xác nhận (mọi nguồn):
+- Mọi addPayment mới (kể cả TM) → HTTP 409, không INSERT
+- Chỉ sau Thất bại / hết hạn ĐÃ XÁC MINH mới thu TM
+
+7. Invariant 4.11 — IPN/query lặp cùng zp_trans_id
+--------------------------------------------------
+Không UPDATE payment lần hai.
+Nếu HĐ còn Nháp + SUM(Thành công)==TongThanhToan + không còn Chờ
+→ retry completeInvoiceInternal (idempotent, tồn trừ một lần).
+Cấm stop ở lớp payment khi HĐ chưa Hoàn thành.
+amount IPN phải == ThanhToan.SoTien.
+Callback chỉ khi thanh toán thành công. HMAC key2 trên CHUỖI data. zp_trans_id bắt buộc.
+
+4.13. Dòng MoMo Chờ leftover
+----------------------------
+Không auto-fail hàng loạt trong migrate. Query/fail trên dòng NguonXacNhan≠ZaloPay → 400.
+Cleanup demo (chạy tay): SupermarketFly_CleanupDemo_PendingMomoQr.sql.
+
+8. API — bảng controller IPN
+----------------------------
+Public (app.js, TRƯỚC 404):
+  GET  /api/payments/gateway/return  → HTML UX
+
+  POST /api/payments/gateway/ipn
+  Luôn HTTP 200 + JSON { return_code, return_message }. Không 204 như MoMo.
+  ZaloPay retry khi return_code === 0; mã khác thì dừng.
+
+  Case (paymentGatewayController.ipn)                 | HTTP | return_code | return_message | ZaloPay retry?
+  ----------------------------------------------------|------|-------------|----------------|---------------
+  type !== 1 (không phải Order) → ignore, không apply | 200  | 1           | ignored        | KHÔNG
+  Idempotent: keep_success / retry_complete / ignore  | 200  | 1           | success        | KHÔNG
+    / transid_conflict / invoice_cancelled            |      |             |                |
+  first_success / mark_failed / amount_mismatch xong  | 200  | 1           | success        | KHÔNG
+  MAC/schema sai (thiếu data, JSON, zp_trans_id)      | 200  | -1          | mac not equal  | không tin callback
+  Exception / order_not_found (IPN sớm hơn INSERT)    | 200  | 0           | ...            | CÓ (~3 lần)
+
+  CẤM trả return_code 0 cho ignore hoặc idempotent — ZaloPay callback lại không cần thiết.
+  Helper: ipnIgnored / ipnIdempotent / ipnAck → 1; ipnBadMac → -1; ipnRetry → 0.
+
+JWT cashierRoutes (UC25):
+  POST /api/cashier/invoices/:id/payments/qr
+  GET  /api/cashier/invoices/:id/payments/:maTT
+  POST /api/cashier/invoices/:id/payments/:maTT/query
+  POST /api/cashier/invoices/:id/payments/:maTT/fail
+
+9. DB / kế toán / ca
+--------------------
+Migration 20260910_PaymentGateway: NguonXacNhan, MaThamChieuCong.
+Migration 20260911_ZaloPayQrPending: DROP UX_ThanhToan_MotQrMoMoCho,
+  ADD UX_ThanhToan_MotQrCho (QR + Chờ, mọi nguồn). Không fail MoMo hàng loạt.
+Idempotent: IF COL_LENGTH / IF NOT EXISTS (revert không drop cột).
+Không phá 3 cột tiền (TongTienHang, TienGiamGia, TongThanhToan).
+completeInvoiceInternal + postSaleJournals giữ (QR → 112).
+closeShift đã chặn còn dòng Chờ xác nhận — giữ.
+
+10. Chạy
+--------
+npm start            = API + Electron, KHÔNG bắt cloudflared
+npm run start:zalopay = 7_CHAY_APP_VA_TUNNEL_MOMO.bat (cùng tunnel)
+  tunnel lấy https://….trycloudflare.com
+  ghi PAYMENT_IPN_URL / PAYMENT_RETURN_URL vào server/.env
+  rồi mới npm start
+Chưa tunnel: POS vẫn tạo QR; IPN không vào. Bấm Query lại sau khi khách trả.
+Test: cd server && node test-payment-gateway.js
+  (T20, amount lệch, IPN duplicate, 1 pending, INSERT-trước-create, 4.7b, IPN ignore=1)
+)

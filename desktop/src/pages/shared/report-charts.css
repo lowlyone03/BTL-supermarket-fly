@@ -1548,6 +1548,7 @@
 .financial-reports .fly-kpi-grid.primary .fly-kpi strong {
   max-width: 100%;
   overflow: hidden;
+  color: var(--ink, #1e392d);
   font-size: clamp(18px, 1.24vw, 23px);
   line-height: 1.12;
   text-overflow: ellipsis;
@@ -2087,13 +2088,17 @@
   min-width: 0;
   flex-wrap: wrap;
 }
-.financial-reports .gross-profit-steps .result {
+.financial-reports .gross-profit-steps .step > div.result {
   min-width: 150px;
   flex: 1.15;
+  background: #e8f4ee;
+  color: var(--ink, #1e392d);
 }
-.financial-reports .gross-profit-steps .result span,
+.financial-reports .gross-profit-steps .result span {
+  color: #5f7469;
+}
 .financial-reports .gross-profit-steps .result strong {
-  color: #fff !important;
+  color: var(--ink, #1b4332);
 }
 
 .financial-reports .report-flow-card,
@@ -2392,6 +2397,7 @@
 .store-pnl-kpi-card strong {
   display: block;
   margin-top: 6px;
+  color: var(--ink, #1e392d);
   font-size: 22px;
   line-height: 1.1;
 }

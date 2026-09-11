@@ -263,7 +263,7 @@ const collectFacts = async (pool, user, periodKey = '') => {
     if (canPosStats) {
         const maCa = facts.shift?.open ? facts.shift.summary?.MaCa : null;
         const maNV = isRole(user, 'Thu ngân') ? user.MaNV : null;
-        facts.momo = await safe('MoMo / nháp', () => loadMomoAndDrafts(pool, { maNV, maCa }));
+        facts.momo = await safe('QR / nháp', () => loadMomoAndDrafts(pool, { maNV, maCa }));
         if (!facts.momo?.failed) facts.sources.push(isRole(user, 'Thu ngân') ? 'Thanh toán / HĐ ca hiện tại' : 'Thanh toán / HĐ hôm nay');
     }
 
@@ -286,10 +286,10 @@ const kpisFromFacts = (facts, user) => {
     }
     if (facts.shift?.open) {
         chips.push({ id: 'cash', label: 'TM hệ thống', value: money(facts.shift.summary?.TienMatHeThong), source: 'Tóm tắt ca' });
-        chips.push({ id: 'momo', label: 'MoMo ca', value: money(facts.shift.summary?.TongTienQR), source: 'Tóm tắt ca — không vào két' });
+        chips.push({ id: 'momo', label: 'QR ca', value: money(facts.shift.summary?.TongTienQR), source: 'Tóm tắt ca — không vào két' });
     }
     if (facts.momo && !facts.momo.failed) {
-        chips.push({ id: 'momo-count', label: 'HĐ MoMo', value: String(facts.momo.SoHoaDonMoMo || 0), source: 'Thanh toán QR thành công' });
+        chips.push({ id: 'momo-count', label: 'HĐ QR', value: String(facts.momo.SoHoaDonMoMo || 0), source: 'Thanh toán QR thành công' });
         chips.push({ id: 'drafts', label: 'HĐ nháp', value: String(facts.momo.SoNhap || 0), source: 'Hóa đơn nháp' });
     }
     if (facts.payables && !facts.payables.failed && facts.payables.summary) {
@@ -386,10 +386,10 @@ const anomaliesFromFacts = (facts, user) => {
         if (n(facts.momo.MoMoCho) > 0) {
             list.push({
                 type: 'momo_pending',
-                object: 'MoMo chờ xác nhận',
+                object: 'QR chờ xác nhận',
                 severity: 'Medium',
                 confidence: 'high',
-                evidence: `${facts.momo.MoMoCho} thanh toán MoMo đang chờ. Trợ lý không tick hộ.`,
+                evidence: `${facts.momo.MoMoCho} thanh toán QR đang chờ. Trợ lý không tick hộ.`,
                 source: 'Thanh toán QR',
                 nextAction: action(isRole(user, 'Thu ngân') ? 'cashierPos' : 'home')
             });
@@ -643,11 +643,11 @@ const insightsFromFacts = (facts, user) => {
         if (tm || momo) {
             cards.push({
                 id: 'ket-vs-momo',
-                title: 'Két tiền mặt và MoMo (112)',
-                body: `Két (phiếu thu TM) ${money(tm)}. MoMo/QR ${money(momo)} vào 112, không vào két. DT đã ghi lúc HĐ hoàn thành.`,
+                title: 'Két tiền mặt và ZaloPay/QR (112)',
+                body: `Két (phiếu thu TM) ${money(tm)}. ZaloPay/QR ${money(momo)} vào 112, không vào két. DT đã ghi lúc HĐ hoàn thành.`,
                 evidence: [
                     { claim: 'Tiền mặt phiếu thu', numbers: [money(tm)], source: 'P&L / phiếu thu ca', confidence: 'high' },
-                    { claim: 'MoMo / QR', numbers: [money(momo)], source: 'Thanh toán QR', confidence: facts.momo && !facts.momo.failed ? 'high' : 'medium' }
+                    { claim: 'ZaloPay / QR', numbers: [money(momo)], source: 'Thanh toán QR', confidence: facts.momo && !facts.momo.failed ? 'high' : 'medium' }
                 ],
                 nextAction: action(isRole(user, 'Thu ngân') ? 'cashierShifts' : 'cashflow')
             });
@@ -655,10 +655,10 @@ const insightsFromFacts = (facts, user) => {
     }
     cards.push({
         id: 'momo-not-drawer',
-        title: 'Vì sao MoMo không vào két?',
-        body: 'Két ca chỉ tiền mặt (TM thu − hoàn TM). MoMo (QR) không vào két, không vào phiếu thu. DT đã ghi lúc HĐ hoàn thành.',
+        title: 'Vì sao ZaloPay/QR không vào két?',
+        body: 'Két ca chỉ tiền mặt (TM thu − hoàn TM). QR (ZaloPay; lịch sử MoMo) không vào két, không vào phiếu thu. DT đã ghi lúc HĐ hoàn thành.',
         evidence: [
-            { claim: 'MoMo hôm nay/ca', numbers: [facts.momo && !facts.momo.failed ? `${facts.momo.SoHoaDonMoMo || 0} HĐ · ${money(facts.momo.TongMoMo)}` : 'không lấy được MoMo, không bịa'], source: 'Thanh toán QR', confidence: facts.momo && !facts.momo.failed ? 'high' : 'low' }
+            { claim: 'QR hôm nay/ca', numbers: [facts.momo && !facts.momo.failed ? `${facts.momo.SoHoaDonMoMo || 0} HĐ · ${money(facts.momo.TongMoMo)}` : 'không lấy được QR, không bịa'], source: 'Thanh toán QR', confidence: facts.momo && !facts.momo.failed ? 'high' : 'low' }
         ],
         nextAction: action(isRole(user, 'Thu ngân') ? 'cashierShifts' : 'home')
     });
@@ -691,7 +691,7 @@ const insightsFromFacts = (facts, user) => {
             cards.push({
                 id: 'top-cash-shift',
                 title: 'Ca tiền mặt hệ thống cao',
-                body: `${topCash.MaCa} · ${topCash.TenNV}: TM hệ thống ${money(topCash.TienMatHeThong)} (MoMo ${money(topCash.TongTienQR)} không vào két).`,
+                body: `${topCash.MaCa} · ${topCash.TenNV}: TM hệ thống ${money(topCash.TienMatHeThong)} (QR ${money(topCash.TongTienQR)} không vào két).`,
                 evidence: [{ claim: 'TienMatHeThong', numbers: [money(topCash.TienMatHeThong)], source: 'Báo cáo ca', confidence: 'high' }],
                 nextAction: action('managerReports')
             });
@@ -721,7 +721,7 @@ const scenarioSnapshot = (facts, user) => {
         }
         : (facts.momo && !facts.momo.failed
             ? { tienMat: 0, momo: n(facts.momo.TongMoMo), nganHang: n(facts.momo.TongMoMo) }
-            : { unavailable: true, reason: 'Chưa có tiền mặt / MoMo trong phạm vi quyền.' });
+            : { unavailable: true, reason: 'Chưa có tiền mặt / QR trong phạm vi quyền.' });
     const stockItems = facts.inventory && !facts.inventory.failed
         ? { items: facts.inventory.items || [] }
         : (facts.admin?.lowStock

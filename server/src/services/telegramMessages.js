@@ -302,10 +302,11 @@ const I18N = {
         kbGuide: '📚 Tài liệu',
         kbHide: '⬆️ Ẩn menu',
         kbShow: '⬇️ Hiện menu',
+        kbPinHint: 'Menu nút nằm dưới khung chat. Điện thoại: nếu không thấy, bấm biểu tượng bàn phím (bốn ô) cạnh ô nhập tin.',
         flyGuide: '📚 Tài liệu',
         hideOk: 'Đã ẩn bàn phím. Đọc chat thoải mái.',
         showOk: 'Đã hiện lại menu.',
-        showHint: 'Hiện lại: bấm ⬇️ Hiện menu, hoặc gửi /fly /start.',
+        showHint: 'Hiện lại: bấm ⬇️ Hiện menu dưới tin này, hoặc gửi /fly. Điện thoại: bấm biểu tượng bàn phím cạnh ô nhập.',
         hideAfterRead: 'Xong thì bấm ⬆️ Ẩn menu để đọc hết chat.',
         guidePickTitle: 'TÀI LIỆU / QUY TẮC',
         guidePickHint: 'Bấm một mục. Công thức đã chốt — không slide rỗng.',
@@ -527,6 +528,12 @@ const I18N = {
         payEmpty: 'Chưa có giao dịch.',
         payPending: 'chờ xác nhận',
         payRecent: 'Giao dịch gần đây',
+        payMixHint: 'TM vào két / phiếu thu. QR không vào két. Cùng ngày vận hành với câu hỏi QR.',
+        payCashNone: 'Không có giao dịch tiền mặt trong ngày vận hành này.',
+        payShifts: 'Ca hôm nay — TM vs QR',
+        payShiftsEmpty: 'Chưa gắn được ca (MaCa) cho giao dịch ngày này.',
+        payChipCash: '💵 Có tiền mặt?',
+        payChipShift: '🕐 Ca TM / QR',
         pendingTitle: 'VIỆC CHỜ DUYỆT',
         pendingEmpty: 'Không có việc chờ.',
         reportsTitle: 'BÁO CÁO CỬA HÀNG',
@@ -666,10 +673,11 @@ const I18N = {
         kbGuide: '📚 Guide',
         kbHide: '⬆️ Hide menu',
         kbShow: '⬇️ Show menu',
+        kbPinHint: 'The button menu sits below the chat. On phone: if it is missing, tap the keyboard icon (four squares) next to the input.',
         flyGuide: '📚 Guide',
         hideOk: 'Keyboard hidden. Read the chat freely.',
         showOk: 'Menu is back.',
-        showHint: 'Show again: tap ⬇️ Show menu, or send /fly /start.',
+        showHint: 'Show again: tap ⬇️ Show menu under this message, or send /fly. On phone: tap the keyboard icon next to the input.',
         hideAfterRead: 'When done, tap ⬆️ Hide menu to read the chat.',
         guidePickTitle: 'DOCUMENTS / RULES',
         guidePickHint: 'Tap one topic. Locked formulas — not empty slides.',
@@ -891,6 +899,12 @@ const I18N = {
         payEmpty: 'No transactions yet.',
         payPending: 'awaiting confirmation',
         payRecent: 'Recent payments',
+        payMixHint: 'Cash goes to the drawer / cash receipt. QR does not. Same operating day as the QR question.',
+        payCashNone: 'No cash transactions on this operating day.',
+        payShifts: 'Shifts today — cash vs QR',
+        payShiftsEmpty: 'No shift (MaCa) linked to today’s payments.',
+        payChipCash: '💵 Any cash?',
+        payChipShift: '🕐 Shift cash / QR',
         pendingTitle: 'PENDING APPROVALS',
         pendingEmpty: 'Nothing pending.',
         reportsTitle: 'STORE REPORT',
@@ -1030,10 +1044,11 @@ const I18N = {
         kbGuide: '📚 文档',
         kbHide: '⬆️ 隐藏菜单',
         kbShow: '⬇️ 显示菜单',
+        kbPinHint: '按钮菜单在聊天框下方。手机上看不到时，请点输入框旁的键盘图标（四格）。',
         flyGuide: '📚 文档',
         hideOk: '已隐藏键盘。请阅读聊天。',
         showOk: '菜单已恢复。',
-        showHint: '再显示：点 ⬇️ 显示菜单，或发送 /fly /start。',
+        showHint: '再显示：点这条消息下的 ⬇️ 显示菜单，或发送 /fly。手机：点输入框旁的键盘图标。',
         hideAfterRead: '看完后请点 ⬆️ 隐藏菜单，以便读完聊天。',
         guidePickTitle: '文档 / 规则',
         guidePickHint: '点一项。已锁定公式 — 不是空幻灯片。',
@@ -1172,6 +1187,12 @@ const I18N = {
         payEmpty: '暂无交易。',
         payPending: '待确认',
         payRecent: '最近交易',
+        payMixHint: '现金进钱箱/收款单。QR 不进钱箱。与 QR 问题同一经营日。',
+        payCashNone: '本经营日没有现金交易。',
+        payShifts: '今日班次 — 现金 vs QR',
+        payShiftsEmpty: '今天的交易尚未关联班次（MaCa）。',
+        payChipCash: '💵 有现金吗？',
+        payChipShift: '🕐 班次现金 / QR',
         pendingTitle: '待审批',
         pendingEmpty: '没有待办。',
         reportsTitle: '门店报表',
@@ -1612,15 +1633,39 @@ const buildShiftsMessage = (rows, lang = DEFAULT_LANG) => {
     return lines.join('\n');
 };
 
-const buildPaymentsMessage = ({ day, channels = [], recent = [] } = {}, lang = DEFAULT_LANG) => {
+const formatPayChannel = (row, lang) => {
+    const waiting = Number(row.ChoXacNhan || 0);
+    return `${channelIcon(row.PhuongThuc)} <b>${escapeHtml(row.PhuongThuc)}</b>  ${moneyCode(row.Tong)}\n   ${textCode(String(row.SoLuong || 0))} GD · ${waiting ? '🟡' : '🟢'} ${t(lang, 'payPending')} ${textCode(String(waiting))}`;
+};
+
+const buildPaymentsMessage = ({ day, channels = [], recent = [], shifts = [] } = {}, lang = DEFAULT_LANG) => {
+    const cashRow = channels.find(row => isCashMethod(row.PhuongThuc))
+        || { PhuongThuc: t(lang, 'todayCash'), Tong: 0, SoLuong: 0, ChoXacNhan: 0 };
+    const qrRow = channels.find(row => isQrMethod(row.PhuongThuc))
+        || { PhuongThuc: t(lang, 'todayQr'), Tong: 0, SoLuong: 0, ChoXacNhan: 0 };
+    const others = channels.filter(row => !isCashMethod(row.PhuongThuc) && !isQrMethod(row.PhuongThuc));
     const lines = [
         headerBlock(`💳 <b>${escapeHtml(t(lang, 'payTitle'))}</b>`),
-        `<i>${escapeHtml(t(lang, 'payDay', { day: formatVnDate(day) }))}</i>`
+        `<i>${escapeHtml(t(lang, 'payDay', { day: formatVnDate(day) }))}</i>`,
+        `<i>${escapeHtml(t(lang, 'payMixHint'))}</i>`,
+        formatPayChannel(cashRow, lang),
+        formatPayChannel(qrRow, lang)
     ];
-    if (!channels.length) lines.push(t(lang, 'payEmpty'));
-    for (const row of channels) {
-        const waiting = Number(row.ChoXacNhan || 0);
-        lines.push(`${channelIcon(row.PhuongThuc)} <b>${escapeHtml(row.PhuongThuc)}</b>  ${moneyCode(row.Tong)}\n   ${textCode(String(row.SoLuong))} GD · ${waiting ? '🟡' : '🟢'} ${t(lang, 'payPending')} ${textCode(String(waiting))}`);
+    if (!Number(cashRow.Tong) && !Number(cashRow.SoLuong)) {
+        lines.push(`<i>${escapeHtml(t(lang, 'payCashNone'))}</i>`);
+    }
+    for (const row of others) lines.push(formatPayChannel(row, lang));
+    if (!channels.length && !Number(cashRow.SoLuong) && !Number(qrRow.SoLuong)) {
+        lines.push(t(lang, 'payEmpty'));
+    }
+    if (shifts.length) {
+        lines.push('', `<b>${escapeHtml(t(lang, 'payShifts'))}</b>`);
+        for (const row of shifts.slice(0, 8)) {
+            const status = row.TrangThai ? statusBadge(row.TrangThai) : '⚪';
+            lines.push(`${status}  ${textCode(row.MaCa)}\n   💵 ${moneyCode(row.TienMat)} · ${textCode(String(row.SoGdTm || 0))} GD · 📱 ${moneyCode(row.TienQR)} · ${textCode(String(row.SoGdQr || 0))} GD`);
+        }
+    } else if (channels.length) {
+        lines.push('', `<i>${escapeHtml(t(lang, 'payShiftsEmpty'))}</i>`);
     }
     if (recent.length) {
         lines.push('', `<b>${escapeHtml(t(lang, 'payRecent'))}</b>`);
@@ -1894,7 +1939,7 @@ const REPLY_NEEDLES = [
     { name: 'debt', needles: ['công nợ ncc', 'công nợ', 'supplier ap', '供应商应付'] },
     { name: 'lowstock', needles: ['tồn thấp', 'low stock', 'sản phẩm / tồn', '商品 / 低库存', '低库存'] },
     { name: 'shifts', needles: ['ca & quỹ', 'ca làm', 'shifts & cash', '班次与钱箱'] },
-    { name: 'payments', needles: ['thanh toán', 'payments', '支付'] },
+    { name: 'payments', needles: ['thanh toán bằng qr', 'thanh toán bằng', 'qr hay tiền mặt', 'bán tiền mặt', 'ca nào bằng', 'ca nào thu', 'thu tm', 'thanh toán', 'payments', '支付'] },
     { name: 'alerts', needles: ['cảnh báo', 'alerts', '提醒'] },
     { name: 'today', needles: ['hôm nay', 'today', '今日经营'] },
     { name: 'fly', needles: ['tóm tắt /fly', 'summary /fly', '摘要 /fly', 'tóm tắt', 'summary', 'cập nhật', 'tổng quan', 'làm mới', 'refresh', '刷新'] },
@@ -1915,7 +1960,7 @@ const REPLY_FALLBACK = [
     { name: 'revenue', re: /doanh thu|today revenue|今日销售/i },
     { name: 'debt', re: /công nợ|supplier ap|供应商应付/i },
     { name: 'shifts', re: /ca\s*&\s*quỹ|shifts\s*&\s*cash|班次与钱箱|^🕐/i },
-    { name: 'payments', re: /thanh toán|payments|支付/i },
+    { name: 'payments', re: /thanh toán|payments|支付|thu\s*tm|qr hay|ca nào bằng|ca nào thu|bán tiền mặt/i },
     { name: 'alerts', re: /cảnh báo|alerts|提醒/i },
     { name: 'fly', re: /tóm tắt|summary\s*\/fly|摘要\s*\/fly|cập nhật|tổng quan|làm mới|^refresh$/i },
     { name: 'langmenu', re: /ngôn ngữ|language|语言/i },
@@ -1949,6 +1994,56 @@ for (const lang of LANGS) {
     }
 }
 
+const foldReply = (value) => normalizeReplyText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd');
+
+const PAYMENTS_INTENT_RE = /(?:\bca\b|\bban\b|\bthu\b|thanh toan|giao dich|\bgd\b).{0,36}(?:tien mat|\btm\b|\bqr\b|zalopay|momo)|(?:hom nay).{0,36}(?:tien mat|thu tm|\bqr\b)|(?:\bqr\b|zalopay|momo).{0,24}(?:hay|hoac|vs|\/|voi).{0,16}(?:tien mat|\btm\b)|(?:tien mat).{0,20}(?:hay|hoac|vs).{0,16}(?:\bqr\b|zalopay)|(?:bao nhieu).{0,28}\bca\b.{0,28}(?:thanh toan|\bqr\b|tien mat)|ca nao (?:bang |thu )?(?:tien mat|\btm\b|\bqr\b)|ban tien mat|thu tm|qr hay tien mat|thanh toan bang/;
+const OTHER_TOPIC_RE = /cong no|ton thap|luong|phieu chi|chung tu|bao cao|ncc|duyet po|ton kho/;
+const SHORT_FOLLOWUP_RE = /^(con|vay|the|sao|roi|u+|da|o+|uk|ok|khong e|ko e|co)\b/;
+
+const matchPaymentsIntent = (text) => PAYMENTS_INTENT_RE.test(foldReply(text));
+
+const looksLikeTopicFollowUp = (text) => {
+    const fold = foldReply(text);
+    if (!fold || fold.length > 80 || OTHER_TOPIC_RE.test(fold)) return false;
+    return SHORT_FOLLOWUP_RE.test(fold) || /\b(ca|tm|qr|tien mat|hom nay)\b/.test(fold);
+};
+
+const isCashMethod = (name) => /tiền mặt|tien mat|cash|现金/i.test(String(name || ''));
+const isQrMethod = (name) => {
+    const key = String(name || '').trim().toLocaleLowerCase('vi-VN');
+    return key === 'qr' || /zalopay|momo/.test(key);
+};
+
+const summarizePaymentShifts = (rows = []) => {
+    const map = new Map();
+    for (const row of rows) {
+        const id = String(row.MaCa || '—').trim() || '—';
+        const cur = map.get(id) || {
+            MaCa: id,
+            TrangThai: row.TrangThai || '',
+            TienMat: 0,
+            TienQR: 0,
+            SoGdTm: 0,
+            SoGdQr: 0
+        };
+        const amount = Number(row.Tong || 0);
+        const count = Number(row.SoLuong || 0);
+        if (isCashMethod(row.PhuongThuc)) {
+            cur.TienMat += amount;
+            cur.SoGdTm += count;
+        } else if (isQrMethod(row.PhuongThuc)) {
+            cur.TienQR += amount;
+            cur.SoGdQr += count;
+        }
+        if (row.TrangThai) cur.TrangThai = row.TrangThai;
+        map.set(id, cur);
+    }
+    return [...map.values()];
+};
+
 const matchReplyNeedles = (norm) => {
     if (!norm) return null;
     let best = null;
@@ -1975,6 +2070,7 @@ const matchReplyCommand = (text) => {
     if (LABEL_TO_CMD.has(raw)) return { name: LABEL_TO_CMD.get(raw), via: 'reply' };
     const norm = normalizeReplyText(raw);
     if (norm && LABEL_TO_CMD.has(norm)) return { name: LABEL_TO_CMD.get(norm), via: 'reply' };
+    if (matchPaymentsIntent(raw)) return { name: 'payments', via: 'reply' };
     const fromNeedle = matchReplyNeedles(norm);
     if (fromNeedle) return { name: fromNeedle, via: 'reply' };
     for (const item of REPLY_FALLBACK) {
@@ -2177,21 +2273,20 @@ const showMenuInlineKeyboard = (lang = DEFAULT_LANG) => ({
 });
 
 const replyKeyboard = (lang = DEFAULT_LANG, { bound = false } = {}) => {
+    // 3 cột, Ẩn menu hàng đầu: Android cắt bàn phím cao 6–7 hàng nên mất Ẩn/Hiện.
     const rows = bound
         ? [
-            ['kbDocs', 'kbPending'],
-            ['kbReports', 'kbRevenue'],
-            ['kbDebt', 'kbShifts'],
-            ['kbPayments', 'kbLowstock'],
-            ['kbGuide', 'kbFly'],
+            ['kbHide', 'kbLang', 'kbFly'],
+            ['kbDocs', 'kbPending', 'kbReports'],
+            ['kbRevenue', 'kbDebt', 'kbShifts'],
+            ['kbPayments', 'kbLowstock', 'kbGuide'],
             ...(isTelegramAskEnabled()
-                ? [['kbAsk', 'kbHelp'], ['kbHide', 'kbLang']]
-                : [['kbHelp', 'kbHide']])
+                ? [['kbAsk', 'kbHelp']]
+                : [['kbHelp']])
         ]
         : [
-            ['kbLang', 'kbHelp'],
-            ['kbLink'],
-            ['kbHide']
+            ['kbHide', 'kbLang'],
+            ['kbHelp', 'kbLink']
         ];
     return {
         keyboard: rows.map(row => row.map(key => ({
@@ -2269,6 +2364,9 @@ module.exports = {
     buildLowstockMessage,
     buildShiftsMessage,
     buildPaymentsMessage,
+    matchPaymentsIntent,
+    looksLikeTopicFollowUp,
+    summarizePaymentShifts,
     buildPendingMessage,
     buildReportsMessage,
     buildReportsMessages,

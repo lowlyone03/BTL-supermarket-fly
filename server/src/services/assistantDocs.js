@@ -1172,6 +1172,18 @@ const emptyDocResult = (period, spec) => okResult({
     report: { empty: true, period: { label: period.label }, kpis: { doanhThuThuan: 0, laiGop: 0, kqkdLoiNhuan: 0, soHoaDon: 0 } }
 });
 
+const cashierRefundHandbook = () => [
+    '1 triệu mở ca là quỹ lẻ, không phải thế chấp QR.',
+    'HĐ tiền mặt → hoàn tiền mặt từ két ca đang mở. Két không được âm.',
+    'HĐ ZaloPay/QR → Refund về zp_trans_id gốc. Không hỏi QR/STK khách. Két không đổi.',
+    'Không đổi hoàn ZaloPay sang tiền mặt. Không lấy 8 triệu từ két 1 triệu.',
+    'Hóa đơn gốc không sửa, không xóa. Lịch sử = HĐ gốc + phiếu trả + giao dịch hoàn.',
+    'Gửi hoàn ≠ khách đã có tiền. Khách được về khi Đang xử lý. Fly Query Refund.',
+    'Hoàn thất bại: Query cùng m_refund_id rồi mới gửi lại. Không trả tiền mặt.',
+    'Đổi ngang = 0 tiền. Đắt hơn = thu chênh. Rẻ hơn = hoàn chênh. Không hoàn 500 rồi thu 700.',
+    'HĐ ca trước hoàn hôm nay: ghi ca đang mở. Không mở lại ca cũ.'
+].join('\n');
+
 module.exports = {
     KINDS,
     parsePeriod,
@@ -1182,5 +1194,6 @@ module.exports = {
     canReadKind,
     specOf,
     emptyDocResult,
-    isManagerUser
+    isManagerUser,
+    cashierRefundHandbook
 };

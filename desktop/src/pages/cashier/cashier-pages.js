@@ -11,6 +11,19 @@
   };
   const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
   const money = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
+  const REFUND_METHODS = ['Tiền mặt', 'QR', 'Thẻ', 'Chuyển khoản'];
+  const canonicalRefundMethod = method => {
+    const value = String(method || '').trim();
+    if (/zalo|momo|^qr$/i.test(value)) return 'QR';
+    return REFUND_METHODS.includes(value) ? value : '';
+  };
+  const originalInvoicePayMethod = payments => {
+    const successful = (payments || []).filter(item => !item.TrangThai || item.TrangThai === 'Thành công');
+    if (!successful.length) return '';
+    const top = [...successful].sort((left, right) => Number(right.SoTien || 0) - Number(left.SoTien || 0))[0];
+    return canonicalRefundMethod(top.PhuongThuc);
+  };
+  const defaultRefundMethod = (original, payments) => canonicalRefundMethod(original) || originalInvoicePayMethod(payments) || 'Tiền mặt';
   const unaccent = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
   const posSearchHaystack = item => unaccent(`${item.MaSP} ${item.MaVach || ''} ${item.TenSP} ${item.TenDM || ''}`);
   const posSearchTokens = query => unaccent(query).trim().split(/\s+/).filter(Boolean);
@@ -74,6 +87,7 @@
   const statusClass = status => ({
     'Đang mở': 'ok', 'Hoàn thành': 'ok', 'Nháp': 'draft', 'Đã hủy': 'cancelled', 'Thành công': 'ok',
     'Thất bại': 'cancelled', 'Chờ kiểm tra': 'sent', 'Chờ duyệt': 'sent', 'Đã duyệt': 'ok', 'Từ chối': 'cancelled',
+    'Đang hoàn tiền': 'sent', 'Hoàn tiền thất bại': 'cancelled',
     'Chờ xác nhận': 'sent',
     'Đang đổi trả': 'sent', 'Hoàn một phần': 'returned', 'Đã hoàn hết': 'cancelled', 'Đã đổi hàng': 'returned',
     'Đổi và hoàn': 'returned', 'Có đổi trả': 'returned'
@@ -320,7 +334,7 @@
         ? `<div class="return-workflow-hint"><svg><use href="#i-warning"/></svg><div><strong>Còn ${pending.length} phiếu đổi trả còn treo / chưa hoàn thành</strong><p>${pending.map(item => `${esc(item.MaDT)} (${esc(item.TrangThai || 'Đã duyệt')})`).join(', ')}. Đóng ca để treo cho ca sau cùng quầy — không xóa, không khóa theo ca cũ.</p></div></div>`
         : '';
       const phrase = window.FLY_FIELDS?.CLOSE_SHIFT_CONFIRM_PHRASE || 'DONG CA';
-      overlay.innerHTML = `<div class="warehouse-modal cashier-close-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">ĐÓNG CA &amp; BÀN GIAO</p><h2>${esc(summary.MaCa)}</h2></div><button type="button" class="warehouse-icon-button close" aria-label="Đóng">×</button></div><div class="warehouse-modal-body"><div class="cashier-close-alert"><svg><use href="#i-warning"/></svg><div><strong>Đóng ca sẽ không bán được cho đến khi mở ca mới</strong><p>Không bấm nếu còn đang bán. Sau khi đóng, POS khóa cho đến khi mở ca khác (hoặc quản lý/kế toán mở lại ca này).</p></div></div>${pendingNote}<div id="closeShiftStep1"><div class="warehouse-stats"><article><span>QUỸ ĐẦU CA</span><strong>${money(summary.TienDauCa)}</strong></article><article><span>TIỀN MẶT THU</span><strong>${money(summary.TongTienMat)}</strong></article><article><span>CHUYỂN KHOẢN</span><strong>${money(summary.TongTienChuyenKhoan)}</strong></article><article><span>QR</span><strong>${money(summary.TongTienQR)}</strong></article><article><span>THẺ</span><strong>${money(summary.TongTienThe)}</strong></article><article><span>HOÀN TIỀN MẶT</span><strong>${money(summary.TongTienHoanMat)}</strong></article></div><p class="cashier-payment-help">Tiền mặt vào két = quỹ đầu ca + tiền mặt thu − hoàn tiền mặt = <strong>${money(summary.TienMatTrongKet)}</strong>. Số bàn giao Kế toán (không gồm quỹ đầu ca) = <strong>${money(summary.TienMatHeThong)}</strong>. QR/thẻ/chuyển khoản không đưa vào két.</p><div class="warehouse-field"><label>Tổng tiền mặt thực tế trong két cuối ca *</label><div class="cashier-money-input"><input id="closingCash" type="number" min="0" step="1000" value="${Number(summary.TienMatTrongKet || 0)}"><span>đ</span></div><small>Đối chiếu két dự kiến ${money(summary.TienMatTrongKet)}. Được nhỏ hơn quỹ đầu ca nếu đã hoàn tiền mặt. Không nhập số âm.</small></div></div><div id="closeShiftStep2" hidden><div class="warehouse-field"><label>Gõ <strong>${esc(phrase)}</strong> để xác nhận đóng ca *</label><input id="closeShiftConfirm" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="${esc(phrase)}"></div><p class="cashier-close-step-hint">Bước 2/2 — nút xác nhận chỉ bật khi cụm từ khớp.</p></div></div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Hủy</button><button type="button" class="warehouse-secondary" id="closeShiftBack" hidden>Quay lại</button><button type="button" class="warehouse-primary" id="closeShiftContinue">Tiếp tục đóng ca</button><button type="button" class="warehouse-danger" id="closeShiftConfirmBtn" hidden disabled>Xác nhận đóng ca</button></div></div>`;
+      overlay.innerHTML = `<div class="warehouse-modal cashier-close-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">ĐÓNG CA &amp; BÀN GIAO</p><h2>${esc(summary.MaCa)}</h2></div><button type="button" class="warehouse-icon-button close" aria-label="Đóng">×</button></div><div class="warehouse-modal-body"><div class="cashier-close-alert"><svg><use href="#i-warning"/></svg><div><strong>Đóng ca sẽ không bán được cho đến khi mở ca mới</strong><p>Không bấm nếu còn đang bán. Sau khi đóng, POS khóa cho đến khi mở ca khác (hoặc quản lý/kế toán mở lại ca này).</p></div></div>${pendingNote}<div id="closeShiftStep1"><p class="warehouse-kicker">PHẦN TIỀN MẶT</p><div class="warehouse-stats"><article><span>QUỸ ĐẦU CA</span><strong>${money(summary.TienDauCa)}</strong></article><article><span>BÁN TM</span><strong>${money(summary.TongTienMat)}</strong></article><article><span>HOÀN TM</span><strong>${money(summary.TongTienHoanMat)}</strong></article><article><span>KÉT DỰ KIẾN</span><strong>${money(summary.TienMatTrongKet)}</strong></article></div><p class="warehouse-kicker">PHẦN ZALOPAY</p><div class="warehouse-stats"><article><span>THANH TOÁN QR</span><strong>${money(summary.TongTienQR)}</strong></article><article><span>HOÀN QR</span><strong>${money(summary.TongTienHoanQR || 0)}</strong></article><article><span>QR RÒNG</span><strong>${money(summary.QrRong != null ? summary.QrRong : Number(summary.TongTienQR || 0) - Number(summary.TongTienHoanQR || 0))}</strong></article></div><p class="cashier-payment-help">Hai phần không cộng trừ lẫn nhau. Dòng TM thuần (bàn giao KT, không gồm quỹ đầu) = <strong>${money(summary.DongTmThuan != null ? summary.DongTmThuan : summary.TienMatHeThong)}</strong>. Hoàn QR không đổi két. Chỉ đếm tiền mặt trong két.</p><div class="warehouse-field"><label>Tổng tiền mặt thực tế trong két cuối ca *</label><div class="cashier-money-input"><input id="closingCash" type="number" min="0" step="1000" value="${Number(summary.TienMatTrongKet || 0)}"><span>đ</span></div><small>Đối chiếu két dự kiến ${money(summary.TienMatTrongKet)}. Được nhỏ hơn quỹ đầu ca nếu đã hoàn tiền mặt. Không nhập số âm.</small></div></div><div id="closeShiftStep2" hidden><div class="warehouse-field"><label>Gõ <strong>${esc(phrase)}</strong> để xác nhận đóng ca *</label><input id="closeShiftConfirm" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="${esc(phrase)}"></div><p class="cashier-close-step-hint">Bước 2/2 — nút xác nhận chỉ bật khi cụm từ khớp.</p></div></div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Hủy</button><button type="button" class="warehouse-secondary" id="closeShiftBack" hidden>Quay lại</button><button type="button" class="warehouse-primary" id="closeShiftContinue">Tiếp tục đóng ca</button><button type="button" class="warehouse-danger" id="closeShiftConfirmBtn" hidden disabled>Xác nhận đóng ca</button></div></div>`;
       document.body.appendChild(overlay);
       const close = () => overlay.remove();
       const step1 = overlay.querySelector('#closeShiftStep1');
@@ -701,20 +715,46 @@
       const payable = payableAmount();
       if (payable <= 0) return context.showToast('Số tiền phải thanh toán không hợp lệ.', 'error');
       const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
-      overlay.innerHTML = `<div class="warehouse-modal cashier-payment-modal cashier-payment-p1"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">THANH TOÁN · TIỀN MẶT + MOMO</p><h2>${money(payable)}</h2></div><button type="button" class="warehouse-icon-button close" aria-label="Đóng">×</button></div><div class="warehouse-modal-body"><div class="cashier-momo-banner"><strong>MoMo sandbox / Test App</strong><span>Không dùng app MoMo thật. POS không bấm Thành công giúp khách. Còn MoMo chờ thì phải Query/resolve trước khi thu tiền mặt.</span></div><div class="pay-method-grid pay-method-grid-p1"><button type="button" class="pay-method active" id="payCashBtn" data-method="Tiền mặt"><svg><use href="#i-cash"/></svg><small>Tiền mặt</small></button><button type="button" class="pay-method" id="payMomoBtn" data-method="MoMo"><svg><use href="#i-qr"/></svg><small>MoMo</small></button></div><p id="paymentRemain" class="cashier-payment-help"></p><div id="paymentList" class="cashier-payment-list"></div><div id="cashPanel" class="cashier-cash-panel"><label>Số tiền mặt<input id="cashAmount" type="number" min="1" step="1000"></label><button type="button" class="warehouse-primary" id="collectCash">Thu tiền mặt</button></div><div id="momoPanel" class="cashier-momo-panel" hidden><p class="cashier-momo-hint">Mở app MoMo Test (không phải app MoMo thật) → Quét mã. POS không bấm Thành công giúp khách.</p><div class="cashier-momo-qr-wrap"><img id="momoQr" alt="Mã QR MoMo Test" hidden><img id="momoPayUrlQr" alt="QR payUrl" hidden></div><p id="momoStatus" class="cashier-payment-help"></p><div class="cashier-momo-actions"><button type="button" class="warehouse-secondary" id="momoQuery">Query lại</button><button type="button" class="warehouse-secondary" id="momoRefresh">Làm mới mã</button><button type="button" class="warehouse-secondary" id="momoOpenApp">Mở bằng Test App</button><button type="button" class="warehouse-secondary" id="momoOpenPay">Mở trang thanh toán</button></div></div></div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Đóng</button></div></div>`;
+      overlay.innerHTML = `<div class="warehouse-modal cashier-payment-modal cashier-payment-p1"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">THANH TOÁN</p><h2>${money(payable)}</h2></div><button type="button" class="warehouse-icon-button close" aria-label="Đóng">×</button></div><div class="warehouse-modal-body"><div class="cashier-momo-banner"><strong>ZaloPay sandbox</strong><span>Quét bằng app ZaloPay Sandbox (OTP 111111). Fly tự xác nhận khi khách trả xong.</span></div><div class="pay-method-grid pay-method-grid-p1"><button type="button" class="pay-method active" id="payCashBtn" data-method="Tiền mặt"><svg><use href="#i-cash"/></svg><small>Tiền mặt</small></button><button type="button" class="pay-method" id="payZaloBtn" data-method="ZaloPay"><svg><use href="#i-qr"/></svg><small>ZaloPay</small></button></div><p id="paymentRemain" class="cashier-payment-help"></p><div id="paymentList" class="cashier-payment-list"></div><div id="cashPanel" class="cashier-cash-panel"><label>Số tiền mặt<input id="cashAmount" type="number" min="1" step="1000"></label><button type="button" class="warehouse-primary" id="collectCash">Thu tiền mặt</button></div><div id="momoPanel" class="cashier-momo-panel" hidden><p class="cashier-momo-hint">Khách mở ZaloPay Sandbox → Quét mã. Không tick Thành công tay.</p><div class="cashier-momo-qr-wrap"><img id="momoQr" alt="Mã QR ZaloPay" hidden></div><p id="momoStatus" class="cashier-momo-status"></p><div class="cashier-momo-actions"><button type="button" class="warehouse-secondary" id="momoQuery">Query lại</button><button type="button" class="warehouse-secondary" id="momoRefresh">Làm mới mã</button><button type="button" class="warehouse-secondary" id="momoOpenPay">Mở trang thanh toán</button></div></div><div id="paySuccessSplash" class="cashier-pay-success" hidden><div class="cashier-pay-success-mark">✓</div><h3>Thanh toán thành công</h3><p id="paySuccessText"></p></div></div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Đóng</button></div></div>`;
       document.body.appendChild(overlay);
       let invoiceId = draftId;
       let pollTimer = null;
+      let pollBusy = false;
+      let saleDone = false;
       let momoRow = null;
-      const methodLabel = item => item.PhuongThuc === 'QR' && item.NguonXacNhan === 'MoMo' ? 'MoMo' : item.PhuongThuc;
+      const playPayChime = () => {
+        try { window.FLY_PLAY_CHIME?.(); } catch { /* trình duyệt chặn tiếng thì bỏ qua */ }
+      };
+      const methodLabel = item => {
+        if (item.PhuongThuc !== 'QR') return item.PhuongThuc;
+        if (item.NguonXacNhan === 'ZaloPay') return 'ZaloPay';
+        if (item.NguonXacNhan === 'MoMo') return 'MoMo';
+        return 'QR';
+      };
       const successPaid = payments => Math.round((payments || []).filter(item => item.TrangThai === 'Thành công').reduce((sum, item) => sum + Number(item.SoTien || 0), 0));
-      const pendingMomo = payments => (payments || []).find(item => item.PhuongThuc === 'QR' && item.NguonXacNhan === 'MoMo' && item.TrangThai === 'Chờ xác nhận');
+      const pendingQr = payments => (payments || []).find(item => item.PhuongThuc === 'QR' && item.TrangThai === 'Chờ xác nhận');
       const finishSale = async (detail) => {
-        clearInterval(pollTimer);
+        if (saleDone || !detail?.invoice) return;
+        saleDone = true;
+        stopPoll();
+        playPayChime();
+        const splash = overlay.querySelector('#paySuccessSplash');
+        const cashPanel = overlay.querySelector('#cashPanel');
+        const momoPanel = overlay.querySelector('#momoPanel');
+        const methods = overlay.querySelector('.pay-method-grid');
+        if (cashPanel) cashPanel.hidden = true;
+        if (momoPanel) momoPanel.hidden = true;
+        if (methods) methods.hidden = true;
+        if (splash) {
+          splash.hidden = false;
+          const line = overlay.querySelector('#paySuccessText');
+          if (line) line.textContent = `${detail.invoice.MaHD} · ${money(detail.invoice.TongThanhToan)}`;
+        }
+        context.showToast(`Thanh toán thành công · ${detail.invoice.MaHD}`, 'success');
+        await new Promise(resolve => setTimeout(resolve, 1600));
         printInvoice(detail);
         cart = new Map(); customer = null; maKM = ''; diemSuDung = 0; quote = null; draftId = null; loaiCS = null; loyaltyOffer = null;
         overlay.remove(); render();
-        context.showToast(`Đã hoàn thành hóa đơn ${detail.invoice.MaHD}.`, 'success');
       };
       const ensureInvoice = async () => {
         if (invoiceId) return invoiceId;
@@ -726,50 +766,59 @@
       const paint = (detail) => {
         const payments = detail.payments || [];
         const remain = Math.max(0, Math.round(Number(detail.invoice.TongThanhToan) - successPaid(payments)));
-        const waiting = pendingMomo(payments);
+        const waiting = pendingQr(payments);
         overlay.querySelector('#paymentRemain').innerHTML = remain === 0 && !waiting
-          ? `Đã đủ ${money(detail.invoice.TongThanhToan)}. Tiền mặt vào két; MoMo (QR) không vào két.`
+          ? `Đã đủ ${money(detail.invoice.TongThanhToan)}. Tiền mặt vào két; QR / ZaloPay không vào két.`
           : waiting
-            ? `Còn MoMo <strong>${money(waiting.SoTien)}</strong> đang chờ. Query/resolve trước khi thu thêm tiền mặt.`
+            ? `Còn QR <strong>${money(waiting.SoTien)}</strong> đang chờ. Query/resolve trước khi thu thêm tiền mặt.`
             : `Còn phải thu <strong>${money(remain)}</strong>.`;
         overlay.querySelector('#paymentList').innerHTML = payments.length
           ? payments.map(item => `<div class="cashier-pay-chip"><strong>${esc(methodLabel(item))}</strong> ${money(item.SoTien)} <span class="status-pill ${statusClass(item.TrangThai)}">${esc(item.TrangThai)}</span></div>`).join('')
           : '<p class="cashier-payment-help">Chưa thu dòng nào.</p>';
         overlay.querySelector('#cashAmount').value = remain || '';
         overlay.querySelector('#payCashBtn').disabled = Boolean(waiting) || remain <= 0;
-        overlay.querySelector('#payMomoBtn').disabled = Boolean(waiting) || remain < 1000;
+        overlay.querySelector('#payZaloBtn').disabled = Boolean(waiting) || remain < 1000;
         overlay.querySelector('#collectCash').disabled = Boolean(waiting) || remain <= 0;
-        overlay.querySelector('#cashPanel').hidden = Boolean(waiting);
+        overlay.querySelector('#cashPanel').hidden = Boolean(waiting) || !overlay.querySelector('#payCashBtn').classList.contains('active');
+        const methods = overlay.querySelector('.pay-method-grid');
+        if (methods) methods.hidden = Boolean(waiting);
+        if (waiting) {
+          overlay.querySelector('#momoPanel').hidden = false;
+          overlay.querySelector('#cashPanel').hidden = true;
+        }
+        overlay.querySelector('#paySuccessSplash').hidden = true;
         return { remain, waiting, payments };
       };
       const showMomoPanel = (payload, statusText) => {
+        overlay.querySelector('#cashPanel').hidden = true;
+        overlay.querySelector('#paySuccessSplash').hidden = true;
+        const methods = overlay.querySelector('.pay-method-grid');
+        if (methods) methods.hidden = true;
         const panel = overlay.querySelector('#momoPanel');
         panel.hidden = false;
         const qr = overlay.querySelector('#momoQr');
-        const extra = overlay.querySelector('#momoPayUrlQr');
-        if (payload?.qrImageDataUrl) { qr.src = payload.qrImageDataUrl; qr.hidden = false; }
+        const image = payload?.qrImageDataUrl || payload?.payUrlQrImageDataUrl || '';
+        if (image) { qr.src = image; qr.hidden = false; }
         else qr.hidden = true;
-        if (payload?.payUrlQrImageDataUrl) { extra.src = payload.payUrlQrImageDataUrl; extra.hidden = false; }
-        else extra.hidden = true;
-        overlay.querySelector('#momoStatus').textContent = statusText || 'Đang chờ khách thanh toán trên MoMo Test App.';
+        overlay.querySelector('#momoStatus').textContent = statusText || 'Đang chờ khách trả trên ZaloPay. Fly sẽ tự xác nhận.';
         momoRow = { ...(momoRow || {}), ...payload };
       };
       const stopPoll = () => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } };
       const hydrateMomoQr = async (waiting) => {
-        overlay.querySelectorAll('.pay-method').forEach(item => item.classList.toggle('active', item.id === 'payMomoBtn'));
+        overlay.querySelectorAll('.pay-method').forEach(item => item.classList.toggle('active', item.id === 'payZaloBtn'));
         const same = momoRow && momoRow.MaTT === waiting.MaTT;
         if (same && (momoRow.qrImageDataUrl || momoRow.payUrl || momoRow.qrCodeUrl)) {
-          showMomoPanel(momoRow, 'Đang chờ khách thanh toán trên MoMo Test App.');
+          showMomoPanel(momoRow, 'Đang chờ khách trả trên ZaloPay. Fly sẽ tự xác nhận.');
           return;
         }
         try {
           const status = await api(context, `/cashier/invoices/${invoiceId}/payments/${waiting.MaTT}`);
-          showMomoPanel({ MaTT: waiting.MaTT, SoTien: waiting.SoTien, ...status }, 'Đang chờ khách thanh toán trên MoMo Test App.');
+          showMomoPanel({ MaTT: waiting.MaTT, SoTien: waiting.SoTien, ...status }, 'Đang chờ khách trả trên ZaloPay. Fly sẽ tự xác nhận.');
           if (!status.qrImageDataUrl && !status.payUrl && !status.qrCodeUrl) {
-            overlay.querySelector('#momoStatus').textContent = 'Dòng MoMo còn Chờ — Query lại. Không tạo mã mới.';
+            overlay.querySelector('#momoStatus').textContent = 'Dòng QR còn Chờ — Query lại. Không tạo mã mới.';
           }
         } catch {
-          showMomoPanel({ MaTT: waiting.MaTT }, 'Đang chờ khách thanh toán trên MoMo Test App.');
+          showMomoPanel({ MaTT: waiting.MaTT }, 'Đang chờ khách trả trên ZaloPay. Fly sẽ tự xác nhận.');
         }
       };
       const refresh = async () => {
@@ -781,46 +830,60 @@
         } else if (momoRow && !state.waiting) {
           const last = (detail.payments || []).find(item => item.MaTT === momoRow.MaTT);
           if (last?.TrangThai === 'Thất bại') {
-            overlay.querySelector('#momoStatus').textContent = 'MoMo thất bại / hết hạn đã xác minh. Chuyển Tiền mặt.';
-            context.showToast('Không thanh toán được MoMo — chuyển Tiền mặt.', 'error');
+            overlay.querySelector('#momoStatus').textContent = 'ZaloPay thất bại / hết hạn đã xác minh. Chuyển Tiền mặt.';
+            context.showToast('Không thanh toán được ZaloPay — chuyển Tiền mặt.', 'error');
           }
         }
         return detail;
       };
+      const applyGatewayStatus = async (status) => {
+        if (!status) return false;
+        if (status.HoaDonTrangThai === 'Hoàn thành' || status.alreadyCompleted || status.completed) {
+          await finishSale(await api(context, `/cashier/invoices/${invoiceId}`));
+          return true;
+        }
+        if (status.TrangThai === 'Thành công') {
+          const detail = await refresh();
+          if (detail?.invoice.TrangThai === 'Hoàn thành') return true;
+          const remain = Math.max(0, Math.round(Number(detail.invoice.TongThanhToan) - successPaid(detail.payments)));
+          if (remain === 0 && !pendingQr(detail.payments)) {
+            await api(context, `/cashier/invoices/${invoiceId}/complete`, { method: 'POST' });
+            await finishSale(await api(context, `/cashier/invoices/${invoiceId}`));
+            return true;
+          }
+          return true;
+        }
+        if (status.TrangThai === 'Thất bại') {
+          stopPoll();
+          await refresh();
+          return true;
+        }
+        return false;
+      };
+      const pollOnce = async (maTT) => {
+        if (pollBusy || !document.body.contains(overlay)) return;
+        pollBusy = true;
+        try {
+          const snapshot = await api(context, `/cashier/invoices/${invoiceId}`);
+          if (snapshot.invoice.TrangThai === 'Hoàn thành') {
+            await finishSale(snapshot);
+            return;
+          }
+          const queried = await api(context, `/cashier/invoices/${invoiceId}/payments/${maTT}/query`, { method: 'POST' });
+          await applyGatewayStatus(queried);
+        } catch { /* poll im lặng; thu ngân vẫn bấm Query lại được */ }
+        finally { pollBusy = false; }
+      };
       const startPoll = (maTT) => {
         stopPoll();
-        pollTimer = setInterval(async () => {
-          try {
-            const status = await api(context, `/cashier/invoices/${invoiceId}/payments/${maTT}`);
-            if (status.qrImageDataUrl && (!momoRow?.qrImageDataUrl || momoRow.MaTT !== maTT)) {
-              showMomoPanel({ ...(momoRow || {}), ...status, MaTT: maTT }, 'Đang chờ khách thanh toán trên MoMo Test App.');
-            }
-            if (status.HoaDonTrangThai === 'Hoàn thành' || status.alreadyCompleted) {
-              const detail = await api(context, `/cashier/invoices/${invoiceId}`);
-              await finishSale(detail);
-              return;
-            }
-            if (status.TrangThai === 'Thành công') {
-              const detail = await refresh();
-              if (detail?.invoice.TrangThai === 'Nháp') {
-                const remain = Math.max(0, Math.round(Number(detail.invoice.TongThanhToan) - successPaid(detail.payments)));
-                if (remain === 0 && !pendingMomo(detail.payments)) {
-                  await api(context, `/cashier/invoices/${invoiceId}/complete`, { method: 'POST' });
-                  await finishSale(await api(context, `/cashier/invoices/${invoiceId}`));
-                }
-              }
-              return;
-            }
-            if (status.TrangThai === 'Thất bại') {
-              stopPoll();
-              await refresh();
-            }
-          } catch { /* poll im lặng, thu ngân bấm Query lại */ }
-        }, 2000);
+        pollOnce(maTT);
+        pollTimer = setInterval(() => { pollOnce(maTT); }, 3000);
       };
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', () => { stopPoll(); overlay.remove(); }));
       overlay.querySelector('#payCashBtn').addEventListener('click', () => {
+        if (overlay.querySelector('#payCashBtn').disabled) return;
         overlay.querySelectorAll('.pay-method').forEach(item => item.classList.toggle('active', item.id === 'payCashBtn'));
+        overlay.querySelector('#momoPanel').hidden = true;
         overlay.querySelector('#cashPanel').hidden = false;
       });
       overlay.querySelector('#collectCash').addEventListener('click', async () => {
@@ -837,7 +900,7 @@
           });
           const detail = await refresh();
           const remain = Math.max(0, Math.round(Number(detail.invoice.TongThanhToan) - successPaid(detail.payments)));
-          if (remain === 0 && !pendingMomo(detail.payments)) {
+          if (remain === 0 && !pendingQr(detail.payments)) {
             await api(context, `/cashier/invoices/${invoiceId}/complete`, { method: 'POST' });
             await finishSale(await api(context, `/cashier/invoices/${invoiceId}`));
           }
@@ -847,15 +910,15 @@
           if (document.body.contains(overlay) && invoiceId) await refresh().catch(() => {});
         }
       });
-      overlay.querySelector('#payMomoBtn').addEventListener('click', async () => {
-        overlay.querySelectorAll('.pay-method').forEach(item => item.classList.toggle('active', item.id === 'payMomoBtn'));
-        const btn = overlay.querySelector('#payMomoBtn');
+      overlay.querySelector('#payZaloBtn').addEventListener('click', async () => {
+        overlay.querySelectorAll('.pay-method').forEach(item => item.classList.toggle('active', item.id === 'payZaloBtn'));
+        const btn = overlay.querySelector('#payZaloBtn');
         if (btn.disabled) return;
         btn.disabled = true;
         try {
           await ensureInvoice();
           const current = await api(context, `/cashier/invoices/${invoiceId}`);
-          const waiting = pendingMomo(current.payments || []);
+          const waiting = pendingQr(current.payments || []);
           if (waiting) {
             await hydrateMomoQr(waiting);
             if (waiting.MaTT) startPoll(waiting.MaTT);
@@ -863,20 +926,20 @@
           }
           const created = await api(context, `/cashier/invoices/${invoiceId}/payments/qr`, { method: 'POST', body: JSON.stringify({}) });
           if (!created.qrImageDataUrl && created.TrangThai === 'Chờ xác nhận') {
-            context.showToast(created.message || 'Chưa rõ trạng thái MoMo. Bấm Query lại.', 'error');
+            context.showToast(created.message || 'Chưa rõ trạng thái ZaloPay. Bấm Query lại.', 'error');
             showMomoPanel({ MaTT: created.MaTT }, created.message || 'Giữ Chờ — Query lại.');
           } else {
-            showMomoPanel(created, 'Đang chờ khách thanh toán trên MoMo Test App.');
+            showMomoPanel(created, 'Đang chờ khách trả trên ZaloPay. Fly sẽ tự xác nhận.');
           }
           if (created.MaTT) startPoll(created.MaTT);
           await refresh();
         } catch (error) {
           const keepWaiting = /Query lại|Giữ Chờ|chưa rõ/i.test(error.message || '');
-          context.showToast(`${keepWaiting || error.message.includes('1.000') ? (error.message || 'Chưa rõ trạng thái MoMo. Giữ Chờ — Query lại.') : (error.message || 'Không thanh toán được MoMo — chuyển Tiền mặt.')}${invoiceId ? ` Hóa đơn nháp: ${invoiceId}.` : ''}`, 'error');
+          context.showToast(`${keepWaiting || error.message.includes('1.000') ? (error.message || 'Chưa rõ trạng thái ZaloPay. Giữ Chờ — Query lại.') : (error.message || 'Không thanh toán được ZaloPay — chuyển Tiền mặt.')}${invoiceId ? ` Hóa đơn nháp: ${invoiceId}.` : ''}`, 'error');
         } finally {
           if (document.body.contains(overlay) && invoiceId) {
             const detail = await refresh().catch(() => null);
-            const waiting = detail && pendingMomo(detail.payments || []);
+            const waiting = detail && pendingQr(detail.payments || []);
             if (waiting?.MaTT) startPoll(waiting.MaTT);
           }
         }
@@ -885,12 +948,10 @@
         if (!momoRow?.MaTT || !invoiceId) return;
         try {
           const result = await api(context, `/cashier/invoices/${invoiceId}/payments/${momoRow.MaTT}/query`, { method: 'POST' });
-          context.showToast(result.TrangThai === 'Thành công' ? 'MoMo đã xác nhận.' : (result.message || `Trạng thái: ${result.TrangThai}`), result.TrangThai === 'Thất bại' ? 'error' : 'success');
-          const detail = await refresh();
-          if (detail?.invoice.TrangThai === 'Hoàn thành') return;
-          if (result.alreadyCompleted || result.completed) {
-            await finishSale(await api(context, `/cashier/invoices/${invoiceId}`));
-          }
+          const done = await applyGatewayStatus(result);
+          if (done) return;
+          context.showToast(result.message || `Trạng thái: ${result.TrangThai}`, result.TrangThai === 'Thất bại' ? 'error' : 'success');
+          await refresh();
         } catch (error) { context.showToast(error.message, 'error'); }
       });
       overlay.querySelector('#momoRefresh').addEventListener('click', async () => {
@@ -904,30 +965,24 @@
             return;
           }
           if (resolved.TrangThai !== 'Thất bại') {
-            context.showToast(resolved.message || 'Chưa xác minh được MoMo. Giữ Chờ — Query lại.', 'error');
+            context.showToast(resolved.message || 'Chưa xác minh được ZaloPay. Giữ Chờ — Query lại. Không tạo mã mới.', 'error');
             await refresh();
             return;
           }
           stopPoll();
           momoRow = null;
           await refresh();
-          overlay.querySelector('#payMomoBtn').click();
+          overlay.querySelector('#payZaloBtn').click();
         } catch (error) { context.showToast(error.message, 'error'); }
       });
-      overlay.querySelector('#momoOpenApp').addEventListener('click', async () => {
-        const link = momoRow?.qrCodeUrl || momoRow?.qrPayload || '';
-        if (!link) return context.showToast('Chưa có deeplink MoMo. Dùng QR trên màn hình hoặc payUrl.', 'error');
-        try { await navigator.clipboard?.writeText(link); } catch { /* ignore */ }
-        context.showToast('Đã copy deeplink. Mở trên điện thoại cài MoMo Test App.', 'success');
-      });
       overlay.querySelector('#momoOpenPay').addEventListener('click', () => {
-        if (!momoRow?.payUrl) return context.showToast('Chưa có payUrl.', 'error');
+        if (!momoRow?.payUrl) return context.showToast('Chưa có trang thanh toán.', 'error');
         window.open(momoRow.payUrl, '_blank', 'noopener');
       });
       if (invoiceId) {
         try {
           const detail = await refresh();
-          const waiting = pendingMomo(detail.payments || []);
+          const waiting = pendingQr(detail.payments || []);
           if (waiting) startPoll(waiting.MaTT);
         } catch (error) { context.showToast(error.message, 'error'); }
       } else {
@@ -1072,16 +1127,16 @@
     ];
     const invoiceHitHtml = item => {
       const view = invoiceReturnView(item);
-      return `<button type="button" class="cashier-invoice-hit${view ? ' has-return' : ''}" data-hd="${esc(item.MaHD)}">${avatar(item.TenKH || 'K')}<div><strong>${esc(item.MaHD)}</strong><small>${esc(item.TenKH || 'Khách vãng lai')}${item.SDT ? ` · ${esc(item.SDT)}` : ''}</small>${view ? `<span class="status-pill ${view.tone}">${esc(view.label)}</span>` : ''}</div><div class="cashier-invoice-hit-meta"><span>${fmtTime(item.NgayLap)}</span><span>Ca ${esc(item.MaCa || '—')} · ${esc(item.TenNV)}</span><strong>${money(item.TongThanhToan)}</strong>${view && view.refunded ? `<small>Đã hoàn ${money(view.refunded)}</small>` : ''}</div></button>`;
+      return `<button type="button" class="cashier-invoice-hit${view ? ' has-return' : ''}" data-hd="${esc(item.MaHD)}">${avatar(item.TenKH || 'K')}<div><strong>${esc(item.MaHD)}</strong><small>${esc(item.TenKH || 'Khách vãng lai')}${item.SDT ? ` · ${esc(item.SDT)}` : ''}</small>${view ? `<span class="status-pill ${view.tone}">${esc(view.label)}</span>` : ''}</div><div class="cashier-invoice-hit-meta"><span>${fmtTime(item.NgayLap)}</span><span>Ca ${esc(item.MaCa || '—')} · ${esc(item.TenNV)}</span>${item.PhuongThucGoc ? `<span>${esc(canonicalRefundMethod(item.PhuongThucGoc) || item.PhuongThucGoc)}</span>` : ''}<strong>${money(item.TongThanhToan)}</strong>${view && view.refunded ? `<small>Đã hoàn ${money(view.refunded)}</small>` : ''}</div></button>`;
     };
     const renderInvoiceForm = (overlay, data) => {
       const inv = data.invoice;
       const view = invoiceReturnView(inv);
       overlay.querySelector('#returnInvoiceHits').innerHTML = '';
-      overlay.querySelector('#returnForm').innerHTML = `<div class="return-source-card"><div><span>HÓA ĐƠN GỐC</span><strong>${esc(inv.MaHD)}</strong></div><div><span>NGÀY BÁN</span><strong>${formatDateVN(inv.NgayLap)}</strong></div><div><span>CA / THU NGÂN GỐC</span><strong>${esc(inv.MaCa || '—')}</strong><small>${esc(inv.TenNV)}</small></div><div><span>KHÁCH HÀNG</span><strong>${esc(inv.TenKH || 'Khách vãng lai')}</strong><small>${esc(inv.SDT || 'Không SĐT')}</small></div><div><span>TỔNG HĐ</span><strong>${money(inv.TongThanhToan)}</strong></div>${view ? `<div><span>ĐỔI TRẢ</span><strong>${esc(view.label)}</strong><small>${view.refunded ? `Đã hoàn ${money(view.refunded)}` : `${view.tickets} phiếu`}</small></div>` : ''}</div>
-        <p class="cashier-return-shift-note">Hóa đơn gắn với ca đã bán (có thể là ca trước hoặc thu ngân khác). Hoàn tiền / giao đổi ghi vào <strong>ca bạn đang mở</strong>, không mở lại ca cũ và không sửa Phiếu thu ca đã đối soát.</p>
+      overlay.querySelector('#returnForm').innerHTML = `<div class="return-source-card"><div><span>HÓA ĐƠN GỐC</span><strong>${esc(inv.MaHD)}</strong></div><div><span>NGÀY BÁN</span><strong>${formatDateVN(inv.NgayLap)}</strong></div><div><span>CA / THU NGÂN GỐC</span><strong>${esc(inv.MaCa || '—')}</strong><small>${esc(inv.TenNV)}</small></div><div><span>KHÁCH HÀNG</span><strong>${esc(inv.TenKH || 'Khách vãng lai')}</strong><small>${esc(inv.SDT || 'Không SĐT')}</small></div><div><span>TỔNG HĐ</span><strong>${money(inv.TongThanhToan)}</strong></div>${inv.PhuongThucGoc ? `<div><span>THANH TOÁN GỐC</span><strong>${esc(canonicalRefundMethod(inv.PhuongThucGoc) || inv.PhuongThucGoc)}</strong></div>` : ''}${view ? `<div><span>ĐỔI TRẢ</span><strong>${esc(view.label)}</strong><small>${view.refunded ? `Đã hoàn ${money(view.refunded)}` : `${view.tickets} phiếu`}</small></div>` : ''}</div>
+        <p class="cashier-return-shift-note">Hóa đơn gốc không sửa, không xóa. Không hỏi QR/STK khách — hoàn ZaloPay về giao dịch gốc. HĐ QR không được đổi sang tiền mặt. Khách có thể về khi phiếu Đang hoàn tiền.</p>
         <div class="warehouse-field"><label>Lý do đổi trả *</label><div class="cashier-reason-chips">${reasons.map(item => `<button type="button" class="cashier-reason-chip" data-reason="${esc(item.label)}" data-form="${esc(item.form)}">${esc(item.label)}</button>`).join('')}</div><textarea id="returnReason" maxlength="500" placeholder="Chọn lý do nhanh hoặc ghi rõ tình trạng hàng..."></textarea><small id="returnReasonHint" class="cashier-payment-help"></small></div>
-        <div class="warehouse-field"><label>Hình thức xử lý *</label><div class="cashier-return-forms"><label><input type="radio" name="returnFormType" value="Hoàn tiền" checked> Hoàn tiền<span>Trả tiền từ két ca đang mở</span></label><label><input type="radio" name="returnFormType" value="Đổi hàng"> Đổi hàng<span>Giao sản phẩm khác sau khi Quản lý duyệt</span></label></div></div>
+        <div class="warehouse-field"><label>Hình thức xử lý *</label><div class="cashier-return-forms"><label><input type="radio" name="returnFormType" value="Hoàn tiền" checked> Hoàn tiền<span>TM → hoàn két; QR → ZaloPay, két không đổi</span></label><label><input type="radio" name="returnFormType" value="Đổi hàng"> Đổi hàng<span>Ngang = 0 tiền; đắt hơn thu chênh; rẻ hơn hoàn chênh</span></label></div></div>
         <div class="warehouse-table-wrap"><table class="warehouse-table cashier-return-table"><thead><tr><th></th><th>SẢN PHẨM</th><th>ĐÃ BÁN</th><th>CÒN ĐỔI TRẢ</th><th>SL TRẢ</th><th>THÀNH TIỀN</th></tr></thead><tbody>${data.lines.map(line => {
           const left = Number(line.SLConDoiTra || 0);
           return `<tr class="cashier-return-line" data-sp="${esc(line.MaSP)}" data-price="${Number(line.DonGia)}" data-left="${left}"><td><input type="checkbox" ${left > 0 ? '' : 'disabled'}></td><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)}</small></td><td class="num">${line.SoLuong}</td><td class="num">${left}</td><td><input type="number" min="1" max="${Math.max(left, 0)}" value="${Math.max(left, 0)}" ${left > 0 ? '' : 'disabled'}></td><td class="num return-line-amount">${money(0)}</td></tr>`;
@@ -1173,7 +1228,7 @@
       if (isLeftoverReturn(item) && !claimedByMe(item)) return false;
       return assignedToMe(item);
     };
-    const canCompleteReturn = item => item.TrangThai === 'Đã duyệt' && canActReturn(item) && hasOpenShift();
+    const canCompleteReturn = item => ['Đã duyệt', 'Đang hoàn tiền', 'Hoàn tiền thất bại'].includes(item.TrangThai) && canActReturn(item) && hasOpenShift();
     const handoverHistoryHtml = item => {
       if (item.LichSuBanGiao) return `<small class="cashier-return-history">${esc(item.LichSuBanGiao)}</small>`;
       if (item.NguoiXuLy && item.NguoiLap && item.NguoiXuLy !== item.NguoiLap) {
@@ -1194,8 +1249,14 @@
     };
     const returnActionHtml = item => {
       const viewBtn = `<button type="button" class="warehouse-secondary" data-view-return="${esc(item.MaDT)}">Lịch sử</button>`;
+      if (item.TrangThai === 'Đang hoàn tiền' && canCompleteReturn(item)) {
+        return `<div class="warehouse-row-actions"><button type="button" class="warehouse-primary" data-complete="${esc(item.MaDT)}">Query hoàn</button>${viewBtn}</div>`;
+      }
+      if (item.TrangThai === 'Hoàn tiền thất bại' && canCompleteReturn(item)) {
+        return `<div class="warehouse-row-actions"><button type="button" class="warehouse-primary" data-complete="${esc(item.MaDT)}">Thử lại hoàn</button>${viewBtn}</div>`;
+      }
       if (item.TrangThai === 'Đã duyệt' && claimedByMe(item) && hasOpenShift()) {
-        const label = item.HinhThucXuLy === 'Hoàn tiền' ? 'Xác nhận hoàn' : 'Xác nhận đổi';
+        const label = item.HinhThucXuLy === 'Hoàn tiền' ? 'Gửi hoàn' : 'Xác nhận đổi';
         return `<div class="warehouse-row-actions"><button type="button" class="warehouse-primary" data-complete="${esc(item.MaDT)}">${label}</button>${viewBtn}</div>`;
       }
       if ((isLeftoverReturn(item) || item.CoTheTiepNhan) && !claimedByMe(item)) {
@@ -1206,7 +1267,7 @@
       }
       if (item.TrangThai === 'Đã duyệt') {
         if (canCompleteReturn(item)) {
-          const label = item.HinhThucXuLy === 'Hoàn tiền' ? 'Xác nhận hoàn' : 'Xác nhận đổi';
+          const label = item.HinhThucXuLy === 'Hoàn tiền' ? 'Gửi hoàn' : 'Xác nhận đổi';
           return `<div class="warehouse-row-actions"><button type="button" class="warehouse-primary" data-complete="${esc(item.MaDT)}">${label}</button>${viewBtn}</div>`;
         }
         if (assignedToMe(item) && !hasOpenShift()) {
@@ -1241,10 +1302,22 @@
     };
     const completeModal = async (id) => {
       const detail = await api(context, `/cashier/returns/${id}`);
-      const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
       const refund = detail.ticket.HinhThucXuLy === 'Hoàn tiền';
+      const shiftSummary = await api(context, '/cashier/shifts/current/summary').catch(() => null);
+      const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
       const returned = detail.lines.filter(item => item.LoaiDong === 'Hàng khách trả');
       const returnedValue = returned.reduce((sum, item) => sum + Number(item.ThanhTien || 0), 0);
+      const drawerCash = shiftSummary && shiftSummary.TienMatTrongKet != null ? Number(shiftSummary.TienMatTrongKet) : null;
+      const originalPay = canonicalRefundMethod(detail.ticket.PhuongThucGoc) || originalInvoicePayMethod(detail.payments);
+      const refundMethodDefault = defaultRefundMethod(originalPay, detail.payments);
+      const lockedQr = originalPay === 'QR';
+      const pendingRefund = detail.ticket.TrangThai === 'Đang hoàn tiền';
+      const failedRefund = detail.ticket.TrangThai === 'Hoàn tiền thất bại';
+      const refundTx = detail.refundTx || {};
+      const handbook = `<div class="return-workflow-hint"><svg><use href="#i-lock"/></svg><div><strong>Cẩm nang hoàn / đổi</strong><p>Không hỏi QR/STK khách, không chuyển QR nhận tiền. HĐ gốc không sửa. QR → ZaloPay (két không đổi). TM → hoàn từ két, két không được âm. Gửi hoàn ≠ khách đã có tiền — khách được về khi Đang xử lý. Thất bại thì Query / thử lại, không trả tiền mặt.</p></div></div>`;
+      const refundFieldsHtml = lockedQr
+        ? `<p class="cashier-payment-help" id="refundChannelNote">HĐ gốc ZaloPay/QR — Fly hoàn về <code>zp_trans_id</code> ${esc(detail.ticket.ZpTransId || '— thiếu mã, không bịa')}. Không đổi sang tiền mặt.</p>${refundTx.MRefundId ? `<p class="cashier-payment-help">m_refund_id <strong>${esc(refundTx.MRefundId)}</strong> · ${esc(refundTx.TrangThaiHoan || '')}${refundTx.NoiDungLoi ? ` · ${esc(refundTx.NoiDungLoi)}` : ''}</p>` : ''}`
+        : `<p class="cashier-payment-help">Hoàn tiền mặt từ két ca đang mở. Két dự kiến ${drawerCash == null ? '—' : money(drawerCash)}. Thiếu két thì chặn — không xác nhận vượt két.</p>`;
       const restocked = /ược nhập lại kho/i.test(detail.ticket.KetQuaKiemTra || '') && !/không nhập lại/i.test(detail.ticket.KetQuaKiemTra || '');
       const hangDiDau = restocked
         ? 'Nhập lại kho bán (cộng tồn)'
@@ -1254,13 +1327,18 @@
       const twoNames = detail.ticket.NguoiXuLy && detail.ticket.NguoiLap && detail.ticket.NguoiXuLy !== detail.ticket.NguoiLap
         ? `${esc(detail.ticket.NguoiLap)} lập / đang xử lý → ${esc(detail.ticket.NguoiXuLy)} tiếp nhận đổi trả cho KH ${esc(detail.ticket.TenKH || 'khách vãng lai')}`
         : '';
-      overlay.innerHTML = `<div class="warehouse-modal receipt-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">${refund ? 'XÁC NHẬN HOÀN TIỀN' : 'XÁC NHẬN ĐỔI HÀNG'}</p><h2>${esc(id)}</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="return-source-card"><div><span>HÓA ĐƠN GỐC</span><strong>${esc(detail.ticket.MaHD)}</strong><small>Ca gốc ${esc(detail.ticket.MaCaGoc || '—')} · ${esc(detail.ticket.ThuNganGoc || '')}</small></div><div><span>HÌNH THỨC</span><strong>${esc(detail.ticket.HinhThucXuLy)}</strong></div><div><span>TIỀN HÀNG TRẢ</span><strong>${money(returnedValue)}</strong></div><div><span>HÀNG ĐI ĐÂU</span><strong>${esc(hangDiDau)}</strong><small>${esc(detail.ticket.KetQuaKiemTra || '—')}</small></div></div>${twoNames ? `<p class="cashier-return-shift-note">${twoNames}</p>` : ''}<p class="cashier-return-shift-note">Phải đang mở ca của bạn. Tiền hoàn tiền mặt trừ két ca hiện tại, không đụng ca đã đóng. Hàng loại bỏ/vứt không trừ kho lần nữa vì đã trừ lúc bán.</p><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HÀNG KHÁCH TRẢ</th><th>SL</th><th>THÀNH TIỀN</th><th>HÀNG ĐI ĐÂU</th></tr></thead><tbody>${returned.map(item => `<tr><td>${esc(item.TenSP)}</td><td class="num">${item.SoLuong}</td><td class="num">${money(item.ThanhTien)}</td><td>${esc(hangDiDau)}</td></tr>`).join('')}</tbody></table></div>${refund ? `<div class="warehouse-field"><label>Phương thức hoàn *</label><select id="refundMethod"><option>Tiền mặt</option><option>QR</option><option>Thẻ</option><option>Chuyển khoản</option></select></div><div class="warehouse-field" id="refundCodeField" hidden><label>Mã giao dịch hoàn *</label><input id="refundCode" placeholder="Mã QR / thẻ / chuyển khoản"></div><p class="cashier-payment-help">Hoàn tiền mặt được trừ khi tính tiền bàn giao cuối ca đang mở.</p>` : `<p>Đổi trực tiếp chỉ áp dụng sản phẩm ngang giá. Hệ thống trừ tồn khi hoàn tất.</p><div class="warehouse-field"><label>Tìm hàng giao đổi</label><input id="exchangeSearch" placeholder="Mã, tên hoặc mã vạch..."></div><div id="exchangeHits" class="cashier-invoice-hits"></div><div id="exchangeLines" class="cashier-exchange-lines"></div><div class="cashier-return-total">Giá trị giao đổi: <strong id="exchangeValue">${money(0)}</strong> · Chênh lệch: <strong id="exchangeDiff">${money(0)}</strong></div><p class="cashier-payment-help" id="exchangeDiffHelp">Chọn hàng giao đổi có tổng giá trị đúng bằng tiền hàng trả.</p>`}</div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-primary confirm">${refund ? 'Xác nhận hoàn' : 'Xác nhận đổi'}</button></div></div>`;
+      const confirmLabel = pendingRefund ? 'Query hoàn ZaloPay' : failedRefund ? 'Query rồi thử lại' : lockedQr ? 'Gửi hoàn ZaloPay' : refund ? 'Xác nhận hoàn tiền mặt' : 'Xác nhận đổi';
+      overlay.innerHTML = `<div class="warehouse-modal receipt-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">${refund ? (pendingRefund ? 'ĐANG HOÀN TIỀN' : failedRefund ? 'HOÀN TIỀN THẤT BẠI' : 'GỬI HOÀN') : 'XÁC NHẬN ĐỔI HÀNG'}</p><h2>${esc(id)}</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body">${handbook}<div class="return-source-card"><div><span>HÓA ĐƠN GỐC</span><strong>${esc(detail.ticket.MaHD)}</strong><small>Ca gốc ${esc(detail.ticket.MaCaGoc || '—')} · ${esc(detail.ticket.ThuNganGoc || '')} · tổng ${money(detail.ticket.TongThanhToan)} không đổi</small></div><div><span>HÌNH THỨC</span><strong>${esc(detail.ticket.HinhThucXuLy)}</strong></div>${originalPay ? `<div><span>THANH TOÁN GỐC</span><strong>${esc(originalPay === 'QR' ? 'ZaloPay' : originalPay)}</strong></div>` : ''}<div><span>TIỀN HÀNG TRẢ</span><strong>${money(returnedValue)}</strong></div><div><span>HÀNG ĐI ĐÂU</span><strong>${esc(hangDiDau)}</strong><small>${esc(detail.ticket.KetQuaKiemTra || '—')}</small></div></div>${twoNames ? `<p class="cashier-return-shift-note">${twoNames}</p>` : ''}<p class="cashier-return-shift-note">Hàng loại bỏ/vứt không trừ kho lần nữa. Hoàn QR không đụng két. 1 triệu mở ca là quỹ lẻ, không phải thế chấp QR.</p><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HÀNG KHÁCH TRẢ</th><th>SL</th><th>THÀNH TIỀN</th><th>HÀNG ĐI ĐÂU</th></tr></thead><tbody>${returned.map(item => `<tr><td>${esc(item.TenSP)}</td><td class="num">${item.SoLuong}</td><td class="num">${money(item.ThanhTien)}</td><td>${esc(hangDiDau)}</td></tr>`).join('')}</tbody></table></div>${refund ? refundFieldsHtml : `<p>Đổi ngang = không hoàn. Đắt hơn = thu chênh (TM hoặc ZaloPay mới). Rẻ hơn = hoàn chênh đúng kênh gốc. Không hoàn 500 rồi thu 700.</p><div class="warehouse-field"><label>Tìm hàng giao đổi</label><input id="exchangeSearch" placeholder="Mã, tên hoặc mã vạch..."></div><div id="exchangeHits" class="cashier-invoice-hits"></div><div id="exchangeLines" class="cashier-exchange-lines"></div><div class="cashier-return-total">Giá trị giao đổi: <strong id="exchangeValue">${money(0)}</strong> · Chênh lệch: <strong id="exchangeDiff">${money(0)}</strong></div><p class="cashier-payment-help" id="exchangeDiffHelp">Chọn hàng giao đổi. Ngang giá thì hoàn tất không sinh tiền.</p><div class="warehouse-field" id="collectMethodField" hidden><label>Thu thêm phần đắt hơn</label><select id="collectMethod"><option value="Tiền mặt">Tiền mặt</option><option value="QR">ZaloPay</option></select></div>`}<p id="refundPollStatus" class="cashier-momo-status"></p></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Đóng</button><button class="warehouse-primary confirm">${confirmLabel}</button></div></div>`;
       document.body.appendChild(overlay);
-      const close = () => overlay.remove();
+      const close = () => { stopRefundPoll(); overlay.remove(); };
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
-      overlay.querySelector('#refundMethod')?.addEventListener('change', () => {
-        overlay.querySelector('#refundCodeField').hidden = overlay.querySelector('#refundMethod').value === 'Tiền mặt';
-      });
+      let refundPollTimer = null;
+      let refundPollBusy = false;
+      const stopRefundPoll = () => { if (refundPollTimer) { clearInterval(refundPollTimer); refundPollTimer = null; } };
+      const paintRefundStatus = text => {
+        const el = overlay.querySelector('#refundPollStatus');
+        if (el) el.textContent = text || '';
+      };
       const updateExchangeTotals = () => {
         const valueEl = overlay.querySelector('#exchangeValue');
         if (!valueEl) return;
@@ -1269,12 +1347,14 @@
         const diff = value - returnedValue;
         valueEl.textContent = money(value);
         overlay.querySelector('#exchangeDiff').textContent = money(diff);
-        overlay.querySelector('.confirm').disabled = !rows.length || Math.abs(diff) > 0.01;
-        overlay.querySelector('#exchangeDiffHelp').textContent = diff > 0
-          ? `Hàng mới cao hơn ${money(diff)}. Hãy hoàn hàng cũ và lập hóa đơn bán mới; không giao qua phiếu này.`
-          : diff < 0
-            ? `Hàng mới thấp hơn ${money(Math.abs(diff))}. Hãy hoàn hàng cũ và lập hóa đơn bán mới; không giao qua phiếu này.`
-            : 'Đã ngang giá, có thể hoàn tất giao đổi.';
+        overlay.querySelector('.confirm').disabled = !rows.length;
+        const collectField = overlay.querySelector('#collectMethodField');
+        if (collectField) collectField.hidden = !(diff > 0.01);
+        overlay.querySelector('#exchangeDiffHelp').textContent = diff > 0.01
+          ? `Hàng mới đắt hơn ${money(diff)} — thu chênh (không hoàn rồi bán lại).`
+          : diff < -0.01
+            ? `Hàng mới rẻ hơn ${money(Math.abs(diff))} — hoàn chênh đúng kênh gốc.`
+            : 'Đổi ngang giá: kho +A −B, không sinh hoàn tiền.';
       };
       let exchangeSearchVersion = 0;
       const runExchangeSearch = (window.FLY_SEARCH?.debounce || ((handler, delay) => { let timer; return (...args) => { clearTimeout(timer); timer = setTimeout(() => handler(...args), delay); }; }))(async (query, version) => {
@@ -1337,11 +1417,42 @@
         const remove = event.target.closest('[data-remove-ex]');
         if (remove) { remove.closest('.cashier-exchange-row').remove(); updateExchangeTotals(); }
       });
+      const startRefundPoll = () => {
+        stopRefundPoll();
+        refundPollTimer = setInterval(async () => {
+          if (refundPollBusy || !overlay.isConnected) return;
+          refundPollBusy = true;
+          try {
+            const queried = await api(context, `/cashier/returns/${id}/refund/query`, { method: 'POST' });
+            paintRefundStatus(queried.message || queried.TrangThai || '');
+            if (queried.completed || queried.alreadyDone || queried.TrangThai === 'Hoàn thành') {
+              stopRefundPoll();
+              context.showToast(queried.message || `Đã hoàn ${id}.`, 'success');
+              try { printReturnTicket(await api(context, `/cashier/returns/${id}`)); } catch { /* in phiếu không chặn */ }
+              close(); await load();
+            } else if (queried.failed || queried.TrangThai === 'Hoàn tiền thất bại') {
+              stopRefundPoll();
+              context.showToast(queried.message || 'Hoàn tiền thất bại. Không trả tiền mặt.', 'error');
+              await load();
+            }
+          } catch (error) {
+            paintRefundStatus(error.message || 'Query hoàn lỗi — giữ Đang xử lý.');
+          } finally {
+            refundPollBusy = false;
+          }
+        }, 3000);
+      };
       overlay.querySelector('.confirm').addEventListener('click', async () => {
         const payload = refund
-          ? { PhuongThucHoan: overlay.querySelector('#refundMethod').value, MaGiaoDichHoan: overlay.querySelector('#refundCode')?.value }
-          : { exchange: [...overlay.querySelectorAll('.cashier-exchange-row')].map(row => ({ MaSP: row.dataset.sp, SoLuong: Number(row.querySelector('.ex-qty').value) })) };
-        if (!refund) {
+          ? { PhuongThucHoan: lockedQr ? 'QR' : 'Tiền mặt' }
+          : {
+            exchange: [...overlay.querySelectorAll('.cashier-exchange-row')].map(row => ({ MaSP: row.dataset.sp, SoLuong: Number(row.querySelector('.ex-qty').value) })),
+            PhuongThucThuThem: overlay.querySelector('#collectMethod')?.value || 'Tiền mặt'
+          };
+        if (refund && !lockedQr && drawerCash != null && Number(detail.ticket.SoTienHoan) > drawerCash) {
+          return context.showToast(`Số dư két không đủ để hoàn tiền. Số dư khả dụng: ${money(drawerCash)}. Số tiền cần hoàn: ${money(detail.ticket.SoTienHoan)}. Vui lòng hoàn về phương thức thanh toán ban đầu.`, 'error');
+        }
+        if (!refund && !pendingRefund && !failedRefund) {
           const invalid = payload.exchange.find(line => {
             const qty = window.FLY_FIELDS?.validatePositiveInteger(line.SoLuong, 'Số lượng đổi');
             return qty ? !qty.ok : !Number.isInteger(line.SoLuong) || line.SoLuong < 1;
@@ -1357,13 +1468,43 @@
           }
         }
         try {
-          const result = await api(context, `/cashier/returns/${id}/complete`, { method: 'POST', body: JSON.stringify(payload) });
+          const path = pendingRefund
+            ? `/cashier/returns/${id}/refund/query`
+            : failedRefund
+              ? `/cashier/returns/${id}/refund/retry`
+              : `/cashier/returns/${id}/complete`;
+          const result = await api(context, path, { method: 'POST', body: JSON.stringify(payload) });
+          if (result.collectPending) {
+            paintRefundStatus(result.message || 'Khách quét ZaloPay phần chênh.');
+            if (result.qrCodeUrl) {
+              const img = document.createElement('img');
+              img.alt = 'QR thu chênh';
+              img.src = /^https?:\/\//.test(result.qrCodeUrl) ? result.qrCodeUrl : `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(result.qrCodeUrl)}`;
+              overlay.querySelector('.warehouse-modal-body').appendChild(img);
+            }
+            startRefundPoll();
+            return;
+          }
+          if (result.pending || result.TrangThai === 'Đang hoàn tiền') {
+            paintRefundStatus(result.message || 'Yêu cầu hoàn đã gửi / Đang xử lý. Khách có thể về.');
+            context.showToast(result.message, 'success');
+            startRefundPoll();
+            return;
+          }
+          if (result.failed || result.TrangThai === 'Hoàn tiền thất bại') {
+            context.showToast(result.message || 'Hoàn tiền thất bại. Không trả tiền mặt.', 'error');
+            await load();
+            return;
+          }
           context.showToast(result.message, 'success');
-          try { printReturnTicket(await api(context, `/cashier/returns/${id}`)); } catch { /* in phiếu không chặn hoàn tất */ }
-          close(); await load();
+          if (result.completed || result.TrangThai === 'Hoàn thành') {
+            try { printReturnTicket(await api(context, `/cashier/returns/${id}`)); } catch { /* in phiếu không chặn */ }
+            close(); await load();
+          }
         } catch (error) { context.showToast(error.message, 'error'); }
       });
       if (!refund) updateExchangeTotals();
+      if (pendingRefund) startRefundPoll();
     };
     const bindReturnActions = () => {
       const newReturn = root.querySelector('#newReturn');

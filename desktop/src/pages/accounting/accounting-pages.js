@@ -1244,6 +1244,42 @@
     await load();
   };
 
+  const shiftPaySplit = row => ({
+    tm: Number(row.TongTienMat || 0),
+    ck: Number(row.TongTienChuyenKhoan || 0),
+    qr: Number(row.TongTienQR || 0),
+    the: Number(row.TongTienThe || 0)
+  });
+  const shiftElectronicTotal = row => {
+    const p = shiftPaySplit(row);
+    return p.ck + p.qr + p.the;
+  };
+  const isZeroCashWithElectronic = (row, cash) => Number(cash || 0) === 0 && shiftElectronicTotal(row) > 0;
+  const zeroCashElectronicHint = row => {
+    const p = shiftPaySplit(row);
+    const parts = [];
+    if (p.qr > 0) parts.push(`QR ${money(p.qr)}`);
+    if (p.ck > 0) parts.push(`CK ${money(p.ck)}`);
+    if (p.the > 0) parts.push(`Thẻ ${money(p.the)}`);
+    return `<small>Ca QR/CK — không TM bàn giao<br>${parts.join(' · ')} vào TK 112</small>`;
+  };
+  const settlementSplitCell = item => {
+    const p = shiftPaySplit(item);
+    const qrLine = p.qr > 0 ? `<strong>QR ${money(p.qr)}</strong>` : `<small>QR ${money(p.qr)}</small>`;
+    return `<small>TM ${money(item.TongTienMat)}<br>CK ${money(item.TongTienChuyenKhoan)}</small><br>${qrLine}<br><small>Thẻ ${money(item.TongTienThe)}</small>`;
+  };
+  const settlementSystemCashCell = item => {
+    const value = Number(item.TienMatHeThong);
+    const hint = value < 0
+      ? `<small>Hoàn TM ${money(item.TongTienHoanMat)} — không phải lỗi quỹ</small>`
+      : isZeroCashWithElectronic(item, item.TienMatHeThong) ? zeroCashElectronicHint(item) : '';
+    return `<strong>${money(item.TienMatHeThong)}</strong>${hint}`;
+  };
+  const settlementHandoverCell = item => {
+    const hint = isZeroCashWithElectronic(item, item.TienThucNop) ? zeroCashElectronicHint(item) : '';
+    return `<strong>${money(item.TienThucNop)}</strong>${hint}`;
+  };
+
   const printShiftReceipt = (detail, receiptId, status) => window.FLY_PRINT?.show({
     title: 'PHIẾU THU TIỀN MẶT BÀN GIAO CA', number: receiptId,
     documentDate: new Date(), status,
@@ -1283,20 +1319,25 @@
     const revenue = detail.invoices.filter(row => row.TrangThai === 'Hoàn thành').reduce((sum, row) => sum + Number(row.TongThanhToan || 0), 0);
     const difference = Number(shift.TienThucNop) - Number(shift.TienMatHeThong);
     const negativeCash = Number(shift.TienMatHeThong) < 0;
+    const zeroCashElectronic = isZeroCashWithElectronic(shift, shift.TienThucNop);
     const refundNote = negativeCash
-      ? `<div class="manager-readonly-note"><svg><use href="#i-warning"/></svg><div><strong>Tiền âm là do hoàn trả, không phải lỗi quỹ</strong><span>Ca này hoàn TM ${money(shift.TongTienHoanMat)} trong khi thu TM ${money(shift.TongTienMat)}. Thường là đổi trả hóa đơn ca trước / ca tồn đọng. Lập Phiếu thu với số âm rồi xác nhận — không từ chối ca.</span></div></div>`
+      ? `<div class="manager-readonly-note"><svg><use href="#i-warning"/></svg><div><strong>Dòng TM thuần âm vì hoàn tiền mặt, không phải hoàn QR</strong><span>Ca này hoàn TM ${money(shift.TongTienHoanMat)} trong khi thu TM ${money(shift.TongTienMat)}. Hoàn ZaloPay (${money(shift.TongTienHoanQR || 0)}) không vào két và không làm TM hệ thống âm. Không lấy 8 triệu từ két 1 triệu khi HĐ gốc là QR.</span></div></div>`
       : '';
+    const electronicNote = zeroCashElectronic
+      ? `<div class="manager-readonly-note"><svg><use href="#i-cash"/></svg><div><strong>Phiếu thu TM = 0đ là đúng — ca không bàn giao tiền mặt</strong><span>Doanh thu qua QR/ZaloPay vào TK 112, không vào két. Đối chiếu sao kê điện tử; không ghi QR vào thực nộp.</span></div></div>`
+      : '';
+    const cashCellHint = zeroCashElectronic ? '<small>Ca QR/CK — không TM bàn giao</small>' : '';
     const refundTable = refunds.length
       ? `<div class="warehouse-table-wrap warehouse-form-lines"><table class="warehouse-table"><thead><tr><th>PHIẾU ĐỔI TRẢ</th><th>HÓA ĐƠN GỐC</th><th>CA BÁN</th><th>NGƯỜI HOÀN</th><th>SỐ TIỀN</th><th>THỜI ĐIỂM</th></tr></thead><tbody>${refunds.map(row => `<tr><td><strong>${esc(row.MaDT)}</strong><small>${esc(row.HinhThucXuLy || '')}</small></td><td>${esc(row.MaHD || '—')}</td><td>${esc(row.MaCaBan && row.MaCaBan !== shift.MaCa ? row.MaCaBan : 'Ca này / không gắn')}</td><td>${esc(row.NguoiHoan || '—')}</td><td class="num">${money(row.SoTienHoan)}</td><td>${fmtDateTime(row.NgayHoan)}</td></tr>`).join('')}</tbody></table></div>`
       : '';
     const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
     overlay.innerHTML = `<div class="warehouse-modal order-detail-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">ĐỐI SOÁT DOANH THU THEO CA</p><h2>${esc(shift.MaCa)}</h2></div><button type="button" class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body">
-      <div class="warehouse-stats"><article><span>THỰC THU / DOANH THU CA</span><strong>${money(revenue)}</strong><small>${detail.invoices.filter(row => row.TrangThai === 'Hoàn thành').length} hóa đơn hoàn thành</small></article><article><span>TIỀN MẶT THU</span><strong>${money(shift.TongTienMat)}</strong></article><article><span>CHUYỂN KHOẢN</span><strong>${money(shift.TongTienChuyenKhoan)}</strong></article><article><span>QR</span><strong>${money(shift.TongTienQR)}</strong></article><article><span>THẺ</span><strong>${money(shift.TongTienThe)}</strong></article><article><span>HOÀN TIỀN MẶT</span><strong>${money(shift.TongTienHoanMat)}</strong></article></div>
-      ${refundNote}<p class="receipt-rule">Thực thu = tổng hóa đơn Hoàn thành. Tiền mặt phải bàn giao = TM thành công − hoàn TM (không gồm quỹ đầu ca, QR/thẻ/CK). Phiếu thu không ghi doanh thu lần hai${negativeCash ? ' và được phép âm khi hoàn TM lớn hơn thu TM' : ''}.</p>
-      <div class="warehouse-detail-grid"><div><span>THU NGÂN</span><strong>${esc(shift.TenNV)}</strong></div><div><span>QUẦY</span><strong>${esc(shift.TenQuay || '—')}</strong></div><div><span>BẮT ĐẦU</span><strong>${fmtDateTime(shift.ThoiGianBatDau)}</strong></div><div><span>KẾT THÚC</span><strong>${fmtDateTime(shift.ThoiGianKetThuc)}</strong></div><div><span>TM HỆ THỐNG</span><strong>${money(shift.TienMatHeThong)}</strong></div><div><span>THỰC NỘP</span><strong>${money(shift.TienThucNop)}</strong></div><div><span>CHÊNH LỆCH</span><strong>${money(difference)}</strong></div><div><span>PHIẾU THU</span><strong>${esc(shift.MaPT || 'Chưa lập')}</strong></div></div>
+      <p class="warehouse-kicker">PHẦN TIỀN MẶT</p><div class="warehouse-stats"><article><span>THỰC THU / DOANH THU CA</span><strong>${money(revenue)}</strong><small>${detail.invoices.filter(row => row.TrangThai === 'Hoàn thành').length} hóa đơn hoàn thành</small></article><article><span>BÁN TM</span><strong>${money(shift.TongTienMat)}</strong></article><article><span>HOÀN TM</span><strong>${money(shift.TongTienHoanMat)}</strong></article><article><span>DÒNG TM THUẦN</span><strong>${money(shift.TienMatHeThong)}</strong><small>Không gồm quỹ đầu ca</small></article></div><p class="warehouse-kicker">PHẦN ZALOPAY</p><div class="warehouse-stats"><article><span>THANH TOÁN QR</span><strong>${money(shift.TongTienQR)}</strong></article><article><span>HOÀN QR</span><strong>${money(shift.TongTienHoanQR || 0)}</strong></article><article><span>QR RÒNG</span><strong>${money(Number(shift.TongTienQR || 0) - Number(shift.TongTienHoanQR || 0))}</strong></article><article><span>CK / THẺ</span><strong>${money(Number(shift.TongTienChuyenKhoan || 0) + Number(shift.TongTienThe || 0))}</strong></article></div>
+      ${refundNote}${electronicNote}<p class="receipt-rule">Thực thu = tổng hóa đơn Hoàn thành. Tiền mặt phải bàn giao = TM thành công − hoàn TM (không gồm quỹ đầu ca, QR/thẻ/CK). Phiếu thu không ghi doanh thu lần hai${negativeCash ? ' và được phép âm khi hoàn TM lớn hơn thu TM' : ''}.</p>
+      <div class="warehouse-detail-grid"><div><span>THU NGÂN</span><strong>${esc(shift.TenNV)}</strong></div><div><span>QUẦY</span><strong>${esc(shift.TenQuay || '—')}</strong></div><div><span>BẮT ĐẦU</span><strong>${fmtDateTime(shift.ThoiGianBatDau)}</strong></div><div><span>KẾT THÚC</span><strong>${fmtDateTime(shift.ThoiGianKetThuc)}</strong></div><div><span>TM HỆ THỐNG</span><strong>${money(shift.TienMatHeThong)}</strong>${Number(shift.TienMatHeThong) === 0 && zeroCashElectronic ? cashCellHint : ''}</div><div><span>THỰC NỘP</span><strong>${money(shift.TienThucNop)}</strong>${cashCellHint}</div><div><span>CHÊNH LỆCH</span><strong>${money(difference)}</strong></div><div><span>PHIẾU THU</span><strong>${esc(shift.MaPT || 'Chưa lập')}</strong></div></div>
       ${refundTable}
       <div class="warehouse-table-wrap warehouse-form-lines"><table class="warehouse-table"><thead><tr><th>HÓA ĐƠN</th><th>THỜI ĐIỂM</th><th>TỔNG THANH TOÁN</th><th>TRẠNG THÁI</th></tr></thead><tbody>${detail.invoices.length ? detail.invoices.map(row => `<tr><td><strong>${esc(row.MaHD)}</strong></td><td>${fmtDateTime(row.NgayLap)}</td><td class="num">${money(row.TongThanhToan)}</td><td>${esc(row.TrangThai)}</td></tr>`).join('') : '<tr><td colspan="4" class="warehouse-empty">Không có hóa đơn bán trong ca — chỉ có hoàn trả thì doanh thu = 0.</td></tr>'}</tbody></table></div>
-      <div class="warehouse-panel-title" style="margin-top:16px"><div><p>THANH TOÁN ĐIỆN TỬ THEO CA</p><h2>MoMo / QR — không vào két</h2></div></div>
+      <div class="warehouse-panel-title" style="margin-top:16px"><div><p>THANH TOÁN ĐIỆN TỬ THEO CA</p><h2>ZaloPay / QR — không vào két</h2></div></div>
       <div class="warehouse-table-wrap warehouse-form-lines"><table class="warehouse-table"><thead><tr><th>HÓA ĐƠN</th><th>PHƯƠNG THỨC</th><th>MÃ GD</th><th>NGUỒN</th><th>TRẠNG THÁI</th><th>SỐ TIỀN</th><th>NGÀY TT</th></tr></thead><tbody>${(detail.payments || []).filter(row => row.PhuongThuc !== 'Tiền mặt').length ? (detail.payments || []).filter(row => row.PhuongThuc !== 'Tiền mặt').map(row => `<tr><td><strong>${esc(row.MaHD)}</strong>${row.MaThamChieuCong ? `<small title="${esc(row.MaThamChieuCong)}">order ${esc(row.MaThamChieuCong)}</small>` : ''}</td><td>${esc(row.PhuongThuc)}</td><td>${esc(row.MaGiaoDich || '—')}</td><td>${esc(row.NguonXacNhan || '—')}</td><td>${esc(row.TrangThai)}</td><td class="num">${money(row.SoTien)}</td><td>${fmtDateTime(row.NgayTT)}</td></tr>`).join('') : '<tr><td colspan="7" class="warehouse-empty">Không có thanh toán điện tử trong ca.</td></tr>'}</tbody></table></div>
     </div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Đóng</button>${shift.TrangThaiPhieuThu === 'Đã xác nhận' ? '<button type="button" class="warehouse-primary print-receipt">In Phiếu thu</button>' : shift.MaPT ? '<button type="button" class="warehouse-primary confirm-receipt">Xác nhận Phiếu thu</button>' : `<button type="button" class="warehouse-primary create-receipt">${negativeCash ? 'Lập Phiếu thu (số âm do hoàn trả)' : 'Lập Phiếu thu'}</button>`}</div></div>`;
     document.body.appendChild(overlay);
@@ -1331,10 +1372,10 @@
         const data = await api(context, '/accounting/shift-settlements');
         const items = data.items || [];
         const summary = data.summary || {};
-        root.innerHTML = `${heading('KẾ TOÁN / ĐỐI SOÁT BÁN LẺ', 'Doanh thu theo ca và Phiếu thu', 'Thực thu = tổng hóa đơn hoàn thành của ca. Phiếu thu chỉ đối soát tiền mặt bàn giao, không ghi doanh thu lần hai. TM hệ thống âm là do hoàn trả (thường hóa đơn ca trước), vẫn lập Phiếu thu được.')}
+        root.innerHTML = `${heading('KẾ TOÁN / ĐỐI SOÁT BÁN LẺ', 'Doanh thu theo ca và Phiếu thu', 'Thực thu = tổng hóa đơn hoàn thành; phiếu thu / thực nộp chỉ tiền mặt bàn giao — QR ZaloPay vào TK 112, không vào két; TM hệ thống âm là do hoàn trả, vẫn lập Phiếu thu được.')}
           <div class="warehouse-stats"><article><span>THỰC THU CÁC CA ĐÃ CHỐT</span><strong>${money(summary.DoanhThu)}</strong><small>${items.length} ca đã đóng</small></article><article><span>TIỀN MẶT HỆ THỐNG</span><strong>${money(summary.TienMatHeThong)}</strong><small>TM thành công − hoàn TM</small></article><article><span>THỰC NỘP</span><strong>${money(summary.TienThucNop)}</strong><small>Tiền mặt thu ngân bàn giao</small></article><article><span>ĐIỆN TỬ (CK + QR + THẺ)</span><strong>${money(Number(summary.TongTienChuyenKhoan || 0) + Number(summary.TongTienQR || 0) + Number(summary.TongTienThe || 0))}</strong><small>Đối chiếu sao kê, không vào két</small></article></div>
           <article class="warehouse-table-card"><div class="warehouse-panel-title"><div><p>CA ĐÃ ĐÓNG</p><h2>Hàng đợi đối soát doanh thu và tiền mặt</h2></div><button class="warehouse-secondary" id="refreshSettlements"><svg><use href="#i-refresh"/></svg>Làm mới</button></div>
-          <div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>CA / THU NGÂN</th><th>KẾT THÚC</th><th>THỰC THU</th><th>TM / CK / QR / THẺ</th><th>TM HỆ THỐNG</th><th>THỰC NỘP</th><th>CHÊNH LỆCH</th><th>ĐỐI SOÁT</th><th>THAO TÁC</th></tr></thead><tbody>${items.length ? items.map(item => `<tr><td><strong>${esc(item.MaCa)}</strong><small>${esc(item.TenNV)} · ${esc(item.TenQuay || '—')}</small></td><td>${fmtDateTime(item.ThoiGianKetThuc)}</td><td class="num"><strong>${money(item.DoanhThu)}</strong><small>${item.SoHoaDon || 0} HĐ</small></td><td class="num"><small>TM ${money(item.TongTienMat)}<br>CK ${money(item.TongTienChuyenKhoan)}<br>QR ${money(item.TongTienQR)} · Thẻ ${money(item.TongTienThe)}</small></td><td class="num">${money(item.TienMatHeThong)}${Number(item.TienMatHeThong) < 0 ? `<small>Hoàn TM ${money(item.TongTienHoanMat)} — không phải lỗi quỹ</small>` : ''}</td><td class="num">${money(item.TienThucNop)}</td><td class="num"><strong>${money(item.ChenhLech)}</strong></td><td><span class="status-pill ${item.TrangThaiDoiSoat === 'Đã đối soát' ? 'ok' : 'sent'}">${esc(item.TrangThaiDoiSoat)}</span></td><td><button class="warehouse-primary settlement-action" data-ca="${item.MaCa}">Xem thực thu</button></td></tr>`).join('') : '<tr><td colspan="9" class="warehouse-empty">Chưa có ca đã đóng. Thu ngân phải đóng ca bán hàng trước.</td></tr>'}</tbody></table></div></article>`;
+          <div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>CA / THU NGÂN</th><th>KẾT THÚC</th><th>THỰC THU</th><th>TM / CK / QR / THẺ</th><th>TM HỆ THỐNG</th><th>THỰC NỘP</th><th>CHÊNH LỆCH</th><th>ĐỐI SOÁT</th><th>THAO TÁC</th></tr></thead><tbody>${items.length ? items.map(item => `<tr><td><strong>${esc(item.MaCa)}</strong><small>${esc(item.TenNV)} · ${esc(item.TenQuay || '—')}</small></td><td>${fmtDateTime(item.ThoiGianKetThuc)}</td><td class="num"><strong>${money(item.DoanhThu)}</strong><small>${item.SoHoaDon || 0} HĐ</small></td><td class="num">${settlementSplitCell(item)}</td><td class="num">${settlementSystemCashCell(item)}</td><td class="num">${settlementHandoverCell(item)}</td><td class="num"><strong>${money(item.ChenhLech)}</strong></td><td><span class="status-pill ${item.TrangThaiDoiSoat === 'Đã đối soát' ? 'ok' : 'sent'}">${esc(item.TrangThaiDoiSoat)}</span></td><td><button class="warehouse-primary settlement-action" data-ca="${item.MaCa}">Xem thực thu</button></td></tr>`).join('') : '<tr><td colspan="9" class="warehouse-empty">Chưa có ca đã đóng. Thu ngân phải đóng ca bán hàng trước.</td></tr>'}</tbody></table></div></article>`;
         root.querySelector('#refreshSettlements').addEventListener('click', load);
         root.querySelectorAll('.settlement-action').forEach(button => button.addEventListener('click', async () => {
           try { await openSettlementDetail(context, button.dataset.ca, load); }

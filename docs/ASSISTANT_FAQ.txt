@@ -14,13 +14,13 @@ Q: Ba cột tiền của Fly là gì?
 Tags: ba cot tien doanh thu ket ca cong no
 A: (A) Doanh thu và giá vốn lúc hóa đơn Hoàn thành. (B) Két ca chỉ tiền mặt (TM thu trừ hoàn TM). (C) Nợ NCC chỉ sau đối chiếu 3 bên Khớp.
 
-Q: MoMo có vào két tiền mặt không?
-Tags: momo qr ket tien mat phieu thu
-A: Không. POS P1 thu Tiền mặt hoặc MoMo (PhuongThuc=QR, NguonXacNhan=MoMo). MoMo không vào két và không vào Phiếu thu ca.
+Q: QR / ZaloPay có vào két tiền mặt không?
+Tags: momo zalopay qr ket tien mat phieu thu
+A: Không. POS P1 hiện thu Tiền mặt hoặc ZaloPay (PhuongThuc=QR, NguonXacNhan=ZaloPay). Hóa đơn cũ có thể NguonXacNhan=MoMo — vẫn là QR. QR không vào két và không vào Phiếu thu ca.
 
-Q: Khách trả nửa tiền mặt nửa MoMo thì phiếu thu tính sao?
-Tags: hon hop tm momo phieu thu ket
-A: Chỉ phần tiền mặt vào két và phiếu thu. Phần MoMo không vào phiếu thu. Doanh thu đã ghi lúc hóa đơn hoàn thành.
+Q: Khách trả nửa tiền mặt nửa ZaloPay thì phiếu thu tính sao?
+Tags: hon hop tm momo zalopay phieu thu ket
+A: Chỉ phần tiền mặt vào két và phiếu thu. Phần QR (ZaloPay hoặc MoMo lịch sử) không vào phiếu thu. Doanh thu đã ghi lúc hóa đơn hoàn thành.
 
 Q: Quản lý có xem tồn kho chi tiết toàn cửa hàng không?
 Tags: quan ly ton kho uc15 dashboard
@@ -67,8 +67,8 @@ Tags: train context llm
 A: Không. Nhóm không huấn luyện mô hình. Mỗi câu hỏi được nhét luật FAQ và số liệu lấy lúc hỏi vào context.
 
 Q: AI chết thì bán hàng còn chạy không?
-Tags: pos momo telegram fallback
-A: Có. Thiếu API key hoặc lỗi nhà cung cấp LLM không chặn POS, ca, MoMo, Telegram, sổ cái.
+Tags: pos zalopay telegram fallback
+A: Có. Thiếu API key hoặc lỗi nhà cung cấp LLM không chặn POS, ca, ZaloPay, Telegram, sổ cái.
 
 Q: Nhật ký trợ lý ghi gì?
 Tags: audit nhat ky uc01
@@ -89,3 +89,23 @@ A: Tab Hôm nay / Cảnh báo / Phân tích / Kịch bản lấy số từ analy
 Q: Kịch bản what-if do ai tính?
 Tags: kich ban what if engine
 A: scenarioEngine tính theo công thức cố định từ KQKD/tồn đúng quyền. LLM chỉ giải thích kết quả, không bịa công thức.
+
+Q: Hoàn ZaloPay / QR có lấy tiền từ két không?
+Tags: hoan zalopay qr ket cam nang 8 trieu
+A: Không. 1 triệu mở ca là quỹ lẻ, không thế chấp QR. HĐ gốc ZaloPay thì Refund về zp_trans_id gốc — két không đổi. Không lấy 8 triệu từ két 1 triệu. Không hỏi QR/STK khách. Gửi hoàn ≠ khách đã có tiền; khách được về khi Đang xử lý. Thất bại thì Query/thử lại, không trả tiền mặt.
+
+Q: Thu ngân được đổi hoàn ZaloPay sang tiền mặt không?
+Tags: hoan qr tien mat ngoai le quan ly
+A: Không. POS khóa kênh gốc. Không có nút ngoại lệ QL trong phiên này. Thiếu zp_trans_id thì từ chối hoàn ZaloPay, không bịa mã. MoMo lịch sử không gọi Refund ZaloPay.
+
+Q: Đổi hàng ngang / đắt / rẻ xử lý tiền thế nào?
+Tags: doi hang ngang dat re chenh
+A: Ngang giá: kho +A −B, 0 hoàn. Đắt hơn: thu chênh TM hoặc ZaloPay mới — không hoàn 500 rồi thu 700. Rẻ hơn: hoàn chênh đúng kênh gốc. Hóa đơn gốc không sửa.
+
+Q: Hôm nay có ca nào thu tiền mặt hay chỉ QR?
+Tags: ca ban tien mat qr hom nay thanh toan tm vs qr ca nao bang
+A: Cùng ngày vận hành với thẻ thanh toán: từng kênh TM/QR và từng ca (MaCa) mở/chốt. Tiền mặt vào két và phiếu thu; QR/ZaloPay không vào két. Hỏi “hôm nay có bán tiền mặt không”, “ca nào thu TM”, “QR hay tiền mặt” — không phải menu Chứng từ/Báo cáo.
+
+Q: Hỏi lại tiền mặt sau khi xem QR thì lấy số nào?
+Tags: hoi lai follow up qr tien mat ca thanh toan khong e
+A: Cùng bảng ThanhToan và cùng ngày vận hành với câu QR trước đó. “Có ca nào bằng tiền mặt không” là hỏi TM vs QR theo ca, không phải nút Chứng từ hay Báo cáo.

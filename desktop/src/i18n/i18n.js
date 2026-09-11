@@ -66,6 +66,8 @@
     'Yêu cầu chỉnh sửa': 'st.revise',
     'Từ chối': 'st.rejected',
     'Hoàn thành': 'st.done',
+    'Đang hoàn tiền': 'st.refunding',
+    'Hoàn tiền thất bại': 'st.refundFail',
     'Đã hủy': 'st.cancelled',
     'Đã gửi Nhà cung cấp': 'st.sentNcc',
     'Nhà cung cấp xác nhận': 'st.nccOk',

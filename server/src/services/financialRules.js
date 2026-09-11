@@ -27,16 +27,111 @@ const isRestockAccepted = text => {
 
 const looksUnsellable = text => /hỏng|hết hạn|kém chất|lỗi cửa hàng|không bán/i.test(String(text || ''));
 
-// Chương 6 quy ước dòng "Hàng giao đổi" chỉ dùng khi đổi ngang giá.
-// Nếu khác giá, nghiệp vụ phải hoàn hàng cũ và lập hóa đơn bán mới.
+// Đổi ngang = không đụng tiền. Khác giá: hoàn chênh hoặc thu chênh trên cùng phiếu — không hoàn hết rồi bán lại.
 const isEqualValueExchange = (returnedValue, exchangeValue) => moneyMatches(
     roundMoney(returnedValue),
     roundMoney(exchangeValue)
 );
 
-// Két dự kiến = quỹ đầu ca + tiền mặt thu − hoàn tiền mặt. Có thể nhỏ hơn quỹ đầu ca.
+const exchangeMoneyDelta = (returnedValue, exchangeValue) => {
+    const returned = roundMoney(returnedValue);
+    const issued = roundMoney(exchangeValue);
+    if (isEqualValueExchange(returned, issued)) {
+        return { kind: 'equal', amount: 0, soTienHoan: 0, soTienThuThem: 0 };
+    }
+    if (returned > issued) {
+        const amount = roundMoney(returned - issued);
+        return { kind: 'refund', amount, soTienHoan: amount, soTienThuThem: 0 };
+    }
+    const amount = roundMoney(issued - returned);
+    return { kind: 'collect', amount, soTienHoan: 0, soTienThuThem: amount };
+};
+
+// Số dư két dự kiến = quỹ đầu ca + TM thu − hoàn TM. QR hoàn không vào công thức này.
+// Hàm chỉ tính số; không được dùng để cho phép két âm — chặn ở cashRefundBlockedByDrawer.
 const expectedDrawerCash = ({ TienDauCa = 0, TongTienMat = 0, TongTienHoanMat = 0 } = {}) =>
     roundMoney(number(TienDauCa) + number(TongTienMat) - number(TongTienHoanMat));
+
+const dongTmThuan = ({ TongTienMat = 0, TongTienHoanMat = 0 } = {}) =>
+    roundMoney(number(TongTienMat) - number(TongTienHoanMat));
+
+const qrNet = ({ TongTienQR = 0, TongTienHoanQR = 0 } = {}) =>
+    roundMoney(number(TongTienQR) - number(TongTienHoanQR));
+
+const REFUND_METHODS = ['Tiền mặt', 'QR', 'Thẻ', 'Chuyển khoản'];
+const RETURN_DONE_STATUSES = ['Hoàn thành'];
+const RETURN_MONEY_PENDING = 'Đang hoàn tiền';
+const RETURN_MONEY_FAILED = 'Hoàn tiền thất bại';
+const RETURN_CLOSED_STATUSES = ['Hoàn thành', 'Từ chối', 'Đã hủy'];
+const RETURN_DONE_SQL = `dt.TrangThai=N'Hoàn thành'`;
+const RETURN_OPEN_SQL = `dt.TrangThai NOT IN (N'Hoàn thành', N'Từ chối', N'Đã hủy')`;
+
+const isSettledReturn = status => RETURN_DONE_STATUSES.includes(String(status || ''));
+const isReturnMoneyPending = status => String(status || '') === RETURN_MONEY_PENDING;
+const isReturnMoneyFailed = status => String(status || '') === RETURN_MONEY_FAILED;
+
+const canonicalRefundMethod = method => {
+    const value = String(method || '').trim();
+    if (/zalo|momo|^qr$/i.test(value)) return 'QR';
+    return REFUND_METHODS.includes(value) ? value : '';
+};
+
+const originalInvoicePayMethod = (payments = []) => {
+    const successful = (Array.isArray(payments) ? payments : []).filter(row =>
+        !row.TrangThai || row.TrangThai === 'Thành công'
+    );
+    if (!successful.length) return '';
+    const top = [...successful].sort((left, right) => number(right.SoTien) - number(left.SoTien))[0];
+    return canonicalRefundMethod(top.PhuongThuc);
+};
+
+const defaultRefundMethod = (originalMethod, payments = []) =>
+    canonicalRefundMethod(originalMethod) || originalInvoicePayMethod(payments) || 'Tiền mặt';
+
+// HĐ gốc QR → bắt buộc hoàn QR/ZaloPay. Thu ngân không được đổi sang tiền mặt.
+const cashierMayRefundCash = (originalMethod, payments = []) =>
+    defaultRefundMethod(originalMethod, payments) === 'Tiền mặt';
+
+const cashRefundExceedsDrawer = (soTienHoan, tienMatTrongKet) =>
+    roundMoney(soTienHoan) > 0 && roundMoney(soTienHoan) > roundMoney(tienMatTrongKet);
+
+// Chặn cứng: két vật lý không âm. expectedDrawerCash âm cũng không được dùng để vẫn hoàn TM.
+const cashRefundBlockedByDrawer = (soTienHoan, tienMatTrongKet) =>
+    cashRefundExceedsDrawer(soTienHoan, tienMatTrongKet) || roundMoney(tienMatTrongKet) < 0;
+
+const formatVndPlain = value => `${roundMoney(value).toLocaleString('vi-VN')} đ`;
+
+const cashRefundDrawerBlock = ({ soTienHoan, tienMatTrongKet } = {}) => {
+    if (!cashRefundBlockedByDrawer(soTienHoan, tienMatTrongKet)) return '';
+    return `Số dư két không đủ để hoàn tiền. Số dư khả dụng: ${formatVndPlain(tienMatTrongKet)}. Số tiền cần hoàn: ${formatVndPlain(soTienHoan)}. Vui lòng hoàn về phương thức thanh toán ban đầu.`;
+};
+
+const cashRefundDrawerWarning = cashRefundDrawerBlock;
+
+const refundableQrRemaining = (originalQrPaid, alreadyRefundedQr) =>
+    roundMoney(Math.max(0, number(originalQrPaid) - number(alreadyRefundedQr)));
+
+const qrRefundWouldExceedCap = (amount, originalQrPaid, alreadyRefundedQr) =>
+    roundMoney(amount) > refundableQrRemaining(originalQrPaid, alreadyRefundedQr);
+
+// MaGiaoDich lúc QR Thành công = zp_trans_id. Không bịa mã nếu thiếu.
+const zpTransIdOf = (payment = {}) => {
+    const direct = String(payment.MaGiaoDich || payment.zp_trans_id || payment.ZpTransId || '').trim();
+    if (direct) return direct;
+    const note = String(payment.GhiChu || '');
+    const match = note.match(/zp_trans_id:([0-9A-Za-z._-]+)/i);
+    return match ? match[1] : '';
+};
+
+const nextRefundSendAction = ({ currentTxStatus, queryClassification } = {}) => {
+    const status = String(currentTxStatus || '').toUpperCase();
+    const klass = String(queryClassification || '');
+    if (status === 'DANG_XU_LY' || klass === 'pending' || klass === 'authorized') return 'query_only';
+    if (status === 'THANH_CONG' || klass === 'success') return 'already_done';
+    if (status === 'THAT_BAI' || klass === 'failure') return 'resend_after_fail';
+    if (status === 'CHO_GUI' || !status) return 'create';
+    return 'query_only';
+};
 
 const cashHandoverExcludingOpening = (tienCuoiCa, tienDauCa) =>
     roundMoney(number(tienCuoiCa) - number(tienDauCa));
@@ -196,9 +291,34 @@ module.exports = {
     isRestockAccepted,
     looksUnsellable,
     isEqualValueExchange,
+    exchangeMoneyDelta,
     roundMoney,
     moneyMatches,
     expectedDrawerCash,
+    dongTmThuan,
+    qrNet,
+    REFUND_METHODS,
+    RETURN_DONE_STATUSES,
+    RETURN_MONEY_PENDING,
+    RETURN_MONEY_FAILED,
+    RETURN_CLOSED_STATUSES,
+    RETURN_DONE_SQL,
+    RETURN_OPEN_SQL,
+    isSettledReturn,
+    isReturnMoneyPending,
+    isReturnMoneyFailed,
+    canonicalRefundMethod,
+    originalInvoicePayMethod,
+    defaultRefundMethod,
+    cashierMayRefundCash,
+    cashRefundExceedsDrawer,
+    cashRefundBlockedByDrawer,
+    cashRefundDrawerBlock,
+    cashRefundDrawerWarning,
+    refundableQrRemaining,
+    qrRefundWouldExceedCap,
+    zpTransIdOf,
+    nextRefundSendAction,
     cashHandoverExcludingOpening,
     calculateGrossProfit,
     evaluateThreeWayMatch

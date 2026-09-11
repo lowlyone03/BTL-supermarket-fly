@@ -113,12 +113,20 @@ const postSaleJournals = async (transaction, { maHD, maNV, user, late = false })
     return { sale, cogs };
 });
 
-const postReturnJournals = async (transaction, { maDT, maNV, user, late = false }) => safePost(transaction, user, async () => {
+const postReturnJournals = async (transaction, {
+    maDT, maNV, user, late = false, includeMoney, includeStock
+} = {}) => safePost(transaction, user, async () => {
     const header = await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT).query(`
         SELECT dt.*, CONVERT(date, COALESCE(dt.NgayHoan, dt.NgayLap)) NgayCT
         FROM PhieuDoiTra dt WHERE dt.MaDT=@MaDT`);
     const ticket = header.recordset[0];
-    if (!ticket || ticket.TrangThai !== 'Hoàn thành') return { skipped: true };
+    if (!ticket) return { skipped: true };
+    const status = String(ticket.TrangThai || '');
+    const moneyReady = status === 'Hoàn thành';
+    const stockReady = moneyReady || status === 'Đang hoàn tiền' || status === 'Hoàn tiền thất bại';
+    const doMoney = includeMoney !== false && moneyReady;
+    const doStock = includeStock !== false && stockReady;
+    if (!doMoney && !doStock) return { skipped: true };
     const returned = await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT).query(`
         SELECT ct.*, hd.SoLuong SoLuongBan, hd.ThanhTien ThanhTienBan,
                hd.ThanhTienSauGiam, hd.ThueSuat ThueSuatHD, hd.TienThue TienThueHD, hd.ThanhTienVon ThanhTienVonBan
@@ -130,7 +138,7 @@ const postReturnJournals = async (transaction, { maDT, maNV, user, late = false 
         SELECT * FROM ChiTietDoiTra WHERE MaDT=@MaDT AND LoaiDong=N'Hàng giao đổi'`);
 
     const results = {};
-    if (ticket.HinhThucXuLy === 'Hoàn tiền' && n(ticket.SoTienHoan) > 0) {
+    if (doMoney && n(ticket.SoTienHoan) > 0) {
         let vat = 0;
         let net = 0;
         const allocated = [];
@@ -166,7 +174,7 @@ const postReturnJournals = async (transaction, { maDT, maNV, user, late = false 
         });
     }
 
-    const restock = /ược nhập lại kho/i.test(String(ticket.KetQuaKiemTra || ''))
+    const restock = doStock && /ược nhập lại kho/i.test(String(ticket.KetQuaKiemTra || ''))
         && !/không nhập lại/i.test(String(ticket.KetQuaKiemTra || ''));
     if (restock) {
         const von = roundMoney(returned.recordset.reduce((sum, line) => sum + n(line.ThanhTienVon), 0));
@@ -178,7 +186,7 @@ const postReturnJournals = async (transaction, { maDT, maNV, user, late = false 
             maNV, user, late
         });
     }
-    if (exchanged.recordset.length) {
+    if (doStock && exchanged.recordset.length) {
         const von = roundMoney(exchanged.recordset.reduce((sum, line) => sum + n(line.ThanhTienVon), 0));
         results.doi = await postJournal(transaction, {
             loaiChungTu: 'PhieuDoiTra', maChungTu: maDT, loaiButToan: 'DOI_TRA_GIAO_DOI',

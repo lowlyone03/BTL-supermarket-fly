@@ -14,10 +14,23 @@ const config = {
     }
 };
 
+const isTransactionParent = parent => Boolean(
+    parent
+    && typeof parent.begin === 'function'
+    && typeof parent.commit === 'function'
+    && typeof parent.rollback === 'function'
+    && parent.isolationLevel !== undefined
+);
+
 const rawQuery = sql.Request.prototype.query;
 let queryGate = Promise.resolve();
 sql.Request.prototype.query = function querySerialized(command, callback) {
-    if (typeof callback === 'function') return rawQuery.call(this, command, callback);
+    // Query trên Transaction đi thẳng: connection riêng, đã tuần tự theo _activeRequest.
+    // Nếu nhét chúng vào queryGate chung với Telegram/pool thì Telegram SELECT (chờ khóa
+    // SERIALIZABLE) giữ cổng JS, transaction không COMMIT được → Query timeout HYT00.
+    if (isTransactionParent(this.parent) || typeof callback === 'function') {
+        return rawQuery.call(this, command, callback);
+    }
     const run = () => rawQuery.call(this, command);
     const pending = queryGate.then(run, run);
     queryGate = pending.then(() => undefined, () => undefined);
@@ -27,11 +40,11 @@ sql.Request.prototype.query = function querySerialized(command, callback) {
 const poolPromise = new sql.ConnectionPool(config)
   .connect()
   .then(pool => {
-    console.log('✅ Đã kết nối tới SQL Server (bằng Windows Authentication) thành công!');
+    require('./termLog').ok('SQL Server - Windows Authentication');
     return pool;
   })
   .catch(err => {
-    console.error('❌ Lỗi kết nối CSDL: ', err.message);
+    require('./termLog').err('Lỗi kết nối CSDL: ' + err.message);
     throw err;
   });
 

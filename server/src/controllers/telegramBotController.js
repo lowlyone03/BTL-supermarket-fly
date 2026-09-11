@@ -9,11 +9,11 @@ const {
     langKeyboardRow, buildStartWelcomeUnbound, buildStartWelcomeBound,
     buildStartWelcomeGuest, buildHelpMessage, buildTodayMessage,
     buildRevenueMessage, buildFlyDashboard, buildDebtMessage, buildLowstockMessage,
-    buildShiftsMessage, buildPaymentsMessage, buildPendingMessage, buildAlertsMessage,
+    buildShiftsMessage, buildPaymentsMessage, summarizePaymentShifts, buildPendingMessage, buildAlertsMessage,
     buildPayrollSummaryMessage, buildPayrollOneMessage,
     buildReportsMenu, reportsMenuKeyboard, buildPnlOnlyMessage,
     buildManagementReportMessage, managementReportKeyboard,
-    replyKeyboard, matchReplyCommand, removeKeyboardMarkup, showMenuInlineKeyboard
+    replyKeyboard, matchReplyCommand, looksLikeTopicFollowUp, removeKeyboardMarkup, showMenuInlineKeyboard
 } = require('../services/telegramMessages');
 const teleGuide = require('../services/telegramGuide');
 const teleAsk = require('../services/telegramAsk');
@@ -35,6 +35,7 @@ const READ_CALLBACK = /^(cmd|cmd:)\w+$/i;
 const PUBLIC_CALLBACKS = new Set(['linkguide', 'help']);
 const pendingLangByChat = new Map();
 const pendingAskByChat = new Map();
+const lastReportByChat = new Map();
 const kbBoundByChat = new Map();
 const seenUpdateIds = new Map();
 const PENDING_ASK_TTL_MS = 10 * 60 * 1000;
@@ -595,6 +596,12 @@ const commandNavigation = (name, lang = 'vi', refreshData = '') => {
         { text: copy.refresh, callback_data: callback },
         { text: copy.home, callback_data: 'cmd:fly' }
     ]];
+    if (name === 'payments') {
+        rows.push([
+            { text: t(lang, 'payChipCash'), callback_data: 'cmd:payments' },
+            { text: t(lang, 'payChipShift'), callback_data: 'cmd:payments' }
+        ]);
+    }
     if (!['reports', 'docs', 'fly'].includes(name)) {
         rows.push([
             { text: copy.reports, callback_data: 'cmd:reports' },
@@ -786,8 +793,21 @@ const cmdPayments = async (pool, user, lang = 'vi') => {
         FROM ThanhToan tt JOIN HoaDon hd ON hd.MaHD=tt.MaHD
         WHERE tt.NgayTT>=@FromR AND tt.NgayTT<@ToR ${filter}
         ORDER BY tt.NgayTT DESC`).catch(() => ({ recordset: [] }));
+    const shiftReq = sqlReq(pool)
+        .input('FromS', sql.DateTime, new Date(win.fromSql.replace(' ', 'T')))
+        .input('ToS', sql.DateTime, new Date(win.toSql.replace(' ', 'T')));
+    if (isTn) shiftReq.input('MaNV', sql.VarChar, user.MaNV);
+    const byShift = await shiftReq.query(`
+        SELECT hd.MaCa, ca.TrangThai, tt.PhuongThuc, COUNT(*) SoLuong, COALESCE(SUM(tt.SoTien),0) Tong
+        FROM ThanhToan tt JOIN HoaDon hd ON hd.MaHD=tt.MaHD
+        LEFT JOIN CaLamViec ca ON ca.MaCa=hd.MaCa
+        WHERE tt.NgayTT>=@FromS AND tt.NgayTT<@ToS ${filter}
+        GROUP BY hd.MaCa, ca.TrangThai, tt.PhuongThuc`).catch(() => ({ recordset: [] }));
     return buildPaymentsMessage({
-        day, channels: result.recordset || [], recent: recent.recordset || []
+        day,
+        channels: result.recordset || [],
+        recent: recent.recordset || [],
+        shifts: summarizePaymentShifts(byShift.recordset || [])
     }, lang);
 };
 
@@ -1051,21 +1071,35 @@ const consumeAskWait = (chatId) => {
     return ok;
 };
 
+const rememberLastReport = (chatId, name, period = 'today') => {
+    const now = Date.now();
+    for (const [id, row] of lastReportByChat) {
+        if (now - row.at > PENDING_ASK_TTL_MS) lastReportByChat.delete(id);
+    }
+    lastReportByChat.set(String(chatId), { name, period, at: now });
+};
+
+const peekLastReport = (chatId) => {
+    const row = lastReportByChat.get(String(chatId));
+    if (!row || (Date.now() - row.at) > PENDING_ASK_TTL_MS) return null;
+    return row;
+};
+
+const resolveFollowUpCommand = (chatId, text) => {
+    const last = peekLastReport(chatId);
+    if (!last || !looksLikeTopicFollowUp(text)) return null;
+    return { name: last.name, via: 'followup', period: last.period };
+};
+
 const refreshReplyKeyboard = async (chatId) => {
     const live = kbBoundByChat.get(String(chatId)) || { bound: false, lang: langOf(chatId), hidden: false };
     if (live.hidden) return;
     try {
-        const ghost = await notify.sendMessage(chatId, '\u2060', {
+        // Không gửi tin ma rồi deleteMessage: Desktop giữ Reply Keyboard, Android/iOS gỡ luôn.
+        await notify.sendMessage(chatId, t(live.lang, 'kbPinHint'), {
             disable_notification: true,
             reply_markup: replyKeyboard(live.lang, { bound: live.bound })
         });
-        const ghostId = ghost?.result?.message_id;
-        if (ghostId) {
-            await notify.telegramApi('deleteMessage', {
-                chat_id: chatId,
-                message_id: ghostId
-            }).catch(() => {});
-        }
     } catch { /* mock / mạng: bàn phím dưới khung chat vẫn hiện nếu Telegram nhận markup */ }
 };
 
@@ -1365,7 +1399,7 @@ const handlePrivateMessage = async (message) => {
         return handleRejectReasonMessage(chatId, text, bound);
     }
     if (peekAskWait(chatId) && text && !/^\/[A-Za-z0-9_]+/i.test(text) && !matchReplyCommand(text)) {
-        consumeAskWait(chatId);
+        rememberAskWait(chatId);
         const boundAsk = await requireBound(chatId).catch(() => ({ error: t(lang, 'denyStranger'), errorCode: 'stranger', lang }));
         if (boundAsk.error) {
             const deny = boundAsk.errorCode === 'muted' || boundAsk.errorCode === 'locked' ? boundAsk.error : t(boundAsk.lang || lang, 'denyStranger');
@@ -1383,6 +1417,17 @@ const handlePrivateMessage = async (message) => {
         return { forbidden: true };
     }
     const parsed = parseCommand(text);
+    if (parsed.name === 'unknown') {
+        const follow = resolveFollowUpCommand(chatId, text);
+        if (follow) {
+            parsed.name = follow.name;
+            parsed.via = follow.via;
+            parsed.period = follow.period;
+        }
+    }
+    if (['payments', 'shifts', 'today'].includes(parsed.name)) {
+        rememberLastReport(chatId, parsed.name, parsed.period || 'today');
+    }
     if (parsed.name === 'hidekb') {
         return sendHideKeyboard(chatId);
     }
@@ -1579,6 +1624,9 @@ const handleCallback = async (query) => {
         rememberAskWait(chatId);
         await reply(chatId, t(live, 'askPrompt'));
         return { ok: true, command: 'askwait' };
+    }
+    if (['payments', 'shifts', 'today'].includes(name)) {
+        rememberLastReport(chatId, name, 'today');
     }
     const result = await runCommand(name, bound.user, bound.pool, chatId, '', live);
     await deliverCallbackResult(query, result, withQuiet(name), name, live);
@@ -1901,6 +1949,7 @@ module.exports = {
     resetChatLangCache: () => {
         pendingLangByChat.clear();
         pendingAskByChat.clear();
+        lastReportByChat.clear();
         kbBoundByChat.clear();
         seenUpdateIds.clear();
         registeredChatCommands.clear();
@@ -1917,6 +1966,9 @@ module.exports = {
     resetUpdateDedup,
     replyKeyboard,
     matchReplyCommand,
+    rememberLastReport,
+    peekLastReport,
+    resolveFollowUpCommand,
     removeKeyboardMarkup,
     parseGuideArg: teleGuide.parseGuideArg,
     buildGuideTopic: teleGuide.buildGuideTopic,

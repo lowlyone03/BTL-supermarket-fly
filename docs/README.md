@@ -13,8 +13,9 @@ Chạy app vẫn từ thư mục gốc repo: `1_CAI_DAT_LAN_DAU.bat` rồi `2_CH
 | --- | --- |
 | [PHUONG_AN_KE_TOAN_DA_CHOT.txt](PHUONG_AN_KE_TOAN_DA_CHOT.txt) | Phương án đang chạy trong mã nguồn (02/09/2026) |
 | [PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt](PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt) | Phạm vi Plan A hiệu chỉnh: giữ/cắt gì (31/08/2026) |
-| [PLAN_12_TICH_HOP_VA_KE_TOAN.txt](PLAN_12_TICH_HOP_VA_KE_TOAN.txt) | Plan 05/09 + **trạng thái code 10/09** (MoMo đã chạy; AI/OCR/e-receipt chưa) |
-| [PLAN_MOMO_TEST_P1.txt](PLAN_MOMO_TEST_P1.txt) | Cổng QR **đang dùng** (MoMo sandbox, 10/09) |
+| [PLAN_12_TICH_HOP_VA_KE_TOAN.txt](PLAN_12_TICH_HOP_VA_KE_TOAN.txt) | Plan 05/09 + **trạng thái code 11/09** (ZaloPay đã chạy; AI/OCR/e-receipt chưa) |
+| [PLAN_ZALOPAY_TEST_P1.txt](PLAN_ZALOPAY_TEST_P1.txt) | Cổng QR **đang dùng** (ZaloPay sandbox, 11/09) |
+| [PLAN_MOMO_TEST_P1.txt](PLAN_MOMO_TEST_P1.txt) | Lịch sử cổng MoMo (10/09) — không deploy theo file này |
 | [PLAN_AI_CHATBOT_TRO_LY.txt](PLAN_AI_CHATBOT_TRO_LY.txt) | Plan trợ lý AI — **P2-MIN đã code** |
 | [PLAN_AI_P2_DU_TELEGRAM_ASK_LICH_SU_TOOL_QL_FAQ.txt](PLAN_AI_P2_DU_TELEGRAM_ASK_LICH_SU_TOOL_QL_FAQ.txt) | Sprint P2-ĐỦ (Telegram /ask, FAQ…) — **chưa làm hết**; P3/P4 không thuộc sprint này |
 | [PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt](PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt) | P3 Đối soát ngân hàng thông minh (UC42, rule engine, **đã code demo**) |

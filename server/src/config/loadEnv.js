@@ -13,10 +13,10 @@ const loadEnv = () => {
         const resolved = path.resolve(file);
         if (seen.has(resolved) || !fs.existsSync(resolved)) continue;
         seen.add(resolved);
-        require('dotenv').config({ path: resolved });
+        require('dotenv').config({ path: resolved, quiet: true });
     }
     if (fs.existsSync(serverEnv)) {
-        require('dotenv').config({ path: serverEnv, override: true });
+        require('dotenv').config({ path: serverEnv, override: true, quiet: true });
     }
 };
 

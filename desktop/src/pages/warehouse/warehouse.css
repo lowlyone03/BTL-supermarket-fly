@@ -76,13 +76,13 @@
 .warehouse-stats > article.attention { border-left-color:#cf705c; }
 .warehouse-stats > article span,.warehouse-stats > article strong,.warehouse-stats > article small { display:block; }
 .warehouse-stats > article span { color:#7e8b84; font-size:10px; font-weight:850; letter-spacing:.08em; }
-.warehouse-stats > article strong { overflow:hidden; margin:13px 0 5px; font-size:25px; text-overflow:ellipsis; white-space:nowrap; }
+.warehouse-stats > article strong { overflow:hidden; margin:13px 0 5px; color:var(--ink, #1e392d); font-size:25px; text-overflow:ellipsis; white-space:nowrap; }
 .warehouse-stats > article small { color:#839088; }
 .warehouse-stat { padding: 20px 22px; border: 1px solid #d9e1dc; border-left: 5px solid #cfe8dc; border-radius: 18px; background: rgba(255,255,255,.94); box-shadow: 0 10px 24px rgba(35,63,48,.045); }
 .warehouse-stat.warn { border-left-color: #e4ad35; }
 .warehouse-stat.danger { border-left-color: #cf705c; }
 .warehouse-stat span { display: block; color: #7e8b84; font-size: 11px; font-weight: 850; letter-spacing: .08em; }
-.warehouse-stat strong { display: block; margin: 13px 0 5px; font-size: 30px; }
+.warehouse-stat strong { display: block; margin: 13px 0 5px; color: var(--ink, #1e392d); font-size: 30px; }
 .warehouse-stat small { color: #839088; }
 
 .warehouse-columns { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(330px, .75fr); gap: 18px; }
@@ -503,9 +503,10 @@
 .gross-profit-steps span,.gross-profit-steps strong { display:block; }
 .gross-profit-steps span { color:#74857c; font-size:8px; font-weight:850; letter-spacing:.06em; }
 .gross-profit-steps strong { margin-top:5px; color:#243f33; font-size:14px; white-space:nowrap; }
-.gross-profit-steps .mid { background:#eef6f2; }
-.gross-profit-steps .result { color:#fff; background:#2f765b; }
-.gross-profit-steps .result span,.gross-profit-steps .result strong { color:#fff; }
+.gross-profit-steps .step > div.mid { background:#eef6f2; }
+.gross-profit-steps .step > div.result { color:var(--ink, #1e392d); background:#e8f4ee; }
+.gross-profit-steps .result span { color:#5f7469; }
+.gross-profit-steps .result strong { color:var(--ink, #1b4332); }
 .cashier-shift-metrics small { display:block; margin-top:4px; color:#839088; font-size:11px; }
 .financial-report-sections { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:18px; }
 .financial-report-sections > article { margin:0; }
@@ -694,6 +695,7 @@ html[data-lang="zh"] .payroll-ky-card header p {
 .warehouse-detail-grid div { padding: 13px; border-radius: 13px; background: #f2f6f3; }
 .warehouse-detail-grid span { display: block; color: #7b8a82; font-size: 10px; font-weight: 800; letter-spacing: .08em; }
 .warehouse-detail-grid strong { display: block; margin-top: 6px; }
+.warehouse-detail-grid small { display: block; margin-top: 4px; color: #8a968f; }
 
 @media (max-width: 1180px) {
   .warehouse-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }

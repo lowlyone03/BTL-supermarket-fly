@@ -456,6 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
       ping(1175, 0.1, 0.13, 0.055);
     }).catch(() => {});
   };
+  window.FLY_PLAY_CHIME = playInboxChime;
   const hideInboxToast = () => {
     const el = document.getElementById('inboxToast');
     if (!el) return;

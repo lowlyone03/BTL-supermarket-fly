@@ -33,7 +33,7 @@ echo ==============================================
 echo CAI DAT THANH CONG
 echo Bay gio:
 echo  - Test mot minh: 2_CHAY_SUPERMARKET_FLY.bat
-echo  - Test MoMo IPN: 7_CHAY_APP_VA_TUNNEL_MOMO.bat
+echo  - Test ZaloPay IPN: 7_CHAY_APP_VA_TUNNEL_MOMO.bat
 echo  - May chu nhom:  4_CHAY_MAY_CHU_NHOM.bat
 echo  - May thanh vien: 5_CHAY_MAY_THANH_VIEN.bat
 echo ==============================================

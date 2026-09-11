@@ -7,7 +7,7 @@ const TYPES = {
     purchase_price: 'Giá mua NCC tăng X% → biên LN / lãi gộp',
     safety_stock: 'Tăng tồn an toàn X% → cần nhập thêm',
     demand_4w: 'Nhu cầu = TB 4 tuần → mặt hàng nguy cơ thiếu',
-    tender_mix: 'Tỷ trọng TM/MoMo đổi → két vs 112'
+    tender_mix: 'Tỷ trọng TM/QR đổi → két vs 112'
 };
 
 const DESCRIPTIONS = {
@@ -16,7 +16,7 @@ const DESCRIPTIONS = {
     purchase_price: 'Giá vốn thuần tăng theo % giá mua. Doanh thu giữ nguyên. Lãi gộp và KQKD giảm đúng phần giá vốn tăng.',
     safety_stock: 'Định mức mới = ceil(định mức × hệ số). Chỉ mặt hàng trong quyền tồn. Không lập đơn mua.',
     demand_4w: 'Nhu cầu = tổng bán 28 ngày / 4 tuần. Nguy cơ thiếu khi số ngày tồn còn lại < 7. Không ghi đề nghị.',
-    tender_mix: 'Chuyển một phần tiền mặt sang MoMo/QR. Két giảm, tài khoản 112 tăng cùng số. Doanh thu không đổi.'
+    tender_mix: 'Chuyển một phần tiền mặt sang ZaloPay/QR. Két giảm, tài khoản 112 tăng cùng số. Doanh thu không đổi.'
 };
 
 const deny = (message) => {
@@ -293,11 +293,11 @@ const runDemandFourWeeks = ({ items = [], period }) => {
 
 const runTenderMix = ({ shiftPct, tienMat, momo, nganHang, period }) => {
     const pct = Number(shiftPct);
-    if (!Number.isFinite(pct) || pct < -80 || pct > 80) bad('Nhập % chuyển TM↔MoMo từ −80 đến 80.');
+    if (!Number.isFinite(pct) || pct < -80 || pct > 80) bad('Nhập % chuyển TM↔QR từ −80 đến 80.');
     const tm = vnd(tienMat);
     const qr = vnd(momo);
     const bank = vnd(nganHang != null ? nganHang : qr);
-    if (!tm && !qr) deny('Chưa có tiền mặt / MoMo trong kỳ để chạy tỷ trọng.');
+    if (!tm && !qr) deny('Chưa có tiền mặt / QR trong kỳ để chạy tỷ trọng.');
     const moved = vnd(tm * (pct / 100));
     const projected = {
         tienMat: vnd(tm - moved),
@@ -306,7 +306,7 @@ const runTenderMix = ({ shiftPct, tienMat, momo, nganHang, period }) => {
     };
     const current = { tienMat: tm, momo: qr, nganHang112: bank };
     const compare = compareMoney(current, projected);
-    const assumption = `${period || 'Kỳ hiện tại'}: chuyển ${pct}% tiền mặt phiếu thu sang MoMo/QR. Doanh thu không đổi. Két giảm, 112 tăng cùng số.`;
+    const assumption = `${period || 'Kỳ hiện tại'}: chuyển ${pct}% tiền mặt phiếu thu sang ZaloPay/QR. Doanh thu không đổi. Két giảm, 112 tăng cùng số.`;
     const formula = 'Δ = TM×X%; két\' = TM − Δ; 112\' = 112 + Δ';
     return {
         type: 'tender_mix',
@@ -318,7 +318,7 @@ const runTenderMix = ({ shiftPct, tienMat, momo, nganHang, period }) => {
         ...compare,
         evidence: [
             { claim: 'Két sau kịch bản', numbers: [`${projected.tienMat.toLocaleString('vi-VN')} đ`], source: 'Phiếu thu tiền mặt', confidence: 'medium' },
-            { claim: 'MoMo / 112 sau kịch bản', numbers: [`${projected.momo.toLocaleString('vi-VN')} đ`], source: 'Thanh toán QR', confidence: 'medium' }
+            { claim: 'QR / 112 sau kịch bản', numbers: [`${projected.momo.toLocaleString('vi-VN')} đ`], source: 'Thanh toán QR', confidence: 'medium' }
         ],
         nextActions: [
             { label: 'Mở ca bán hàng', target: 'cashier-shifts' },
@@ -331,7 +331,7 @@ const runTenderMix = ({ shiftPct, tienMat, momo, nganHang, period }) => {
             period,
             rows: [
                 { chiTieu: 'Két (TM phiếu thu)', hienTai: tm, kichBan: projected.tienMat, chenh: compare.delta.tienMat },
-                { chiTieu: 'MoMo / QR', hienTai: qr, kichBan: projected.momo, chenh: compare.delta.momo },
+                { chiTieu: 'ZaloPay / QR', hienTai: qr, kichBan: projected.momo, chenh: compare.delta.momo },
                 { chiTieu: '112 ước', hienTai: bank, kichBan: projected.nganHang112, chenh: compare.delta.nganHang112 }
             ]
         })
@@ -381,7 +381,7 @@ const runScenario = ({ type, params = {}, snapshot = {} } = {}) => {
     }
     if (kind === 'tender_mix') {
         const cash = snapshot.cash || {};
-        if (cash.unavailable) deny(cash.reason || 'Chưa có tiền mặt / MoMo để chạy tỷ trọng.');
+        if (cash.unavailable) deny(cash.reason || 'Chưa có tiền mặt / QR để chạy tỷ trọng.');
         return runTenderMix({
             shiftPct: params.shiftPct ?? params.changePct,
             tienMat: cash.tienMat,
@@ -390,7 +390,7 @@ const runScenario = ({ type, params = {}, snapshot = {} } = {}) => {
             period
         });
     }
-    bad('Chọn kịch bản: doanh thu, giá mua NCC, tồn an toàn, nhu cầu 4 tuần hoặc TM/MoMo.');
+    bad('Chọn kịch bản: doanh thu, giá mua NCC, tồn an toàn, nhu cầu 4 tuần hoặc TM/QR.');
 };
 
 module.exports = {

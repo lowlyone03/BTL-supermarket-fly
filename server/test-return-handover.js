@@ -117,6 +117,12 @@ test('Tiếp nhận trên ca mới: MaNV_XuLy + MaCa hiện tại; lịch sử c
     }
     assert.equal(canCompleteAssignedReturn(claimed.find(row => row.TrangThai === 'Đã duyệt'), linh, quay), true);
     assert.equal(canCompleteAssignedReturn(claimed.find(row => row.TrangThai === 'Nháp'), linh, quay), false);
+    const refunding = { ...claimed.find(row => row.TrangThai === 'Đã duyệt'), TrangThai: 'Đang hoàn tiền' };
+    const failed = { ...claimed.find(row => row.TrangThai === 'Đã duyệt'), TrangThai: 'Hoàn tiền thất bại' };
+    assert.equal(canCompleteAssignedReturn(refunding, linh, quay), true);
+    assert.equal(canCompleteAssignedReturn(failed, linh, quay), true);
+    assert.equal(isUnfinishedReturn(refunding), true);
+    assert.equal(isUnfinishedReturn({ ...refunding, TrangThai: 'Hoàn thành', NgayHoan: new Date() }), false);
 
     const completed = applyReturnClaim(ticket({
         TrangThai: 'Hoàn thành',

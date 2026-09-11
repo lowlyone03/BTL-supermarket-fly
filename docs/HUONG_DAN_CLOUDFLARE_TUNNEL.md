@@ -4,16 +4,16 @@ Cách này: **chỉ máy TV1** cài thêm một file. Sáu bạn kia **không c�
 
 Không cần tài khoản Cloudflare. Không cần cùng Wi-Fi. Database vẫn nằm trên máy TV1.
 
-## Test MoMo trên máy TV1 (IPN + app một lệnh)
+## Test ZaloPay trên máy TV1 (IPN + app một lệnh)
 
-`npm start` rồi mới mở `6_MO_DUONG_HAM_CLOUDFLARE.bat` **không đủ** cho MoMo:
+`npm start` rồi mới mở `6_MO_DUONG_HAM_CLOUDFLARE.bat` **không đủ** cho ZaloPay:
 file 6 chỉ tạo link, **không** ghi `PAYMENT_IPN_URL` / `PAYMENT_RETURN_URL`.
 Node chỉ đọc `.env` lúc start (`loadEnv` trong `server/src/app.js`) — start trước rồi sửa `.env` thì API vẫn gửi URL cũ (hoặc trống).
 
 **Một thao tác** (double-click hoặc gõ):
 
 - `7_CHAY_APP_VA_TUNNEL_MOMO.bat`
-- hoặc: `npm run start:momo` (cùng việc; `npm run start:tunnel` cũng vậy)
+- hoặc: `npm run start:zalopay` (cùng việc; `npm run start:tunnel` / `start:momo` cũng vậy)
 
 Thứ tự script (đừng đảo):
 
@@ -28,13 +28,13 @@ Thứ tự script (đừng đảo):
 Vẫn **hai cửa sổ**: tunnel phải sống suốt buổi; app chạy cửa sổ kia.
 Tắt tunnel = link đổi = chạy lại file 7 (script ghi `.env` rồi start lại).
 
-`npm start` / `2_CHAY_SUPERMARKET_FLY.bat` **không** bắt `cloudflared` — máy thành viên và test không MoMo giữ như cũ.
+`npm start` / `2_CHAY_SUPERMARKET_FLY.bat` **không** bắt `cloudflared` — máy thành viên và test không ZaloPay giữ như cũ.
 
 File `6_MO_DUONG_HAM_CLOUDFLARE.bat`: chỉ tunnel, khi TV1 đã mở file 4 cho nhóm test xa.
 
 ---
 
-Hai cửa sổ phải mở suốt buổi test **nhóm** (không MoMo / chỉ share API):
+Hai cửa sổ phải mở suốt buổi test **nhóm** (không ZaloPay / chỉ share API):
 
 ```text
 Cửa sổ 1:  4_CHAY_MAY_CHU_NHOM.bat     ← API + SQL (cổng 3000)
@@ -233,7 +233,7 @@ Tài khoản vẫn như cũ, mật khẩu `123`. Phân công TV2–TV7 xem `HUON
 
 ## Nhớ 4 điều
 
-1. Test MoMo IPN trên máy TV1: file 7 / `npm run start:momo` (không dùng `npm start` + file 6).
+1. Test ZaloPay IPN trên máy TV1: file 7 / `npm run start:zalopay` (không dùng `npm start` + file 6).
 2. Test nhóm xa (chỉ share API): file 4 trước, file 6 sau.
 3. Copy đúng một dòng `https://....trycloudflare.com`. Hai cửa sổ mở suốt buổi.
-4. Tắt hầm = link chết = chạy lại file 7 (MoMo) hoặc gửi link mới (nhóm).
+4. Tắt hầm = link chết = chạy lại file 7 (ZaloPay) hoặc gửi link mới (nhóm).
