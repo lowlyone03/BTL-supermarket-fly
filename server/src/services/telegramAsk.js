@@ -1,4 +1,4 @@
-const { escapeHtml, splitTelegramText, isTelegramAskEnabled } = require('./telegramMessages');
+const { escapeHtml, formatMoney, liteMarkdownToHtml, splitTelegramText, isTelegramAskEnabled } = require('./telegramMessages');
 const { sanitizeAssistantText, humanizeSources } = require('./assistantCopy');
 
 const ASK_USAGE = 'Hỏi Trợ lý Fly. Gõ: /ask hôm nay cần chú ý gì?\nTrợ lý không duyệt chứng từ. Việc chờ: nút trên tin, hoặc /pending.';
@@ -49,7 +49,7 @@ const invokeAsk = (args) => {
     return ask(args);
 };
 
-const prettyMoney = (value) => `${Math.round(Number(value || 0)).toLocaleString('vi-VN')} đ`;
+const prettyMoney = (value) => formatMoney(value);
 
 const askDocCallbackData = (skin, kind, id) => {
     const code = KIND_CODE[kind];
@@ -86,24 +86,75 @@ const formatDocLine = (row, index, kind) => {
     return `${index + 1}. <b>${escapeHtml(so)}</b> — ${escapeHtml(partner)} — ${escapeHtml(amount)}`;
 };
 
+const MONTH_KEY_RE = /^(20\d{2}-(?:0[1-9]|1[0-2]))/;
+const WANTS_MONTH_REPORT = /doanh\s*(số|so|thu)|báo\s*cáo\s*tháng|\bkqkd\b|kết\s*quả\s*kinh\s*doanh/i;
+
+const inferPeriodKey = (result, question = '') => {
+    const direct = String(result?.period?.key || result?.report?.period?.period || '');
+    const fromDirect = direct.match(MONTH_KEY_RE);
+    if (fromDirect) return fromDirect[1];
+    try {
+        const parsed = require('./assistantInvoices').parsePeriod(`${question} ${result?.answer || ''}`);
+        const fromParsed = String(parsed?.key || '').match(MONTH_KEY_RE);
+        if (fromParsed) return fromParsed[1];
+    } catch { /* giữ rỗng */ }
+    return '';
+};
+
+const stripSourceDump = (value) => String(value || '')
+    .replace(/\n{0,2}(?:#{1,6}\s*)?(?:Nguồn|Sources?|来源)\s*[:：]?\s*\n(?:\s*(?:[-•*]|\d+\.)\s*.+\n?)*/gi, '\n')
+    .replace(/(?:^|\n)(?:Nguồn|Sources?|来源)\s*[:：].+$/gim, '')
+    .replace(/^\s*(?:Cần hỗ trợ gì thêm\??|Need anything else\??)\s*$/gim, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
 const normalizeAnswerLines = (value) => {
     let out = sanitizeAssistantText(value || '').replace(/\r\n/g, '\n').trim();
     if (!out) return '';
     if (!out.includes('\n') && / \- /.test(out)) {
         out = out.replace(/ \- /g, '\n- ');
     }
-    return out;
+    return stripSourceDump(out);
 };
 
 const formatPlainAnswer = (value) => {
     const raw = normalizeAnswerLines(value) || 'Trợ lý không trả lời được.';
-    return raw.split('\n').map((line) => escapeHtml(line.trimEnd())).join('\n');
+    return liteMarkdownToHtml(raw).replace(/\*\*/g, '');
 };
 
 const formatSourcesBlock = (sources) => {
-    const names = humanizeSources(sources || []).slice(0, 8);
+    const names = humanizeSources(sources || []).slice(0, 4);
     if (!names.length) return '';
-    return `\n\n<b>Nguồn</b>\n${names.map((item) => `• ${escapeHtml(item)}`).join('\n')}`;
+    return `\n\n<i>Nguồn: ${names.map((item) => escapeHtml(item)).join(' · ')}</i>`;
+};
+
+const kpiLine = (label, value) => {
+    if (value == null || !Number.isFinite(Number(value))) return '';
+    return `${escapeHtml(label)}: <b>${prettyMoney(value)}</b>`;
+};
+
+const formatReportCard = (result) => {
+    const k = result.report?.kpis || {};
+    const period = result.period?.label || result.report?.period?.label || '';
+    const kind = result.kind || result.invoiceKind || '';
+    const spec = specOfKind(kind);
+    const title = kind === 'kqkd'
+        ? 'KQKD'
+        : (kind === 'store-report' ? 'Doanh số' : (spec?.label || 'Báo cáo'));
+    const lines = [
+        `📊 <b>${escapeHtml(title)}${period ? ` · ${escapeHtml(period)}` : ''}</b>`,
+        '',
+        kpiLine('Doanh thu thuần', k.doanhThuThuan),
+        kpiLine('Giá vốn thuần', k.giaVonHangBanThuan ?? k.giaVonThuan),
+        kpiLine('Lãi gộp', k.laiGop),
+        kpiLine('Lãi/lỗ KQKD', k.kqkdLoiNhuan),
+        '<i>Lãi gộp = DT thuần − GV thuần. Không trừ tiền trả NCC.</i>',
+        '<i>Bấm Báo cáo tháng hoặc KQKD dưới tin này để xem, in hoặc tải bản đủ.</i>'
+    ];
+    if (result.report?.empty) {
+        lines.push('<i>Kỳ này chưa phát sinh — vẫn tải được mẫu.</i>');
+    }
+    return lines.filter(Boolean).join('\n');
 };
 
 const formatAskDocuments = (result) => {
@@ -117,22 +168,30 @@ const formatAskDocuments = (result) => {
         const more = items.length > MAX_DOC_BUTTONS
             ? `\n<i>… nút PDF hiện ${MAX_DOC_BUTTONS} chứng từ đầu.</i>`
             : '';
-        return `Có <b>${items.length}</b> ${escapeHtml(label)}${period ? ` trong ${escapeHtml(period)}` : ''}.\nBấm mã bên dưới để tải PDF mẫu hệ thống. Nút Giấy trắng = bản mực đen.\n\n${lines.join('\n')}${more}`;
+        return `📄 Có <b>${items.length}</b> ${escapeHtml(label)}${period ? ` trong ${escapeHtml(period)}` : ''}.\nBấm mã bên dưới để tải PDF mẫu hệ thống. Nút Giấy trắng = bản mực đen.\n\n${lines.join('\n')}${more}`;
     }
-    const answer = formatPlainAnswer(result.answer);
-    if (result.report || result.print) {
-        return `${answer}\nBấm nút để tải PDF mẫu hệ thống hoặc giấy trắng.`;
-    }
-    return answer;
+    if (result.report?.kpis) return formatReportCard(result);
+    return formatPlainAnswer(result.answer);
 };
 
-const buildAskKeyboard = (result) => {
+const wantsMonthReport = (result, question = '') => {
+    const kind = result?.kind || result?.invoiceKind || '';
+    if (kind === 'store-report' || kind === 'kqkd') return true;
+    return WANTS_MONTH_REPORT.test(`${question} ${result?.answer || ''}`);
+};
+
+const buildAskKeyboard = (result, question = '') => {
     const kind = result.kind || result.invoiceKind;
-    if (!kind || !KIND_CODE[kind]) return null;
     const items = itemsOf(result);
     const spec = specOfKind(kind);
-    const periodKey = result.period?.key || '';
+    const periodKey = inferPeriodKey(result, question);
     const rows = [];
+    if (periodKey && wantsMonthReport(result, question)) {
+        rows.push([
+            { text: '📊 Báo cáo tháng', callback_data: `period:month:${periodKey}` },
+            { text: '📈 KQKD', callback_data: askDocCallbackData('s', 'kqkd', periodKey) }
+        ]);
+    }
     if (items.length && spec?.mode !== 'report') {
         for (const row of items.slice(0, MAX_DOC_BUTTONS)) {
             const id = row.id || row.soHd;
@@ -145,13 +204,13 @@ const buildAskKeyboard = (result) => {
                 { text: 'Giấy trắng', callback_data: white }
             ]);
         }
-    } else if (result.print || result.report || spec?.mode === 'report') {
+    } else if (kind && KIND_CODE[kind] && (result.print || result.report || spec?.mode === 'report')) {
         const id = periodKey || result.print?.mau?.number || result.print?.number || '';
         const system = askDocCallbackData('s', kind, id);
         const white = askDocCallbackData('w', kind, id);
         if (system) {
             rows.push([
-                { text: 'Tải PDF hệ thống', callback_data: system },
+                { text: '📄 Tải PDF hệ thống', callback_data: system },
                 { text: 'Giấy trắng', callback_data: white }
             ]);
         }
@@ -160,12 +219,12 @@ const buildAskKeyboard = (result) => {
     return { inline_keyboard: rows };
 };
 
-const formatAskAnswer = (result) => {
+const formatAskAnswer = (result, question = '') => {
     const items = itemsOf(result);
     const hasDocs = items.length || result?.report || result?.print;
     const body = hasDocs ? formatAskDocuments(result) : formatPlainAnswer(result?.answer);
     const texts = splitTelegramText(`${body}${formatSourcesBlock(result?.sources)}`, 3900);
-    const keyboard = hasDocs ? buildAskKeyboard(result) : null;
+    const keyboard = buildAskKeyboard(result, question);
     return {
         texts,
         extra: keyboard ? { reply_markup: keyboard } : undefined
@@ -201,7 +260,7 @@ const runTelegramAsk = async ({ user, question, pool, req = null } = {}) => {
             }),
             timeout
         ]);
-        const formatted = formatAskAnswer(result);
+        const formatted = formatAskAnswer(result, clipped);
         return { result, texts: formatted.texts, extra: formatted.extra };
     } catch (error) {
         if (Number(error.status) === 429) {
@@ -278,6 +337,7 @@ module.exports = {
     parseAskDocCallback,
     buildAskKeyboard,
     formatAskAnswer,
+    formatReportCard,
     runTelegramAsk,
     enqueueAsk,
     deliverAskDocument

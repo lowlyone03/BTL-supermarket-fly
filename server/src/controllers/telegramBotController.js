@@ -39,6 +39,18 @@ const kbBoundByChat = new Map();
 const seenUpdateIds = new Map();
 const PENDING_ASK_TTL_MS = 10 * 60 * 1000;
 const SEEN_UPDATE_TTL_MS = 2 * 60 * 1000;
+const COMMAND_MENU_BUTTON = { type: 'commands' };
+const TELEGRAM_COMMAND_SCOPES = [
+    { type: 'default' },
+    { type: 'all_private_chats' }
+];
+const TELEGRAM_COMMAND_LANGS = ['vi', 'en', 'zh'];
+const FAST_PATH_COMMANDS = new Set([
+    'today', 'pending', 'docs', 'reports', 'help', 'fly', 'guide', 'rules',
+    'revenue', 'debt', 'lowstock', 'shifts', 'payments', 'alerts', 'payroll'
+]);
+const registeredChatCommands = new Set();
+const pendingMenuPins = new Set();
 
 const rememberUpdateId = (updateId) => {
     if (updateId == null || updateId === '') return false;
@@ -100,7 +112,30 @@ const nativeTelegramCommands = () => {
     return cmds;
 };
 
+const telegramCommandMenuPayloads = (chatId, languageCode) => {
+    const commands = nativeTelegramCommands();
+    const payloads = [];
+    if (!commands.length) return payloads;
+    const preferred = languageCode ? normalizeLang(languageCode) : '';
+    const langs = [];
+    if (preferred && TELEGRAM_COMMAND_LANGS.includes(preferred)) langs.push(preferred);
+    for (const code of TELEGRAM_COMMAND_LANGS) {
+        if (!langs.includes(code)) langs.push(code);
+    }
+    for (const scope of TELEGRAM_COMMAND_SCOPES.map(item => ({ ...item }))) {
+        payloads.push({ commands, scope });
+        for (const language_code of langs) {
+            payloads.push({ commands, scope, language_code });
+        }
+    }
+    if (chatId) {
+        payloads.push({ commands, scope: { type: 'chat', chat_id: chatId } });
+    }
+    return payloads;
+};
+
 const FLY_BUTTONS = [
+    { id: 'fly', key: 'flyHome', uc: [] },
     { id: 'today', key: 'flyToday', uc: ['UC10'] },
     { id: 'revenue', key: 'flyRevenue', uc: ['UC10'] },
     { id: 'debt', key: 'flyDebt', uc: ['UC10', 'UC28'] },
@@ -285,6 +320,7 @@ const sendHideKeyboard = async (chatId) => {
         ...withQuiet('hidekb'),
         reply_markup: showMenuInlineKeyboard(lang)
     });
+    pinChatCommandMenuSoon(chatId);
     return { ok: true, command: 'hidekb', removed: true };
 };
 
@@ -297,7 +333,8 @@ const sendShowKeyboard = async (chatId) => {
         if (!live.error && isManagerRole(live.user?.TenVaiTro)) bound = true;
     } catch { /* giữ bound đã nhớ */ }
     rememberReplyKb(chatId, { hidden: false, bound, lang: prev.lang || lang });
-    await reply(chatId, t(lang, 'showOk'), withQuiet('showkb'));
+    await reply(chatId, t(lang, 'showOk'), { ...withQuiet('showkb'), show_reply_keyboard: true });
+    pinChatCommandMenuSoon(chatId);
     return { ok: true, command: 'showkb' };
 };
 
@@ -435,18 +472,80 @@ const startBoundText = (user, lang = 'vi') => buildStartWelcomeBound(user, lang)
 const startBoundKeyboard = (user, lang = 'vi') => flyKeyboard(user, lang);
 
 const registerNativeTelegramMenu = async (fetchFn) => {
-    await notify.telegramApi('setMyCommands', { commands: nativeTelegramCommands() }, { fetchFn });
-    await notify.telegramApi('setChatMenuButton', { menu_button: { type: 'commands' } }, { fetchFn });
+    const apiOpts = { fetchFn };
+    for (const payload of telegramCommandMenuPayloads()) {
+        if (!payload.commands?.length) continue;
+        await notify.telegramApi('setMyCommands', payload, apiOpts);
+    }
+    await notify.telegramApi('setChatMenuButton', { menu_button: COMMAND_MENU_BUTTON }, apiOpts);
 };
 
 const registerMenuSafe = async (fetchFn) => {
     try {
         await registerNativeTelegramMenu(fetchFn);
-        console.log('Telegram: đã setMyCommands + menu hamburger');
+        console.log('Telegram: đã setMyCommands (default + all_private_chats) + MenuButtonCommands — không lặp lại mỗi tin');
     } catch (error) {
         console.error('Telegram setMyCommands:', error.message);
     }
 };
+
+const pinChatCommandMenu = async (chatId) => {
+    const id = String(chatId || '').trim();
+    if (!id) return;
+    try {
+        await notify.telegramApi('setChatMenuButton', {
+            chat_id: id,
+            menu_button: COMMAND_MENU_BUTTON
+        });
+    } catch (error) {
+        console.error('Telegram setChatMenuButton chat:', error.message);
+    }
+};
+
+const attachChatSlashCommandsOnce = async (chatId) => {
+    const id = String(chatId || '').trim();
+    if (!id || registeredChatCommands.has(id)) return;
+    try {
+        await notify.telegramApi('setMyCommands', {
+            commands: nativeTelegramCommands(),
+            scope: { type: 'chat', chat_id: id }
+        });
+        registeredChatCommands.add(id);
+    } catch (error) {
+        console.error('Telegram setMyCommands chat:', error.message);
+    }
+};
+
+const pinChatCommandMenuSoon = (chatId) => {
+    const id = String(chatId || '').trim();
+    if (!id) return Promise.resolve();
+    const job = Promise.resolve()
+        .then(() => pinChatCommandMenu(id))
+        .catch((error) => {
+            console.error('Telegram setChatMenuButton chat:', error.message);
+        });
+    pendingMenuPins.add(job);
+    job.finally(() => pendingMenuPins.delete(job));
+    return job;
+};
+
+const finishStartMenuSoon = (chatId) => {
+    const id = String(chatId || '').trim();
+    if (!id) return Promise.resolve();
+    const job = Promise.resolve()
+        .then(async () => {
+            await attachChatSlashCommandsOnce(id);
+            await pinChatCommandMenu(id);
+        })
+        .catch((error) => {
+            console.error('Telegram menu /start:', error.message);
+        });
+    pendingMenuPins.add(job);
+    job.finally(() => pendingMenuPins.delete(job));
+    return job;
+};
+
+const flushTelegramMenuPins = () => Promise.allSettled([...pendingMenuPins]);
 
 const unauthorizedHint = (error) => {
     const msg = String(error?.message || error || '');
@@ -465,7 +564,13 @@ const denyIfNoUc = (user, codes, lang = 'vi') => {
 };
 
 const flyKeyboard = (user, lang = 'vi') => {
-    const visible = FLY_BUTTONS.filter(btn => userHasCommand(user, btn.uc));
+    const askOn = teleAsk.isTelegramAskEnabled();
+    const visible = FLY_BUTTONS
+        .map((btn) => {
+            if (askOn && btn.id === 'langmenu') return { id: 'askwait', key: 'kbAsk', uc: [] };
+            return btn;
+        })
+        .filter(btn => userHasCommand(user, btn.uc));
     const rows = [];
     for (let i = 0; i < visible.length; i += 2) {
         rows.push(visible.slice(i, i + 2).map(btn => ({
@@ -811,6 +916,10 @@ const cmdReportPick = async (pool, user, which, lang = 'vi') => {
         const warehouseTg = require('../services/warehouseReportTelegram');
         return warehouseTg.composeWarehouseReportList(pool, lang);
     }
+    if (key === 'dept') {
+        const deptTg = require('../services/departmentReportTelegram');
+        return deptTg.composeDepartmentReportList(pool, lang);
+    }
     return cmdReports(pool, user, lang);
 };
 
@@ -915,6 +1024,8 @@ const parseCommand = (text) => {
     if (docs) return { name: 'docs', arg: String(docs[1] || '').trim() };
     const ask = raw.match(/^\/ask(?:\s+(.+))?$/i);
     if (ask) return { name: 'ask', arg: String(ask[1] || '').trim() };
+    const askBare = raw.match(/^ask(?:\s+|[:：]\s*)(.+)$/i);
+    if (askBare) return { name: 'ask', arg: String(askBare[1] || '').trim() };
     const guide = raw.match(/^\/(?:guide|rules)(?:\s+(.+))?$/i);
     if (guide) return { name: 'guide', arg: String(guide[1] || '').trim() };
     const simple = raw.match(/^\/(help|fly|today|debt|lowstock|shifts|payments|pending|reports|alerts|unlink|revenue)\s*$/i);
@@ -940,6 +1051,36 @@ const consumeAskWait = (chatId) => {
     return ok;
 };
 
+const refreshReplyKeyboard = async (chatId) => {
+    const live = kbBoundByChat.get(String(chatId)) || { bound: false, lang: langOf(chatId), hidden: false };
+    if (live.hidden) return;
+    try {
+        const ghost = await notify.sendMessage(chatId, '\u2060', {
+            disable_notification: true,
+            reply_markup: replyKeyboard(live.lang, { bound: live.bound })
+        });
+        const ghostId = ghost?.result?.message_id;
+        if (ghostId) {
+            await notify.telegramApi('deleteMessage', {
+                chat_id: chatId,
+                message_id: ghostId
+            }).catch(() => {});
+        }
+    } catch { /* mock / mạng: bàn phím dưới khung chat vẫn hiện nếu Telegram nhận markup */ }
+};
+
+const sendBoundBriefing = async (chatId, user, lang, dash, extra = {}) => {
+    rememberReplyKb(chatId, { bound: true, lang, hidden: false });
+    const text = extra.text || buildStartWelcomeBound(user, lang, dash);
+    const payload = { ...extra };
+    delete payload.text;
+    await notify.sendMessage(chatId, text, {
+        ...payload,
+        reply_markup: flyKeyboard(user, lang)
+    });
+    await refreshReplyKeyboard(chatId);
+};
+
 const handleStartCommand = async (chatId) => {
     const quiet = { disable_notification: true };
     let bound;
@@ -949,32 +1090,37 @@ const handleStartCommand = async (chatId) => {
         console.error('Telegram start:', error.message);
         const lang = langOf(chatId);
         await reply(chatId, t(lang, 'bindDbError'), quiet);
+        finishStartMenuSoon(chatId);
         return { start: true, error: true };
     }
     const lang = bound.lang || langOf(chatId, bound.user);
     if (!bound.error && isManagerRole(bound.user.TenVaiTro)) {
-        rememberReplyKb(chatId, { bound: true, lang, hidden: false });
         let dash = { summary: {}, inbox: [] };
         try {
             dash = await loadTodayBundle(bound.pool, bound.user);
         } catch (error) {
             console.error('Telegram start dash:', error.message);
         }
-        await reply(chatId, buildStartWelcomeBound(bound.user, lang, dash), quiet);
+        await sendBoundBriefing(chatId, bound.user, lang, dash, quiet);
+        finishStartMenuSoon(chatId);
         return { start: true, bound: true };
     }
     if (!bound.error && bound.user) {
         rememberReplyKb(chatId, { bound: false, lang });
-        await reply(chatId, buildStartWelcomeGuest(lang), quiet);
+        await reply(chatId, buildStartWelcomeGuest(lang), { ...quiet, show_reply_keyboard: true });
+        finishStartMenuSoon(chatId);
         return { start: true, bound: true, denied: true };
     }
     if (bound.errorCode === 'muted' || bound.errorCode === 'locked') {
         rememberReplyKb(chatId, { bound: false, lang });
         await reply(chatId, bound.error, quiet);
+        finishStartMenuSoon(chatId);
         return { start: true };
     }
     rememberReplyKb(chatId, { bound: false, lang });
-    await reply(chatId, startWelcomeText(lang), quiet);
+    await reply(chatId, startWelcomeText(lang), { ...quiet, reply_markup: startUnboundKeyboard(lang) });
+    await refreshReplyKeyboard(chatId);
+    finishStartMenuSoon(chatId);
     return { start: true };
 };
 
@@ -984,22 +1130,26 @@ const handleLangCallback = async (chatId, lang) => {
     const liveLang = normalized;
     if (!bound.error && bound.user && isManagerRole(bound.user.TenVaiTro)) {
         await persistLang(chatId, liveLang, bound.user.MaNV);
-        rememberReplyKb(chatId, { bound: true, lang: liveLang, hidden: false });
         let dash = { summary: {}, inbox: [] };
         try {
             dash = await loadTodayBundle(bound.pool, bound.user);
         } catch { /* chào vẫn gửi khi dashboard lỗi */ }
-        await reply(chatId, `${t(liveLang, 'langChosen')}\n\n${buildStartWelcomeBound(bound.user, liveLang, dash)}`);
+        await sendBoundBriefing(chatId, bound.user, liveLang, dash, {
+            text: `${t(liveLang, 'langChosen')}\n\n${buildStartWelcomeBound(bound.user, liveLang, dash)}`
+        });
+        pinChatCommandMenuSoon(chatId);
         return { ok: true, command: 'lang', lang: liveLang };
     }
     if (!bound.error && bound.user) {
         await persistLang(chatId, liveLang, bound.user.MaNV);
         rememberReplyKb(chatId, { bound: false, lang: liveLang });
-        await reply(chatId, `${t(liveLang, 'langChosen')}\n\n${buildStartWelcomeGuest(liveLang)}`);
+        await reply(chatId, `${t(liveLang, 'langChosen')}\n\n${buildStartWelcomeGuest(liveLang)}`, { show_reply_keyboard: true });
+        pinChatCommandMenuSoon(chatId);
         return { ok: true, command: 'lang', lang: liveLang, denied: true };
     }
     rememberReplyKb(chatId, { bound: false, lang: liveLang });
-    await reply(chatId, `${t(liveLang, 'langChosen')}\n\n${startWelcomeText(liveLang)}`);
+    await reply(chatId, `${t(liveLang, 'langChosen')}\n\n${startWelcomeText(liveLang)}`, { show_reply_keyboard: true });
+    pinChatCommandMenuSoon(chatId);
     return { ok: true, command: 'lang', lang: liveLang };
 };
 
@@ -1096,7 +1246,7 @@ const completedDecisionKeyboard = (parsed, lang = 'vi') => ({
         ],
         [
             { text: navCopy(lang).home, callback_data: 'cmd:fly' },
-            { text: '📋 Việc chờ', callback_data: 'cmd:pending' }
+            { text: '⏳ Việc chờ', callback_data: 'cmd:pending' }
         ]
     ]
 });
@@ -1252,7 +1402,8 @@ const handlePrivateMessage = async (message) => {
         try {
             const body = await handleBindOtp(chatId, parsed.otp);
             if (/Đã liên kết|Linked |已关联/.test(body)) rememberReplyKb(chatId, { bound: true, lang: langOf(chatId), hidden: false });
-            await reply(chatId, body);
+            await reply(chatId, body, { show_reply_keyboard: true });
+            finishStartMenuSoon(chatId);
             return { bind: true };
         } catch (error) {
             console.error('Telegram bind:', error.message);
@@ -1262,6 +1413,10 @@ const handlePrivateMessage = async (message) => {
     }
     if (parsed.name === 'start') {
         return handleStartCommand(chatId);
+    }
+    if (FAST_PATH_COMMANDS.has(parsed.name) && message.message_id) {
+        const activity = parsed.name === 'docs' ? 'upload_photo' : 'typing';
+        notify.sendChatAction(chatId, activity).catch(() => {});
     }
     const bound = await requireBound(chatId).catch(() => ({ error: t(lang, 'denyStranger'), errorCode: 'stranger', lang }));
     const live = bound.lang || lang;
@@ -1298,9 +1453,9 @@ const handlePrivateMessage = async (message) => {
     if (parsed.name === 'ask') {
         return handleAskCommand(bound, chatId, parsed.arg, message);
     }
-    if (message.message_id) {
+    if (message.message_id && !FAST_PATH_COMMANDS.has(parsed.name)) {
         const activity = parsed.name === 'docs' ? 'upload_photo' : 'typing';
-        await notify.sendChatAction(chatId, activity).catch(() => {});
+        notify.sendChatAction(chatId, activity).catch(() => {});
     }
     const result = await runCommand(parsed.name, bound.user, bound.pool, chatId, parsed.arg, live);
     await deliverCommandResult(chatId, decorateCommandResult(result, parsed.name, live), withQuiet(parsed.name));
@@ -1319,7 +1474,7 @@ const handleCallback = async (query) => {
         const activity = /^askd:/.test(data)
             ? 'upload_document'
             : (/docs|dkind/.test(data) ? 'upload_photo' : 'typing');
-        await notify.sendChatAction(chatId, activity).catch(() => {});
+        notify.sendChatAction(chatId, activity).catch(() => {});
     }
     const langMatch = data.match(/^lang:(vi|en|zh)$/i);
     if (langMatch) {
@@ -1416,6 +1571,15 @@ const handleCallback = async (query) => {
     if (decision) {
         return handleDecisionCallback(chatId, decision, bound.user, bound.pool, live, query);
     }
+    if (name === 'askwait') {
+        if (!teleAsk.isTelegramAskEnabled()) {
+            await reply(chatId, teleAsk.ASK_DISABLED);
+            return { ok: true, command: 'askwait', disabled: true };
+        }
+        rememberAskWait(chatId);
+        await reply(chatId, t(live, 'askPrompt'));
+        return { ok: true, command: 'askwait' };
+    }
     const result = await runCommand(name, bound.user, bound.pool, chatId, '', live);
     await deliverCallbackResult(query, result, withQuiet(name), name, live);
     return { ok: true, command: name };
@@ -1423,15 +1587,21 @@ const handleCallback = async (query) => {
 
 const handleUpdate = async (update) => {
     if (rememberUpdateId(update?.update_id)) return { deduped: true };
-    if (update.callback_query) return handleCallback(update.callback_query);
-    const message = update.message || update.edited_message;
-    if (!message) return { ignored: true };
-    const type = String(message.chat?.type || '');
-    if (type !== 'private') {
-        if (message.chat?.id) await reply(message.chat.id, DENY_GROUP).catch(() => {});
-        return { group: true };
+    try {
+        if (update.callback_query) {
+            return await handleCallback(update.callback_query);
+        }
+        const message = update.message || update.edited_message;
+        if (!message) return { ignored: true };
+        const type = String(message.chat?.type || '');
+        if (type !== 'private') {
+            if (message.chat?.id) await reply(message.chat.id, DENY_GROUP).catch(() => {});
+            return { group: true };
+        }
+        return await handlePrivateMessage(message);
+    } finally {
+        await flushTelegramMenuPins();
     }
-    return handlePrivateMessage(message);
 };
 
 const verifyWebhookSecret = (req) => {
@@ -1650,7 +1820,11 @@ const startTelegramBot = async (options = {}) => {
                                 pollAbort = true;
                                 notify.stopCompanionJobs();
                                 notify.setTelegramStatus('off');
-                                console.error(`Telegram getUpdates 409 (PID ${process.pid}) — dừng polling.`);
+                                console.error(
+                                    `Telegram getUpdates 409 (PID ${process.pid}): còn process bot CŨ đang getUpdates. `
+                                    + 'Process này DỪNG ngay — không xóa setMyCommands / ChatMenuButton. '
+                                    + 'Tắt HẾT node (cổng 3000) rồi npm start đúng một lần.'
+                                );
                                 if (process.env.TELEGRAM_BOT_CHILD === '1') process.exit(0);
                                 return;
                             }
@@ -1715,6 +1889,9 @@ module.exports = {
     startUnboundKeyboard,
     BOT_NATIVE_COMMANDS,
     nativeTelegramCommands,
+    telegramCommandMenuPayloads,
+    pinChatCommandMenu,
+    flushTelegramMenuPins,
     cmdHelp,
     cmdFly,
     handleUpdate,
@@ -1726,6 +1903,8 @@ module.exports = {
         pendingAskByChat.clear();
         kbBoundByChat.clear();
         seenUpdateIds.clear();
+        registeredChatCommands.clear();
+        pendingMenuPins.clear();
         teleDecision.resetDecisionState();
         teleAsk.setAskOverride(null);
         teleAsk.setAskDocOverride(null);

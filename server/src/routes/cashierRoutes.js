@@ -13,6 +13,10 @@ router.post('/attendance/check-in', requirePermission('UC31'), controller.checkI
 router.post('/attendance/check-out', requirePermission('UC31'), controller.checkOut);
 router.get('/shifts', requirePermission('UC22'), controller.getShifts);
 router.get('/reports/sales', requirePermission('UC22'), reportController.getSalesReport);
+router.post('/reports/submit', requirePermission('UC22'), (req, res) => reportController.submitDepartmentReport(req, res, 'TN_BAN_HANG'));
+router.get('/reports/submissions', requirePermission('UC22'), (req, res) => reportController.listMyDepartmentReports(req, res, 'TN_BAN_HANG'));
+router.get('/reports/submissions/:id', requirePermission('UC22'), reportController.getAdminDepartmentReport);
+router.delete('/reports/submissions/:id', requirePermission('UC22'), reportController.withdrawDepartmentReport);
 router.post('/shifts/open', requirePermission('UC22'), controller.openShift);
 router.get('/shifts/current/summary', requirePermission('UC22'), controller.getCurrentShiftSummary);
 router.post('/shifts/close', requirePermission('UC22'), controller.closeShift);

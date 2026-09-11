@@ -1,6 +1,17 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
-const { MANAGER_FIXED_PERMISSION_CODES } = require('../constants/permissions');
+const {
+    MANAGER_FIXED_PERMISSION_CODES,
+    FUNCTION_CATALOG,
+    ensureEmployeePermissionSchema,
+    loadRoleCodesFromDb,
+    loadOverrideCodes,
+    mergeEffective,
+    uniqueCodes,
+    saveEmployeeOverrides,
+    clearEmployeeOverrides,
+    foldRole
+} = require('../services/effectivePermissions');
 
 // Lấy danh sách vai trò
 const getRoles = async (req, res) => {
@@ -109,8 +120,227 @@ const updatePermissions = async (req, res) => {
     }
 };
 
+const getStaffPermissions = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        await ensureEmployeePermissionSchema(pool);
+        const [roles, functions, employees] = await Promise.all([
+            pool.request().query(`SELECT MaVaiTro, TenVaiTro, MoTa FROM VaiTro ORDER BY MaVaiTro`),
+            pool.request().query(`SELECT MaChucNang, TenChucNang, Nhom FROM ChucNang ORDER BY Nhom, MaChucNang`),
+            pool.request().query(`
+                SELECT n.MaNV, n.TenNV, n.ChucVu, n.TrangThai,
+                       t.MaTK, t.MaVaiTro, t.TrangThai AS TrangThaiTK, v.TenVaiTro
+                FROM NhanVien n
+                LEFT JOIN TaiKhoan t ON t.MaNV = n.MaNV
+                LEFT JOIN VaiTro v ON v.MaVaiTro = t.MaVaiTro
+                ORDER BY CASE COALESCE(v.TenVaiTro, n.ChucVu)
+                    WHEN N'Quản lý' THEN 1
+                    WHEN N'Nhân viên mua hàng' THEN 2
+                    WHEN N'Thủ kho' THEN 3
+                    WHEN N'Thu ngân' THEN 4
+                    WHEN N'Kế toán' THEN 5
+                    ELSE 6 END, n.TenNV`)
+        ]);
+        const roleRows = roles.recordset;
+        const functionRows = functions.recordset.length ? functions.recordset : FUNCTION_CATALOG;
+        const roleCodesMap = {};
+        for (const role of roleRows) {
+            roleCodesMap[role.MaVaiTro] = await loadRoleCodesFromDb(pool, role.MaVaiTro);
+        }
+        const staff = [];
+        for (const emp of employees.recordset) {
+            const maVaiTro = emp.MaVaiTro;
+            const tenVaiTro = emp.TenVaiTro || emp.ChucVu;
+            const roleCodes = maVaiTro ? (roleCodesMap[maVaiTro] || []) : [];
+            const override = emp.MaNV ? await loadOverrideCodes(pool, emp.MaNV) : null;
+            const codes = mergeEffective({ roleCodes, overrideCodes: override, tenVaiTro });
+            const extra = codes.filter((code) => !roleCodes.includes(code));
+            staff.push({
+                MaNV: emp.MaNV,
+                TenNV: emp.TenNV,
+                ChucVu: emp.ChucVu,
+                TrangThai: emp.TrangThai,
+                HasAccount: Boolean(emp.MaTK),
+                MaTK: emp.MaTK || null,
+                MaVaiTro: maVaiTro || null,
+                TenVaiTro: tenVaiTro,
+                TrangThaiTK: emp.TrangThaiTK,
+                CheDo: override ? 'TuyChinh' : 'TheoVaiTro',
+                codes,
+                roleCodes,
+                extra
+            });
+        }
+        res.json({
+            functions: functionRows,
+            roles: roleRows.map((role) => ({
+                ...role,
+                codes: roleCodesMap[role.MaVaiTro] || []
+            })),
+            employees: staff
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Không tải được phân quyền nhân viên.' });
+    }
+};
+
+const updateEmployeePermissions = async (req, res) => {
+    const transaction = new sql.Transaction(await poolPromise);
+    try {
+        const maNV = String(req.params.maNV || '').trim();
+        const codes = Array.isArray(req.body?.codes) ? req.body.codes : null;
+        if (!maNV || !codes) {
+            return res.status(400).json({ message: 'Thiếu mã nhân viên hoặc danh sách quyền.' });
+        }
+        await transaction.begin();
+        await ensureEmployeePermissionSchema(transaction);
+        const emp = await new sql.Request(transaction)
+            .input('MaNV', sql.VarChar, maNV)
+            .query(`SELECT n.MaNV, n.TenNV, n.ChucVu, t.MaVaiTro, v.TenVaiTro
+                    FROM NhanVien n
+                    LEFT JOIN TaiKhoan t ON t.MaNV = n.MaNV
+                    LEFT JOIN VaiTro v ON v.MaVaiTro = t.MaVaiTro
+                    WHERE n.MaNV = @MaNV`);
+        if (!emp.recordset.length) {
+            await transaction.rollback();
+            return res.status(404).json({ message: 'Không tìm thấy nhân viên.' });
+        }
+        const row = emp.recordset[0];
+        if (!row.MaVaiTro) {
+            await transaction.rollback();
+            return res.status(400).json({ message: 'Nhân viên chưa có tài khoản nên chưa gán quyền đăng nhập.' });
+        }
+        if (foldRole(row.TenVaiTro || row.ChucVu) === 'quản lý') {
+            await transaction.rollback();
+            return res.status(400).json({ message: 'Quyền vai trò Quản lý được cố định, không tùy chỉnh từng người.' });
+        }
+        const roleCodes = await loadRoleCodesFromDb(transaction, row.MaVaiTro);
+        const granted = uniqueCodes(codes);
+        const valid = new Set((FUNCTION_CATALOG || []).map((item) => item.MaChucNang));
+        const catalog = await new sql.Request(transaction).query('SELECT MaChucNang FROM ChucNang');
+        catalog.recordset.forEach((item) => valid.add(String(item.MaChucNang)));
+        if (granted.some((code) => !valid.has(code))) {
+            await transaction.rollback();
+            return res.status(400).json({ message: 'Danh sách quyền chứa mã chức năng không hợp lệ.' });
+        }
+        const saved = await saveEmployeeOverrides(transaction, {
+            maNV,
+            codes: granted,
+            roleCodes
+        });
+        await logAudit(transaction, {
+            user: req.user, req, action: 'Phân quyền nhân viên', table: 'NhanVien_ChucNang',
+            recordId: maNV, severity: 'Quan trọng',
+            content: saved.cheDo === 'TuyChinh'
+                ? `Tùy chỉnh quyền ${row.TenNV}: ${saved.codes.join(', ')}`
+                : `Khôi phục ${row.TenNV} theo mẫu vai trò ${row.TenVaiTro}`
+        });
+        await transaction.commit();
+        res.json({
+            message: saved.cheDo === 'TuyChinh'
+                ? `Đã lưu quyền riêng cho ${row.TenNV}. Nhân viên cần đăng nhập lại hoặc tải lại trang.`
+                : `Đã trả ${row.TenNV} về đúng mẫu vai trò ${row.TenVaiTro}.`,
+            ...saved,
+            MaNV: maNV
+        });
+    } catch (error) {
+        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        console.error(error);
+        res.status(500).json({ message: error.message || 'Không lưu được quyền nhân viên.' });
+    }
+};
+
+const resetEmployeePermissions = async (req, res) => {
+    try {
+        const maNV = String(req.params.maNV || '').trim();
+        const pool = await poolPromise;
+        await ensureEmployeePermissionSchema(pool);
+        await clearEmployeeOverrides(pool, maNV);
+        await logAudit(pool, {
+            user: req.user, req, action: 'Khôi phục quyền theo vai trò', table: 'NhanVien_ChucNang',
+            recordId: maNV, content: `Xóa tùy chỉnh quyền của ${maNV}`
+        });
+        res.json({ message: 'Đã khôi phục quyền theo mẫu vai trò.', cheDo: 'TheoVaiTro', MaNV: maNV });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Không khôi phục được quyền.' });
+    }
+};
+
+const promoteEmployee = async (req, res) => {
+    const transaction = new sql.Transaction(await poolPromise);
+    try {
+        const maNV = String(req.params.maNV || '').trim();
+        const maVaiTro = Number(req.body?.MaVaiTro);
+        const keepOverrides = Boolean(req.body?.GiuQuyenRieng);
+        if (!maNV || !Number.isInteger(maVaiTro)) {
+            return res.status(400).json({ message: 'Chọn vai trò mới cho nhân viên.' });
+        }
+        await transaction.begin();
+        await ensureEmployeePermissionSchema(transaction);
+        const emp = await new sql.Request(transaction)
+            .input('MaNV', sql.VarChar, maNV)
+            .query(`SELECT n.MaNV, n.TenNV, n.ChucVu, t.MaTK, t.MaVaiTro, v.TenVaiTro
+                    FROM NhanVien n
+                    LEFT JOIN TaiKhoan t ON t.MaNV = n.MaNV
+                    LEFT JOIN VaiTro v ON v.MaVaiTro = t.MaVaiTro
+                    WHERE n.MaNV = @MaNV`);
+        if (!emp.recordset.length) {
+            await transaction.rollback();
+            return res.status(404).json({ message: 'Không tìm thấy nhân viên.' });
+        }
+        const row = emp.recordset[0];
+        if (!row.MaTK) {
+            await transaction.rollback();
+            return res.status(400).json({ message: 'Nhân viên chưa có tài khoản, hãy tạo tài khoản trước khi nâng vai trò.' });
+        }
+        const role = await new sql.Request(transaction)
+            .input('MaVaiTro', sql.Int, maVaiTro)
+            .query('SELECT MaVaiTro, TenVaiTro FROM VaiTro WHERE MaVaiTro = @MaVaiTro');
+        if (!role.recordset.length) {
+            await transaction.rollback();
+            return res.status(400).json({ message: 'Vai trò không tồn tại.' });
+        }
+        const next = role.recordset[0];
+        await new sql.Request(transaction)
+            .input('MaNV', sql.VarChar, maNV)
+            .input('ChucVu', sql.NVarChar, next.TenVaiTro)
+            .query('UPDATE NhanVien SET ChucVu = @ChucVu WHERE MaNV = @MaNV');
+        await new sql.Request(transaction)
+            .input('MaTK', sql.Int, row.MaTK)
+            .input('MaVaiTro', sql.Int, next.MaVaiTro)
+            .query('UPDATE TaiKhoan SET MaVaiTro = @MaVaiTro WHERE MaTK = @MaTK');
+        if (!keepOverrides) {
+            await new sql.Request(transaction)
+                .input('MaNV', sql.VarChar, maNV)
+                .query('DELETE FROM dbo.NhanVien_ChucNang WHERE MaNV = @MaNV');
+        }
+        await logAudit(transaction, {
+            user: req.user, req, action: 'Nâng vai trò nhân viên', table: 'TaiKhoan',
+            recordId: String(row.MaTK), severity: 'Quan trọng',
+            content: `${row.TenNV}: ${row.TenVaiTro || row.ChucVu} → ${next.TenVaiTro}`
+        });
+        await transaction.commit();
+        res.json({
+            message: `Đã chuyển ${row.TenNV} sang vai trò ${next.TenVaiTro}. Nhân viên cần đăng nhập lại.`,
+            MaNV: maNV,
+            MaVaiTro: next.MaVaiTro,
+            TenVaiTro: next.TenVaiTro
+        });
+    } catch (error) {
+        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        console.error(error);
+        res.status(500).json({ message: error.message || 'Không đổi được vai trò.' });
+    }
+};
+
 module.exports = {
     getRoles,
     getPermissionMatrix,
-    updatePermissions
+    updatePermissions,
+    getStaffPermissions,
+    updateEmployeePermissions,
+    resetEmployeePermissions,
+    promoteEmployee
 };

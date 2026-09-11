@@ -15,6 +15,15 @@ document.addEventListener('DOMContentLoaded', () => {
     window.FLY_I18N?.applyDom(document);
     window.FLY_APPEARANCE?.syncButtons(document);
     document.title = t('login.title');
+    const origin = window.flyApi?.getOrigin?.() || 'http://localhost:3000';
+    const host = window.flyApi?.displayHost?.(origin) || origin;
+    if (serverStatus.classList.contains('is-ok')) {
+      setServerStatus(t('login.okHost', { host }), 'ok');
+    } else if (serverStatus.classList.contains('is-error')) {
+      setServerStatus(window.flyApi.connectionErrorMessage(origin), 'error');
+    } else {
+      setServerStatus(window.flyApi?.isLocalHost?.(origin) ? t('login.local') : t('login.usingHost', { host }), '');
+    }
   });
   document.title = t('login.title');
   const form = document.getElementById('loginForm');
@@ -73,6 +82,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const isPassword = password.type === 'password';
     password.type = isPassword ? 'text' : 'password';
     passwordToggle.setAttribute('aria-label', isPassword ? t('login.hidePass') : t('login.showPass'));
+    const icon = passwordToggle.querySelector('use');
+    if (icon) icon.setAttribute('href', isPassword ? '#i-eye-off' : '#i-eye');
     password.focus();
   });
 

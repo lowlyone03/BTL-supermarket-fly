@@ -22,77 +22,97 @@
     <link rel="stylesheet" href="login.css" />
     <link rel="stylesheet" href="../shared/theme.css?v=theme-i18n-1" />
   </head>
-  <body>
+  <body class="login-body">
     <svg class="svg-library" aria-hidden="true">
       <symbol id="i-cart" viewBox="0 0 24 24"><path d="M2.2 3.2h2.1l2.1 10.1a2 2 0 0 0 2 1.6h8.9a2 2 0 0 0 1.9-1.4L21 7H6.1M9 20a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm10 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z"/></symbol>
       <symbol id="i-user" viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a7 7 0 0 0-14 0h14Z"/></symbol>
       <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></symbol>
       <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></symbol>
+      <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.7 10.7a2.5 2.5 0 0 0 3.6 3.6"/><path d="M9.9 5.1A11 11 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-2.2 3.2"/><path d="M6.1 6.6C3.5 8.5 2 12 2 12s3.5 6 10 6a10.5 10.5 0 0 0 4.1-.8"/></symbol>
       <symbol id="i-arrow" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6M9 12h11"/></symbol>
       <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 2 8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></symbol>
       <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></symbol>
       <symbol id="i-box" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 7 9 5 9-5v10l-9 5-9-5V7Zm9 5v10"/></symbol>
       <symbol id="i-pos" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h10v4H7zM7 15h2M12 15h2M17 15h.01M7 18h2M12 18h2M17 18h.01"/></symbol>
       <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><path d="m4 7 5-4 6 5 6-6"/></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 8v.01"/></symbol>
     </svg>
 
-    <div class="login-pref pref-cluster">
-      <div class="pref-group">
-        <button type="button" data-lang="vi">VI</button>
-        <button type="button" data-lang="en">EN</button>
-        <button type="button" data-lang="zh">中文</button>
-      </div>
-      <div class="pref-group">
-        <button type="button" data-theme-set="light" data-i18n="pref.light">Sáng</button>
-        <button type="button" data-theme-set="dark" data-i18n="pref.dark">Tối</button>
-        <button type="button" data-theme-set="soft" data-i18n="pref.soft">Dịu</button>
-      </div>
-    </div>
     <main class="auth-shell">
       <section class="auth-showcase">
-        <a class="showcase-brand" href="../landing/landing.html"><svg><use href="#i-cart" /></svg><span>Supermarket Fly</span></a>
+        <a class="showcase-brand" href="../landing/landing.html">
+          <span class="showcase-brand-mark"><svg><use href="#i-cart" /></svg></span>
+          <span>Supermarket Fly</span>
+        </a>
         <div class="showcase-copy">
           <p class="showcase-kicker" data-i18n="login.kicker">Hệ thống quản lý nội bộ</p>
           <h1>Supermarket Fly</h1>
           <span class="showcase-rule" aria-hidden="true"></span>
           <p class="showcase-description" data-i18n="login.desc">Hệ thống quản lý nội bộ giúp vận hành siêu thị hiệu quả, minh bạch và chính xác.</p>
-          <svg class="showcase-illustration" viewBox="0 0 520 270" role="img" aria-label="Minh họa hệ thống quản lý kho, bán hàng tại quầy và báo cáo">
-            <g class="illustration-soft">
-              <rect x="300" y="18" width="198" height="128" rx="8" />
-              <path d="M300 45h198" />
-              <circle cx="316" cy="32" r="3" /><circle cx="328" cy="32" r="3" /><circle cx="340" cy="32" r="3" />
-              <circle cx="345" cy="82" r="24" /><path d="M345 58v24h24M345 82l16 18" />
-              <path d="M401 114V92M419 114V78M437 114V98M455 114V66M389 114h82" />
-              <path d="M392 62h72M392 75h47" />
+          <svg class="showcase-illustration" viewBox="0 0 520 248" role="img" aria-label="Minh họa hệ thống quản lý kho, bán hàng tại quầy và báo cáo">
+            <g class="ill-ambient">
+              <rect x="300" y="16" width="200" height="118" rx="16" />
             </g>
-            <g class="illustration-main">
-              <path d="M24 58 42 48l160 23v140L42 225 24 216Z" />
-              <path d="M42 48v177M56 77h132v118H56zM56 112h132M56 151h132" />
-              <path d="M68 88h18v24H68zM94 83h17v29H94zM119 90h24v22h-24zM151 86h21v26h-21z" />
-              <path d="M67 124h27v27H67zM103 129h19v22h-19zM132 121h25v30h-25zM165 127h13v24h-13z" />
-              <path d="M62 166h35v29H62zM105 160h43v35h-43zM156 169h26v26h-26z" />
-              <path d="M72 208h58v43H72zM130 214h64v37h-64zM72 208l29-10 57 10M130 214l28-9 36 9" />
-              <rect x="205" y="128" width="174" height="94" rx="12" />
-              <rect x="219" y="140" width="146" height="68" rx="7" />
-              <path d="M238 157h45M238 170h32M238 183h38" />
-              <rect x="299" y="154" width="46" height="38" rx="4" /><path d="M322 154v38M299 173h46" />
-              <path d="M234 222v17h115v-17M222 239h140l16 13H205l17-13Z" />
+            <g class="ill-panel">
+              <rect x="314" y="28" width="172" height="94" rx="10" />
+              <circle cx="328" cy="42" r="2.5" /><circle cx="339" cy="42" r="2.5" /><circle cx="350" cy="42" r="2.5" />
+              <path d="M314 54h172" />
+              <rect class="ill-bar" x="330" y="78" width="12" height="30" rx="2.5" />
+              <rect class="ill-bar ill-bar-2" x="350" y="68" width="12" height="40" rx="2.5" />
+              <rect class="ill-bar" x="370" y="74" width="12" height="34" rx="2.5" />
+              <rect class="ill-bar ill-bar-2" x="390" y="62" width="12" height="46" rx="2.5" />
+              <circle cx="448" cy="85" r="20" />
+              <circle class="ill-donut-hole" cx="448" cy="85" r="10" />
+              <path class="ill-slice" d="M448 65a20 20 0 0 1 17 28L448 85Z" />
+            </g>
+            <g class="ill-ops">
+              <rect x="28" y="32" width="148" height="168" rx="12" />
+              <path d="M28 80h148M28 128h148M28 176h148" />
+              <rect class="ill-block" x="42" y="52" width="28" height="20" rx="3" />
+              <rect class="ill-block ill-block-soft" x="78" y="52" width="22" height="20" rx="3" />
+              <rect class="ill-block" x="108" y="52" width="32" height="20" rx="3" />
+              <rect class="ill-block ill-block-soft" x="148" y="52" width="16" height="20" rx="3" />
+              <rect class="ill-block ill-block-soft" x="42" y="100" width="34" height="20" rx="3" />
+              <rect class="ill-block" x="84" y="100" width="24" height="20" rx="3" />
+              <rect class="ill-block ill-block-soft" x="116" y="100" width="40" height="20" rx="3" />
+              <rect class="ill-block" x="42" y="148" width="26" height="20" rx="3" />
+              <rect class="ill-block ill-block-soft" x="76" y="148" width="44" height="20" rx="3" />
+              <rect class="ill-block" x="128" y="148" width="32" height="20" rx="3" />
+              <rect x="198" y="112" width="168" height="92" rx="12" />
+              <rect class="ill-screen" x="212" y="124" width="140" height="54" rx="7" />
+              <path d="M226 140h48M226 152h34M226 164h40" />
+              <rect class="ill-block" x="312" y="136" width="22" height="22" rx="4" />
+              <path d="M230 204h104M210 216h144l8 10H202l8-10Z" />
             </g>
           </svg>
           <ul class="showcase-modules" aria-label="Các nghiệp vụ chính">
-            <li><svg><use href="#i-cart" /></svg><span data-i18n="login.modBuy">Mua hàng</span></li>
-            <li><svg><use href="#i-box" /></svg><span data-i18n="login.modWh">Quản lý kho</span></li>
-            <li><svg><use href="#i-pos" /></svg><span data-i18n="login.modPos">Bán hàng tại quầy</span></li>
-            <li><svg><use href="#i-chart" /></svg><span data-i18n="login.modAcct">Kế toán &amp; báo cáo</span></li>
+            <li><span class="mod-icon"><svg><use href="#i-cart" /></svg></span><span data-i18n="login.modBuy">Mua hàng</span></li>
+            <li><span class="mod-icon"><svg><use href="#i-box" /></svg></span><span data-i18n="login.modWh">Quản lý kho</span></li>
+            <li><span class="mod-icon"><svg><use href="#i-pos" /></svg></span><span data-i18n="login.modPos">Bán hàng tại quầy</span></li>
+            <li><span class="mod-icon"><svg><use href="#i-chart" /></svg></span><span data-i18n="login.modAcct">Kế toán &amp; báo cáo</span></li>
           </ul>
         </div>
-        <div class="showcase-footer" data-i18n="login.footer">© 2026 Supermarket_Fly · Phiên bản 1.0</div>
+        <div class="showcase-footer" data-i18n="login.footer">© 2026 Supermarket Fly · Phiên bản 1.0</div>
       </section>
 
       <section class="auth-panel">
-        <a class="back-link" href="../landing/landing.html"><svg><use href="#i-arrow" /></svg><span data-i18n="login.back">Quay lại trang giới thiệu</span></a>
+        <header class="panel-toolbar">
+          <a class="back-link" href="../landing/landing.html"><svg><use href="#i-arrow" /></svg><span data-i18n="login.back">Quay lại trang giới thiệu</span></a>
+          <div class="login-pref pref-cluster">
+            <div class="pref-group">
+              <button type="button" data-lang="vi">VI</button>
+              <button type="button" data-lang="en">EN</button>
+              <button type="button" data-lang="zh">中文</button>
+            </div>
+            <div class="pref-group">
+              <button type="button" data-theme-set="light" data-i18n="pref.light">Sáng</button>
+              <button type="button" data-theme-set="dark" data-i18n="pref.dark">Tối</button>
+              <button type="button" data-theme-set="soft" data-i18n="pref.soft">Dịu</button>
+            </div>
+          </div>
+        </header>
         <div class="login-card">
-          <div class="mobile-brand"><svg><use href="#i-cart" /></svg><strong>Supermarket Fly</strong></div>
+          <div class="mobile-brand"><span class="showcase-brand-mark"><svg><use href="#i-cart" /></svg></span><strong>Supermarket Fly</strong></div>
           <div class="login-heading"><h2 data-i18n="login.h2">Đăng nhập</h2><p data-i18n="login.sub">Sử dụng tài khoản nội bộ đã được cấp.</p></div>
 
           <form id="loginForm" class="login-form" novalidate>
@@ -100,21 +120,27 @@
             <label class="form-field" for="username"><span data-i18n="login.user">Tên đăng nhập</span><div class="input-wrap"><svg><use href="#i-user" /></svg><input type="text" id="username" name="username" data-i18n-placeholder="login.userPh" placeholder="Ví dụ: admin" autocomplete="username" required /></div></label>
             <label class="form-field" for="password"><span data-i18n="login.pass">Mật khẩu</span><div class="input-wrap"><svg><use href="#i-lock" /></svg><input type="password" id="password" name="password" data-i18n-placeholder="login.passPh" placeholder="Nhập mật khẩu của bạn" autocomplete="current-password" required /><button class="password-toggle" id="passwordToggle" type="button" data-i18n-aria="login.showPass" aria-label="Hiện mật khẩu"><svg><use href="#i-eye" /></svg></button></div></label>
             <div class="form-options"><label class="remember-option"><input type="checkbox" id="rememberUsername" /><span data-i18n="login.remember">Ghi nhớ tên đăng nhập</span></label><button class="forgot-button" id="forgotPasswordBtn" type="button" data-i18n="login.forgot">Quên mật khẩu?</button></div>
+            <button type="submit" class="btn-login" id="btnLogin"><span data-i18n="login.submit">Đăng nhập</span></button>
             <div class="role-chips" id="roleChips">
               <p data-i18n="login.testHint">Chọn nhanh tài khoản test — mật khẩu 123</p>
               <div>
-                <button type="button" data-user="admin" data-i18n="role.manager">Quản lý</button>
-                <button type="button" data-user="muahang" data-i18n="role.purchasing">Mua hàng</button>
-                <button type="button" data-user="thukho" data-i18n="role.warehouse">Thủ kho</button>
-                <button type="button" data-user="thungan" data-i18n="role.cashier">Thu ngân</button>
-                <button type="button" data-user="ketoan" data-i18n="role.accounting">Kế toán</button>
+                <button type="button" data-user="admin" data-i18n="login.chipMgr">Quản lý</button>
+                <button type="button" data-user="muahang" data-i18n="login.chipBuy">Mua hàng</button>
+                <button type="button" data-user="thukho" data-i18n="login.chipWh">Thủ kho</button>
+                <button type="button" data-user="thungan" data-i18n="login.chipPos">Thu ngân</button>
+                <button type="button" data-user="ketoan" data-i18n="login.chipAcct">Kế toán</button>
               </div>
             </div>
-            <button type="submit" class="btn-login" id="btnLogin"><span data-i18n="login.submit">Đăng nhập</span></button>
           </form>
 
           <div class="login-note server-box">
-            <p><strong data-i18n="login.serverTitle">Máy chủ nhóm (database chung)</strong><span data-i18n="login.serverHelp">Cùng Wi-Fi: dán IP máy chủ, ví dụ 192.168.1.10. Khác Wi-Fi: dán IP Tailscale (100.x.x.x) hoặc link Cloudflare/ngrok TV1 gửi. Máy này: localhost.</span></p>
+            <details class="server-help">
+              <summary>
+                <strong data-i18n="login.serverTitle">Máy chủ nhóm (database chung)</strong>
+                <span data-i18n="login.serverGuide">Hướng dẫn kết nối</span>
+              </summary>
+              <p data-i18n="login.serverHelp">Cùng Wi-Fi: dán IP máy chủ, ví dụ 192.168.1.10. Khác Wi-Fi: dán IP Tailscale (100.x.x.x) hoặc link Cloudflare/ngrok TV1 gửi. Máy này: localhost.</p>
+            </details>
             <div class="server-row">
               <div class="input-wrap">
                 <svg><use href="#i-database" /></svg>

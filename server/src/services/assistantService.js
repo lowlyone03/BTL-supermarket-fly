@@ -1,7 +1,8 @@
 const { poolPromise } = require('../config/db');
 const { logAuditSafe } = require('./auditLog');
 const { pickFaq, fold } = require('./assistantFaq');
-const { collectContext, codesOf } = require('./assistantTools');
+const { collectContext, codesOf, hasUc } = require('./assistantTools');
+const { attachEffectivePermissions } = require('./effectivePermissions');
 const { handleDocumentIntent, detectDocumentIntent, emptyDocResult, specOf, canReadKind } = require('./assistantDocs');
 const {
     describeAccess,
@@ -28,6 +29,8 @@ CẤM nêu mã UC hay "use case".
 
 Quản lý là giám sát: được xem, in và tải hóa đơn mua/bán, đơn mua, phiếu nhập/xuất, đề nghị mua, đổi trả, phiếu thu/chi, công nợ NCC, báo cáo cửa hàng, KQKD, CĐPS, LCTT, lương gộp tháng. CẤM nói "tôi không có dữ liệu", "chỉ cấp công nợ/hôm nay", "hãy mở màn hình". Hệ thống tool đã trả list hoặc báo cáo thì chỉ tóm tắt số, không diễn giải quyền.
 
+Mọi bộ phận (quản lý, mua hàng, thu ngân, kế toán, thủ kho) được hỏi trong phạm vi chức năng đã cấp. CẤM duyệt / phê duyệt / từ chối chứng từ, hoàn thành hóa đơn, trả NCC, ghi sổ, tick thanh toán, phân quyền hộ — kể cả khi người dùng có quyền duyệt trên dashboard. Duyệt chỉ do người bấm nút trên màn hình Fly hoặc Telegram.
+
 Next action không thay thế xem/in trong widget. Không duyệt hộ, không trả tiền, không ghi sổ.
 
 Cấm: duyệt chứng từ, hoàn thành hóa đơn, trả NCC, sửa tồn, lộ secret, viết SQL.
@@ -42,9 +45,13 @@ Quản lý không xem tồn kho chi tiết toàn hàng, không xem danh sách ch
 
 Nếu người dùng xin danh sách hóa đơn hoặc báo cáo tháng, hệ thống đã đưa list/số — chỉ nói ngắn và gợi ý chọn Xem / In hoặc Tải. Không viết đoạn giới thiệu chung về KQKD hay quyền.`;
 
-const FORBIDDEN_ANSWER = `Trợ lý Fly không được phép duyệt chứng từ, hoàn thành hóa đơn, trả nhà cung cấp, ghi sổ hay tick thanh toán hộ.
+const FORBIDDEN_ANSWER = `Trợ lý Fly không được phép duyệt chứng từ, phê duyệt phiếu chi, hoàn tiền, hoàn thành hóa đơn, trả nhà cung cấp, ghi sổ, tick thanh toán hay đổi phân quyền hộ.
 
-Bạn mở đúng màn trên dashboard (Trung tâm phê duyệt, POS, công nợ, sổ cái) để thao tác. Telegram đã có nút duyệt riêng — trợ lý không gọi nút đó.`;
+Bạn mở đúng màn trên dashboard (Trung tâm phê duyệt, POS, công nợ, sổ cái, phân quyền) rồi bấm nút. Telegram nếu có nút duyệt thì đó là thao tác tay — trợ lý chat không gọi nút đó.`;
+
+const SCOPE_ANSWER = `Câu hỏi này nằm ngoài chức năng được cấp cho tài khoản của bạn.
+
+Trợ lý chỉ xem và giải thích trong phạm vi công việc đã phân. Hãy hỏi việc thuộc quầy/kho/mua hàng/kế toán của bạn, hoặc nhờ Quản lý cấp thêm quyền (tùy chỉnh theo nhân viên, không đổi cả vai trò).`;
 
 const looksLikeSecret = (text) => /mat\s*khau|password|secret|token|otp|api[_-]?key/i.test(String(text || ''));
 
@@ -66,12 +73,18 @@ const consumeRate = (maNV) => {
 
 const isForbiddenQuestion = (question) => {
     const text = fold(question);
+    const listing = /(nhung|danh sach|liet ke|nao dang|dang cho|cho toi duyet|cho duyet|can chu y)/.test(text)
+        && /(duyet|phe duyet)/.test(text)
+        && !/(giup|gium|ho\b|bam|thuc hien|giup toi|ho toi)/.test(text)
+        && !/(duyet|phe duyet|tu choi)\s+(po|pc|px|dn|hd|phieu|don)\s*\w+/i.test(text);
+    if (listing) return false;
     const patterns = [
-        /duyet.{0,60}(ho|giup|gium)/,
+        /duyet.{0,80}(ho|giup|gium|giup toi|ho toi|lun|luon|ngay|giup minh)/,
+        /phe\s*duyet.{0,80}(ho|giup|gium|phieu|don|po|pc)/,
         /tu\s*choi.{0,40}(ho|giup|gium)/,
         /\/approve/,
         /\/reject/,
-        /approve.{0,40}(ho|giup|for me)/,
+        /approve.{0,40}(ho|giup|for me|this|it)/,
         /tra\s*ncc.{0,40}(giup|ho|gium)/,
         /chi\s*ncc.{0,40}(giup|ho|gium)/,
         /lap\s*phieu\s*chi.{0,40}(giup|ho)/,
@@ -81,9 +94,34 @@ const isForbiddenQuestion = (question) => {
         /ghi\s*so.{0,40}(giup|ho)/,
         /khoa\s*ky.{0,40}(giup|ho)/,
         /\/ask.{0,40}\/approve/,
-        /bam\s*duyet\s*ho/
+        /bam\s*(nut\s*)?duyet/,
+        /duyet\s+(po|pc|px|dn|hd)\w*/i,
+        /duyet\s+phieu(\s+chi)?/,
+        /duyet\s+don\s+mua/,
+        /phan\s*quyen.{0,40}(giup|ho)/,
+        /cap\s*quyen.{0,40}(giup|ho)/,
+        /hoan\s*tien.{0,40}(giup|ho|gium)/
     ];
     return patterns.some((re) => re.test(text));
+};
+
+const SCOPE_INTENTS = [
+    { re: /cong\s*no|phieu\s*chi|tra\s*ncc|han\s*thanh\s*toan/, uc: ['UC28', 'UC09', 'UC10'] },
+    { re: /ghi\s*so|so\s*cai|khoa\s*ky|but\s*toan/, uc: ['UC37', 'UC38', 'UC39'] },
+    { re: /doi\s*chieu\s*hoa\s*don\s*mua|hoa\s*don\s*mua/, uc: ['UC27', 'UC10'] },
+    { re: /ton\s*kho|duoi\s*dinh\s*muc|phieu\s*nhap|phieu\s*xuat|kiem\s*ke/, uc: ['UC15', 'UC16', 'UC17', 'UC18', 'UC19', 'UC20'] },
+    { re: /de\s*nghi\s*mua|don\s*mua|nha\s*cung\s*cap|ncc\s+nao/, uc: ['UC11', 'UC12', 'UC13', 'UC14', 'UC05', 'UC10'] },
+    { re: /bang\s*luong|phieu\s*chi\s*luong/, uc: ['UC33', 'UC32'] },
+    { re: /kqkd|ket\s*qua\s*kinh\s*doanh|bang\s*can\s*doi/, uc: ['UC43', 'UC10'] },
+    { re: /doi\s*soat\s*(nh|ngan\s*hang)|sao\s*ke/, uc: ['UC42'] }
+];
+
+const isOutOfScopeQuestion = (question, user) => {
+    const text = fold(question);
+    const hit = SCOPE_INTENTS.find((item) => item.re.test(text));
+    if (!hit) return false;
+    if (fold(user?.TenVaiTro) === 'quan ly') return false;
+    return !hit.uc.some((code) => hasUc(user, code));
 };
 
 const resolveProvider = (override) => {
@@ -158,8 +196,39 @@ const ask = async ({
         throw error;
     }
     consumeRate(user?.MaNV);
+    try {
+        const db = pool || await poolPromise;
+        await attachEffectivePermissions(db, user);
+    } catch { /* giữ Quyen theo vai trò */ }
     const resolvedChannel = channel === 'telegram' ? 'telegram' : 'electron';
     const resolvedTab = tab || (/h[oô]m\s*nay/i.test(text) ? 'homnay' : 'chat');
+    if (isForbiddenQuestion(text)) {
+        await auditAsk({ req, user, question: text, result: 'Từ chối', blocked: true });
+        return {
+            answer: FORBIDDEN_ANSWER,
+            sources: ['Chính sách trợ lý Fly — không thao tác chứng từ'],
+            evidence: [{ claim: 'Từ chối duyệt / ghi sổ hộ', numbers: [], source: 'Chính sách trợ lý', confidence: 'high' }],
+            nextActions: [{ label: 'Mở Trung tâm phê duyệt', target: 'manager-purchase-approvals' }],
+            blocked: true,
+            model: null,
+            channel: resolvedChannel,
+            tab: resolvedTab
+        };
+    }
+    if (isOutOfScopeQuestion(text, user)) {
+        await auditAsk({ req, user, question: text, result: 'Ngoài phạm vi', blocked: true });
+        return {
+            answer: SCOPE_ANSWER,
+            sources: ['Phân quyền nhân viên / vai trò'],
+            evidence: [{ claim: 'Ngoài chức năng được cấp', numbers: codesOf(user), source: 'Phân quyền', confidence: 'high' }],
+            nextActions: [],
+            blocked: true,
+            outOfScope: true,
+            model: null,
+            channel: resolvedChannel,
+            tab: resolvedTab
+        };
+    }
     const docIntent = detectDocumentIntent(text);
     if (docIntent) {
         const spec = specOf(docIntent.kind);
@@ -187,19 +256,6 @@ const ask = async ({
             };
         }
         }
-    }
-    if (isForbiddenQuestion(text)) {
-        await auditAsk({ req, user, question: text, result: 'Từ chối', blocked: true });
-        return {
-            answer: FORBIDDEN_ANSWER,
-            sources: ['Chính sách trợ lý Fly — không thao tác chứng từ'],
-            evidence: [{ claim: 'Từ chối thao tác hộ', numbers: [], source: 'Chính sách trợ lý', confidence: 'high' }],
-            nextActions: [{ label: 'Mở Trung tâm phê duyệt', target: 'manager-purchase-approvals' }],
-            blocked: true,
-            model: null,
-            channel: resolvedChannel,
-            tab: resolvedTab
-        };
     }
 
     let snapshot = { soLieu: 'không lấy được số liệu, không bịa', sources: [], permissions: codesOf(user), roleLabel: user?.TenVaiTro };
@@ -270,10 +326,12 @@ module.exports = {
     getBrief,
     runUserScenario,
     isForbiddenQuestion,
+    isOutOfScopeQuestion,
     packContext,
     clipHistory,
     consumeRate,
     usage,
     FORBIDDEN_ANSWER,
+    SCOPE_ANSWER,
     SYSTEM_PROMPT
 };

@@ -17,18 +17,24 @@
     let current = null;
     root.innerHTML = `<header class="warehouse-heading"><div>
         <p class="warehouse-kicker">QUẢN LÝ / BÁO CÁO THỦ KHO</p>
-        <h1>Báo cáo kho do Thủ kho gửi</h1>
-        <p>Chỉ xem bản Thủ kho đã nộp theo ngày, tháng, quý hoặc năm. Báo cáo tổng cửa hàng (doanh thu, lãi lỗ) vẫn nằm ở menu <strong>Báo cáo cửa hàng</strong>.</p>
+        <h1>Báo cáo Thủ kho đã gửi</h1>
+        <p>Xem bản Thủ kho đã nộp theo ngày, tháng, quý hoặc năm. Báo cáo tổng siêu thị vẫn ở <strong>Báo cáo cửa hàng</strong>.</p>
       </div></header>
-      <article class="report-admin-banner">
-        <strong>Hai báo cáo khác nhau</strong>
-        <span>Báo cáo cửa hàng = toàn siêu thị. Báo cáo Thủ kho = nhập–xuất–tồn, hàng rời kho bán, tồn thấp và đổi trả do Thủ kho lập rồi gửi lên.</span>
+      <article class="report-admin-banner dept-split-note">
+        <strong>Hai menu khác nhau</strong>
+        <span>Báo cáo cửa hàng = toàn siêu thị. Báo cáo Thủ kho = nhập–xuất–tồn, hàng rời kho bán, tồn thấp và đổi trả do Thủ kho gửi lên.</span>
       </article>
-      <div class="warehouse-toolbar report-admin-toolbar">
-        ${wh().warehouseButtons?.('admin') || '<button class="warehouse-secondary" id="exportRoleReportCsv" disabled>Xuất CSV</button><button class="warehouse-secondary" id="exportRoleReportExcel" disabled>Xuất Excel</button><button class="warehouse-secondary" id="printRoleReport" disabled>Xem bản in / PDF</button>'}
-      </div>
+      <section class="dept-admin-toolbar">
+        <div class="dept-admin-actions">
+          ${wh().warehouseButtons?.('admin') || '<button class="warehouse-secondary" id="exportRoleReportCsv" disabled>Xuất CSV</button><button class="warehouse-secondary" id="exportRoleReportExcel" disabled>Xuất Excel</button><button class="warehouse-secondary" id="printRoleReport" disabled>Xem bản in / PDF</button>'}
+        </div>
+      </section>
       <div id="adminWarehouseList"></div>
-      <div id="adminWarehouseDetail"><div class="welcome-card report-idle"><h2>Chưa mở báo cáo</h2><p>Chọn một kỳ Thủ kho đã gửi để xem, in hoặc xuất Excel/CSV.</p></div></div>`;
+      <div id="adminWarehouseDetail"><div class="welcome-card report-idle report-idle-keeper">
+        <span class="report-idle-mark" aria-hidden="true"><svg><use href="#i-report"></use></svg></span>
+        <h2>Chưa mở báo cáo</h2>
+        <p>Chọn một kỳ Thủ kho đã gửi để xem snapshot, in hoặc xuất Excel/CSV.</p>
+      </div></div>`;
 
     const actions = wh().bindWarehouseReportActions?.(root, {
       getReport: () => current?.report,

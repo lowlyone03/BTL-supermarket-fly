@@ -216,7 +216,7 @@ const warehouseReportKeyboard = (lang = 'vi') => ({
         { text: t(lang, 'rptWarehouseList') || '📋 Kỳ đã gửi', callback_data: 'rpt:wh' },
         { text: t(lang, 'rptStoreReports') || '📊 Báo cáo cửa hàng', callback_data: 'cmd:reports' }
     ], [
-        { text: '🏠 Tổng quan', callback_data: 'cmd:fly' }
+        { text: 'Tổng quan', callback_data: 'cmd:fly' }
     ]]
 });
 
@@ -227,7 +227,7 @@ const warehouseReportListKeyboard = (items = [], lang = 'vi') => {
     }]));
     rows.push([
         { text: '‹ Danh sách báo cáo', callback_data: 'cmd:reports' },
-        { text: '🏠 Tổng quan', callback_data: 'cmd:fly' }
+        { text: 'Tổng quan', callback_data: 'cmd:fly' }
     ]);
     return { inline_keyboard: rows };
 };

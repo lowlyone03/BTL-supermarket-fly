@@ -27,7 +27,7 @@
         <div class="form-group"><label>Tồn tối thiểu *</label><input id="productMinimum" type="number" min="0" step="1" required placeholder="0"><small class="field-help">Dùng để cảnh báo và lập đề nghị mua hàng.</small><small class="field-error" id="productMinimumError"></small></div><div class="form-group"><label>Trạng thái</label><select id="productStatusInput"><option>Đang bán</option><option>Ngừng bán</option></select></div>
       </div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeProductModal()">Hủy</button><button type="button" class="btn btn-secondary" onclick="previewProduct()">Xem trước</button><button class="btn btn-primary" id="productSubmitButton" type="submit">Lưu sản phẩm</button></div></form></div></div></div>
       <div class="modal-backdrop" id="categoryModal" style="display:none"><div class="modal category-manager-modal"><div class="modal-header"><div><p class="module-kicker">DANH MỤC HÀNG HÓA</p><h3>Quản lý danh mục sản phẩm</h3><p class="modal-description">Thêm mới, tra cứu, chỉnh sửa hoặc ngừng sử dụng danh mục.</p></div><button class="close-btn" onclick="closeCategoryModal()" aria-label="Đóng">×</button></div><div class="modal-body category-manager-layout"><section class="category-editor-panel"><div class="category-section-heading"><div><small>THÔNG TIN DANH MỤC</small><h4 id="categoryFormTitle">Thêm danh mục mới</h4></div><button type="button" class="text-action" id="categoryResetButton" onclick="resetCategoryForm()">Làm mới</button></div><form id="categoryForm"><div class="form-group"><label>Mã danh mục *</label><div class="input-with-action"><input id="categoryCode" maxlength="20" required placeholder="Ví dụ: DM007"><button type="button" class="field-action" id="categoryCodeSuggestionButton" onclick="suggestCategoryCode()">Gợi ý</button></div><small class="field-help">Mã duy nhất, không thể đổi sau khi tạo.</small><small class="field-error" id="categoryCodeError"></small></div><div class="form-group"><label>Tên danh mục *</label><input id="categoryName" maxlength="100" required placeholder="Ví dụ: Đồ uống"><small class="field-error" id="categoryNameError"></small></div><div class="form-group"><label>Mô tả</label><textarea id="categoryDescription" maxlength="255" rows="4" placeholder="Mô tả ngắn nhóm sản phẩm"></textarea></div><div class="category-form-actions"><button type="button" class="btn btn-secondary" id="categoryCancelEdit" onclick="resetCategoryForm()" hidden>Hủy chỉnh sửa</button><button type="button" class="btn btn-secondary" onclick="previewCategory()">Xem trước</button><button class="btn btn-primary" id="categorySubmitButton" type="submit">Thêm danh mục</button></div></form><div class="category-rule-note"><strong>Quy tắc ngừng sử dụng</strong><span>Danh mục chỉ được ngừng sau khi toàn bộ sản phẩm thuộc danh mục đã ngừng bán.</span></div></section><section class="category-browser-panel"><div class="category-browser-heading"><div><small>DANH SÁCH DANH MỤC</small><h4><span id="categoryTotalCount">0</span> danh mục</h4></div><span class="category-active-count"><span id="categoryActiveCount">0</span> đang sử dụng</span></div><label class="category-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="categorySearch" placeholder="Tìm mã hoặc tên danh mục..."></label><div class="category-list" id="categoryList"></div></section></div></div></div>
-      <script src="../admin/products.js?v=tax-ui-1"></script>`,
+      <script src="../admin/products.js?v=products-dom-3"></script>`,
 
     'promotions.html': `
       <section class="admin-module">
@@ -61,7 +61,7 @@
         </div></div>
 
       <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closePromoModal()">Hủy</button><button type="button" class="btn btn-secondary" onclick="previewPromotion()">Xem trước</button><button class="btn btn-primary" id="promoSubmitBtn" type="submit">Lưu khuyến mãi</button></div></form></div></div></div>
-      <script src="../admin/promotions.js?v=search-2"></script>`,
+      <script src="../admin/promotions.js?v=search-3"></script>`,
 
     'employees.html': `
       <section class="admin-module emp-module">
@@ -115,7 +115,7 @@
                 <div class="form-group"><label>Mã nhân viên *</label><input type="text" id="maNV" required placeholder="VD: NV_TN02" maxlength="20"><small class="emp-field-error" id="maNV_err"></small></div>
                 <div class="form-group"><label>Họ và tên *</label><input type="text" id="tenNV" required placeholder="Nhập họ tên nhân viên" maxlength="150"><small class="emp-field-error" id="tenNV_err"></small></div>
                 <div class="form-group"><label>Số CCCD <span class="req-create">*</span></label><input type="text" id="cccd" inputmode="numeric" placeholder="12 số (hoặc CMND 9 số)" maxlength="12"><small class="emp-field-error" id="cccd_err"></small></div>
-                <div class="form-group"><label>Ngày sinh <span class="req-create">*</span></label><input type="date" id="ngaySinh"><small class="emp-field-error" id="ngaySinh_err"></small></div>
+                <div class="form-group"><label>Ngày sinh <span class="req-create">*</span></label><input type="date" id="ngaySinh" data-date-range="birth"><small class="emp-field-error" id="ngaySinh_err"></small></div>
                 <div class="form-group"><label>Giới tính <span class="req-create">*</span></label><select id="gioiTinh"><option value="">Chưa chọn</option><option value="Nam">Nam</option><option value="Nữ">Nữ</option></select><small class="emp-field-error" id="gioiTinh_err"></small></div>
                 <div class="form-group"><label>Số điện thoại <span class="req-create">*</span></label><input type="text" id="sdt" placeholder="09xxxxxxxx hoặc +84..." maxlength="20"><small class="emp-field-error" id="sdt_err"></small></div>
                 <div class="form-group"><label>Email</label><input type="email" id="email" placeholder="ten@supermarket.fly"><small class="emp-field-error" id="email_err"></small></div>
@@ -130,14 +130,14 @@
                 <div class="form-group"><label>Nguyên quán</label><input type="text" id="nguyenQuan" placeholder="Nguyên quán" maxlength="200"><small class="emp-field-error" id="nguyenQuan_err"></small></div>
               </div></div>
               <div class="emp-form-section"><div class="emp-section-heading"><small>GIẤY TỜ &amp; CƯ TRÚ</small><h4>CCCD và địa chỉ</h4></div><div class="form-grid">
-                <div class="form-group"><label>Ngày cấp CCCD</label><input type="date" id="ngayCapCCCD"><small class="emp-field-error" id="ngayCapCCCD_err"></small></div>
+                <div class="form-group"><label>Ngày cấp CCCD</label><input type="date" id="ngayCapCCCD" data-date-range="issue"><small class="emp-field-error" id="ngayCapCCCD_err"></small></div>
                 <div class="form-group"><label>Nơi cấp CCCD</label><input type="text" id="noiCapCCCD" placeholder="Cục Cảnh sát QLHC về TTXH" maxlength="200"><small class="emp-field-error" id="noiCapCCCD_err"></small></div>
                 <div class="form-group form-span-2"><label>Hộ khẩu thường trú</label><input type="text" id="hoKhauThuongTru" placeholder="Số nhà, phường/xã, quận/huyện, tỉnh/thành" maxlength="300"><small class="emp-field-error" id="hoKhauThuongTru_err"></small></div>
                 <div class="form-group form-span-2"><label>Chỗ ở hiện nay</label><input type="text" id="choOHienNay" placeholder="Mặc định theo địa chỉ liên hệ nếu để trống" maxlength="300"><small class="emp-field-error" id="choOHienNay_err"></small></div>
               </div></div>
               <div class="emp-form-section"><div class="emp-section-heading"><small>THÔNG TIN CÔNG VIỆC</small><h4>Vị trí &amp; trạng thái</h4></div><div class="form-grid">
                 <div class="form-group"><label>Chức vụ *</label><select id="chucVu" required><option value="Quản lý">Quản lý</option><option value="Nhân viên mua hàng">Nhân viên mua hàng</option><option value="Thủ kho">Thủ kho</option><option value="Thu ngân" selected>Thu ngân</option><option value="Kế toán">Kế toán</option></select><small class="emp-field-error" id="chucVu_err"></small></div>
-                <div class="form-group"><label>Ngày vào làm <span class="req-create">*</span></label><input type="date" id="ngayVaoLam"><small class="emp-field-error" id="ngayVaoLam_err"></small></div>
+                <div class="form-group"><label>Ngày vào làm <span class="req-create">*</span></label><input type="date" id="ngayVaoLam" data-date-range="hire"><small class="emp-field-error" id="ngayVaoLam_err"></small></div>
                 <div class="form-group"><label>Trạng thái</label><select id="trangThai"><option value="Đang làm việc">Đang làm việc</option><option value="Nghỉ việc">Nghỉ việc</option></select></div>
               </div></div>
               <div class="emp-form-section"><div class="emp-section-heading"><small>HỌC VẤN</small><h4>Trình độ &amp; chuyên môn</h4></div><div class="form-grid">
@@ -164,8 +164,8 @@
         </div>
       </div>
       <script src="../shared/field-validators.js?v=fields-7"></script>
-      <script src="../shared/employee-profile.js?v=emp-syll-1"></script>
-      <script src="../admin/employees.js?v=emp-syll-1"></script>`,
+      <script src="../shared/employee-profile.js?v=emp-date-1"></script>
+      <script src="../admin/employees.js?v=emp-dom-1"></script>`,
 
     'accounts.html': `
       <section class="admin-module">
@@ -192,12 +192,12 @@
           <div class="table-container"><table class="account-table"><thead><tr><th>Tài khoản</th><th>Nhân viên</th><th>Vai trò</th><th>Trạng thái</th><th>Đăng nhập cuối</th><th class="align-right">Thao tác</th></tr></thead><tbody id="accTableBody"></tbody></table></div>
         </article>
 
-        <article class="surface-card data-surface" id="telegramBindCard">
-          <div class="table-toolbar">
+        <article class="surface-card data-surface telegram-bind-card" id="telegramBindCard">
+          <div class="table-toolbar telegram-bind-toolbar">
             <div>
               <p class="module-kicker" style="margin:0">KÊNH TELEGRAM</p>
               <strong>Liên kết ChatId đã xác thực</strong>
-              <p style="margin:6px 0 0;color:#68766e;font-size:12px">Quản lý hủy liên kết cưỡng chế. Không nhập token bot trên máy thu ngân.</p>
+              <p style="margin:6px 0 0;color:#68766e;font-size:12px">Bot xem số liệu theo quyền nhân viên. Nút duyệt trên Telegram là thao tác tay — trợ lý AI không được duyệt hộ. Không nhập token bot trên máy thu ngân.</p>
             </div>
             <button class="icon-button" type="button" onclick="loadTelegramBindings()" title="Làm mới" aria-label="Tải lại liên kết Telegram"><svg aria-hidden="true"><use href="#i-refresh"/></svg></button>
           </div>
@@ -230,22 +230,22 @@
         </div>
       </div>
       <script src="../shared/field-validators.js?v=fields-7"></script>
-      <script src="../shared/employee-profile.js?v=emp-syll-1"></script>
-      <script src="../admin/accounts.js?v=telegram-p1"></script>`,
+      <script src="../shared/employee-profile.js?v=emp-date-1"></script>
+      <script src="../admin/accounts.js?v=telegram-p2"></script>`,
 
     'permissions.html': `
-      <section class="admin-module">
+      <section class="admin-module perm-module">
         <header class="module-heading">
-          <div><p class="module-kicker">KIỂM SOÁT / PHÂN QUYỀN</p><h1>Phân quyền theo vai trò</h1><p>Thiết lập quyền truy cập chức năng phù hợp với phạm vi công việc của từng nhóm nhân sự.</p></div>
-          <div class="heading-actions"><span class="record-count">29 chức năng</span><button class="btn btn-primary" onclick="savePermissions()">Lưu thay đổi</button></div>
+          <div><p class="module-kicker">KIỂM SOÁT / PHÂN QUYỀN</p><h1>Phân quyền theo nhân viên</h1><p>Vai trò là mẫu chung (tổng). Mở từng người để cấp thêm hoặc thu quyền — thu ngân xuất sắc có thể cao hơn đồng nghiệp mà không đổi cả vai trò.</p></div>
+          <div class="heading-actions"><span class="record-count" id="permRecordCount">0 nhân viên</span><button class="btn btn-primary" id="permSaveBtn" type="button">Lưu quyền nhân viên</button></div>
         </header>
-        <div class="permission-note"><span class="note-icon"><svg aria-hidden="true"><use href="#i-shield"/></svg></span><div><strong>Quyền điều hành của Quản lý được bảo vệ</strong><p>Các quyền quản trị cốt lõi được cố định để bảo đảm Quản lý luôn có thể điều hành hệ thống.</p></div></div>
+        <div class="permission-note perm-page-note"><span class="note-icon"><svg aria-hidden="true"><use href="#i-shield"/></svg></span><div><strong>Nhân viên là cấp con của vai trò</strong><p>Không tùy chỉnh thì kế thừa mẫu. Có tùy chỉnh thì badge “tùy chỉnh riêng”. Quyền Quản lý cố định. Nhân viên cần tải lại trang sau khi được cấp thêm.</p></div></div>
         <article class="surface-card data-surface permission-surface">
-          <div class="matrix-legend"><span><i class="legend-dot allowed"></i> Được phép</span><span><i class="legend-dot denied"></i> Không được phép</span><span><i class="legend-lock"><svg aria-hidden="true"><use href="#i-lock"/></svg></i> Quyền cố định</span></div>
-          <div class="matrix-container" id="matrixContainer"><div class="empty-state">Đang tải ma trận phân quyền...</div></div>
+          <div class="matrix-legend"><span><i class="legend-dot allowed"></i> Được phép</span><span><i class="legend-dot denied"></i> Không được phép</span><span class="perm-legend-custom"><i class="legend-dot custom"></i> Tùy chỉnh riêng</span><span><i class="legend-lock"><svg aria-hidden="true"><use href="#i-lock"/></svg></i> Quyền cố định</span></div>
+          <div class="matrix-container" id="matrixContainer"><div class="empty-state">Đang tải phân quyền nhân viên...</div></div>
         </article>
       </section>
-      <script src="../admin/permissions.js"></script>`,
+      <script src="../admin/permissions.js?v=emp-perm-2"></script>`,
 
     'audit-log.html': `
       <section class="admin-module audit-trace">
@@ -306,7 +306,7 @@
           </div>
         </article>
       </section>
-      <script src="../admin/audit-log.js?v=audit-rs-3"></script>`,
+      <script src="../admin/audit-log.js?v=audit-rs-4"></script>`,
 
     'backup.html': `
       <section class="admin-module">
@@ -354,7 +354,7 @@
           4. Hoặc lập lịch backup tự động bằng SQL Server Agent Job</span>
         </div>
       </section>
-      <script src="../admin/backup.js?v=search-2"></script>`,
+      <script src="../admin/backup.js?v=search-3"></script>`,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = templates;

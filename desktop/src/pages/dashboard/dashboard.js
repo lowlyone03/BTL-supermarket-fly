@@ -25,12 +25,45 @@ document.addEventListener('DOMContentLoaded', () => {
   const announcedInboxIds = new Set();
   let closeInboxPanel = () => {};
 
+  window.FLY_NAV_SEQ = Number(window.FLY_NAV_SEQ || 0);
+  const humanizeClientError = (error) => {
+    const raw = String(error?.message || error || '').trim();
+    const tx = (key, fallback) => {
+      const translated = window.FLY_I18N?.t(key);
+      return translated && translated !== key ? translated : fallback;
+    };
+    if (!raw) return tx('error.generic', 'Có lỗi xảy ra. Thử lại hoặc bấm RS để tải lại giao diện.');
+    if (/innerhtml/i.test(raw) && /null/i.test(raw)) {
+      return tx('error.domInnerHtml', 'Không cập nhật được màn hình vì trang vừa chuyển hoặc danh sách chưa sẵn sàng. Thử tải lại (RS) nếu dữ liệu không đúng.');
+    }
+    if (/cannot set properties of null|cannot read properties of null|null is not an object/i.test(raw)) {
+      return tx('error.domNull', 'Giao diện chưa sẵn sàng. Thử tải lại trang (nút RS).');
+    }
+    if (/failed to fetch|networkerror|load failed|err_connection|network request failed/i.test(raw)) {
+      return window.flyApi?.connectionErrorMessage?.()
+        || tx('error.network', 'Không kết nối được máy chủ. Kiểm tra npm start rồi thử lại.');
+    }
+    if (/(?:window\.)?(?:prompt|alert|confirm)\(\)\s*is not supported/i.test(raw)
+      || (/(?:notallowederror|not allowed)/i.test(raw) && /prompt|alert|confirm/i.test(raw))) {
+      return tx('error.nativePrompt', 'Ứng dụng không mở được hộp thoại hỏi nhanh của trình duyệt. Hãy dùng hộp thoại trên màn hình.');
+    }
+    return raw;
+  };
+  window.FLY_CLIENT_ERROR = humanizeClientError;
   window.showToast = (message, type = 'success') => {
+    if (!toast) return;
+    const text = type === 'error' ? humanizeClientError(message) : String(message ?? '');
     clearTimeout(toastTimer);
-    toast.textContent = message;
+    toast.textContent = text;
     toast.className = `toast visible ${type}`;
-    const hold = String(message || '').length > 70 ? 9000 : 3200;
+    const hold = text.length > 70 ? 9000 : 3200;
     toastTimer = setTimeout(() => toast.classList.remove('visible'), hold);
+  };
+  const bumpNav = () => {
+    const version = ++navigationVersion;
+    window.FLY_NAV_SEQ = version;
+    window.dispatchEvent(new CustomEvent('fly:pageleave'));
+    return version;
   };
 
   const selectMenu = document.createElement('div');
@@ -180,10 +213,16 @@ document.addEventListener('DOMContentLoaded', () => {
   if (loyaltyNav) loyaltyNav.style.display = isManager ? '' : 'none';
   const warehouseReportNav = document.getElementById('managerWarehouseReportNav');
   if (warehouseReportNav) warehouseReportNav.style.display = isManager ? '' : 'none';
-  ['managerLedgerKqkdNav', 'managerLedgerCfNav', 'managerLedgerBsNav', 'managerLedgerHandbookNav', 'managerReconNav'].forEach(id => {
+  const deptReportNav = document.getElementById('managerDeptReportNav');
+  if (deptReportNav) deptReportNav.style.display = isManager ? '' : 'none';
+  const reportsTitle = document.getElementById('navTitleReports');
+  if (reportsTitle) reportsTitle.style.display = isManager ? '' : 'none';
+  ['managerLedgerKqkdNav', 'managerLedgerCfNav', 'managerLedgerBsNav', 'managerReconNav', 'managerHandbookNav'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = isManager ? '' : 'none';
   });
+  const accountingHandbookNav = document.getElementById('accountingHandbookNav');
+  if (accountingHandbookNav) accountingHandbookNav.style.display = isAccounting ? '' : 'none';
   if (isManager) document.getElementById('navGroupSystem').style.display = 'block';
   const appearanceNav = document.getElementById('managerAppearanceNav');
   if (appearanceNav) appearanceNav.style.display = isManager ? '' : 'none';
@@ -191,6 +230,150 @@ document.addEventListener('DOMContentLoaded', () => {
   if (isPurchasing) document.getElementById('navGroupPurchasing').style.display = 'block';
   if (isAccounting) document.getElementById('navGroupAccounting').style.display = 'block';
   if (isCashier) document.getElementById('navGroupCashier').style.display = 'block';
+
+  const TARGET_UC = {
+    home: ['UC10'],
+    'manager-purchase-approvals': ['UC05', 'UC06', 'UC07', 'UC08', 'UC09'],
+    'manager-payables': ['UC10', 'UC28'],
+    'manager-workforce': ['UC30'],
+    'manager-workforce-approve': ['UC32'],
+    'manager-holidays': ['UC30'],
+    'manager-reports': ['UC10'],
+    'manager-loyalty': ['UC04', 'UC10'],
+    'admin-warehouse-reports': ['UC10', 'UC15'],
+    'admin-department-reports': ['UC10'],
+    'ledger-kqkd': ['UC43'],
+    'ledger-cf': ['UC43'],
+    'ledger-bs': ['UC43'],
+    'ledger-reconciliation': ['UC42'],
+    'ledger-handbook': ['UC10', 'UC34', 'UC35', 'UC38', 'UC42', 'UC43'],
+    'cashier-schedule': ['UC31'],
+    'warehouse-home': ['UC15'],
+    'warehouse-history': ['UC15'],
+    'warehouse-inventory': ['UC15'],
+    'warehouse-inventory-counts': ['UC20'],
+    'warehouse-stock-issues': ['UC19'],
+    'warehouse-requests': ['UC16'],
+    'warehouse-receiving': ['UC17'],
+    'warehouse-receipts': ['UC18'],
+    'warehouse-returns': ['UC21'],
+    'warehouse-reports': ['UC15'],
+    'purchasing-inbox': ['UC12'],
+    'purchasing-suppliers': ['UC11'],
+    'purchasing-orders': ['UC13', 'UC14'],
+    'purchasing-reports': ['UC14', 'UC10'],
+    'accounting-invoices': ['UC27'],
+    'accounting-payables': ['UC28'],
+    'accounting-settlements': ['UC29'],
+    'accounting-reports': ['UC29', 'UC10'],
+    'accounting-payroll': ['UC33'],
+    'accounting-history': ['UC27', 'UC28', 'UC29', 'UC33'],
+    'ledger-coa': ['UC34'],
+    'ledger-periods': ['UC35'],
+    'ledger-expenses': ['UC36'],
+    'ledger-journals': ['UC37'],
+    'ledger-nkc': ['UC38'],
+    'ledger-gl': ['UC38'],
+    'ledger-trial': ['UC38'],
+    'ledger-vat': ['UC40'],
+    'ledger-close': ['UC39'],
+    'ledger-assets': ['UC41'],
+    'ledger-bank': ['UC42'],
+    'cashier-shifts': ['UC22'],
+    'cashier-pos': ['UC24'],
+    'cashier-customers': ['UC23'],
+    'cashier-invoices': ['UC25'],
+    'cashier-returns': ['UC26'],
+    'cashier-reports': ['UC25', 'UC10'],
+    '../admin/products.html': ['UC04'],
+    '../admin/employees.html': ['UC04'],
+    '../admin/accounts.html': ['UC02'],
+    '../admin/promotions.html': ['UC04'],
+    '../admin/permissions.html': ['UC02'],
+    '../admin/audit-log.html': ['UC03'],
+    '../admin/backup.html': ['UC02']
+  };
+  const hideOrphanNavTitles = (parent) => {
+    if (!parent) return;
+    const kids = [...parent.children];
+    kids.forEach((child, index) => {
+      if (!child.classList.contains('nav-group-title')) return;
+      const after = kids.slice(index + 1);
+      const stop = after.findIndex(node => node.classList.contains('nav-group-title') || node.classList.contains('nav-group'));
+      const slice = stop === -1 ? after : after.slice(0, stop);
+      const hasVisible = slice.some(node => {
+        if (node.classList.contains('nav-item')) return node.style.display !== 'none';
+        return false;
+      });
+      child.style.display = hasVisible ? '' : 'none';
+    });
+  };
+  const applySidebarByPermission = () => {
+    const codes = new Set((user.Quyen || []).map(String));
+    const can = (need) => Array.isArray(need) && need.some((code) => codes.has(code));
+    const scheduleNav = document.getElementById('personalScheduleNav');
+    if (scheduleNav) scheduleNav.style.display = can(['UC31']) ? '' : 'none';
+    document.querySelectorAll('.nav-item[data-target]').forEach((item) => {
+      if (item.id === 'personalScheduleNav' || item.id === 'managerHandbookNav' || item.id === 'accountingHandbookNav') return;
+      const need = TARGET_UC[item.dataset.target];
+      if (!need) return;
+      if (isManager) return;
+      const inGroup = item.closest('.nav-group');
+      if (!inGroup) {
+        item.style.display = 'none';
+        return;
+      }
+      if (can(need)) {
+        item.style.display = '';
+        inGroup.style.display = 'block';
+      } else {
+        item.style.display = 'none';
+      }
+    });
+    if (!isManager && (can(['UC02']) || can(['UC03']) || can(['UC04']))) {
+      const system = document.getElementById('navGroupSystem');
+      if (system) system.style.display = 'block';
+    }
+    document.querySelectorAll('#sidebarNav .nav-group').forEach((group) => {
+      const hasItem = [...group.querySelectorAll('.nav-item')].some(item => item.style.display !== 'none');
+      if (!hasItem) group.style.display = 'none';
+    });
+    hideOrphanNavTitles(document.getElementById('sidebarNav'));
+    document.querySelectorAll('#sidebarNav .nav-group').forEach(hideOrphanNavTitles);
+    if (!isManager) {
+      const reportsTitle = document.getElementById('navTitleReports');
+      if (reportsTitle) reportsTitle.style.display = 'none';
+      const mgrHb = document.getElementById('managerHandbookNav');
+      if (mgrHb) mgrHb.style.display = 'none';
+    } else {
+      const mgrHb = document.getElementById('managerHandbookNav');
+      if (mgrHb) mgrHb.style.display = '';
+    }
+    const acctHb = document.getElementById('accountingHandbookNav');
+    if (acctHb) {
+      acctHb.style.display = isAccounting ? '' : 'none';
+      if (isAccounting) {
+        const group = document.getElementById('navGroupAccounting');
+        if (group) group.style.display = 'block';
+      }
+    }
+    hideOrphanNavTitles(document.getElementById('sidebarNav'));
+    document.querySelectorAll('#sidebarNav .nav-group').forEach(hideOrphanNavTitles);
+  };
+  applySidebarByPermission();
+  fetch(`${API_BASE}/auth/session`, { headers: { Authorization: `Bearer ${token}` } })
+    .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+    .then(({ ok, data }) => {
+      const quyen = data?.user?.Quyen || data?.Quyen;
+      if (!ok || !Array.isArray(quyen)) return;
+      user.Quyen = quyen;
+      try {
+        const stored = JSON.parse(localStorage.getItem('fly_user') || '{}');
+        localStorage.setItem('fly_user', JSON.stringify({ ...stored, Quyen: quyen }));
+      } catch { /* ignore */ }
+      applySidebarByPermission();
+    })
+    .catch(() => {});
 
   const searchRole = isWarehouse ? 'warehouse' : isPurchasing ? 'purchasing' : isCashier ? 'cashier' : isAccounting ? 'accounting' : 'manager';
   const paintSearchPlaceholder = () => {
@@ -207,8 +390,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.title = `${title} - Supermarket Fly`;
   };
 
-  const apiGet = async path => {
-    const response = await fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+  const apiGet = async (path, { signal } = {}) => {
+    const response = await fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${token}` }, signal });
     const data = await response.json();
     if (response.status === 401) {
       localStorage.removeItem('fly_token');
@@ -314,15 +497,13 @@ document.addEventListener('DOMContentLoaded', () => {
     || document.querySelector('#pwdModal[style*="flex"]')
     || contentArea.querySelector('input:focus, textarea:focus')
   );
+  let goToPage = () => false;
   const pageContext = () => ({
     token,
     user,
     apiBase: API_BASE,
     showToast: window.showToast,
-    navigate: nextTarget => {
-      const nextNav = pageNavItems.find(item => item.dataset.target === nextTarget);
-      if (nextNav) openPage(nextNav);
-    }
+    navigate: nextTarget => goToPage(nextTarget)
   });
   const setNavBadge = (target, count) => {
     const nav = pageNavItems.find(item => item.dataset.target === target);
@@ -342,8 +523,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const hint = document.getElementById('notificationHint');
     const heading = document.getElementById('notificationHeading');
     if (!list) return;
-    hint.textContent = window._flyInboxHint || t('notify.hint');
-    heading.textContent = inboxItems.length ? t('notify.waiting', { n: inboxItems.length }) : t('notify.none');
+    if (hint) hint.textContent = window._flyInboxHint || t('notify.hint');
+    if (heading) heading.textContent = inboxItems.length ? t('notify.waiting', { n: inboxItems.length }) : t('notify.none');
     list.innerHTML = inboxItems.length
       ? inboxItems.map(item => `<li><button class="notification-item ${escapeHtml(item.tone || 'info')}" type="button" data-inbox-target="${escapeHtml(item.target)}"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span>${item.at ? `<time>${fmtInboxTime(item.at)}</time>` : ''}</button></li>`).join('')
       : `<li class="notification-empty">${t('notify.empty')}</li>`;
@@ -362,11 +543,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const dot = document.getElementById('notificationDot');
     const bell = document.getElementById('notificationButton');
     const count = items.length;
-    countEl.textContent = count > 99 ? '99+' : String(count);
-    countEl.classList.toggle('visible', count > 0);
-    dot.classList.toggle('visible', unread > 0);
+    if (countEl) {
+      countEl.textContent = count > 99 ? '99+' : String(count);
+      countEl.classList.toggle('visible', count > 0);
+    }
+    dot?.classList.toggle('visible', unread > 0);
     bell?.classList.toggle('has-unread', unread > 0);
-    if (announce && fresh.length) {
+    if (announce && fresh.length && countEl) {
       countEl.classList.remove('pulse');
       void countEl.offsetWidth;
       countEl.classList.add('pulse');
@@ -384,6 +567,10 @@ document.addEventListener('DOMContentLoaded', () => {
     setNavBadge('accounting-settlements', byTarget['accounting-settlements'] || 0);
     setNavBadge('cashier-returns', byTarget['cashier-returns'] || 0);
     setNavBadge('admin-warehouse-reports', byTarget['admin-warehouse-reports'] || 0);
+    setNavBadge('admin-department-reports', byTarget['admin-department-reports'] || 0);
+    setNavBadge('purchasing-reports', byTarget['purchasing-reports'] || 0);
+    setNavBadge('accounting-reports', byTarget['accounting-reports'] || 0);
+    setNavBadge('cashier-reports', byTarget['cashier-reports'] || 0);
     if (!document.getElementById('notificationPanel').hidden) renderInboxPanel();
     if (announce && fresh.length) {
       fresh.forEach(item => announcedInboxIds.add(item.id));
@@ -393,7 +580,7 @@ document.addEventListener('DOMContentLoaded', () => {
       playInboxChime();
       if (document.getElementById('notificationPanel')?.hidden) showInboxToast(fresh[0], fresh.length);
       const currentTarget = currentNav?.dataset.target;
-      const heavyPages = new Set(['accounting-reports', 'manager-reports', 'warehouse-reports', 'cashier-reports', 'purchasing-reports', 'admin-warehouse-reports']);
+      const heavyPages = new Set(['accounting-reports', 'manager-reports', 'warehouse-reports', 'cashier-reports', 'purchasing-reports', 'admin-warehouse-reports', 'admin-department-reports']);
       const shouldReload = fresh.some(item => item.target === currentTarget || (currentTarget === 'home' && item.target === 'manager-purchase-approvals'));
       if (shouldReload && !workspaceBusy() && !heavyPages.has(currentTarget)) refreshCurrentPage();
     }
@@ -539,30 +726,28 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   const updatePendingIndicators = total => {
     pendingTotal = Number(total || 0);
-    document.getElementById('approvalNavBadge').textContent = String(pendingTotal).padStart(2, '0');
-    document.getElementById('notificationDot').classList.toggle('visible', pendingTotal > 0);
+    const badge = document.getElementById('approvalNavBadge');
+    if (badge) badge.textContent = String(pendingTotal).padStart(2, '0');
+    document.getElementById('notificationDot')?.classList.toggle('visible', pendingTotal > 0);
   };
 
   const loadOverview = async () => {
-    const loadVersion = ++navigationVersion;
+    if (!isManager) return;
+    const loadVersion = bumpNav();
     closeSelectMenu();
     contentArea.scrollTop = 0;
     setPageTitle(t('overview.title'));
-    if (!isManager) {
-      contentArea.innerHTML = `<div class="welcome-card"><h2>Chào mừng ${escapeHtml(user.TenNV)}</h2><p>Các chức năng của ${escapeHtml(user.TenVaiTro)} sẽ được hiển thị theo quyền đã cấp.</p></div>`;
-      return;
-    }
+    currentNav = document.getElementById('managerHomeNav');
+    setActiveNav('home');
 
     contentArea.innerHTML = `<div class="overview-loading">${t('empty.loading')}</div>`;
     try {
-      const [data, catalog] = await Promise.all([
-        apiGet('/admin/dashboard'),
-        apiGet('/admin/catalog/products').catch(() => ({ items: [], summary: {} }))
-      ]);
+      const data = await apiGet('/admin/dashboard');
       if (loadVersion !== navigationVersion) return;
       const summary = data.summary;
       const pending = data.pendingApprovals;
-      document.getElementById('approvalNavBadge').textContent = String(pending.TongChoDuyet || 0).padStart(2, '0');
+      const approvalBadge = document.getElementById('approvalNavBadge');
+      if (approvalBadge) approvalBadge.textContent = String(pending.TongChoDuyet || 0).padStart(2, '0');
 
       const warehousePending = Number(pending.PhieuXuat || 0) + Number(pending.KiemKe || 0);
       const financePending = Number(pending.DoiTra || 0) + Number(pending.PhieuChi || 0);
@@ -619,19 +804,14 @@ document.addEventListener('DOMContentLoaded', () => {
         ? t('overview.priorityBusy', { n: String(pending.TongChoDuyet).padStart(2, '0') })
         : t('overview.priorityIdle');
       const priorityText = pending.TongChoDuyet > 0 ? t('overview.priorityBusyText') : t('overview.priorityIdleText');
-      const featuredProducts = (catalog.items || [])
-        .filter(item => item.TrangThai === 'Đang bán' && window.FLY_PRODUCT_IMAGES?.hasImage(item))
-        .sort((left, right) => {
-          const leftRisk = Number(left.SLTon || 0) - Number(left.TonKhoToiThieu || 0);
-          const rightRisk = Number(right.SLTon || 0) - Number(right.TonKhoToiThieu || 0);
-          return leftRisk - rightRisk || String(left.MaSP).localeCompare(String(right.MaSP));
-        })
+      const featuredProducts = (data.lowStock || [])
+        .filter(item => window.FLY_PRODUCT_IMAGES?.hasImage?.(item))
         .slice(0, 6);
       const productCards = featuredProducts.map((item, index) => {
-        const low = Number(item.SLTon || 0) <= Number(item.TonKhoToiThieu || 0);
+        const low = true;
         return `<article class="overview-product-card ${low ? 'low' : ''}">
           <div class="overview-product-visual">${window.FLY_PRODUCT_IMAGES.markup(item, { className: 'overview-product-photo', eager: index < 3 })}<span>${escapeHtml(item.TenDM || item.MaDM || t('overview.goods'))}</span></div>
-          <div class="overview-product-copy"><small>${escapeHtml(item.MaSP)}</small><h3>${escapeHtml(item.TenSP)}</h3><strong>${formatMoney(item.GiaBan)}</strong><div><span>${t('overview.left', { n: Number(item.SLTon || 0).toLocaleString('vi-VN'), unit: item.DonViTinh || '' })}</span><b>${low ? t('overview.needFill') : t('overview.ready')}</b></div></div>
+          <div class="overview-product-copy"><small>${escapeHtml(item.MaSP)}</small><h3>${escapeHtml(item.TenSP)}</h3><strong>${item.GiaBan != null ? formatMoney(item.GiaBan) : '—'}</strong><div><span>${t('overview.left', { n: Number(item.SLTon || 0).toLocaleString('vi-VN'), unit: item.DonViTinh || '' })}</span><b>${t('overview.needFill')}</b></div></div>
         </article>`;
       }).join('');
 
@@ -652,6 +832,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <article class="decision-card amber"><div class="card-top"><span class="decision-icon"><svg><use href="#i-approve"/></svg></span><strong>${String(pending.DonMuaHang || 0).padStart(2,'0')}</strong></div><h3>${t('overview.poCard')}</h3><p>${t('overview.poHint')}</p><button type="button" data-action="approval">${t('overview.seePo')} <svg><use href="#i-chevron"/></svg></button></article>
             <article class="decision-card red"><div class="card-top"><span class="decision-icon"><svg><use href="#i-box"/></svg></span><strong>${String(warehousePending).padStart(2,'0')}</strong></div><h3>${t('overview.whCard')}</h3><p>${t('overview.whHint')}</p><button type="button" data-action="approval">${t('overview.seeDocs')} <svg><use href="#i-chevron"/></svg></button></article>
             <article class="decision-card blue"><div class="card-top"><span class="decision-icon"><svg><use href="#i-report"/></svg></span><strong>${String(financePending).padStart(2,'0')}</strong></div><h3>${t('overview.finCard')}</h3><p>${t('overview.finHint')}</p><button type="button" data-action="approval">${t('overview.seeReq')} <svg><use href="#i-chevron"/></svg></button></article>
+            <article class="decision-card ${Number(data.departmentReportsUnread || 0) ? 'amber' : ''}"><div class="card-top"><span class="decision-icon"><svg><use href="#i-report"/></svg></span><strong>${String(data.departmentReportsUnread || 0).padStart(2,'0')}</strong></div><h3>${t('overview.deptCard')}</h3><p>${t('overview.deptHint')}</p><button type="button" data-open-target="admin-department-reports">${t('overview.seeDept')} <svg><use href="#i-chevron"/></svg></button></article>
           </div>
 
           <div class="stat-grid">
@@ -742,7 +923,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const target = navItem.dataset.target;
     setActiveNav(target);
     if (target === 'home') return loadOverview();
-    const pageVersion = ++navigationVersion;
+    const pageVersion = bumpNav();
     contentArea.scrollTop = 0;
     setPageTitle(navItem.querySelector('span')?.textContent.trim() || t('common.admin'));
     contentArea.innerHTML = `<div class="overview-loading">${t('empty.page')}</div>`;
@@ -769,14 +950,56 @@ document.addEventListener('DOMContentLoaded', () => {
     openPage(item);
   }));
 
-  window.FLY_NAV = {
-    open(target) {
-      const nextNav = pageNavItems.find(item => item.dataset.target === target);
-      if (!nextNav) return false;
+  goToPage = (target, title) => {
+    const visible = pageNavItems.find(item => item.dataset.target === target && item.style.display !== 'none');
+    const nextNav = visible || pageNavItems.find(item => item.dataset.target === target);
+    if (nextNav) {
       openPage(nextNav);
       return true;
     }
+    const pageName = String(target || '').split('/').pop();
+    if (!window.FLY_ROLE_PAGES?.templates?.[pageName]) return false;
+    const ghost = document.createElement('a');
+    ghost.className = 'nav-item';
+    ghost.dataset.target = target;
+    const span = document.createElement('span');
+    span.textContent = title || (pageName === 'ledger-handbook' ? t('handbook.title') : pageName);
+    ghost.appendChild(span);
+    openPage(ghost);
+    return true;
   };
+  window.FLY_NAV = {
+    open(target) {
+      return goToPage(target);
+    }
+  };
+
+  const landRoleHome = () => {
+    if (isManager) {
+      loadOverview();
+      return;
+    }
+    document.getElementById('managerHomeNav')?.classList.remove('active');
+    const firstTargets = isWarehouse ? ['warehouse-home']
+      : isPurchasing ? ['purchasing-inbox']
+        : isAccounting ? ['accounting-invoices']
+          : isCashier ? ['cashier-shifts', 'cashier-pos', 'cashier-schedule']
+            : [];
+    const navVisible = item => {
+      if (!item || item.style.display === 'none') return false;
+      const group = item.closest('.nav-group');
+      return !(group && group.style.display === 'none');
+    };
+    const firstNav = firstTargets
+      .map(target => pageNavItems.find(item => item.dataset.target === target && navVisible(item)))
+      .find(Boolean)
+      || pageNavItems.find(navVisible);
+    if (firstNav) openPage(firstNav);
+    else {
+      contentArea.innerHTML = `<div class="welcome-card"><h2>Chào mừng ${escapeHtml(user.TenNV)}</h2><p>Chọn một mục trên menu trái để bắt đầu.</p></div>`;
+    }
+  };
+  landRoleHome();
 
   document.querySelectorAll('[data-coming-soon]').forEach(item => item.addEventListener('click', event => {
     event.preventDefault();
@@ -822,9 +1045,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const box = document.getElementById('telegramStatusBox');
     const otpBlock = document.getElementById('telegramOtpBlock');
     const unlinkBtn = document.getElementById('telegramUnlinkBtn');
+    if (!box || !otpBlock) return;
     const handle = data.botHandle || `@${data.botUsername || 'supermarket_flybot'}`;
-    document.getElementById('telegramBotName').textContent = `Bot: ${handle}`;
-    unlinkBtn.hidden = !data.bound;
+    const botName = document.getElementById('telegramBotName');
+    if (botName) botName.textContent = `Bot: ${handle}`;
+    if (unlinkBtn) unlinkBtn.hidden = !data.bound;
     if (data.bound) {
       const when = data.verifiedAt ? new Date(data.verifiedAt).toLocaleString('vi-VN', { timeZone: HANOI_TIME_ZONE }) : '';
       box.textContent = `Đã liên kết${data.chatMasked ? ` · ${data.chatMasked}` : ''}${when ? ` · lúc ${when}` : ''}.`;
@@ -836,7 +1061,8 @@ document.addEventListener('DOMContentLoaded', () => {
       otpBlock.hidden = false;
       document.getElementById('telegramOtpValue').textContent = data.pendingOtp;
       const until = data.otpExpiresAt ? new Date(data.otpExpiresAt).toLocaleTimeString('vi-VN', { timeZone: HANOI_TIME_ZONE }) : '';
-      document.getElementById('telegramOtpHint').innerHTML = `Mã hết hạn ${until || 'sau 5 phút'}. Gửi <code>/start ${data.pendingOtp}</code> trên Telegram.`;
+      const otpHint = document.getElementById('telegramOtpHint');
+      if (otpHint) otpHint.innerHTML = `Mã hết hạn ${until || 'sau 5 phút'}. Gửi <code>/start ${data.pendingOtp}</code> trên Telegram.`;
     } else {
       otpBlock.hidden = true;
     }
@@ -870,7 +1096,8 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('telegramOtpValue').textContent = data.otp;
       const handle = data.botHandle || `@${data.botUsername || 'supermarket_flybot'}`;
       document.getElementById('telegramBotName').textContent = `Bot: ${handle}`;
-      document.getElementById('telegramOtpHint').innerHTML = `Mã hết hạn sau ${data.ttlMinutes || 5} phút. Gửi <code>/start ${data.otp}</code> cho ${handle}.`;
+      const otpHint = document.getElementById('telegramOtpHint');
+      if (otpHint) otpHint.innerHTML = `Mã hết hạn sau ${data.ttlMinutes || 5} phút. Gửi <code>/start ${data.otp}</code> cho ${handle}.`;
       document.getElementById('telegramStatusBox').textContent = 'Mã mới đã tạo. Chat riêng với bot — không gửi vào group.';
       window.showToast('Đã tạo mã liên kết Telegram.', 'success');
     } catch (error) {
@@ -972,6 +1199,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const detail = button.querySelector('span')?.textContent || '';
     const warehouseCode = `${title} ${detail}`.match(/BCK\d{8}\d{3}/);
     if (warehouseCode) sessionStorage.setItem('fly_open_warehouse_report', warehouseCode[0]);
+    const deptCode = `${title} ${detail}`.match(/BCM\d{8}\d{3}|BCKT\d{8}\d{3}|BCTN\d{8}\d{3}/);
+    if (deptCode) sessionStorage.setItem('fly_open_department_report', deptCode[0]);
     if (target === 'manager-workforce' && /chấm công/i.test(title)) target = 'manager-workforce-approve';
     const nav = pageNavItems.find(item => item.dataset.target === target);
     if (nav) openPage(nav);
@@ -1080,8 +1309,9 @@ document.addEventListener('DOMContentLoaded', () => {
       paintSearchPlaceholder();
       window.FLY_I18N?.applyDom(document);
       window.FLY_I18N?.applyPhrases(document);
-      if (currentNav?.dataset.target === 'home') loadOverview();
-      else refreshCurrentPage();
+      if (currentNav?.dataset.target === 'home') {
+        if (isManager) loadOverview();
+      } else if (currentNav) refreshCurrentPage();
     }
   });
   window.FLY_APPEARANCE.fetchMine(API_BASE, token).then((prefs) => {
@@ -1093,8 +1323,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.FLY_APPEARANCE.syncButtons(document);
     if (isManager && prefs.macDinhCuaHang) window.FLY_APPEARANCE.fillStoreDefaults(prefs.macDinhCuaHang);
     if (before && before !== window.FLY_I18N?.getLang()) {
-      if (currentNav?.dataset.target === 'home' || (isManager && !currentNav)) loadOverview();
-      else refreshCurrentPage();
+      if (isManager && (currentNav?.dataset.target === 'home' || !currentNav)) loadOverview();
+      else if (currentNav) refreshCurrentPage();
     }
   }).catch(() => {});
 
@@ -1108,16 +1338,4 @@ document.addEventListener('DOMContentLoaded', () => {
   loadInbox();
   connectInboxStream();
   if (!inboxLive) startInboxPoll();
-
-  if (isManager) {
-    loadOverview();
-  } else {
-    const firstTarget = isWarehouse ? 'warehouse-home'
-      : isPurchasing ? 'purchasing-inbox'
-        : isAccounting ? 'accounting-invoices'
-          : isCashier ? 'cashier-schedule' : null;
-    const firstNav = pageNavItems.find(item => item.dataset.target === firstTarget);
-    if (firstNav) openPage(firstNav);
-    else loadOverview();
-  }
 });

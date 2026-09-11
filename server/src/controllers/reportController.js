@@ -5,6 +5,8 @@ const { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS } = require('../services/in
 const storeProfitLoss = require('../services/storeProfitLoss');
 const { mergeWrittenOffLines, summarizeWrittenOffLines } = require('../services/writtenOffGoods');
 const warehouseReportSubmit = require('../services/warehouseReportSubmit');
+const departmentReportSubmit = require('../services/departmentReportSubmit');
+const { compareKpis, KIND_META } = require('../services/departmentReportSnapshot');
 
 const bindPeriod = (pool, period) => pool.request()
     .input('From', sql.NVarChar(10), period.from)
@@ -721,7 +723,8 @@ const getSalesReport = async (req, res) => {
     try {
         const pool = await poolPromise;
         const { period, latestActivity, fallbackFrom } = await resolveReportPeriod(pool, req.query);
-        const maNV = req.user.MaNV;
+        const requestedNv = String(req.query.maNV || '').trim();
+        const maNV = (req.user.TenVaiTro === 'Quản lý' && requestedNv) ? requestedNv : req.user.MaNV;
         const [sales, methods, shifts, returns, daily, topProducts, recentInvoices, alerts] = await Promise.all([
             bindPeriod(pool, period).input('MaNV', sql.VarChar, maNV).query(`
                 SELECT COUNT(*) SoHoaDon,
@@ -1084,6 +1087,156 @@ const getAdminWarehouseReport = async (req, res) => {
     }
 };
 
+const kindFromBody = (req, fallback) => String(req.body?.kind || req.body?.loaiBaoCao || fallback || '').trim();
+
+const submitDepartmentReport = async (req, res, defaultKind) => {
+    try {
+        const pool = await poolPromise;
+        const kind = kindFromBody(req, defaultKind);
+        const result = await departmentReportSubmit.submitDepartmentReport(pool, req.user, {
+            kind,
+            report: req.body?.report,
+            note: req.body?.note,
+            maCa: req.body?.maCa
+        });
+        res.json(result);
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không gửi được báo cáo bộ phận.' });
+    }
+};
+
+const listMyDepartmentReports = async (req, res, defaultKind) => {
+    try {
+        const pool = await poolPromise;
+        const kind = String(req.query.kind || defaultKind || '').trim() || null;
+        const items = await departmentReportSubmit.listDepartmentReports(pool, {
+            mine: req.user.MaNV,
+            loai: kind,
+            periodType: req.query.periodType,
+            period: req.query.period,
+            includeWithdrawn: req.query.includeWithdrawn === '1',
+            latestOnly: req.query.history === '1' ? false : true
+        });
+        const dueKind = kind || defaultKind;
+        const due = dueKind
+            ? await departmentReportSubmit.dueFor(pool, {
+                mine: req.user.MaNV,
+                kind: dueKind,
+                periodType: req.query.periodType || 'month',
+                period: req.query.period
+            })
+            : { submitted: false, latest: null };
+        res.json({ items, due });
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không tải được danh sách báo cáo đã gửi.' });
+    }
+};
+
+const withdrawDepartmentReport = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const result = await departmentReportSubmit.withdrawDepartmentReport(pool, req.user, req.params.id);
+        res.json(result);
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không thu hồi được báo cáo.' });
+    }
+};
+
+const listAdminDepartmentReports = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const items = await departmentReportSubmit.listDepartmentReports(pool, {
+            boPhan: req.query.boPhan,
+            loai: req.query.kind || req.query.loai,
+            periodType: req.query.periodType,
+            period: req.query.period,
+            status: req.query.status,
+            maNV: req.query.maNV,
+            includeWithdrawn: req.query.includeWithdrawn === '1',
+            latestOnly: req.query.history === '1' ? false : true,
+            top: 100
+        });
+        const warehouse = req.query.includeWarehouse === '1'
+            ? await warehouseReportSubmit.listWarehouseReports(pool, { top: 40 }).catch(() => [])
+            : [];
+        res.json({ items, warehouse });
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không tải được báo cáo bộ phận.' });
+    }
+};
+
+const getAdminDepartmentReport = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const isManager = req.user.TenVaiTro === 'Quản lý';
+        const data = await departmentReportSubmit.getDepartmentReportSubmission(pool, req.params.id, {
+            markViewedBy: isManager ? req.user.MaNV : null
+        });
+        if (!isManager) departmentReportSubmit.assertCanRead(req.user, data.header);
+        res.json(data);
+    } catch (error) {
+        console.error(error);
+        const missing = /không tìm thấy/i.test(error.message || '');
+        res.status(missing ? 404 : 400).json({ message: error.message || 'Không mở được báo cáo bộ phận.' });
+    }
+};
+
+const feedbackAdminDepartmentReport = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const result = await departmentReportSubmit.feedbackDepartmentReport(pool, req.user, req.params.id, req.body?.note);
+        res.json(result);
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không gửi được phản hồi.' });
+    }
+};
+
+const compareAdminDepartmentReport = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const data = await departmentReportSubmit.getDepartmentReportSubmission(pool, req.params.id);
+        const kind = data.header.LoaiBaoCao;
+        const period = data.report?.period || {};
+        const query = {
+            periodType: period.periodType || data.header.LoaiKy,
+            period: period.period || data.header.GiaTriKy,
+            lockPeriod: '1'
+        };
+        let live = {};
+        if (kind === 'MH_DON_MUA') {
+            req.query = query;
+            live = await new Promise((resolve, reject) => {
+                const fakeRes = { json: resolve, status: () => ({ json: (err) => reject(new Error(err?.message || 'Không tải được số mua hàng.')) }) };
+                getPurchasingReport({ ...req, query }, fakeRes).catch(reject);
+            });
+        } else if (kind === 'TN_BAN_HANG') {
+            live = await new Promise((resolve, reject) => {
+                const fakeReq = { ...req, query: { ...query, maNV: data.header.MaNV_Lap }, user: { ...req.user, TenVaiTro: 'Quản lý' } };
+                const fakeRes = { json: resolve, status: () => ({ json: (err) => reject(new Error(err.message)) }) };
+                getSalesReport(fakeReq, fakeRes).catch(reject);
+            });
+        } else if (kind === 'KT_NOI_BO') {
+            live = await buildFinancialReport(query);
+        } else {
+            live = data.report;
+        }
+        res.json({
+            kind,
+            meta: KIND_META[kind] || {},
+            rows: compareKpis(kind, data.report, live || {}),
+            livePeriod: live?.period || null
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(400).json({ message: error.message || 'Không so sánh được với số hệ thống.' });
+    }
+};
+
 module.exports = {
     getFinancialReport,
     getStoreOperationsReport,
@@ -1098,5 +1251,12 @@ module.exports = {
     withdrawWarehouseReport,
     listMyWarehouseReports,
     listAdminWarehouseReports,
-    getAdminWarehouseReport
+    getAdminWarehouseReport,
+    submitDepartmentReport,
+    listMyDepartmentReports,
+    withdrawDepartmentReport,
+    listAdminDepartmentReports,
+    getAdminDepartmentReport,
+    feedbackAdminDepartmentReport,
+    compareAdminDepartmentReport
 };

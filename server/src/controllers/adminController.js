@@ -2,6 +2,8 @@ const { sql, poolPromise } = require('../config/db');
 const { closeOpenAttendance } = require('../services/attendanceSync');
 const { ensureFundColumns } = require('./paymentVoucherController');
 const { ensurePayrollSchema } = require('../services/payrollSchema');
+const { ACTIVE_VOUCHER_APPLY, DEBT_STATUS_SQL } = require('../services/payablePaymentSchema');
+const { OVERDUE_EXTENSION_DAYS } = require('../services/payableMath');
 
 const clean = (value, max = 120) => String(value ?? '').trim().slice(0, max);
 
@@ -69,6 +71,7 @@ const loadAdminDashboard = async (pool) => {
                 ...pending,
                 TongChoDuyet: Object.values(pending).reduce((total, value) => total + Number(value || 0), 0)
             },
+            departmentReportsUnread: await require('../services/departmentReportSubmit').countUnreadForAdmin(pool).catch(() => 0),
             recentLogs: logsResult.recordset,
             revenue: revenueResult.recordset[0] || { DoanhThuHomNay: 0, DoanhThu7Ngay: 0, LaiGopHomNay: 0 },
             lowStock: lowStockResult.recordset
@@ -165,24 +168,25 @@ const loadPayablesOverview = async (pool, { search = '', status = '' } = {}) => 
                                pc.TrangThai AS TrangThaiPhieuChi,pc.HinhThucCapQuy,pc.NgayCapQuy,
                                pc.GhiChuCapQuy,nvDuyet.TenNV AS NguoiDuyet,nvLap.TenNV AS NguoiLap,
                                DATEDIFF(DAY,CONVERT(date,GETDATE()),cn.HanThanhToan) AS SoNgayConLai,
+                               ${DEBT_STATUS_SQL} AS TrangThaiHienTai,
+                               CASE WHEN cn.SoTienConLai>0 AND DATEDIFF(day,cn.HanThanhToan,CONVERT(date,GETDATE()))>=${OVERDUE_EXTENSION_DAYS}
+                                    THEN 1 ELSE 0 END AS QuaHan45,
+                               CASE WHEN cn.SoTienNo>0 THEN CAST(ROUND(cn.SoTienDaTra * 100.0 / cn.SoTienNo, 1) AS DECIMAL(9,1)) ELSE 0 END AS PhanTramDaTra,
                                CASE
-                                   WHEN cn.SoTienConLai=0 THEN N'Đã thanh toán'
-                                   WHEN cn.HanThanhToan<CONVERT(date,GETDATE()) THEN N'Quá hạn'
-                                   ELSE N'Đang nợ'
-                               END AS TrangThaiHienTai,
-                               CASE
-                                   WHEN cn.SoTienConLai=0 OR pc.TrangThai=N'Thanh toán thành công' THEN N'Đã tất toán'
+                                   WHEN cn.SoTienConLai=0 THEN N'Đã tất toán'
                                    WHEN pc.TrangThai=N'Thanh toán thất bại' THEN N'Thanh toán thất bại, Kế toán làm lại'
                                    WHEN pc.TrangThai=N'Đã duyệt' THEN N'Đã giao tiền, chờ Kế toán chi'
                                    WHEN pc.TrangThai=N'Chờ duyệt' THEN N'Chờ Quản lý giao tiền'
                                    WHEN pc.TrangThai=N'Từ chối' THEN N'Phiếu chi bị từ chối'
+                                   WHEN pc.MaPhieu IS NULL AND cn.SoTienDaTra>0 THEN N'Thanh toán một phần, có thể lập phiếu tiếp'
                                    WHEN pc.MaPhieu IS NULL THEN N'Kế toán chưa lập Phiếu chi'
+                                   WHEN pc.TrangThai=N'Thanh toán thành công' AND cn.SoTienConLai>0 THEN N'Thanh toán một phần, có thể lập phiếu tiếp'
                                    ELSE pc.TrangThai
                                END AS BuocTatToan
                         FROM CongNoPhaiTra cn
                         JOIN NhaCungCap ncc ON ncc.MaNCC=cn.MaNCC
                         JOIN HoaDonMuaHang hd ON hd.MaHDMH=cn.MaHDMH
-                        LEFT JOIN PhieuChi pc ON pc.MaCongNo=cn.MaCNPTra
+                        ${ACTIVE_VOUCHER_APPLY}
                         LEFT JOIN NhanVien nvLap ON nvLap.MaNV=pc.MaNV
                         LEFT JOIN NhanVien nvDuyet ON nvDuyet.MaNV=pc.MaNV_Duyet
                     )
@@ -234,22 +238,26 @@ const getPayableDetail = async (req, res) => {
                        pc.TrangThai AS TrangThaiPhieuChi,pc.HinhThucCapQuy,pc.NgayCapQuy,
                        pc.GhiChuCapQuy,pc.NoiDung,pc.MaGiaoDichNganHang,
                        nvLap.TenNV AS NguoiLap,nvDuyet.TenNV AS NguoiDuyet,
-                       CASE WHEN cn.SoTienConLai=0 THEN N'Đã thanh toán'
-                            WHEN cn.HanThanhToan<CONVERT(date,GETDATE()) THEN N'Quá hạn'
-                            ELSE N'Đang nợ' END AS TrangThaiHienTai,
+                       DATEDIFF(DAY,CONVERT(date,GETDATE()),cn.HanThanhToan) AS SoNgayConLai,
+                       ${DEBT_STATUS_SQL} AS TrangThaiHienTai,
+                       CASE WHEN cn.SoTienConLai>0 AND DATEDIFF(day,cn.HanThanhToan,CONVERT(date,GETDATE()))>=${OVERDUE_EXTENSION_DAYS}
+                            THEN 1 ELSE 0 END AS QuaHan45,
+                       CASE WHEN cn.SoTienNo>0 THEN CAST(ROUND(cn.SoTienDaTra * 100.0 / cn.SoTienNo, 1) AS DECIMAL(9,1)) ELSE 0 END AS PhanTramDaTra,
                        CASE
-                           WHEN cn.SoTienConLai=0 OR pc.TrangThai=N'Thanh toán thành công' THEN N'Đã tất toán'
+                           WHEN cn.SoTienConLai=0 THEN N'Đã tất toán'
                            WHEN pc.TrangThai=N'Thanh toán thất bại' THEN N'Thanh toán thất bại, Kế toán làm lại'
                            WHEN pc.TrangThai=N'Đã duyệt' THEN N'Đã giao tiền, chờ Kế toán chi'
                            WHEN pc.TrangThai=N'Chờ duyệt' THEN N'Chờ Quản lý giao tiền'
                            WHEN pc.TrangThai=N'Từ chối' THEN N'Phiếu chi bị từ chối'
+                           WHEN pc.MaPhieu IS NULL AND cn.SoTienDaTra>0 THEN N'Thanh toán một phần, có thể lập phiếu tiếp'
                            WHEN pc.MaPhieu IS NULL THEN N'Kế toán chưa lập Phiếu chi'
+                           WHEN pc.TrangThai=N'Thanh toán thành công' AND cn.SoTienConLai>0 THEN N'Thanh toán một phần, có thể lập phiếu tiếp'
                            ELSE pc.TrangThai
                        END AS BuocTatToan
                 FROM CongNoPhaiTra cn
                 JOIN NhaCungCap ncc ON ncc.MaNCC=cn.MaNCC
                 JOIN HoaDonMuaHang hd ON hd.MaHDMH=cn.MaHDMH
-                LEFT JOIN PhieuChi pc ON pc.MaCongNo=cn.MaCNPTra
+                ${ACTIVE_VOUCHER_APPLY}
                 LEFT JOIN NhanVien nvLap ON nvLap.MaNV=pc.MaNV
                 LEFT JOIN NhanVien nvDuyet ON nvDuyet.MaNV=pc.MaNV_Duyet
                 WHERE cn.MaCNPTra=@MaCN`);
@@ -264,7 +272,24 @@ const getPayableDetail = async (req, res) => {
                 FROM ChiTietHoaDonMuaHang ct
                 JOIN SanPham sp ON sp.MaSP=ct.MaSP
                 WHERE ct.MaHDMH=@MaHD ORDER BY sp.TenSP`);
-        res.json({ payable: header.recordset[0], lines: lines.recordset });
+        const payable = header.recordset[0];
+        const payments = await pool.request().input('MaCN', sql.VarChar, payable.MaCNPTra).query(`
+            SELECT pc.MaPhieu, pc.SoTien, pc.PhuongThuc, pc.TrangThai, pc.NgayChungTu,
+                   pc.LoaiThanhToan, pc.PhanTram, nv.TenNV AS NguoiLap
+            FROM PhieuChi pc
+            LEFT JOIN NhanVien nv ON nv.MaNV = pc.MaNV
+            WHERE pc.MaCongNo = @MaCN
+            ORDER BY pc.NgayChungTu DESC, pc.MaPhieu DESC`);
+        let extensions = [];
+        try {
+            const ext = await pool.request().input('MaCN', sql.VarChar, payable.MaCNPTra).query(`
+                SELECT TOP 8 g.*, nv.TenNV AS NguoiYeuCau
+                FROM CongNoGiaHan g
+                LEFT JOIN NhanVien nv ON nv.MaNV = g.MaNV_YeuCau
+                WHERE g.MaCNPTra = @MaCN ORDER BY g.NgayYeuCau DESC`);
+            extensions = ext.recordset;
+        } catch { extensions = []; }
+        res.json({ payable, lines: lines.recordset, payments: payments.recordset, extensions });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải chi tiết khoản công nợ.' });

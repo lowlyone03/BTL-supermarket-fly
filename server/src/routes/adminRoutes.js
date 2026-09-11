@@ -30,6 +30,12 @@ router.get('/reports/store-profit-loss', requirePermission('UC10'), reportContro
 router.post('/reports/store-profit-loss/plan', requirePermission('UC10'), reportController.postStoreProfitLossPlan);
 router.get('/reports/warehouse-submissions', requirePermission('UC10'), reportController.listAdminWarehouseReports);
 router.get('/reports/warehouse-submissions/:id', requirePermission('UC10'), reportController.getAdminWarehouseReport);
+router.get('/reports/buying', requirePermission('UC10'), reportController.getPurchasingReport);
+router.get('/reports/sales', requirePermission('UC10'), reportController.getSalesReport);
+router.get('/reports/department-submissions', requirePermission('UC10'), reportController.listAdminDepartmentReports);
+router.get('/reports/department-submissions/:id', requirePermission('UC10'), reportController.getAdminDepartmentReport);
+router.get('/reports/department-submissions/:id/compare', requirePermission('UC10'), reportController.compareAdminDepartmentReport);
+router.post('/reports/department-submissions/:id/feedback', requirePermission('UC10'), reportController.feedbackAdminDepartmentReport);
 router.get('/catalog/categories', requirePermission('UC04'), catalogController.getCategories);
 router.post('/catalog/categories', requirePermission('UC04'), catalogController.createCategory);
 router.put('/catalog/categories/:id', requirePermission('UC04'), catalogController.updateCategory);

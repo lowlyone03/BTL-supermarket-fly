@@ -4,17 +4,11 @@ const { sql } = require('../config/db');
 const { generateJournalId, yyMM } = require('./journalEngine');
 const { vietnamDateKey } = require('./reportingPeriod');
 const { logAuditSafe } = require('./auditLog');
-const { ROLE_PERMISSION_CODES } = require('../constants/permissions');
+const { codesOf, hasUc } = require('./effectivePermissions');
 const { isRole } = require('./inboxService');
 const {
     STATUS, KT_STATUS, parseStatementCsv, matchStatement, dateKey, roundMoney
 } = require('./reconciliationEngine');
-
-const codesOf = (user) => {
-    const key = String(user?.TenVaiTro || '').trim().toLocaleLowerCase('vi-VN');
-    return ROLE_PERMISSION_CODES[key] || [];
-};
-const hasUc = (user, code) => codesOf(user).includes(code);
 
 const deny = (message, status = 403) => {
     const error = new Error(message);

@@ -228,7 +228,10 @@ const telegramApi = async (method, payload = {}, options = {}) => {
             throw new Error('Token Telegram không hợp lệ — kiểm tra TELEGRAM_BOT_TOKEN trong server/.env');
         }
         if (code === 409 || /conflict/i.test(desc)) {
-            throw new Error('Telegram 409 Conflict — còn process bot khác, tắt npm start cũ');
+            throw new Error(
+                'Telegram 409 Conflict — còn process bot khác (getUpdates). '
+                + 'Tắt HẾT node cổng 3000 rồi npm start một lần. Process này không xóa lệnh/menu.'
+            );
         }
         throw new Error(data.description || `Telegram ${method} thất bại`);
     }
@@ -1071,8 +1074,33 @@ const notifyWarehouseReportSubmitted = async (pool, maBC) => {
     return first;
 };
 
+const notifyDepartmentReportSubmitted = async (pool, maBC) => {
+    const id = String(maBC || '').trim();
+    if (!id || !pool) return { sent: 0 };
+    const { composeDepartmentReportView } = require('./departmentReportTelegram');
+    const pack = await composeDepartmentReportView(pool, id, { mode: 'push', lang: 'vi' });
+    if (!pack.texts.length) return { sent: 0 };
+    const ql = await boundRecipients(pool, { roles: ['Quản lý'], ucAny: ['UC10'] });
+    if (!ql.length) return { sent: 0 };
+    const first = await pushTo(pool, ql, 'BCP_NOP', id, pack.texts[0], { extra: pack.extra });
+    if (first.sent && pack.texts.length > 1) {
+        for (const person of ql) {
+            for (const text of pack.texts.slice(1)) {
+                try { await sendMessage(person.ChatId, text, pack.extra); } catch (error) {
+                    runtime.log('Telegram BCP:', error.message);
+                }
+            }
+        }
+    }
+    return first;
+};
+
 handlers['Gửi báo cáo kho'] = async (ctx) => {
     await notifyWarehouseReportSubmitted(ctx.pool, ctx.recordId);
+};
+
+handlers['Gửi báo cáo bộ phận'] = async (ctx) => {
+    await notifyDepartmentReportSubmitted(ctx.pool, ctx.recordId);
 };
 
 handlers['Gửi kế hoạch điều chỉnh lãi lỗ'] = async (ctx) => {
@@ -1106,6 +1134,7 @@ const pickInboxToPush = (items, { recordId, now }) => {
         const blob = `${item.id} ${item.title || ''} ${item.detail || ''}`;
         if (/hóa đơn bán|hoàn thành hóa đơn|^hd:|^hoadon:/i.test(blob)) return false;
         if (/báo cáo thủ kho|gửi báo cáo kho|BCK\d{8}/i.test(blob)) return false;
+        if (/báo cáo bộ phận|gửi báo cáo bộ phận|BCM\d{8}|BCKT\d{8}|BCTN\d{8}/i.test(blob)) return false;
         if (id && (String(item.id).includes(id) || String(item.detail || '').includes(id))) return true;
         if (id) return false;
         const at = item.at ? new Date(item.at).getTime() : 0;
@@ -1291,6 +1320,7 @@ module.exports = {
     notifyShiftClosed,
     notifyAttendancePending,
     notifyWarehouseReportSubmitted,
+    notifyDepartmentReportSubmitted,
     onAudit,
     sendOperatingReport,
     sendMorningSchedule,

@@ -367,14 +367,20 @@
     }
     const tag = mode === 'admin' ? 'button' : 'article';
     const type = mode === 'admin' ? ' type="button"' : '';
+    const pill = status => {
+      const cls = status === 'Đã thu hồi' ? 'cancelled' : status === 'Đã xem' ? 'ok' : 'sent';
+      return `<span class="status-pill ${cls}">${esc(status || 'Đã gửi')}</span>`;
+    };
     return `<article class="report-submit-strip">
-      <div class="report-submit-head"><p>${mode === 'admin' ? 'BÁO CÁO THỦ KHO ĐÃ NHẬN' : 'KỲ ĐÃ GỬI CHO QUẢN LÝ'}</p>
-        <h3>${mode === 'admin' ? 'Chọn một kỳ để xem bản Thủ kho đã nộp' : 'Mỗi dòng là một lần bạn đã bấm Gửi báo cáo kho'}</h3>
+      <div class="report-submit-head"><p>${mode === 'admin' ? 'BẢN NỘP ĐÃ NHẬN' : 'KỲ ĐÃ GỬI CHO QUẢN LÝ'}</p>
+        <h3>${mode === 'admin' ? 'Chọn một kỳ để xem bản Thủ kho đã nộp' : 'Mỗi thẻ là một lần bạn đã bấm Gửi báo cáo kho'}</h3>
         ${mode === 'keeper' ? '<span class="report-submit-help">Quản lý xem ở menu <strong>Báo cáo Thủ kho</strong> — không phải Báo cáo cửa hàng. Gửi lại cùng kỳ sẽ thay bản cũ. Gửi nhầm thì bấm <strong>Thu hồi</strong>.</span>' : ''}
       </div>
       <div class="report-submit-list">${items.slice(0, 8).map(item => `<${tag}${type} class="report-submit-item" data-warehouse-report="${esc(item.MaBC)}">
-        <strong>${esc(item.MaBC)}</strong><span>${esc(periodLabelOf(item))}</span>
-        <small>${esc(item.TenNV_Lap || '')} · ${esc(fmtDateTime(item.NgayNop))} · ${esc(item.TrangThai || 'Đã gửi')}</small>
+        <div class="report-submit-item-top"><strong>${esc(item.MaBC)}</strong>${pill(item.TrangThai)}</div>
+        <span class="report-submit-kind">Thủ kho</span>
+        <span class="report-submit-period">${esc(periodLabelOf(item))}</span>
+        <small>${esc(item.TenNV_Lap || '')}${item.TenNV_Lap ? ' · ' : ''}${esc(fmtDateTime(item.NgayNop))}</small>
         ${mode === 'keeper' ? `<button type="button" class="report-submit-withdraw" data-withdraw-report="${esc(item.MaBC)}">Thu hồi bản này</button>` : ''}
       </${tag}>`).join('')}</div>
     </article>`;
@@ -602,7 +608,14 @@
   };
 
   const bindWarehouseReportActions = (root, { getReport, context, mode = 'keeper', getMeta, onSubmitted } = {}) => {
-    const enable = () => root.querySelectorAll('#exportRoleReportCsv, #exportRoleReportExcel, #printRoleReport, #submitWarehouseReport').forEach(button => { button.disabled = false; });
+    const enable = () => {
+      const row = root.querySelector('.report-followup-actions');
+      if (row) row.hidden = false;
+      root.querySelectorAll('#exportRoleReportCsv, #exportRoleReportExcel, #printRoleReport, #submitWarehouseReport').forEach(button => {
+        button.disabled = false;
+        button.hidden = false;
+      });
+    };
     const metaOf = (report, extra) => (typeof getMeta === 'function' ? { ...exportMeta(report, context, extra), ...getMeta(report) } : exportMeta(report, context, extra));
     root.querySelector('#printRoleReport')?.addEventListener('click', () => {
       const report = getReport?.();

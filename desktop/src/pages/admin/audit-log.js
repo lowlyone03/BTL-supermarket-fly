@@ -157,12 +157,14 @@
         const count = document.getElementById('logCount');
         const pageLabel = document.getElementById('auditPageLabel');
         if (!body) return;
-        count.textContent = `${state.total} bản ghi`;
+        if (count) count.textContent = `${state.total} bản ghi`;
         const from = (state.page - 1) * 50 + (state.items.length ? 1 : 0);
         const to = (state.page - 1) * 50 + state.items.length;
         if (pageLabel) pageLabel.textContent = state.total ? `Hiện ${from}–${to} / ${state.total}` : 'Không có bản ghi';
-        document.getElementById('auditPrev').disabled = state.page <= 1;
-        document.getElementById('auditNext').disabled = state.page * 50 >= state.total;
+        const prev = document.getElementById('auditPrev');
+        const next = document.getElementById('auditNext');
+        if (prev) prev.disabled = state.page <= 1;
+        if (next) next.disabled = state.page * 50 >= state.total;
         if (!state.items.length) {
             body.innerHTML = `<tr><td colspan="5" class="empty-state">Không có thao tác phù hợp bộ lọc. Thử chọn “Tất cả việc làm” hoặc nới khoảng ngày.</td></tr>`;
             return;

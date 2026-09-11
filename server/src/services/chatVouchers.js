@@ -50,12 +50,30 @@ const VOUCHER_TYPES = [
         roles: ['quản lý', 'thu ngân', 'kế toán']
     },
     {
-        loai: 'HoaDonMuaHang',
-        table: 'HoaDonMuaHang',
-        idCol: 'MaHDMH',
-        title: 'HÓA ĐƠN MUA HÀNG',
-        dateCols: ['NgayLap', 'NgayHoaDon'],
-        statusCol: 'TrangThaiDoiChieu',
+        loai: 'PhieuChi',
+        table: 'PhieuChi',
+        idCol: 'MaPhieu',
+        title: 'PHIẾU CHI NCC',
+        dateCols: ['NgayChungTu', 'NgayDuyet'],
+        statusCol: 'TrangThai',
+        roles: ['quản lý', 'kế toán', 'nhân viên mua hàng']
+    },
+    {
+        loai: 'CongNoPhaiTra',
+        table: 'CongNoPhaiTra',
+        idCol: 'MaCNPTra',
+        title: 'CÔNG NỢ NHÀ CUNG CẤP',
+        dateCols: ['HanThanhToan', 'NgayPhatSinh'],
+        statusCol: 'TrangThai',
+        roles: ['quản lý', 'kế toán', 'nhân viên mua hàng']
+    },
+    {
+        loai: 'GiaHanCongNo',
+        table: 'CongNoGiaHan',
+        idCol: 'MaGiaHan',
+        title: 'XIN GIA HẠN THANH TOÁN',
+        dateCols: ['NgayYeuCau'],
+        statusCol: 'TrangThai',
         roles: ['quản lý', 'kế toán', 'nhân viên mua hàng']
     }
 ];
@@ -114,7 +132,83 @@ const listVouchers = async (pool, user, { q = '', loai = '' } = {}) => {
     return items.slice(0, 30);
 };
 
+const moneyOf = (value) => Number(value || 0);
+
+const getSpecialVoucher = async (pool, user, loai, ma) => {
+    const role = foldRole(user?.TenVaiTro);
+    const finance = ['quản lý', 'kế toán', 'nhân viên mua hàng'].includes(role);
+    if (!finance) return null;
+    if (loai === 'GiaHanCongNo') {
+        const result = await pool.request()
+            .input('Ma', sql.Int, Number(ma) || 0)
+            .query(`
+                SELECT g.MaGiaHan, g.MaCNPTra, g.HanCu, g.HanMoi, g.TrangThai, g.NgayYeuCau,
+                       g.GhiChu, ncc.TenNCC, cn.SoTienNo, cn.SoTienDaTra, cn.SoTienConLai
+                FROM dbo.CongNoGiaHan g
+                LEFT JOIN dbo.CongNoPhaiTra cn ON cn.MaCNPTra = g.MaCNPTra
+                LEFT JOIN dbo.NhaCungCap ncc ON ncc.MaNCC = COALESCE(g.MaNCC, cn.MaNCC)
+                WHERE g.MaGiaHan = @Ma`);
+        if (!result.recordset.length) return null;
+        const row = result.recordset[0];
+        return {
+            loai,
+            ma: String(row.MaGiaHan),
+            ten: `Xin gia hạn · ${row.TenNCC || row.MaCNPTra}`,
+            title: 'XIN GIA HẠN THANH TOÁN',
+            trangThai: row.TrangThai,
+            ngay: row.NgayYeuCau,
+            tenNCC: row.TenNCC,
+            soTien: moneyOf(row.SoTienNo),
+            soTienDaTra: moneyOf(row.SoTienDaTra),
+            soTienConLai: moneyOf(row.SoTienConLai),
+            hanThanhToan: row.HanMoi || row.HanCu,
+            maCongNo: row.MaCNPTra
+        };
+    }
+    if (loai === 'CongNoPhaiTra') {
+        const result = await pool.request()
+            .input('Ma', sql.VarChar, String(ma).trim())
+            .query(`
+                SELECT cn.MaCNPTra, cn.SoTienNo, cn.SoTienDaTra, cn.SoTienConLai, cn.HanThanhToan,
+                       cn.TrangThai, ncc.TenNCC, hd.SoHoaDon
+                FROM dbo.CongNoPhaiTra cn
+                JOIN dbo.NhaCungCap ncc ON ncc.MaNCC = cn.MaNCC
+                LEFT JOIN dbo.HoaDonMuaHang hd ON hd.MaHDMH = cn.MaHDMH
+                WHERE cn.MaCNPTra = @Ma`);
+        if (!result.recordset.length) return null;
+        const row = result.recordset[0];
+        return {
+            loai, ma: row.MaCNPTra, ten: `Công nợ ${row.MaCNPTra} · ${row.TenNCC}`,
+            title: 'CÔNG NỢ NHÀ CUNG CẤP', trangThai: row.TrangThai, ngay: row.HanThanhToan,
+            tenNCC: row.TenNCC, soTien: moneyOf(row.SoTienNo), soTienDaTra: moneyOf(row.SoTienDaTra),
+            soTienConLai: moneyOf(row.SoTienConLai), hanThanhToan: row.HanThanhToan, soHoaDon: row.SoHoaDon
+        };
+    }
+    if (loai === 'PhieuChi') {
+        const result = await pool.request()
+            .input('Ma', sql.VarChar, String(ma).trim())
+            .query(`
+                SELECT pc.MaPhieu, pc.SoTien, pc.TrangThai, pc.NgayChungTu, pc.PhuongThuc,
+                       ncc.TenNCC, cn.SoTienNo, cn.SoTienDaTra, cn.SoTienConLai, cn.MaCNPTra
+                FROM dbo.PhieuChi pc
+                JOIN dbo.NhaCungCap ncc ON ncc.MaNCC = pc.MaNCC
+                LEFT JOIN dbo.CongNoPhaiTra cn ON cn.MaCNPTra = pc.MaCongNo
+                WHERE pc.MaPhieu = @Ma`);
+        if (!result.recordset.length) return null;
+        const row = result.recordset[0];
+        return {
+            loai, ma: row.MaPhieu, ten: `Phiếu chi ${row.MaPhieu} · ${row.TenNCC}`,
+            title: 'PHIẾU CHI NCC', trangThai: row.TrangThai, ngay: row.NgayChungTu,
+            tenNCC: row.TenNCC, soTien: moneyOf(row.SoTien), soTienDaTra: moneyOf(row.SoTienDaTra),
+            soTienConLai: moneyOf(row.SoTienConLai), maCongNo: row.MaCNPTra
+        };
+    }
+    return null;
+};
+
 const getVoucher = async (pool, user, loai, ma) => {
+    const special = await getSpecialVoucher(pool, user, String(loai || ''), ma);
+    if (special) return special;
     const spec = typeByLoai.get(String(loai || ''));
     if (!spec) {
         const error = new Error('Loại chứng từ không hỗ trợ.');

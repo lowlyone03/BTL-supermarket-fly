@@ -92,7 +92,7 @@
                         <div class="form-group"><label>Mã nhân viên *</label><input type="text" id="maNV" required placeholder="VD: NV_TN02" maxlength="20"><small class="emp-field-error" id="maNV_err"></small></div>
                         <div class="form-group"><label>Họ và tên *</label><input type="text" id="tenNV" required placeholder="Nhập họ tên nhân viên" maxlength="150"><small class="emp-field-error" id="tenNV_err"></small></div>
                         <div class="form-group"><label>Số CCCD <span class="req-create">*</span></label><input type="text" id="cccd" inputmode="numeric" placeholder="12 số (hoặc CMND 9 số)" maxlength="12"><small class="emp-field-error" id="cccd_err"></small></div>
-                        <div class="form-group"><label>Ngày sinh <span class="req-create">*</span></label><input type="date" id="ngaySinh"><small class="emp-field-error" id="ngaySinh_err"></small></div>
+                        <div class="form-group"><label>Ngày sinh <span class="req-create">*</span></label><input type="date" id="ngaySinh" data-date-range="birth"><small class="emp-field-error" id="ngaySinh_err"></small></div>
                         <div class="form-group"><label>Giới tính <span class="req-create">*</span></label><select id="gioiTinh"><option value="">Chưa chọn</option><option value="Nam">Nam</option><option value="Nữ">Nữ</option></select><small class="emp-field-error" id="gioiTinh_err"></small></div>
                         <div class="form-group"><label>Số điện thoại <span class="req-create">*</span></label><input type="text" id="sdt" placeholder="09xxxxxxxx hoặc +84..." maxlength="20"><small class="emp-field-error" id="sdt_err"></small></div>
                         <div class="form-group"><label>Email</label><input type="email" id="email" placeholder="ten@supermarket.fly" maxlength="150"><small class="emp-field-error" id="email_err"></small></div>
@@ -115,7 +115,7 @@
                 <div class="emp-form-section">
                     <div class="emp-section-heading"><small>GIẤY TỜ & CƯ TRÚ</small><h4>CCCD và địa chỉ</h4></div>
                     <div class="form-grid">
-                        <div class="form-group"><label>Ngày cấp CCCD</label><input type="date" id="ngayCapCCCD"><small class="emp-field-error" id="ngayCapCCCD_err"></small></div>
+                        <div class="form-group"><label>Ngày cấp CCCD</label><input type="date" id="ngayCapCCCD" data-date-range="issue"><small class="emp-field-error" id="ngayCapCCCD_err"></small></div>
                         <div class="form-group"><label>Nơi cấp CCCD</label><input type="text" id="noiCapCCCD" placeholder="Cục Cảnh sát QLHC về TTXH" maxlength="200"><small class="emp-field-error" id="noiCapCCCD_err"></small></div>
                         <div class="form-group form-span-2"><label>Hộ khẩu thường trú</label><input type="text" id="hoKhauThuongTru" placeholder="Số nhà, phường/xã, quận/huyện, tỉnh/thành" maxlength="300"><small class="emp-field-error" id="hoKhauThuongTru_err"></small></div>
                         <div class="form-group form-span-2"><label>Chỗ ở hiện nay</label><input type="text" id="choOHienNay" placeholder="Mặc định theo địa chỉ liên hệ nếu để trống" maxlength="300"><small class="emp-field-error" id="choOHienNay_err"></small></div>
@@ -126,7 +126,7 @@
                     <div class="emp-section-heading"><small>THÔNG TIN CÔNG VIỆC</small><h4>Vị trí & trạng thái</h4></div>
                     <div class="form-grid">
                         <div class="form-group"><label>Chức vụ *</label><select id="chucVu" required><option value="Quản lý">Quản lý</option><option value="Nhân viên mua hàng">Nhân viên mua hàng</option><option value="Thủ kho">Thủ kho</option><option value="Thu ngân" selected>Thu ngân</option><option value="Kế toán">Kế toán</option></select><small class="emp-field-error" id="chucVu_err"></small></div>
-                        <div class="form-group"><label>Ngày vào làm <span class="req-create">*</span></label><input type="date" id="ngayVaoLam"><small class="emp-field-error" id="ngayVaoLam_err"></small></div>
+                        <div class="form-group"><label>Ngày vào làm <span class="req-create">*</span></label><input type="date" id="ngayVaoLam" data-date-range="hire"><small class="emp-field-error" id="ngayVaoLam_err"></small></div>
                         <div class="form-group"><label>Trạng thái</label><select id="trangThai"><option value="Đang làm việc">Đang làm việc</option><option value="Nghỉ việc">Nghỉ việc</option></select></div>
                     </div>
                 </div>
@@ -173,5 +173,5 @@
 
 <script src="../shared/escape-key.js"></script>
 <script src="../shared/field-validators.js?v=fields-7"></script>
-<script src="../shared/employee-profile.js?v=emp-syll-1"></script>
-<script src="../admin/employees.js?v=emp-syll-1"></script>
+<script src="../shared/employee-profile.js?v=emp-date-1"></script>
+<script src="../admin/employees.js?v=emp-date-1"></script>

@@ -155,7 +155,13 @@ const syncAllMemberships = async (pool) => {
 const lastMessagePreview = (row) => {
     if (!row) return '';
     if (row.LoaiTin === 'Anh' || row.LoaiTin === 'File') return row.TenFile || 'Đã gửi tệp';
-    if (row.LoaiTin === 'ChungTu') return row.MaChungTu ? `Chứng từ ${row.MaChungTu}` : 'Chứng từ hệ thống';
+    if (row.LoaiTin === 'ChungTu') {
+        try {
+            const parsed = JSON.parse(String(row.NoiDung || ''));
+            if (parsed && parsed.title) return parsed.title;
+        } catch { /* plain text */ }
+        return row.MaChungTu ? `Chứng từ ${row.MaChungTu}` : 'Chứng từ hệ thống';
+    }
     return previewText(row.NoiDung);
 };
 
@@ -275,7 +281,12 @@ const listMessages = async (pool, user, maPhong, query = {}) => {
     const items = result.recordset
         .map((row) => ({ ...mapMessage(row), cuaToi: row.MaNV_Gui === actor.MaNV }))
         .sort((a, b) => a.maTin - b.maTin);
-    return { phong: room.MaPhong, tenPhong: room.TenPhong, items };
+    return {
+        phong: room.MaPhong,
+        tenPhong: room.TenPhong,
+        items,
+        hasMore: result.recordset.length >= limit
+    };
 };
 
 const insertMessage = async (pool, { room, actor, noiDung, loaiTin, file, voucher }) => {
@@ -399,6 +410,42 @@ const markRead = async (pool, user, maPhong, maTinCuoi) => {
     return { maPhong: room.MaPhong, maTinCuoi: watermark };
 };
 
+const postRoomCard = async (pool, user, { khoa, noiDung, voucher, allowGuest } = {}) => {
+    await withSchema(pool);
+    await syncMembershipSafe(pool, user?.MaNV);
+    const roomRow = await pool.request()
+        .input('Khoa', sql.VarChar, String(khoa || '').slice(0, 40))
+        .query(`SELECT TOP 1 MaPhong, TenPhong, Khoa FROM dbo.PhongChat WHERE Khoa = @Khoa AND TrangThai = N'DangMo'`);
+    if (!roomRow.recordset.length) {
+        throw httpError(500, 'Chưa có kênh chat tương ứng.');
+    }
+    const room = roomRow.recordset[0];
+    let actor;
+    if (allowGuest) {
+        actor = await loadActor(pool, user?.MaNV);
+        if (!actor || !isActiveActor(actor)) {
+            throw httpError(403, 'Tài khoản không còn dùng chat nội bộ.');
+        }
+    } else {
+        ({ actor } = await assertMember(pool, user, room.MaPhong));
+    }
+    const text = clipText(noiDung, 1000);
+    if (!text && !voucher) throw httpError(400, 'Thiếu nội dung thẻ chat.');
+    const inserted = await insertMessage(pool, {
+        room,
+        actor,
+        noiDung: text || voucher?.ten || voucher?.ma,
+        loaiTin: voucher ? 'ChungTu' : 'VanBan',
+        voucher
+    });
+    try { await chatHub.notifyChat({ pool, maPhong: room.MaPhong, maTin: inserted.MaTin }); } catch { /* ignore */ }
+    return {
+        maTin: Number(inserted.MaTin),
+        maPhong: room.MaPhong,
+        khoa: room.Khoa
+    };
+};
+
 const getFileMessage = async (pool, user, maTin) => {
     await withSchema(pool);
     const row = await pool.request()
@@ -428,5 +475,6 @@ module.exports = {
     getVoucher,
     consumeChatRate,
     resetChatRateForTests,
-    loadActor
+    loadActor,
+    postRoomCard
 };

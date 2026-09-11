@@ -11,5 +11,9 @@ router.use(requirePermission('UC02'));
 router.get('/', roleController.getRoles);
 router.get('/permissions', roleController.getPermissionMatrix);
 router.put('/permissions', roleController.updatePermissions);
+router.get('/staff-permissions', roleController.getStaffPermissions);
+router.put('/employees/:maNV/permissions', roleController.updateEmployeePermissions);
+router.post('/employees/:maNV/permissions/reset', roleController.resetEmployeePermissions);
+router.post('/employees/:maNV/promote', roleController.promoteEmployee);
 
 module.exports = router;

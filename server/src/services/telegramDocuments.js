@@ -1,5 +1,5 @@
 const {
-    escapeHtml, formatMoney, formatVnDateTime, formatTelegramDate,
+    escapeHtml, formatMoney, moneyCode, formatVnDateTime, formatTelegramDate,
     formatTelegramValue, prettyShiftName, headerBlock, splitTelegramText, t, RULE,
     statusBadge, sectionTitle
 } = require('./telegramMessages');
@@ -46,11 +46,14 @@ const idInput = (id) => {
     return { Id: { type: sql?.VarChar, value: String(id) } };
 };
 
-const DOC_KIND_RE = 'po|px|kk|dt|pc|cc|hd|pn|hdm|gh|bck';
+const DOC_KIND_RE = 'po|px|kk|dt|pc|cc|hd|pn|hdm|gh|bckt|bctn|bcm|bck|dept';
 
 const inferKindFromId = (raw) => {
     const id = String(raw || '').trim();
     if (!id) return null;
+    if (/^BCKT/i.test(id)) return 'bckt';
+    if (/^BCTN/i.test(id)) return 'bctn';
+    if (/^BCM/i.test(id)) return 'bcm';
     if (/^BCK/i.test(id)) return 'bck';
     if (/^PO/i.test(id)) return 'po';
     if (/^PX/i.test(id)) return 'px';
@@ -90,13 +93,13 @@ const formatLine = (row, index, mode = 'sale') => {
         return `${index + 1}. <b>${escapeHtml(String(code))}</b> ${escapeHtml(name)}\n    HT ${escapeHtml(String(row.SLHeThong ?? '—'))} / TT ${escapeHtml(String(row.SLThucTe ?? '—'))} · lệch ${escapeHtml(String(row.ChenhLech ?? '—'))}${row.NguyenNhan ? ` · ${escapeHtml(row.NguyenNhan)}` : ''}`;
     }
     if (mode === 'receipt') {
-        return `${index + 1}. <b>${escapeHtml(String(code))}</b> ${escapeHtml(name)}${unit}\n    giao ${escapeHtml(String(row.SoLuongGiao ?? '—'))} · nhập ${escapeHtml(String(row.SoLuongChapNhan ?? '—'))} · từ chối ${escapeHtml(String(row.SoLuongTuChoi ?? 0))} × ${escapeHtml(formatMoney(row.DonGiaNhap ?? row.DonGia))} = ${escapeHtml(formatMoney(amountOf(row)))}`;
+        return `${index + 1}. <b>${escapeHtml(String(code))}</b> ${escapeHtml(name)}${unit}\n    giao ${escapeHtml(String(row.SoLuongGiao ?? '—'))} · nhập ${escapeHtml(String(row.SoLuongChapNhan ?? '—'))} · từ chối ${escapeHtml(String(row.SoLuongTuChoi ?? 0))} × ${moneyCode(row.DonGiaNhap ?? row.DonGia)} = ${moneyCode(amountOf(row))}`;
     }
     if (mode === 'return') {
         const loai = row.LoaiDong ? `${escapeHtml(row.LoaiDong)} · ` : '';
-        return `${index + 1}. ${loai}<b>${escapeHtml(String(code))}</b> ${escapeHtml(name)}\n    SL ${escapeHtml(String(qtyOf(row) ?? '—'))} × ${escapeHtml(formatMoney(priceOf(row)))} = ${escapeHtml(formatMoney(amountOf(row)))}`;
+        return `${index + 1}. ${loai}<b>${escapeHtml(String(code))}</b> ${escapeHtml(name)}\n    SL ${escapeHtml(String(qtyOf(row) ?? '—'))} × ${moneyCode(priceOf(row))} = ${moneyCode(amountOf(row))}`;
     }
-    return `${index + 1}. <b>${escapeHtml(String(code))}</b> ${escapeHtml(name)}${unit}\n    SL ${escapeHtml(String(qtyOf(row) ?? '—'))} × ${escapeHtml(formatMoney(priceOf(row)))} = ${escapeHtml(formatMoney(amountOf(row)))}`;
+    return `${index + 1}. <b>${escapeHtml(String(code))}</b> ${escapeHtml(name)}${unit}\n    SL ${escapeHtml(String(qtyOf(row) ?? '—'))} × ${moneyCode(priceOf(row))} = ${moneyCode(amountOf(row))}`;
 };
 
 const fieldLine = (label, value, lang = 'vi') => {
@@ -109,13 +112,14 @@ const buildDocumentSheet = (doc = {}, lang = 'vi') => {
     const number = doc.number || doc.id || '—';
     const when = formatTelegramDate(doc.date, lang) || formatVnDateTime(doc.date, lang) || '';
     const status = doc.status ? String(doc.status) : '';
-    const approved = /đã duyệt|đã xác nhận|đã thanh toán|thành công|đã đối chiếu/i.test(status);
     const lines = Array.isArray(doc.lines) ? doc.lines.slice(0, MAX_LINES) : [];
     const fields = Array.isArray(doc.fields) ? doc.fields : [];
     const totals = Array.isArray(doc.totals) ? doc.totals : [];
+    const vendor = fields.find(field => /ncc|nhà cung cấp|khách|nhân viên/i.test(String(field.label || '')));
+    const totalField = totals.find(item => item.money !== false && (typeof item.value === 'number' || item.format === 'money'));
     const header = [
         headerBlock(`📄 <b>${escapeHtml(title)}</b>`),
-        `<blockquote>🔖 <b>${escapeHtml(String(number))}</b>${when ? `  ·  ${escapeHtml(when)}` : ''}\n${status ? statusBadge(status) : '⚪ <b>Chưa xác định</b>'}${approved ? '  ✓' : ''}</blockquote>`
+        `<blockquote>${status ? statusBadge(status) : 'Chưa xác định'}\n🔖 <b>${escapeHtml(String(number))}</b>${when ? ` · ${escapeHtml(when)}` : ''}${vendor?.value ? `\n${escapeHtml(vendor.label)}: ${escapeHtml(formatTelegramValue(vendor.value, lang))}` : ''}${totalField ? `\n${escapeHtml(totalField.label || 'Số tiền')}: ${moneyCode(totalField.value)}` : ''}</blockquote>`
     ];
     const body = [];
     for (const field of fields) {
@@ -133,12 +137,12 @@ const buildDocumentSheet = (doc = {}, lang = 'vi') => {
         body.push('', '<b>💰 Tổng hợp</b>');
         for (const item of totals) {
             const money = item.money !== false && (typeof item.value === 'number' || item.format === 'money');
-            const shown = money ? formatMoney(item.value) : formatTelegramValue(item.value, lang);
-            body.push(`<b>${escapeHtml(item.label)}</b>: ${escapeHtml(String(shown))}`);
+            const shown = money ? moneyCode(item.value) : escapeHtml(formatTelegramValue(item.value, lang));
+            body.push(`<b>${escapeHtml(item.label)}</b>: ${shown}`);
         }
     }
     if (doc.note) body.push('', `<i>${escapeHtml(String(doc.note).slice(0, 500))}</i>`);
-    body.push('', `<i>🏪 SUPERMARKET FLY · ${escapeHtml(t(lang, 'hideAfterRead'))}</i>`);
+    body.push('', `<i>${escapeHtml(t(lang, 'hideAfterRead'))}</i>`);
     return [...header, '', ...body].filter(line => line !== undefined).join('\n');
 };
 
@@ -595,6 +599,15 @@ const loadDocumentPack = async (pool, kind, id, lang = 'vi') => {
                     : [{ text: pack.text, kind: 'bck', number: ma }]
             };
         }
+        if (key === 'dept' || key === 'bcm' || key === 'bckt' || key === 'bctn') {
+            const deptTg = require('./departmentReportTelegram');
+            const pack = await deptTg.composeDepartmentReportView(pool, ma, { mode: 'view', lang });
+            return {
+                messages: pack.documents?.length
+                    ? pack.documents
+                    : [{ text: pack.text, kind: key, number: ma }]
+            };
+        }
         if (key === 'po') {
             const loaded = await loadPoCore(pool, ma);
             if (!loaded) return { messages: missingSheet(key, ma, lang) };
@@ -709,7 +722,7 @@ const docsIndexKeyboard = (items = []) => {
         text: `📄 ${item.id}`,
         callback_data: String(`docs:${item.kind}:${item.id}`).slice(0, 64)
     }]));
-    rows.push([{ text: '⏳ Cần duyệt', callback_data: 'cmd:pending' }, { text: '📊 Báo cáo', callback_data: 'cmd:reports' }]);
+    rows.push([{ text: '⏳ Việc chờ', callback_data: 'cmd:pending' }, { text: '📊 Báo cáo', callback_data: 'cmd:reports' }]);
     return { inline_keyboard: rows };
 };
 
@@ -723,7 +736,8 @@ const DOC_TYPE_KEYS = [
     { kind: 'dt', key: 'docsTypeDt' },
     { kind: 'pc', key: 'docsTypePc' },
     { kind: 'cc', key: 'docsTypeCc' },
-    { kind: 'bck', key: 'docsTypeBck' }
+    { kind: 'bck', key: 'docsTypeBck' },
+    { kind: 'bcm', key: 'docsTypeBcm' }
 ];
 
 const DOC_LIST_LIMIT = 12;
@@ -763,6 +777,11 @@ const DOC_LIST_SQL = {
     bck: `SELECT TOP ${DOC_LIST_LIMIT} bc.MaBC AS id, bc.NgayNop AS ngay, bc.TrangThai AS trangThai,
                 ISNULL(bc.NhanKy, bc.TenNV_Lap) AS doiTuong
          FROM BaoCaoKhoNop bc
+         ORDER BY bc.NgayNop DESC, bc.MaBC DESC`,
+    bcm: `SELECT TOP ${DOC_LIST_LIMIT} bc.MaBC AS id, bc.NgayNop AS ngay, bc.TrangThai AS trangThai,
+                ISNULL(bc.NhanKy, bc.TenNV_Lap) AS doiTuong
+         FROM BaoCaoBoPhanNop bc
+         WHERE bc.TrangThai IN (N'Đã gửi', N'Đã xem', N'Cần phản hồi')
          ORDER BY bc.NgayNop DESC, bc.MaBC DESC`,
     cc: `SELECT TOP ${DOC_LIST_LIMIT} CAST(cc.MaChamCong AS varchar(20)) AS id, l.NgayLam AS ngay,
                 cc.TrangThai AS trangThai, nv.TenNV AS doiTuong

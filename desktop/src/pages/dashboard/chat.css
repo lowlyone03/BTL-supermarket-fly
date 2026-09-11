@@ -225,10 +225,12 @@
 #chatWidget .chat-body {
   position: relative;
   z-index: 2;
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
+  overflow: hidden;
   display: grid;
   grid-template-columns: 148px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   pointer-events: auto;
 }
 
@@ -314,6 +316,9 @@
   position: relative;
   z-index: 1;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -321,9 +326,14 @@
   pointer-events: auto;
 }
 #chatWidget .chat-thread {
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   padding: 14px 14px 10px;
   display: flex;
   flex-direction: column;
@@ -519,7 +529,11 @@
 }
 
 #chatWidget .chat-composer {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 4;
   padding: 0 12px 12px;
+  background: linear-gradient(180deg, rgba(247,251,248,0) 0%, #eef5f1 28%);
 }
 #chatWidget .chat-composer-box {
   display: flex;
@@ -700,4 +714,120 @@
   #chatWidget {
     width: min(460px, calc(100vw - 32px));
   }
+}
+
+/* Fly chat v2 — department color, invoice cards, extension thread */
+#chatWidget {
+  border: 1px solid #cfe3d8;
+  box-shadow: 0 22px 48px rgba(18, 56, 44, .18);
+}
+#chatWidget .chat-head {
+  background: linear-gradient(135deg, #1c4a3d 0%, #2b7d60 58%, #3d8f8a 100%);
+  color: #f4faf6;
+}
+#chatWidget .chat-head h2,
+#chatWidget .chat-sub { color: #f4faf6; }
+#chatWidget .chat-sub { opacity: .88; }
+#chatWidget .chat-close { background: rgba(255,255,255,.16); color: #fff; }
+#chatWidget .chat-body { grid-template-columns: 168px minmax(0, 1fr); }
+#chatWidget.is-single-room .chat-body { grid-template-columns: minmax(0, 1fr); }
+#chatWidget.is-single-room .chat-rooms { display: none !important; }
+#chatWidget .chat-load-older {
+  margin: 0 auto 6px;
+  color: #6b746c;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+}
+#chatWidget .chat-rooms { width: 168px; min-width: 168px; background: #f3faf6; border-right-color: #d7ebe1; }
+#chatWidget .chat-room {
+  height: auto;
+  min-height: 46px;
+  padding: 8px 8px 8px 6px;
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr) auto;
+  align-items: center;
+}
+#chatWidget .chat-room-swatch {
+  width: 6px;
+  height: 22px;
+  border-radius: 99px;
+  background: #8fbfa8;
+}
+#chatWidget .chat-room.tone-store .chat-room-swatch { background: #2b7d60; }
+#chatWidget .chat-room.tone-wh .chat-room-swatch { background: #c4a35a; }
+#chatWidget .chat-room.tone-buy .chat-room-swatch { background: #3d7ea6; }
+#chatWidget .chat-room.tone-acct .chat-room-swatch { background: #6b5ea8; }
+#chatWidget .chat-room.tone-cash .chat-room-swatch { background: #d07a3a; }
+#chatWidget .chat-room.tone-mgr .chat-room-swatch { background: #1c4a3d; }
+#chatWidget .chat-room.tone-extend .chat-room-swatch { background: #c4553d; }
+#chatWidget .chat-room.has-unread { background: #e7f6ee; }
+#chatWidget .chat-room.tone-extend { background: #fff4ef; }
+#chatWidget .chat-room.tone-extend.is-active { background: #8b2e1a; color: #fff7f4; }
+#chatWidget .chat-main { background: linear-gradient(180deg, #f7fbf8 0%, #eef5f1 100%); }
+#chatWidget .chat-dept {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: .02em;
+  color: #1c4a3d;
+  background: #dceee4;
+}
+#chatWidget .chat-turn.dept-buy .chat-dept { color: #1d4e6e; background: #d7ecf6; }
+#chatWidget .chat-turn.dept-acct .chat-dept { color: #43357a; background: #e6e1f7; }
+#chatWidget .chat-turn.dept-wh .chat-dept { color: #6b5414; background: #f6edd3; }
+#chatWidget .chat-turn.dept-cash .chat-dept { color: #7a4314; background: #fbe4d0; }
+#chatWidget .chat-turn.dept-mgr .chat-dept { color: #14352c; background: #cfe8dc; }
+#chatWidget .chat-bubble {
+  background: #fff;
+  border: 1px solid #e1ece6;
+  box-shadow: 0 6px 14px rgba(28, 74, 61, .05);
+}
+#chatWidget .chat-turn.is-mine .chat-bubble {
+  background: linear-gradient(160deg, #1c4a3d, #2b7d60);
+  border-color: transparent;
+  color: #f4faf6;
+}
+#chatWidget .chat-voucher {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid #d5e8dc;
+  border-left: 4px solid #2b7d60;
+  background: #f7fbf8;
+}
+#chatWidget .chat-voucher.is-invoice { border-left-color: #3d7ea6; background: #f3f9fc; }
+#chatWidget .chat-voucher.is-extend { border-left-color: #c4553d; background: #fff7f4; }
+#chatWidget .chat-voucher-dl {
+  margin: 6px 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+}
+#chatWidget .chat-voucher-dl div { min-width: 0; }
+#chatWidget .chat-voucher-dl dt {
+  color: #6a7a72;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+#chatWidget .chat-voucher-dl dd {
+  margin: 0;
+  color: #17382e;
+  font-size: 12px;
+  font-weight: 650;
+}
+#chatWidget .chat-card-note { margin: 8px 0 0; font-size: 12px; opacity: .92; }
+#chatWidget .chat-composer-box {
+  border: 1px solid #cfe0d6;
+  background: #fff;
+  box-shadow: 0 8px 18px rgba(28, 74, 61, .06);
+}
+#chatWidget .chat-send {
+  background: linear-gradient(180deg, #3d8f8a, #1c4a3d);
 }

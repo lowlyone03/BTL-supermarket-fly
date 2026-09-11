@@ -35,6 +35,7 @@ const TABLE_LABELS = {
     KeHoachDieuChinhLaiLo: 'Kế hoạch điều chỉnh lãi lỗ',
     ThongBaoCuaHang: 'Thông báo cửa hàng',
     BaoCaoKhoNop: 'Báo cáo kho đã gửi',
+    BaoCaoBoPhanNop: 'Báo cáo bộ phận đã gửi',
     KyKeToan: 'Kỳ kế toán',
     SoDuDauKy: 'Số dư đầu kỳ',
     ChiPhiVanHanh: 'Phiếu chi phí vận hành',
@@ -70,6 +71,7 @@ const TARGET_BY_TABLE = {
     KeHoachDieuChinhLaiLo: 'manager-reports',
     ThongBaoCuaHang: 'manager-reports',
     BaoCaoKhoNop: 'admin-warehouse-reports',
+    BaoCaoBoPhanNop: 'admin-department-reports',
     KyKeToan: 'ledger-periods',
     SoDuDauKy: 'ledger-periods',
     ChiPhiVanHanh: 'ledger-expenses',
@@ -98,6 +100,26 @@ const ACTION_META = {
         viecLam: 'Thủ kho thu hồi báo cáo kho đã gửi',
         giaiThich: 'Xóa bản đã nộp khỏi danh sách Quản lý xem. Không sửa tồn kho. Có thể lập và gửi lại sau.',
         mucDo: 'Cảnh báo', nhom: 'kho', target: 'admin-warehouse-reports'
+    },
+    'Gửi báo cáo bộ phận': {
+        viecLam: 'Bộ phận gửi báo cáo cho Quản lý',
+        giaiThich: 'Lưu bản chụp báo cáo mua hàng, kế toán hoặc thu ngân theo kỳ và thông báo cho Quản lý. Không phải báo cáo tổng cửa hàng. Không duyệt chứng từ.',
+        mucDo: 'Thông tin', nhom: 'bao-cao', target: 'admin-department-reports'
+    },
+    'Thu hồi báo cáo bộ phận': {
+        viecLam: 'Thu hồi báo cáo bộ phận đã gửi',
+        giaiThich: 'Ẩn bản đã nộp khỏi danh sách Quản lý. Giữ JSON. Không sửa số liệu gốc.',
+        mucDo: 'Cảnh báo', nhom: 'bao-cao', target: 'admin-department-reports'
+    },
+    'Phản hồi báo cáo bộ phận': {
+        viecLam: 'Quản lý yêu cầu bộ phận giải trình báo cáo',
+        giaiThich: 'Không duyệt, không ghi sổ. Chỉ ghi câu hỏi để người lập gửi phiên mới hoặc giải thích.',
+        mucDo: 'Cảnh báo', nhom: 'bao-cao', target: 'admin-department-reports'
+    },
+    'Xem báo cáo bộ phận': {
+        viecLam: 'Quản lý mở báo cáo bộ phận đã nộp',
+        giaiThich: 'Đánh dấu đã xem. Không phải phê duyệt chứng từ.',
+        mucDo: 'Thông tin', nhom: 'bao-cao', target: 'admin-department-reports'
     },
     'Gửi kế hoạch điều chỉnh lãi lỗ': {
         viecLam: 'Gửi kế hoạch điều chỉnh khi cửa hàng lỗ',

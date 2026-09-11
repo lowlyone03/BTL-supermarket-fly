@@ -7,15 +7,40 @@
   let editingCode = null;
   let editingCategoryCode = null;
   let imagePreviewUrl = null;
+  let loadSeq = 0;
+
+  window.__flyProductsAbort?.abort();
+  const pageAbort = new AbortController();
+  window.__flyProductsAbort = pageAbort;
+  const navSeq = Number(window.FLY_NAV_SEQ || 0);
+  const onPageLeave = () => pageAbort.abort();
+  window.addEventListener('fly:pageleave', onPageLeave, { once: true });
 
   const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
   const money = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
   const productPhoto = (item, className = '') => window.FLY_PRODUCT_IMAGES?.markup(item, { className }) || '';
   const normalizeCode = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const isAbort = error => error?.name === 'AbortError' || /aborted|AbortError/i.test(String(error?.message || ''));
+  const stillOnPage = () => Number(window.FLY_NAV_SEQ || 0) === navSeq && Boolean(document.getElementById('productTableBody'));
+  const el = id => document.getElementById(id);
+  const setText = (id, value) => {
+    const node = el(id);
+    if (node) node.textContent = value;
+    return node;
+  };
+  const setHtml = (id, html) => {
+    const node = el(id);
+    if (node) node.innerHTML = html;
+    return node;
+  };
+  const toastError = error => {
+    if (!stillOnPage() || isAbort(error)) return;
+    window.showToast(error?.message || error, 'error');
+  };
   const api = async (path, options = {}) => {
     const headers = { Authorization: `Bearer ${token}`, ...(options.headers || {}) };
     if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
-    const response = await fetch(`${API}${path}`, { ...options, headers });
+    const response = await fetch(`${API}${path}`, { ...options, headers, signal: options.signal || pageAbort.signal });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.message || 'Không thể xử lý yêu cầu.');
     return data;
@@ -33,7 +58,7 @@
     preview.innerHTML = source
       ? `<img src="${esc(source)}" alt="Xem trước ảnh sản phẩm">`
       : '<span>Ảnh</span>';
-    document.getElementById('productImageName').textContent = label || 'JPG, PNG hoặc WebP · tối đa 5 MB';
+    setText('productImageName', label || 'JPG, PNG hoặc WebP · tối đa 5 MB');
   };
 
   const fallbackProductPrefix = category => {
@@ -68,26 +93,30 @@
   };
 
   const fillCategoryOptions = () => {
-    const filter = document.getElementById('productCategory');
-    const input = document.getElementById('productCategoryInput');
-    if (!filter || !input) return;
-    const currentFilter = filter.value;
-    const currentInput = input.value;
-    filter.innerHTML = '<option value="">Tất cả danh mục</option>' + categories.map(item => `<option value="${esc(item.MaDM)}">${esc(item.TenDM)}</option>`).join('');
-    input.innerHTML = categories.filter(item => Number(item.TrangThai) === 1 || item.MaDM === currentInput)
-      .map(item => `<option value="${esc(item.MaDM)}">${esc(item.TenDM)} · ${esc(item.MaDM)}</option>`).join('');
-    filter.value = categories.some(item => item.MaDM === currentFilter) ? currentFilter : '';
-    if ([...input.options].some(option => option.value === currentInput)) input.value = currentInput;
+    const filter = el('productCategory');
+    const input = el('productCategoryInput');
+    if (!filter && !input) return;
+    const currentFilter = filter?.value;
+    const currentInput = input?.value;
+    if (filter) {
+      filter.innerHTML = '<option value="">Tất cả danh mục</option>' + categories.map(item => `<option value="${esc(item.MaDM)}">${esc(item.TenDM)}</option>`).join('');
+      filter.value = categories.some(item => item.MaDM === currentFilter) ? currentFilter : '';
+    }
+    if (input) {
+      input.innerHTML = categories.filter(item => Number(item.TrangThai) === 1 || item.MaDM === currentInput)
+        .map(item => `<option value="${esc(item.MaDM)}">${esc(item.TenDM)} · ${esc(item.MaDM)}</option>`).join('');
+      if ([...input.options].some(option => option.value === currentInput)) input.value = currentInput;
+    }
   };
 
   const renderCategories = () => {
-    const list = document.getElementById('categoryList');
+    const list = el('categoryList');
     if (!list) return;
     const normalizeSearch = window.FLY_SEARCH?.normalize || (value => String(value ?? '').trim().toLocaleLowerCase('vi'));
-    const keyword = normalizeSearch(document.getElementById('categorySearch')?.value || '');
+    const keyword = normalizeSearch(el('categorySearch')?.value || '');
     const visible = categories.filter(item => !keyword || normalizeSearch(`${item.MaDM} ${item.TenDM} ${item.MoTa || ''}`).includes(keyword));
-    document.getElementById('categoryTotalCount').textContent = categories.length;
-    document.getElementById('categoryActiveCount').textContent = categories.filter(item => Number(item.TrangThai) === 1).length;
+    setText('categoryTotalCount', categories.length);
+    setText('categoryActiveCount', categories.filter(item => Number(item.TrangThai) === 1).length);
     list.innerHTML = visible.length ? visible.map(item => {
       const active = Number(item.TrangThai) === 1;
       return `<article class="category-row">
@@ -98,28 +127,35 @@
   };
 
   const loadCategories = async () => {
+    if (!stillOnPage()) return;
     const data = await api('/categories');
+    if (!stillOnPage()) return;
     categories = data.items || [];
     fillCategoryOptions();
     renderCategories();
   };
 
   const loadAllProducts = async () => {
+    if (!stillOnPage()) return;
     const data = await api('/products');
+    if (!stillOnPage()) return;
     allProducts = data.items || [];
   };
 
   window.loadProducts = async () => {
+    if (!stillOnPage()) return;
+    const req = ++loadSeq;
     try {
-      const search = document.getElementById('productSearch')?.value || '';
-      const category = document.getElementById('productCategory')?.value || '';
-      const status = document.getElementById('productStatus')?.value || '';
-      const taxFilter = document.getElementById('productTaxFilter')?.value || '';
+      const search = el('productSearch')?.value || '';
+      const category = el('productCategory')?.value || '';
+      const status = el('productStatus')?.value || '';
+      const taxFilter = el('productTaxFilter')?.value || '';
       const data = await api(`/products?search=${encodeURIComponent(search)}&category=${encodeURIComponent(category)}&status=${encodeURIComponent(status)}`);
+      if (!stillOnPage() || req !== loadSeq) return;
       const fetched = data.items || [];
       if (!search && !category && !status) allProducts = [...fetched];
       const missingTax = (allProducts.length ? allProducts : fetched).filter(item => item.ThueSuat == null).length;
-      const taxAlert = document.getElementById('productTaxAlert');
+      const taxAlert = el('productTaxAlert');
       if (taxAlert) {
         taxAlert.hidden = missingTax === 0;
         taxAlert.innerHTML = `Có <strong>${missingTax}</strong> sản phẩm chưa chọn thuế suất. Gán 0 / 5 / 8 / 10 — nếu để trống (NULL) thì POS chặn bán.`;
@@ -129,35 +165,44 @@
         : taxFilter === ''
           ? fetched
           : fetched.filter(item => Number(item.ThueSuat) === Number(taxFilter));
-      document.getElementById('productCount').textContent = `${data.summary.total} sản phẩm`;
-      document.getElementById('productActiveCount').textContent = data.summary.active;
-      document.getElementById('productUnopenedCount').textContent = data.summary.unopened;
-      document.getElementById('productInactiveCount').textContent = data.summary.inactive;
-      document.getElementById('productTableBody').innerHTML = products.length ? products.map(item => `<tr>
+      const summary = data.summary || {};
+      setText('productCount', `${summary.total ?? products.length} sản phẩm`);
+      setText('productActiveCount', summary.active ?? 0);
+      setText('productUnopenedCount', summary.unopened ?? 0);
+      setText('productInactiveCount', summary.inactive ?? 0);
+      const rows = products.length ? products.map(item => `<tr>
         <td><div class="product-table-main">${productPhoto(item, 'table-product-photo')}<div><strong>${esc(item.TenSP)}</strong><small>${esc(item.MaSP)} · ${esc(item.DonViTinh)} · ${esc(item.MaVach || 'Chưa có mã vạch')}</small></div></div></td>
         <td>${esc(item.TenDM)}<small>${esc(item.MaDM)}</small></td><td><strong>${money(item.GiaNhap)}</strong><small>Giá bán ${money(item.GiaBan)}</small></td><td>${item.ThueSuat == null ? '<span class="product-tax-badge is-missing">Chưa chọn</span>' : `<span class="product-tax-badge">${esc(item.ThueSuat)}%</span>`}</td><td>${item.TonKhoToiThieu}</td>
         <td><strong>${item.SLTon}</strong><small>${Number(item.ChuaNhapLanDau) === 1 ? 'Chưa nhập lần đầu' : `Đang đặt ${item.SLDatMua}`}</small></td>
         <td><span class="status-badge ${item.TrangThai === 'Đang bán' ? 'active' : 'locked'}"><i></i>${esc(item.TrangThai)}</span></td>
         <td class="align-right"><div class="action-group"><button class="btn-outline" data-edit-product="${esc(item.MaSP)}">Chỉnh sửa</button><button class="btn-outline ${item.TrangThai === 'Đang bán' ? 'danger-text' : ''}" data-toggle-product="${esc(item.MaSP)}">${item.TrangThai === 'Đang bán' ? 'Ngừng bán' : 'Kích hoạt'}</button></div></td></tr>`).join('') : `<tr><td colspan="8" class="empty-state">${esc(window.FLY_SEARCH?.emptyMessage?.(search, 'sản phẩm', 'Không có sản phẩm phù hợp.') || 'Không có sản phẩm phù hợp.')}</td></tr>`;
-    } catch (error) { window.showToast(error.message, 'error'); }
+      if (!setHtml('productTableBody', rows)) return;
+    } catch (error) { toastError(error); }
   };
 
   window.suggestProductCode = async () => {
     try {
       if (!allProducts.length) await loadAllProducts();
-      const categoryCode = document.getElementById('productCategoryInput').value;
+      if (!stillOnPage()) return;
+      const categoryInput = el('productCategoryInput');
+      const codeInput = el('productCode');
+      if (!categoryInput || !codeInput) return;
+      const categoryCode = categoryInput.value;
       const category = categories.find(item => item.MaDM === categoryCode);
       if (!category) throw new Error('Hãy chọn danh mục trước khi gợi ý mã sản phẩm.');
       const categoryCodes = allProducts.filter(item => item.MaDM === categoryCode).map(item => item.MaSP);
       const suggestion = nextCode(categoryCodes, fallbackProductPrefix(category), allProducts.map(item => item.MaSP));
-      document.getElementById('productCode').value = suggestion;
-      document.getElementById('productCodeHelp').textContent = `Mã gợi ý theo danh mục ${category.TenDM}; bạn có thể sửa trước khi lưu.`;
-    } catch (error) { window.showToast(error.message, 'error'); }
+      codeInput.value = suggestion;
+      setText('productCodeHelp', `Mã gợi ý theo danh mục ${category.TenDM}; bạn có thể sửa trước khi lưu.`);
+    } catch (error) { toastError(error); }
   };
 
   window.suggestProductBarcode = async () => {
     try {
       if (!allProducts.length) await loadAllProducts();
+      if (!stillOnPage()) return;
+      const barcodeInput = el('productBarcode');
+      if (!barcodeInput) return;
       const used = new Set(allProducts.map(item => String(item.MaVach || '')));
       const sequences = [...used].filter(code => /^893\d{10}$/.test(code)).map(code => Number(code.slice(3, 12)));
       let sequence = Math.max(0, ...sequences) + 1;
@@ -167,11 +212,12 @@
         candidate = `${base}${ean13Checksum(base)}`;
         sequence += 1;
       } while (used.has(candidate));
-      document.getElementById('productBarcode').value = candidate;
-    } catch (error) { window.showToast(error.message, 'error'); }
+      barcodeInput.value = candidate;
+    } catch (error) { toastError(error); }
   };
 
   window.openProductModal = async code => {
+    if (!stillOnPage() || !el('productModal') || !el('productForm')) return;
     editingCode = code || null;
     const item = allProducts.find(product => product.MaSP === code) || products.find(product => product.MaSP === code);
     const isEditing = Boolean(item);
@@ -192,9 +238,11 @@
     document.getElementById('productMinimum').value = item?.TonKhoToiThieu ?? 0;
     document.getElementById('productStatusInput').value = item?.TrangThai || 'Đang bán';
     document.getElementById('productCodeHelp').textContent = isEditing ? 'Mã sản phẩm không thể đổi sau khi tạo.' : 'Mã duy nhất, không thể đổi sau khi tạo.';
-    const imageInput = document.getElementById('productImage');
-    imageInput.value = '';
-    imageInput.required = false;
+    const imageInput = el('productImage');
+    if (imageInput) {
+      imageInput.value = '';
+      imageInput.required = false;
+    }
     document.getElementById('productImageRequiredMark').hidden = isEditing;
     document.getElementById('productImageTitle').textContent = isEditing ? 'Thay ảnh sản phẩm' : 'Chọn ảnh sản phẩm';
     document.getElementById('productImageHelp').textContent = isEditing
@@ -203,14 +251,17 @@
     clearImagePreviewUrl();
     const currentImage = isEditing ? window.FLY_PRODUCT_IMAGES?.resolve(item) || '' : '';
     renderImagePreview(currentImage, currentImage ? `Ảnh hiện tại của ${item.MaSP}` : 'JPG, PNG hoặc WebP · tối đa 5 MB');
-    document.getElementById('productModal').style.display = 'flex';
+    el('productModal').style.display = 'flex';
     if (!isEditing) await window.suggestProductCode();
-    document.getElementById(isEditing ? 'productName' : 'productCode').focus();
+    if (!stillOnPage()) return;
+    el(isEditing ? 'productName' : 'productCode')?.focus();
   };
 
   window.closeProductModal = () => {
-    document.getElementById('productModal').style.display = 'none';
-    document.getElementById('productForm').reset();
+    const modal = el('productModal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    el('productForm')?.reset();
     clearImagePreviewUrl();
     renderImagePreview();
     editingCode = null;
@@ -296,7 +347,7 @@
       backdrop.innerHTML = `<div class="modal" style="max-width:560px"><div class="modal-header"><div><p class="module-kicker">XEM TRƯỚC SẢN PHẨM</p><h3>Kiểm tra thông tin trước khi lưu</h3></div><button type="button" class="close-btn" onclick="document.getElementById('productPreviewModal').style.display='none'">×</button></div><div class="modal-body" id="productPreviewContent">${previewHtml}</div><div class="modal-footer"><button class="btn btn-secondary" onclick="document.getElementById('productPreviewModal').style.display='none'">Đóng</button></div></div>`;
       document.body.appendChild(backdrop);
     } else {
-      document.getElementById('productPreviewContent').innerHTML = previewHtml;
+      if (!setHtml('productPreviewContent', previewHtml)) return;
       modal.style.display = 'flex';
     }
   };
@@ -321,7 +372,7 @@
       backdrop.innerHTML = `<div class="modal" style="max-width:480px"><div class="modal-header"><div><p class="module-kicker">XEM TRƯỚC DANH MỤC</p><h3>Kiểm tra trước khi lưu</h3></div><button type="button" class="close-btn" onclick="document.getElementById('categoryPreviewModal').style.display='none'">×</button></div><div class="modal-body" id="categoryPreviewContent">${previewHtml}</div><div class="modal-footer"><button class="btn btn-secondary" onclick="document.getElementById('categoryPreviewModal').style.display='none'">Đóng</button></div></div>`;
       document.body.appendChild(backdrop);
     } else {
-      document.getElementById('categoryPreviewContent').innerHTML = previewHtml;
+      if (!setHtml('categoryPreviewContent', previewHtml)) return;
       modal.style.display = 'flex';
     }
   };
@@ -348,7 +399,7 @@
     ].every(Boolean);
     if (!valid) return window.showToast('Vui lòng kiểm tra lại thông tin sản phẩm.', 'error');
     const imageInput = document.getElementById('productImage');
-    if (!editingCode && !imageInput.files?.length) {
+    if (!editingCode && !imageInput?.files?.length) {
       return window.showToast('Ảnh sản phẩm là bắt buộc khi thêm mới.', 'error');
     }
     const wasEditing = Boolean(editingCode);
@@ -369,19 +420,24 @@
     if (payload.ThueSuat === 0 && !window.confirm('Xác nhận thuế suất 0% theo cấu hình sản phẩm?')) return;
     const formData = new FormData();
     Object.entries(payload).forEach(([key, value]) => formData.append(key, String(value ?? '')));
-    if (imageInput.files?.[0]) formData.append('AnhSanPham', imageInput.files[0]);
+    if (imageInput?.files?.[0]) formData.append('AnhSanPham', imageInput.files[0]);
     const submitButton = document.getElementById('productSubmitButton');
     try {
-      submitButton.disabled = true;
-      submitButton.textContent = wasEditing ? 'Đang lưu...' : 'Đang thêm...';
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = wasEditing ? 'Đang lưu...' : 'Đang thêm...';
+      }
       const data = await api(`/products${productCode ? `/${encodeURIComponent(productCode)}` : ''}`, { method: wasEditing ? 'PUT' : 'POST', body: formData });
+      if (!stillOnPage()) return;
       window.showToast(data.message, 'success');
       window.closeProductModal();
       await Promise.all([window.loadProducts(), loadAllProducts()]);
-    } catch (error) { window.showToast(error.message, 'error'); }
+    } catch (error) { toastError(error); }
     finally {
-      submitButton.disabled = false;
-      submitButton.textContent = wasEditing ? 'Lưu thay đổi' : 'Thêm sản phẩm';
+      if (submitButton && stillOnPage()) {
+        submitButton.disabled = false;
+        submitButton.textContent = wasEditing ? 'Lưu thay đổi' : 'Thêm sản phẩm';
+      }
     }
   });
 
@@ -405,7 +461,7 @@
       window.showToast(data.message, 'success');
       await loadCategories();
       window.resetCategoryForm();
-    } catch (error) { window.showToast(error.message, 'error'); }
+    } catch (error) { toastError(error); }
   });
 
   document.getElementById('categoryList')?.addEventListener('click', async event => {
@@ -421,7 +477,7 @@
       window.showToast(data.message, 'success');
       await Promise.all([loadCategories(), window.loadProducts()]);
       if (editingCategoryCode === item.MaDM) window.resetCategoryForm();
-    } catch (error) { window.showToast(error.message, 'error'); }
+    } catch (error) { toastError(error); }
   });
 
   document.getElementById('categorySearch')?.addEventListener('input', renderCategories);
@@ -465,8 +521,8 @@
       const data = await api(`/products/${encodeURIComponent(item.MaSP)}/status`, { method: 'PATCH', body: JSON.stringify({ TrangThai: item.TrangThai === 'Đang bán' ? 'Ngừng bán' : 'Đang bán' }) });
       window.showToast(data.message, 'success');
       await Promise.all([window.loadProducts(), loadAllProducts()]);
-    } catch (error) { window.showToast(error.message, 'error'); }
+    } catch (error) { toastError(error); }
   });
 
-  Promise.all([loadCategories(), window.loadProducts(), loadAllProducts()]).catch(error => window.showToast(error.message, 'error'));
+  Promise.all([loadCategories(), window.loadProducts()]).catch(error => toastError(error));
 })();

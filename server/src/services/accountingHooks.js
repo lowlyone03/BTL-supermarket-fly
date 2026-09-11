@@ -242,10 +242,17 @@ const assertSupplierReturnAllowed = async (transaction, maPN) => {
     const matched = debt.recordset[0];
     if (!matched) return { matched: false };
     if (matched.MaCNPTra) {
+        if (Number(matched.SoTienConLai) <= 0) {
+            const error = new Error('Công nợ đã tất toán. Không trả hàng NCC trên khoản đã chi hết.');
+            error.status = 400;
+            error.code = 'DA_TAT_TOAN';
+            throw error;
+        }
         const pc = await new sql.Request(transaction).input('MaCN', sql.VarChar, matched.MaCNPTra)
-            .query(`SELECT TOP 1 MaPhieu, TrangThai FROM PhieuChi WHERE MaCongNo=@MaCN`);
+            .query(`SELECT TOP 1 MaPhieu, TrangThai FROM PhieuChi
+                    WHERE MaCongNo=@MaCN AND TrangThai IN (N'Chờ duyệt', N'Đã duyệt', N'Thanh toán thất bại')`);
         if (pc.recordset.length) {
-            const error = new Error('Đã lập Phiếu chi cho công nợ này. Trả hàng NCC phải xử lý TRƯỚC KHI lập Phiếu chi (1 công nợ – 1 Phiếu chi).');
+            const error = new Error(`Đang có Phiếu chi ${pc.recordset[0].MaPhieu} (${pc.recordset[0].TrangThai}). Hoàn tất hoặc xử lý phiếu đó trước khi trả hàng NCC.`);
             error.status = 400;
             error.code = 'DA_CO_PHIEU_CHI';
             throw error;

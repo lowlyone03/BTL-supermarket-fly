@@ -5,7 +5,7 @@ const { verifyToken, requirePermission, requireAnyPermission } = require('../mid
 const router = express.Router();
 router.use(verifyToken);
 
-router.get('/handbook', requireAnyPermission(['UC34', 'UC35', 'UC43']), controller.getHandbook);
+router.get('/handbook', requireAnyPermission(['UC10', 'UC34', 'UC35', 'UC38', 'UC42', 'UC43']), controller.getHandbook);
 
 const kt34 = requirePermission('UC34');
 const kt35 = requirePermission('UC35');

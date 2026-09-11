@@ -8,7 +8,7 @@ const http = require('node:http');
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const {
-    ROOM_MATRIX, canRoleEnter, roomsForRole, scanMessage, unreadFromWatermark, SOFT_TWELVE
+    ROOM_SEED, ROOM_MATRIX, canRoleEnter, roomsForRole, scanMessage, unreadFromWatermark, SOFT_TWELVE
 } = require('./src/services/chatPolicy');
 const chatHub = require('./src/services/chatHub');
 const { consumeChatRate, resetChatRateForTests } = require('./src/services/chatService');
@@ -32,20 +32,31 @@ const fakeRes = () => {
 };
 
 const runUnit = async () => {
-    await test('Ma trận: TK vào #mua-hàng, MH vào #kho, TN không vào #kế-toán', () => {
-        assert.equal(canRoleEnter('Thủ kho', 'mua-hang'), true);
-        assert.equal(canRoleEnter('Nhân viên mua hàng', 'kho'), true);
+    await test('Ma trận: mọi vai trò chỉ vào chat chung #cửa-hàng', () => {
+        assert.equal(canRoleEnter('Thủ kho', 'cua-hang'), true);
+        assert.equal(canRoleEnter('Nhân viên mua hàng', 'cua-hang'), true);
+        assert.equal(canRoleEnter('Thu ngân', 'cua-hang'), true);
+        assert.equal(canRoleEnter('Kế toán', 'cua-hang'), true);
+        assert.equal(canRoleEnter('Quản lý', 'cua-hang'), true);
+        assert.equal(canRoleEnter('Thủ kho', 'mua-hang'), false);
+        assert.equal(canRoleEnter('Nhân viên mua hàng', 'kho'), false);
         assert.equal(canRoleEnter('Thu ngân', 'ke-toan'), false);
         assert.equal(canRoleEnter('Thu ngân', 'kho'), false);
         assert.equal(canRoleEnter('Kế toán', 'kho'), false);
-        assert.equal(canRoleEnter('Quản lý', 'quan-ly'), true);
-        assert.deepEqual(ROOM_MATRIX.kho, ['Quản lý', 'Thủ kho', 'Nhân viên mua hàng']);
-        assert.deepEqual(ROOM_MATRIX['mua-hang'], ['Quản lý', 'Nhân viên mua hàng', 'Thủ kho']);
+        assert.equal(canRoleEnter('Quản lý', 'quan-ly'), false);
+        assert.deepEqual(ROOM_MATRIX['cua-hang'], ['Quản lý', 'Nhân viên mua hàng', 'Thủ kho', 'Thu ngân', 'Kế toán']);
         const cashierRooms = roomsForRole('Thu ngân').map((room) => room.Khoa).sort();
-        assert.deepEqual(cashierRooms, ['cua-hang', 'thu-ngan']);
+        assert.deepEqual(cashierRooms, ['cua-hang']);
+        assert.equal(canRoleEnter('Thu ngân', 'gia-han-ncc'), false);
+        assert.equal(canRoleEnter('Kế toán', 'gia-han-ncc'), false);
+        assert.equal(canRoleEnter('Nhân viên mua hàng', 'gia-han-ncc'), false);
+        assert.equal(canRoleEnter('Quản lý', 'gia-han-ncc'), false);
+        assert.equal(roomsForRole('Kế toán').some((room) => room.Khoa === 'gia-han-ncc'), false);
+        assert.equal(roomsForRole('Nhân viên mua hàng').some((room) => room.Khoa === 'mua-hang'), false);
+        assert.ok(ROOM_SEED.some((room) => room.Khoa === 'gia-han-ncc' && room.MaPhong === 'CH_GIAHAN'));
         const keeperRooms = roomsForRole('Thủ kho').map((room) => room.Khoa).sort();
-        assert.ok(keeperRooms.includes('mua-hang'));
-        assert.ok(keeperRooms.includes('kho'));
+        assert.deepEqual(keeperRooms, ['cua-hang']);
+        assert.ok(!keeperRooms.includes('kho'));
         assert.ok(!keeperRooms.includes('ke-toan'));
     });
 
@@ -198,20 +209,23 @@ const runLive = async () => {
             assert.equal(res.status, 401);
         });
 
-        await test('T3/T3b/T3c/T6/T7 ma trận phòng theo vai trò', async () => {
+        await test('T3 chat chung: mọi vai trò chỉ thấy CH_CUAHANG', async () => {
             const tn = await jsonReq(port, 'GET', '/api/chat/rooms', { token: tok.tn });
             const tk = await jsonReq(port, 'GET', '/api/chat/rooms', { token: tok.tk });
             const mh = await jsonReq(port, 'GET', '/api/chat/rooms', { token: tok.mh });
             const kt = await jsonReq(port, 'GET', '/api/chat/rooms', { token: tok.kt });
             const ql = await jsonReq(port, 'GET', '/api/chat/rooms', { token: tok.ql });
-            const codes = (res) => (res.data.items || []).map((item) => item.maPhong);
+            const codes = (res) => (res.data.items || []).map((item) => item.maPhong).sort();
+            assert.deepEqual(codes(tn), ['CH_CUAHANG']);
+            assert.deepEqual(codes(tk), ['CH_CUAHANG']);
+            assert.deepEqual(codes(mh), ['CH_CUAHANG']);
+            assert.deepEqual(codes(kt), ['CH_CUAHANG']);
+            assert.deepEqual(codes(ql), ['CH_CUAHANG']);
             assert.ok(!codes(tn).includes('CH_KETOAN'));
-            assert.ok(codes(tk).includes('CH_MUAHANG'));
-            assert.ok(codes(mh).includes('CH_KHO'));
-            assert.ok(codes(kt).includes('CH_KETOAN'));
-            assert.ok(codes(kt).includes('CH_CUAHANG'));
-            assert.ok(!codes(kt).includes('CH_KHO'));
-            assert.equal(codes(ql).length, 6);
+            assert.ok(!codes(tn).includes('CH_GIAHAN'));
+            assert.ok(!codes(tk).includes('CH_MUAHANG'));
+            assert.ok(!codes(mh).includes('CH_KHO'));
+            assert.ok(!codes(kt).includes('CH_KETOAN'));
         });
 
         await test('T4/T5 TN không đọc/gửi #kế-toán → 403', async () => {
@@ -243,22 +257,22 @@ const runLive = async () => {
             assert.match(String(hard.data.message || ''), /CCCD/i);
         });
 
-        await test('T10 Unread watermark + TK gửi #kho QL thấy', async () => {
-            const sent = await jsonReq(port, 'POST', '/api/chat/rooms/CH_KHO/messages', {
-                token: tok.tk, body: { NoiDung: `TK gửi QL trên #kho ${Date.now()}` }
+        await test('T10 Unread watermark + TK gửi chat chung QL thấy', async () => {
+            const sent = await jsonReq(port, 'POST', '/api/chat/rooms/CH_CUAHANG/messages', {
+                token: tok.tk, body: { NoiDung: `TK gửi QL trên chat chung ${Date.now()}` }
             });
             assert.equal(sent.status, 201);
             const unread = await jsonReq(port, 'GET', '/api/chat/unread', { token: tok.ql });
-            const kho = (unread.data.phong || []).find((item) => item.maPhong === 'CH_KHO');
+            const chung = (unread.data.phong || []).find((item) => item.maPhong === 'CH_CUAHANG');
             assert.ok(Number(unread.data.tongChuaDoc) >= 1);
-            assert.ok(kho && Number(kho.chuaDoc) >= 1);
-            const read = await jsonReq(port, 'POST', '/api/chat/rooms/CH_KHO/read', {
+            assert.ok(chung && Number(chung.chuaDoc) >= 1);
+            const read = await jsonReq(port, 'POST', '/api/chat/rooms/CH_CUAHANG/read', {
                 token: tok.ql, body: { MaTinCuoi: sent.data.maTin }
             });
             assert.equal(read.status, 200);
             const after = await jsonReq(port, 'GET', '/api/chat/unread', { token: tok.ql });
-            const khoAfter = (after.data.phong || []).find((item) => item.maPhong === 'CH_KHO');
-            assert.equal(Number(khoAfter?.chuaDoc || 0), 0);
+            const afterRoom = (after.data.phong || []).find((item) => item.maPhong === 'CH_CUAHANG');
+            assert.equal(Number(afterRoom?.chuaDoc || 0), 0);
         });
     } finally {
         await new Promise((resolve) => server.close(resolve));

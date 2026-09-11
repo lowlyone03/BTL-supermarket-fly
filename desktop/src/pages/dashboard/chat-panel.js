@@ -12,21 +12,25 @@
 
   const t = (key, vars) => window.FLY_I18N?.t(key, vars) || key;
   const ROOM_META = () => ({
-    'cua-hang': { title: t('chat.room.store') },
-    'kho': { title: t('chat.room.wh') },
-    'mua-hang': { title: t('chat.room.buy') },
-    'ke-toan': { title: t('chat.room.acct') },
-    'thu-ngan': { title: t('chat.room.cash') },
-    'quan-ly': { title: t('chat.room.mgr') }
+    'cua-hang': { title: t('chat.room.store'), tone: 'store' },
+    'kho': { title: t('chat.room.wh'), tone: 'wh' },
+    'mua-hang': { title: t('chat.room.buy'), tone: 'buy' },
+    'ke-toan': { title: t('chat.room.acct'), tone: 'acct' },
+    'thu-ngan': { title: t('chat.room.cash'), tone: 'cash' },
+    'quan-ly': { title: t('chat.room.mgr'), tone: 'mgr' },
+    'gia-han-ncc': { title: t('chat.room.extend'), tone: 'extend' }
   });
-  const ROOM_ORDER = ['cua-hang', 'kho', 'mua-hang', 'ke-toan', 'thu-ngan', 'quan-ly'];
+  const ROOM_ORDER = ['cua-hang'];
   const VOUCHER_LABEL = {
     HoaDon: 'Hóa đơn bán hàng',
     HoaDonMuaHang: 'Hóa đơn mua hàng',
     DeNghiMuaHang: 'Đề nghị mua hàng',
     DonMuaHang: 'Đơn mua hàng',
     PhieuNhap: 'Phiếu nhập kho',
-    PhieuXuat: 'Phiếu xuất kho'
+    PhieuXuat: 'Phiếu xuất kho',
+    PhieuChi: 'Phiếu chi NCC',
+    CongNoPhaiTra: 'Công nợ NCC',
+    GiaHanCongNo: 'Xin gia hạn NCC'
   };
 
   const roomMeta = (room) => ROOM_META()[room?.khoa] || {
@@ -43,6 +47,8 @@
     if (/^PO|^DMH/.test(id)) return 'DonMuaHang';
     if (/^PN/.test(id)) return 'PhieuNhap';
     if (/^PX/.test(id)) return 'PhieuXuat';
+    if (/^PC/.test(id)) return 'PhieuChi';
+    if (/^CN/.test(id)) return 'CongNoPhaiTra';
     return known;
   };
 
@@ -83,6 +89,10 @@
   let chatToastTimer = 0;
   let voucherTimer = 0;
   let roomSeq = 0;
+  let stickToBottom = true;
+  let loadingOlder = false;
+  let hasMoreOlder = true;
+  let threadBound = false;
 
   const authHeaders = (json = true) => {
     const headers = { Authorization: `Bearer ${token}` };
@@ -394,7 +404,18 @@
 
   const renderRooms = () => {
     const nav = document.getElementById('chatRooms');
+    const widget = drawer();
+    if (widget) widget.classList.toggle('is-single-room', rooms.length <= 1);
     if (!nav) return;
+    if (rooms.length <= 1) {
+      nav.hidden = true;
+      nav.setAttribute('aria-hidden', 'true');
+      roomsMarkup = '';
+      nav.replaceChildren();
+      return;
+    }
+    nav.hidden = false;
+    nav.removeAttribute('aria-hidden');
     const html = !rooms.length
       ? '<p class="chat-empty">Chưa có phòng.</p>'
       : sortedRooms().map((room) => {
@@ -404,13 +425,31 @@
           ? `<span class="chat-room-badge">${unread > 99 ? '99+' : unread}</span>`
           : unread === 1 ? '<i class="chat-room-dot" aria-hidden="true"></i>' : '';
         const id = escapeHtml(room.maPhong);
-        return `<button type="button" class="chat-room${room.maPhong === activeRoom ? ' is-active' : ''}" data-room-id="${id}" data-room="${id}">
+        return `<button type="button" class="chat-room tone-${escapeHtml(meta.tone || 'store')}${room.maPhong === activeRoom ? ' is-active' : ''}${unread ? ' has-unread' : ''}" data-room-id="${id}" data-room="${id}">
+        <i class="chat-room-swatch" aria-hidden="true"></i>
         <strong>${escapeHtml(meta.title)}</strong>${mark}
       </button>`;
       }).join('');
     if (html === roomsMarkup) return;
     roomsMarkup = html;
     nav.innerHTML = html;
+  };
+
+  const moneyChat = (value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
+  const parseCard = (text) => {
+    try {
+      const parsed = JSON.parse(String(text || '').trim());
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch { return null; }
+  };
+  const deptClass = (vaiTro) => {
+    const role = String(vaiTro || '').toLocaleLowerCase('vi-VN');
+    if (role.includes('quản lý')) return 'dept-mgr';
+    if (role.includes('kế toán')) return 'dept-acct';
+    if (role.includes('mua hàng')) return 'dept-buy';
+    if (role.includes('thủ kho')) return 'dept-wh';
+    if (role.includes('thu ngân')) return 'dept-cash';
+    return 'dept-store';
   };
 
   const attachmentHtml = (item) => {
@@ -428,37 +467,57 @@
     if (item.loaiTin === 'ChungTu') {
       const loai = inferVoucherLoai(item.loaiChungTu, item.maChungTu);
       const ma = item.maChungTu || '';
-      return `<div class="chat-voucher">
+      const card = parseCard(item.noiDung);
+      const extra = card ? `<dl class="chat-voucher-dl">
+        ${card.TenNCC ? `<div><dt>NCC</dt><dd>${escapeHtml(card.TenNCC)}</dd></div>` : ''}
+        ${card.MaCNPTra ? `<div><dt>Công nợ</dt><dd>${escapeHtml(card.MaCNPTra)}</dd></div>` : ''}
+        ${card.SoTienConLai != null ? `<div><dt>Còn lại</dt><dd>${escapeHtml(moneyChat(card.SoTienConLai))}</dd></div>` : ''}
+        ${card.SoTienNo != null ? `<div><dt>Gốc</dt><dd>${escapeHtml(moneyChat(card.SoTienNo))}</dd></div>` : ''}
+        ${card.HanCu ? `<div><dt>Hạn cũ</dt><dd>${escapeHtml(String(card.HanCu).slice(0, 10))}</dd></div>` : ''}
+        ${card.HanMoi ? `<div><dt>Hạn mới</dt><dd>${escapeHtml(String(card.HanMoi).slice(0, 10))}</dd></div>` : ''}
+        ${card.TrangThai ? `<div><dt>Trạng thái</dt><dd>${escapeHtml(card.TrangThai)}</dd></div>` : ''}
+      </dl>` : `<span>${escapeHtml(ma || 'Chưa có mã')}</span>`;
+      const canGrant = /mua hàng|quản lý/i.test(String(user.TenVaiTro || ''));
+      const grantBtn = loai === 'GiaHanCongNo' && canGrant && card?.MaCNPTra && !card.HanMoi
+        ? `<button type="button" class="chat-xem" data-extend-grant="${escapeHtml(card.MaCNPTra)}">Ghi hạn mới</button>`
+        : '';
+      const tone = loai === 'GiaHanCongNo' ? ' is-extend' : (loai === 'HoaDon' || loai === 'HoaDonMuaHang' ? ' is-invoice' : '');
+      return `<div class="chat-voucher${tone}">
         <div class="chat-attach-copy">
-          <strong>${escapeHtml(VOUCHER_LABEL[loai] || item.noiDung || 'Chứng từ')}</strong>
-          <span>${escapeHtml(ma || 'Chưa có mã')}</span>
+          <strong>${escapeHtml(card?.title || VOUCHER_LABEL[loai] || 'Chứng từ')}</strong>
+          ${extra}
         </div>
+        ${grantBtn}
         <button type="button" class="chat-xem" data-voucher="${escapeHtml(loai)}" data-ma="${escapeHtml(ma)}" data-code="${escapeHtml(ma)}">Xem</button>
       </div>`;
     }
     return '';
   };
 
-  const renderThread = () => {
+  const renderThread = ({ pinBottom = false, restore = null } = {}) => {
     const root = document.getElementById('chatThread');
     const label = document.getElementById('chatRoomLabel');
     const room = rooms.find((item) => item.maPhong === activeRoom);
     const meta = roomMeta(room);
-    if (label) label.textContent = room ? `Tin giữa các bộ phận · ${meta.title}` : 'Tin giữa các bộ phận';
+    if (label) label.textContent = t('chat.sub');
     syncComposer(room);
     if (!root) return;
     let html;
     if (!activeRoom) {
-      html = `<div class="chat-empty"><h3>Chat nội bộ</h3><p>Chọn một bộ phận bên trái để bắt đầu.</p></div>`;
+      html = `<div class="chat-empty"><h3>${t('chat.title')}</h3><p>${t('chat.pickRoom')}</p></div>`;
     } else if (!messages.length) {
-      html = `<div class="chat-empty"><h3>${escapeHtml(meta.title)}</h3><p>Chưa có tin. Viết tin đầu tiên cho bộ phận ${escapeHtml(meta.title)}.</p></div>`;
+      html = `<div class="chat-empty"><h3>${escapeHtml(meta.title)}</h3><p>${t('chat.emptyRoom')}</p></div>`;
     } else {
-      html = messages.map((item) => {
+      const older = hasMoreOlder
+        ? `<p class="chat-load-older">${loadingOlder ? t('chat.loadingOlder') : t('chat.scrollOlder')}</p>`
+        : '';
+      html = older + messages.map((item) => {
         const attach = attachmentHtml(item);
+        const card = item.loaiTin === 'ChungTu' ? parseCard(item.noiDung) : null;
         const text = item.loaiTin === 'ChungTu' ? '' : escapeHtml(item.noiDung);
-        return `<div class="chat-turn${item.cuaToi ? ' is-mine' : ''}">
-        <div class="chat-meta">${escapeHtml(item.tenNVGui)} · ${escapeHtml(clock(item.ngayGui))}</div>
-        <div class="chat-bubble">${text}${attach}</div>
+        return `<div class="chat-turn${item.cuaToi ? ' is-mine' : ''} ${deptClass(item.tenVaiTroGui)}">
+        <div class="chat-meta"><em class="chat-dept">${escapeHtml(item.tenVaiTroGui || '')}</em> ${escapeHtml(item.tenNVGui)} · ${escapeHtml(clock(item.ngayGui))}</div>
+        <div class="chat-bubble">${text}${attach}${card?.GhiChu && !text ? `<p class="chat-card-note">${escapeHtml(card.GhiChu)}</p>` : ''}</div>
       </div>`;
       }).join('');
     }
@@ -466,7 +525,26 @@
       threadMarkup = html;
       root.innerHTML = html;
     }
-    if (activeRoom && messages.length) root.scrollTop = root.scrollHeight;
+    if (restore) {
+      root.scrollTop = root.scrollHeight - restore.height + restore.top;
+    } else if (pinBottom || stickToBottom) {
+      root.scrollTop = root.scrollHeight;
+    }
+    bindThreadScroll(root);
+  };
+
+  const bindThreadScroll = (root) => {
+    if (!root || threadBound) return;
+    threadBound = true;
+    root.addEventListener('scroll', () => {
+      const gap = root.scrollHeight - root.scrollTop - root.clientHeight;
+      stickToBottom = gap < 56;
+      if (root.scrollTop < 64 && hasMoreOlder && !loadingOlder) loadOlder();
+    }, { passive: true });
+    root.addEventListener('wheel', (event) => event.stopPropagation(), { passive: true });
+    root.addEventListener('click', (event) => {
+      if (event.target.closest('.chat-load-older')) loadOlder();
+    });
   };
 
   const applyUnread = (data) => {
@@ -493,7 +571,7 @@
 
   const loadRooms = async () => {
     const data = await api('/chat/rooms');
-    rooms = data.items || [];
+    rooms = (data.items || []).filter((room) => room.khoa === 'cua-hang');
     setBadge(rooms.reduce((sum, room) => sum + Number(room.chuaDoc || 0), 0));
     if (activeRoom && !rooms.some((room) => room.maPhong === activeRoom)) activeRoom = '';
     renderRooms();
@@ -506,6 +584,33 @@
     if (!maPhong || !maTin) return;
     try { await api(`/chat/rooms/${encodeURIComponent(maPhong)}/read`, { method: 'POST', body: JSON.stringify({ MaTinCuoi: maTin }) }); }
     catch { /* unread sẽ tự sửa lúc poll */ }
+  };
+
+  const loadOlder = async () => {
+    if (!activeRoom || loadingOlder || !hasMoreOlder || !messages.length) return;
+    const root = document.getElementById('chatThread');
+    const before = messages[0].maTin;
+    const seq = roomSeq;
+    loadingOlder = true;
+    try {
+      const data = await api(`/chat/rooms/${encodeURIComponent(activeRoom)}/messages?before=${before}&limit=50`);
+      if (seq !== roomSeq) return;
+      const known = new Set(messages.map((item) => item.maTin));
+      const incoming = (data.items || []).filter((item) => !known.has(item.maTin));
+      hasMoreOlder = data.hasMore != null ? Boolean(data.hasMore) : incoming.length >= 50;
+      if (!incoming.length) {
+        hasMoreOlder = false;
+        return;
+      }
+      const restore = root ? { height: root.scrollHeight, top: root.scrollTop } : null;
+      messages = [...incoming, ...messages];
+      threadMarkup = '';
+      renderThread({ restore });
+    } catch {
+      hasMoreOlder = false;
+    } finally {
+      loadingOlder = false;
+    }
   };
 
   const loadMessages = async (maPhong, { after = 0, silent = false, seq = roomSeq } = {}) => {
@@ -524,8 +629,10 @@
       changed = true;
     } else {
       messages = data.items || [];
+      hasMoreOlder = data.hasMore != null ? Boolean(data.hasMore) : messages.length >= 50;
+      stickToBottom = true;
     }
-    if (!silent || changed) renderThread();
+    if (!silent || changed) renderThread({ pinBottom: !after || stickToBottom });
     const last = messages[messages.length - 1];
     if (isOpen() && activeRoom === maPhong && last) await markRead(maPhong, last.maTin);
   };
@@ -534,6 +641,11 @@
     if (!maPhong) return;
     const seq = ++roomSeq;
     activeRoom = maPhong;
+    messages = [];
+    threadMarkup = '';
+    hasMoreOlder = true;
+    stickToBottom = true;
+    loadingOlder = false;
     setError('');
     const pop = document.getElementById('chatVoucherPop');
     if (pop) pop.hidden = true;
@@ -616,7 +728,8 @@
         method: 'POST',
         body: JSON.stringify({ LoaiChungTu: loai, MaChungTu: ma })
       });
-      document.getElementById('chatVoucherPop').hidden = true;
+      const voucherPop = document.getElementById('chatVoucherPop');
+      if (voucherPop) voucherPop.hidden = true;
       if (result.canhBao) setWarn(result.canhBao);
       await loadMessages(activeRoom);
       await loadRooms();
@@ -830,6 +943,21 @@
       });
       return;
     }
+    const grantBtn = event.target.closest('[data-extend-grant]');
+    if (grantBtn && panel.contains(grantBtn)) {
+      event.preventDefault();
+      event.stopPropagation();
+      const id = grantBtn.getAttribute('data-extend-grant');
+      onceAction(`grant:${id}`, async () => {
+        const ctx = { token, apiBase: API_BASE, user, showToast: window.showToast || ((msg) => setError(msg)) };
+        if (window.FLY_PAYABLES?.grantExtension) {
+          await window.FLY_PAYABLES.grantExtension(ctx, id, async () => {
+            if (activeRoom) await loadMessages(activeRoom);
+          });
+        }
+      });
+      return;
+    }
     const xem = event.target.closest('.chat-xem');
     if (xem && panel.contains(xem)) {
       event.preventDefault();
@@ -905,6 +1033,16 @@
   });
   closeLightbox();
   syncComposer(null);
+
+  window.FLY_CHAT = {
+    openByKhoa: async () => {
+      await openDrawer();
+      await loadRooms();
+      const room = rooms.find((item) => item.khoa === 'cua-hang') || rooms[0];
+      if (room) await openRoom(room.maPhong);
+    },
+    openRoom
+  };
 
   if (token) {
     loadUnread();

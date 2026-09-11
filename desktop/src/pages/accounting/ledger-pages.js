@@ -172,9 +172,22 @@
     } finally { clearTimeout(timer); }
   };
 
+  const nativeDialogMissing = () => new Error(
+    window.FLY_I18N?.t('error.nativePrompt') && window.FLY_I18N.t('error.nativePrompt') !== 'error.nativePrompt'
+      ? window.FLY_I18N.t('error.nativePrompt')
+      : 'Ứng dụng không mở được hộp thoại hỏi nhanh của trình duyệt. Hãy dùng hộp thoại trên màn hình.'
+  );
+  const askConfirm = options => {
+    if (!window.FLY_DIALOG?.confirm) return Promise.reject(nativeDialogMissing());
+    return window.FLY_DIALOG.confirm(options);
+  };
+  const askPrompt = options => {
+    if (!window.FLY_DIALOG?.prompt) return Promise.reject(nativeDialogMissing());
+    return window.FLY_DIALOG.prompt(options);
+  };
   const catchUi = (context, fn) => async (...args) => {
     try { await fn(...args); }
-    catch (error) { context.showToast(error.message, 'error'); }
+    catch (error) { context.showToast(window.FLY_CLIENT_ERROR?.(error) || error.message, 'error'); }
   };
 
   const guessDocLoai = (loai, ma) => {
@@ -977,21 +990,20 @@
     return html.join('');
   };
 
+  const loadLocalHandbook = async () => {
+    const response = await fetch('../accounting/cam-nang.txt');
+    if (!response.ok) throw new Error('Không tải được cẩm nang kế toán.');
+    return response.text();
+  };
+
   const loadHandbookText = async context => {
     try {
       const data = await api(context, '/ledger/handbook');
       if (data.content) return data.content;
-    } catch (error) {
-      if (error.status === 401 || error.status === 403) throw error;
-      try {
-        const response = await fetch('../accounting/cam-nang.txt');
-        if (response.ok) return await response.text();
-      } catch { /* dùng lỗi API gốc */ }
-      throw error;
+    } catch {
+      /* Đọc bản đóng gói trong app — cẩm nang là tài liệu, không phụ thuộc quyền ghi sổ */
     }
-    const response = await fetch('../accounting/cam-nang.txt');
-    if (!response.ok) throw new Error('Không tải được cẩm nang kế toán.');
-    return response.text();
+    return loadLocalHandbook();
   };
 
   const highlightQuery = (scope, query) => {
@@ -1149,10 +1161,142 @@
     main.querySelectorAll('.hb-section').forEach(section => observer.observe(section));
     let pendingJump = '';
     try { pendingJump = sessionStorage.getItem('fly_hb_jump') || ''; } catch { pendingJump = ''; }
-    if (pendingJump && root.querySelector(`#${CSS.escape(pendingJump)}`)) {
+    if (pendingJump) {
+      const exact = root.querySelector(`#${CSS.escape(pendingJump)}`);
+      const byTitle = [...root.querySelectorAll('.hb-section h2')].find(h2 => /đối soát ngân hàng/i.test(h2.textContent || ''));
+      const targetId = exact?.id || root.querySelector('#hb-s19')?.id || byTitle?.closest('.hb-section')?.id;
       try { sessionStorage.removeItem('fly_hb_jump'); } catch { /* ignore */ }
-      setTimeout(() => jump(pendingJump), 80);
+      if (targetId) setTimeout(() => jump(targetId), 80);
     }
+  };
+
+  const listSubsections = section => {
+    const out = [];
+    (section.body || []).forEach(line => {
+      const match = String(line || '').trim().match(SUBSECTION_HEAD);
+      if (match) out.push({ id: `${section.id}-${match[2]}`, label: `${match[1]}.${match[2]}`, title: match[3].trim() });
+    });
+    return out;
+  };
+
+  const pickReconSection = parsed => parsed.sections.find(section => section.num === '19')
+    || parsed.sections.find(section => /đối soát ngân hàng/i.test(section.title || ''))
+    || parsed.sections.find(section => section.featured && /đối soát/i.test(section.title || ''))
+    || null;
+
+  const fillHandbookDrawerBody = async (root, scroller, context, options = {}) => {
+    const raw = await loadHandbookText(context);
+    const parsed = parseHandbook(raw);
+    const want = String(options.onlySection || '19');
+    const picked = want === '19' ? pickReconSection(parsed) : (parsed.sections.find(section => section.num === want) || pickReconSection(parsed));
+    if (!picked) throw new Error('Không tìm thấy mục đối soát ngân hàng trong cẩm nang.');
+    const html = renderHandbookLines(picked.body, picked.id);
+    const subs = listSubsections(picked);
+    const tocHtml = [
+      `<a href="#${picked.id}" data-hb-jump="${picked.id}" class="is-active"><span>${esc(picked.num)}</span>${esc(picked.title)}</a>`,
+      ...subs.map(sub => `<a href="#${sub.id}" data-hb-jump="${sub.id}"><span>${esc(sub.label)}</span>${esc(sub.title)}</a>`)
+    ].join('');
+    root.innerHTML = `
+      <div class="hb-shell hb-shell-drawer">
+        <aside class="hb-toc" id="hbToc">
+          <p class="hb-toc-kicker">${tx('handbook.tocInSection')}</p>
+          <nav class="hb-toc-nav" id="hbTocNav">${tocHtml}</nav>
+          <p class="hb-toc-hint">${tx('handbook.drawerHint')}</p>
+        </aside>
+        <div class="hb-main" id="hbMain">
+          <article class="hb-section is-featured" id="${picked.id}">
+            <div class="hb-section-head">
+              <span class="hb-num">${esc(picked.num)}</span>
+              <div>
+                <p class="lg-kicker">${tx('handbook.section', { n: picked.num })}</p>
+                <h2>${esc(picked.title)}</h2>
+              </div>
+            </div>
+            <div class="hb-body">${html}</div>
+          </article>
+        </div>
+      </div>`;
+    const titleEl = document.getElementById('hbDrawerTitle');
+    if (titleEl) titleEl.textContent = `${picked.title} · ${tx('handbook.section', { n: picked.num })}`;
+    const tocNav = root.querySelector('#hbTocNav');
+    const jump = id => {
+      const el = root.querySelector(`#${CSS.escape(id)}`);
+      if (!el || !scroller) return;
+      const top = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 10;
+      scroller.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      tocNav?.querySelectorAll('a').forEach(a => a.classList.toggle('is-active', a.dataset.hbJump === id));
+    };
+    tocNav?.querySelectorAll('[data-hb-jump]').forEach(link => {
+      link.addEventListener('click', event => {
+        event.preventDefault();
+        jump(link.dataset.hbJump);
+      });
+    });
+    const prefer = options.jumpTo && root.querySelector(`#${CSS.escape(options.jumpTo)}`) ? options.jumpTo : picked.id;
+    setTimeout(() => jump(prefer), 40);
+    return picked;
+  };
+
+  const openHandbookDrawer = async (context, options = {}) => {
+    const previous = document.getElementById('hbDrawer');
+    previous?.remove();
+    const trigger = document.activeElement;
+    const overlay = document.createElement('div');
+    overlay.id = 'hbDrawer';
+    overlay.className = 'hb-drawer-backdrop';
+    overlay.innerHTML = `
+      <aside class="hb-drawer" role="dialog" aria-modal="true" aria-labelledby="hbDrawerTitle">
+        <header class="hb-drawer-head">
+          <div>
+            <p class="lg-kicker">${tx('handbook.drawerKicker')}</p>
+            <h2 id="hbDrawerTitle">${tx('handbook.drawerTitle')}</h2>
+            <p class="hb-drawer-lead">${tx('handbook.drawerLead')}</p>
+          </div>
+          <button type="button" class="lg-btn lg-btn-ghost" id="hbDrawerFull">${tx('handbook.openFull')}</button>
+          <button type="button" class="lg-btn lg-btn-ghost" id="hbDrawerClose">${tx('handbook.close')}</button>
+        </header>
+        <div class="hb-drawer-scroll" id="hbDrawerScroll">
+          <div class="lg-loading"><strong>${tx('handbook.loading')}</strong>${tx('handbook.wait')}</div>
+        </div>
+      </aside>`;
+    document.body.appendChild(overlay);
+    document.body.classList.add('hb-drawer-open');
+    const close = () => {
+      document.removeEventListener('keydown', onKey);
+      overlay.remove();
+      document.body.classList.remove('hb-drawer-open');
+      if (trigger && typeof trigger.focus === 'function') trigger.focus();
+    };
+    const onKey = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        close();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    overlay.addEventListener('click', event => {
+      if (event.target === overlay) close();
+    });
+    overlay.querySelector('#hbDrawerClose')?.addEventListener('click', close);
+    overlay.querySelector('#hbDrawerFull')?.addEventListener('click', () => {
+      close();
+      try { sessionStorage.setItem('fly_hb_jump', options.jumpTo || 'hb-s19'); } catch { /* ignore */ }
+      const opened = typeof context.navigate === 'function'
+        ? context.navigate('ledger-handbook')
+        : window.FLY_NAV?.open?.('ledger-handbook');
+      if (!opened) context.showToast?.('Không mở được cẩm nang đầy đủ. Dùng menu Cẩm nang kế toán.', 'error');
+    });
+    overlay.querySelector('#hbDrawerClose')?.focus();
+    const scroller = overlay.querySelector('#hbDrawerScroll');
+    try {
+      await fillHandbookDrawerBody(scroller, scroller, context, {
+        jumpTo: options.jumpTo || 'hb-s19',
+        onlySection: options.onlySection || '19'
+      });
+    } catch (error) {
+      scroller.innerHTML = `<article class="hb-section"><p class="lg-help" style="margin:0">${esc(error.message || 'Không đọc được cẩm nang đối soát.')}</p></article>`;
+    }
+    return true;
   };
 
   const initCoa = async (root, context) => {
@@ -1249,7 +1393,7 @@
     printLib()?.bindButton(root.querySelector('#kyPrint'), () => {
       const opening = root._openingPrint;
       if (!opening) {
-        window.alert('Chưa có số dư kỳ để in. Chọn tháng rồi tải lại.');
+        context.showToast('Chưa có số dư kỳ để in. Chọn tháng rồi tải lại.', 'error');
         return null;
       }
       return printLib().opening(opening.maKy, opening.items, printH());
@@ -1551,7 +1695,16 @@
         }));
       });
       root.querySelectorAll('[data-dao]').forEach(btn => btn.addEventListener('click', catchUi(context, async () => {
-        const lyDo = window.prompt('Lý do đảo bút toán thủ công');
+        const lyDo = await askPrompt({
+          kicker: 'BÚT TOÁN THỦ CÔNG',
+          title: `Đảo bút toán ${btn.dataset.dao}?`,
+          message: 'Nhập lý do đảo. Hệ thống sinh bút toán đảo, không xóa bút toán gốc.',
+          label: 'Lý do đảo',
+          placeholder: 'Ví dụ: nhập nhầm tài khoản, sai số tiền...',
+          input: 'textarea',
+          required: true,
+          okLabel: 'Đảo bút toán'
+        });
         if (!lyDo) return;
         const out = await api(context, `/ledger/journals/${btn.dataset.dao}/reverse`, { method: 'POST', body: JSON.stringify({ LyDo: lyDo }) });
         context.showToast(out.message, 'success');
@@ -1607,7 +1760,7 @@
     let printConfig = null;
     printLib()?.bindButton(root.querySelector('#rpPrint'), () => {
       if (!printConfig) {
-        window.alert('Chưa có số liệu để in. Bấm Lập báo cáo trước.');
+        context.showToast('Chưa có số liệu để in. Bấm Lập báo cáo trước.', 'error');
         return null;
       }
       return printConfig;
@@ -1708,7 +1861,7 @@
     let printConfig = null;
     printLib()?.bindButton(root.querySelector('#rpPrint'), () => {
       if (!printConfig) {
-        window.alert('Chưa có sổ cái để in. Bấm Xem sổ cái trước.');
+        context.showToast('Chưa có sổ cái để in. Bấm Xem sổ cái trước.', 'error');
         return null;
       }
       return printConfig;
@@ -1917,42 +2070,212 @@
       };
     });
 
-  const renderCloseCheck = (data) => {
+  const CLOSE_TYPE_ORDER = ['HoaDon', 'HoaDonMuaHang', 'PhieuChi', 'PhieuNhap', 'ChiPhiVanHanh', 'PhieuChiLuong', 'TaiSanCoDinh'];
+  const CLOSE_TYPE_PATTERNS = [
+    { re: /^Hóa đơn bán\s+(\S+)\s+(.+)$/i, loai: 'HoaDon', typeLabel: 'Hóa đơn bán' },
+    { re: /^Hóa đơn mua(?: hàng)?\s+(\S+)\s+(.+)$/i, loai: 'HoaDonMuaHang', typeLabel: 'Hóa đơn mua' },
+    { re: /^Phiếu chi lương\s+(\S+)\s+(.+)$/i, loai: 'PhieuChiLuong', typeLabel: 'Phiếu chi lương' },
+    { re: /^Phiếu chi\s+(\S+)\s+(.+)$/i, loai: 'PhieuChi', typeLabel: 'Phiếu chi' },
+    { re: /^Phiếu nhập\s+(\S+)\s+(.+)$/i, loai: 'PhieuNhap', typeLabel: 'Phiếu nhập' },
+    { re: /^(?:Phiếu )?chi phí(?: vận hành)?\s+(\S+)\s+(.+)$/i, loai: 'ChiPhiVanHanh', typeLabel: 'Chi phí' }
+  ];
+
+  const shortCloseReason = text => {
+    let reason = String(text || '').trim();
+    reason = reason
+      .replace(/^đã hoàn thành nhưng\s+/i, '')
+      .replace(/^đã khớp nhưng\s+/i, '')
+      .replace(/^thanh toán thành công nhưng\s+/i, '');
+    if (!reason) return 'Cần xử lý chứng từ';
+    return reason.charAt(0).toUpperCase() + reason.slice(1);
+  };
+
+  const parseCloseItem = text => {
+    const raw = String(text || '').trim();
+    for (const rule of CLOSE_TYPE_PATTERNS) {
+      const match = raw.match(rule.re);
+      if (match) {
+        return { raw, loai: rule.loai, ma: match[1], typeLabel: rule.typeLabel, reason: shortCloseReason(match[2]) };
+      }
+    }
+    const code = raw.match(/\b((?:HDM|HD|PCL|PC|PN|CP|TS|BT)[A-Z0-9-]+)\b/i);
+    const ma = code ? code[1] : '';
+    const loai = guessDocLoai('', ma);
+    return {
+      raw,
+      loai,
+      ma,
+      typeLabel: loai ? labelOf(loai) : 'Chứng từ khác',
+      reason: shortCloseReason(ma ? raw.replace(ma, '').replace(/\s+/g, ' ').trim() : raw)
+    };
+  };
+
+  const groupCloseItems = items => {
+    const groups = new Map();
+    items.forEach(item => {
+      const key = item.loai || item.typeLabel || 'Khac';
+      if (!groups.has(key)) groups.set(key, { key, typeLabel: item.typeLabel || 'Chứng từ khác', items: [] });
+      groups.get(key).items.push(item);
+    });
+    return [...groups.values()].sort((a, b) => {
+      const ia = CLOSE_TYPE_ORDER.indexOf(a.key);
+      const ib = CLOSE_TYPE_ORDER.indexOf(b.key);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+  };
+
+  const renderCloseGroups = (messages, variant) => {
+    const items = messages.map(parseCloseItem);
+    const groups = groupCloseItems(items);
+    if (!groups.length) {
+      if (variant === 'warn') {
+        return `<div class="lg-close-empty">
+          <span class="lg-close-empty-mark" aria-hidden="true">✓</span>
+          <strong>Không có cảnh báo WARN</strong>
+          <p>Không còn phiếu nhập treo hay hóa đơn nháp trong kỳ này.</p>
+        </div>`;
+      }
+      return `<div class="lg-close-empty">
+        <span class="lg-close-empty-mark" aria-hidden="true">✓</span>
+        <strong>Không chặn khóa</strong>
+        <p>Mọi chứng từ hợp lệ trong kỳ đã có bút toán bắt buộc.</p>
+      </div>`;
+    }
+    const chips = groups.map(group =>
+      `<span class="lg-close-chip">${group.items.length} ${esc(group.typeLabel.toLowerCase())}</span>`
+    ).join('');
+    const body = groups.map(group => `
+      <div class="lg-close-group">
+        <h4>${esc(group.typeLabel)} <em>${group.items.length}</em></h4>
+        <div class="lg-close-table-wrap">
+          <table class="lg-table lg-table-close">
+            <thead><tr><th>Mã chứng từ</th><th>Lý do</th></tr></thead>
+            <tbody>${group.items.map(item => `<tr>
+              <td title="${esc(item.raw)}">${item.ma ? docLink(item.loai, item.ma) : '—'}</td>
+              <td>${esc(item.reason)}</td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </div>`).join('');
+    return `<div class="lg-close-chips">${chips}</div>${body}`;
+  };
+
+  const renderCloseCheck = (data, maKyFallback = '') => {
     const blocks = data.block || [];
     const warns = data.warn || [];
-    return `<div class="lg-split">
-      <section class="lg-panel lg-panel-block">
-        <h3>BLOCK — không khóa</h3>
-        <p>Chứng từ đã ở trạng thái hợp lệ nhưng thiếu bút toán bắt buộc. Không có nút bỏ qua.</p>
-        <ul>${blocks.map(x => `<li>${esc(x)}</li>`).join('') || '<li>Không có mục BLOCK.</li>'}</ul>
+    const ky = data.period || {};
+    const maKy = ky.MaKy || maKyFallback;
+    const blocked = Boolean(blocks.length);
+    const hasWarn = Boolean(warns.length);
+    const ctaTitle = blocked ? 'Chưa khóa được' : hasWarn ? 'Có thể khóa' : 'Sẵn sàng khóa';
+    const ctaDetail = blocked
+      ? `Hãy ghi sổ ${blocks.length} chứng từ BLOCK — không bỏ qua.`
+      : hasWarn
+        ? `Còn ${warns.length} WARN; vẫn khóa được.`
+        : 'Checklist sạch — kết chuyển rồi khóa kỳ.';
+    const note = blocked
+      ? 'Hãy ghi sổ các chứng từ BLOCK trước khi khóa.'
+      : hasWarn
+        ? 'Không có BLOCK. Có thể khóa kỳ; WARN sẽ được ghi nhận.'
+        : 'Checklist sạch — có thể kết chuyển rồi khóa kỳ.';
+    return `<div class="lg-close-summary">
+      <div class="lg-close-stat ${blocked ? 'is-block' : 'is-ok'}">
+        <span>BLOCK</span>
+        <strong>${blocks.length}</strong>
+        <small>${blocked ? 'Chặn khóa kỳ' : 'Không chặn khóa'}</small>
+      </div>
+      <div class="lg-close-stat ${hasWarn ? 'is-warn' : 'is-ok'}">
+        <span>WARN</span>
+        <strong>${warns.length}</strong>
+        <small>${hasWarn ? 'Vẫn khóa được' : 'Không có cảnh báo'}</small>
+      </div>
+      <div class="lg-close-stat is-period">
+        <span>Kỳ đang kiểm</span>
+        <strong>${esc(monthLabel(maKy))}</strong>
+        <small>${ky.TrangThai ? badge(ky.TrangThai) : 'Chọn kỳ ở thanh trên'}</small>
+      </div>
+      <div class="lg-close-stat ${blocked ? 'is-block' : 'is-ok'}">
+        <span>Khóa kỳ</span>
+        <strong>${esc(ctaTitle)}</strong>
+        <small>${esc(ctaDetail)}</small>
+      </div>
+    </div>
+    <div class="lg-close-cols">
+      <section class="lg-close-col ${blocked ? 'is-block' : 'is-ok'}">
+        <header class="lg-close-col-head">
+          <div>
+            <p class="lg-kicker">Chặn khóa</p>
+            <h3>BLOCK — không khóa</h3>
+            <p>Chứng từ đã hợp lệ nhưng thiếu bút toán bắt buộc. Không có nút bỏ qua.</p>
+          </div>
+          <strong class="lg-close-count">${blocks.length}</strong>
+        </header>
+        ${renderCloseGroups(blocks, 'block')}
       </section>
-      <section class="lg-panel lg-panel-warn">
-        <h3>WARN — vẫn khóa được</h3>
-        <p>Phiếu nhập chưa 3-way, hóa đơn nháp, chứng từ chờ duyệt… Cảnh báo nhưng vẫn khóa kỳ được.</p>
-        <ul>${warns.map(x => `<li>${esc(x)}</li>`).join('') || '<li>Không có mục WARN.</li>'}</ul>
+      <section class="lg-close-col ${hasWarn ? 'is-warn' : 'is-ok'}">
+        <header class="lg-close-col-head">
+          <div>
+            <p class="lg-kicker">Cảnh báo</p>
+            <h3>WARN — vẫn khóa được</h3>
+            <p>Phiếu nhập chưa 3-way, hóa đơn nháp, chứng từ chờ duyệt… Vẫn khóa kỳ được.</p>
+          </div>
+          <strong class="lg-close-count">${warns.length}</strong>
+        </header>
+        ${renderCloseGroups(warns, 'warn')}
       </section>
     </div>
-    <p class="lg-note">${blocks.length ? 'Hãy ghi sổ các chứng từ BLOCK trước khi khóa.' : warns.length ? 'Không có BLOCK. Có thể khóa kỳ; WARN sẽ được ghi nhận.' : 'Checklist sạch — có thể kết chuyển rồi khóa kỳ.'}</p>`;
+    <p class="lg-close-note ${blocked ? 'is-block' : hasWarn ? 'is-warn' : 'is-ok'}">${esc(note)}</p>`;
   };
 
   const initClose = async (root, context) => {
     const current = await loadOpenPeriod(context);
+    root.classList.add('lg-close-page');
     root.innerHTML = `${header('Khóa kỳ / kết chuyển', 'Kiểm tra BLOCK (đỏ, chặn khóa) và WARN (vàng, vẫn khóa). Kết chuyển 511/5212/632/642/711 → 911 → 421, rồi khóa kỳ. Chỉ mở lại kỳ khóa gần nhất nếu kỳ sau chưa có bút toán nghiệp vụ.', periodChip(current))}
-      <div class="lg-toolbar">
+      <div class="lg-toolbar lg-close-toolbar">
         <label class="lg-field"><span>Kỳ</span><input type="month" id="clMonth" data-keep-native value="${monthNow()}"></label>
         <div class="lg-actions">
-          <button type="button" class="lg-btn lg-btn-ghost" id="clCheck">Kiểm tra</button>
+          <button type="button" class="lg-btn lg-btn-scan" id="clCheck">Kiểm tra</button>
           <button type="button" class="lg-btn lg-btn-ghost" id="clKc">Kết chuyển</button>
           <button type="button" class="lg-btn lg-btn-primary" id="clClose">Khóa kỳ</button>
           <button type="button" class="lg-btn lg-btn-ghost" id="clReopen">Mở lại kỳ</button>
         </div>
+        <p class="lg-close-hint" id="clHint">Đang kiểm tra điều kiện khóa kỳ…</p>
       </div>
       <div id="clOut">${loadingBox('Đang kiểm tra điều kiện khóa kỳ...')}</div>`;
     const maKy = () => root.querySelector('#clMonth').value;
+    let lastCheck = { block: [], warn: [] };
+    const applyCloseState = () => {
+      const btn = root.querySelector('#clClose');
+      const hint = root.querySelector('#clHint');
+      const blocked = Boolean(lastCheck.block?.length);
+      const hasWarn = Boolean(lastCheck.warn?.length);
+      if (btn) {
+        btn.disabled = blocked;
+        btn.title = blocked
+          ? `Không khóa — còn ${lastCheck.block.length} chứng từ BLOCK thiếu bút toán.`
+          : hasWarn
+            ? `Còn ${lastCheck.warn.length} WARN (vẫn khóa được).`
+            : 'Khóa kỳ. Số dư cuối chuyển thành số dư đầu kỳ sau.';
+      }
+      if (!hint) return;
+      hint.classList.toggle('is-block', blocked);
+      hint.classList.toggle('is-ok', !blocked);
+      hint.textContent = blocked
+        ? `Khóa kỳ đang tắt — còn ${lastCheck.block.length} chứng từ BLOCK. Không có nút bỏ qua.`
+        : hasWarn
+          ? `Không còn BLOCK. Có ${lastCheck.warn.length} WARN — vẫn khóa được.`
+          : 'Checklist sạch — có thể kết chuyển rồi khóa kỳ.';
+    };
+    const paintCheck = (data) => {
+      lastCheck = data;
+      const out = root.querySelector('#clOut');
+      out.innerHTML = renderCloseCheck(data, maKy());
+      bindDocLinks(out, context, () => runCheck().catch(() => {}));
+      applyCloseState();
+    };
     const runCheck = async () => {
       const data = await api(context, `/ledger/periods/${maKy()}/close-check`);
-      root.querySelector('#clOut').innerHTML = renderCloseCheck(data);
-      root.querySelector('#clClose').disabled = Boolean(data.block?.length);
+      paintCheck(data);
       return data;
     };
     root.querySelector('#clCheck').addEventListener('click', catchUi(context, () => runCheck()));
@@ -1961,12 +2284,25 @@
         const data = await api(context, `/ledger/periods/${maKy()}/closing-entry`, { method: 'POST' });
         context.showToast(data.message, 'success');
       });
+      applyCloseState();
     }));
     root.querySelector('#clClose').addEventListener('click', catchUi(context, async ev => {
       const check = await runCheck();
       if (check.block?.length) return context.showToast('Không khóa — còn chứng từ hợp lệ thiếu bút toán.', 'error');
-      if (check.warn?.length && !window.confirm('Còn cảnh báo WARN (vẫn khóa được). Khóa kỳ này?')) return;
-      else if (!check.warn?.length && !window.confirm(`Khóa kỳ ${maKy()}? Số dư cuối sẽ chuyển thành số dư đầu kỳ sau.`)) return;
+      const confirmed = check.warn?.length
+        ? await askConfirm({
+          kicker: 'KHÓA KỲ',
+          title: `Khóa kỳ ${monthLabel(maKy())}?`,
+          message: 'Còn cảnh báo WARN (vẫn khóa được). Khóa kỳ này?',
+          okLabel: 'Khóa kỳ'
+        })
+        : await askConfirm({
+          kicker: 'KHÓA KỲ',
+          title: `Khóa kỳ ${monthLabel(maKy())}?`,
+          message: 'Số dư cuối sẽ chuyển thành số dư đầu kỳ sau.',
+          okLabel: 'Khóa kỳ'
+        });
+      if (!confirmed) return;
       try {
         await busy(ev.currentTarget, async () => {
           const data = await api(context, `/ledger/periods/${maKy()}/close`, { method: 'POST' });
@@ -1974,20 +2310,29 @@
           await runCheck();
         });
       } catch (error) {
-        if (error.block) {
-          root.querySelector('#clOut').innerHTML = renderCloseCheck(error);
-          root.querySelector('#clClose').disabled = Boolean(error.block.length);
-        }
+        if (error.block) paintCheck(error);
         throw error;
+      } finally {
+        applyCloseState();
       }
     }));
     root.querySelector('#clReopen').addEventListener('click', catchUi(context, async ev => {
-      const LyDo = window.prompt('Lý do mở lại kỳ (chỉ kỳ khóa gần nhất, kỳ sau chưa có bút toán nghiệp vụ)');
+      const LyDo = await askPrompt({
+        kicker: 'MỞ LẠI KỲ',
+        title: `Mở lại ${monthLabel(maKy())}?`,
+        message: 'Chỉ mở lại kỳ khóa gần nhất, kỳ sau chưa có bút toán nghiệp vụ.',
+        label: 'Lý do mở lại',
+        placeholder: 'Ví dụ: còn chứng từ cần ghi sổ, khóa nhầm kỳ...',
+        input: 'textarea',
+        required: true,
+        okLabel: 'Mở lại kỳ'
+      });
       if (!LyDo) return;
       await busy(ev.currentTarget, async () => {
         const data = await api(context, `/ledger/periods/${maKy()}/reopen`, { method: 'POST', body: JSON.stringify({ LyDo }) });
         context.showToast(data.message, 'success');
       });
+      applyCloseState();
     }));
     root.querySelector('#clMonth').addEventListener('change', () => runCheck().catch(err => {
       root.querySelector('#clOut').innerHTML = errorBox(err.message);
@@ -2395,6 +2740,7 @@
   };
 
   window.FLY_LEDGER_DOCS = { open: openLedgerDocument, guess: guessDocLoai };
+  window.FLY_HANDBOOK = { openDrawer: openHandbookDrawer };
   window.FLY_ROLE_PAGES = {
     templates: { ...(previous?.templates || {}), ...templates },
     init: async (pageName, context) => {

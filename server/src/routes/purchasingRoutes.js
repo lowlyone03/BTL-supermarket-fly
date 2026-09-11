@@ -19,5 +19,9 @@ router.post('/purchase-orders/:id/send-supplier', requirePermission('UC14'), ord
 router.post('/purchase-orders/:id/supplier-confirm', requirePermission('UC14'), orderController.confirmSupplier);
 router.post('/purchase-orders/:id/shipments', requirePermission('UC14'), orderController.recordShipment);
 router.get('/reports/buying', requirePermission('UC14'), reportController.getPurchasingReport);
+router.post('/reports/submit', requirePermission('UC14'), (req, res) => reportController.submitDepartmentReport(req, res, 'MH_DON_MUA'));
+router.get('/reports/submissions', requirePermission('UC14'), (req, res) => reportController.listMyDepartmentReports(req, res, 'MH_DON_MUA'));
+router.get('/reports/submissions/:id', requirePermission('UC14'), reportController.getAdminDepartmentReport);
+router.delete('/reports/submissions/:id', requirePermission('UC14'), reportController.withdrawDepartmentReport);
 
 module.exports = router;

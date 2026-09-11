@@ -13,7 +13,7 @@ const ALREADY_DONE = /không còn|đã được duyệt|đã duyệt trước|kh
 const DENY_403 = 'Tài khoản chưa được cấp quyền sử dụng chức năng này.';
 const OK_APPROVE = 'Đã duyệt trên Telegram — đã ghi nhật ký. Mở Fly nếu cần.';
 const OK_REJECT = 'Đã từ chối trên Telegram — đã ghi nhật ký. Mở Fly nếu cần.';
-const ALREADY_TEXT = 'Việc này đã được xử lý trước đó. Không duyệt lần hai.';
+const ALREADY_TEXT = 'Đã xử lý trước đó. Không duyệt lần hai.';
 const ASK_REASON = 'Nhập lý do từ chối (bắt buộc như trên Fly). Gửi tin trả lời tin này.';
 
 const pendingRejectByChat = new Map();
@@ -565,15 +565,21 @@ const buildApprovalCard = (dossier = {}, lang = 'vi') => {
     const title = dossier.title || KIND_META[dossier.kind]?.label || 'VIỆC CẦN DUYỆT';
     const lines = Array.isArray(dossier.lines) ? dossier.lines.slice(0, MAX_LINES) : [];
     const extras = dossier.extra || {};
+    const amount = dossier.totals?.tong;
+    const hero = [
+        statusBadge(dossier.status || (pending ? 'Chờ duyệt' : '—')),
+        dossier.id ? `<b>${escapeHtml(dossier.id)}</b>` : '',
+        dossier.party ? escapeHtml(dossier.party) : '',
+        amount != null ? moneyCode(amount) : ''
+    ].filter(Boolean).join('\n');
     const rows = [
         headerBlock(`${pending ? '⚡' : '📋'} <b>${escapeHtml(title)}</b>`),
-        `<blockquote>${statusBadge(dossier.status || (pending ? 'Chờ duyệt' : '—'))}\n🔖 ${escapeHtml(dossier.id || '—')}</blockquote>`,
+        `<blockquote>${hero}</blockquote>`,
         sectionTitle('👤', 'Thông tin chứng từ'),
         kv('Mã chứng từ', textCode(dossier.id || '—')),
         kv('Người lập', textCode(dossier.createdBy || '—')),
         dossier.approvedBy ? kv('Người duyệt', textCode(dossier.approvedBy)) : '',
-        dossier.createdAt ? kv('Lúc lập', textCode(formatVnDateTime(dossier.createdAt, lang) || '—')) : '',
-        dossier.party ? kv('NCC / NV / KH', textCode(dossier.party)) : ''
+        dossier.createdAt ? kv('Lúc lập', textCode(formatVnDateTime(dossier.createdAt, lang) || '—')) : ''
     ];
     if (extras.LoaiXuat) rows.push(kv('Loại xuất', textCode(extras.LoaiXuat)));
     if (extras.Kho) rows.push(kv('Kho / quầy', textCode(extras.Kho)));

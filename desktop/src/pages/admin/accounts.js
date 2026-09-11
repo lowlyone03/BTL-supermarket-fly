@@ -45,21 +45,27 @@
         </div>`;
 
     const renderAccounts = () => {
+        const body = document.getElementById('accTableBody');
+        if (!body) return;
         const normalizeSearch = window.FLY_SEARCH?.normalize || (value => String(value ?? '').trim().toLocaleLowerCase('vi-VN'));
-        const search = normalizeSearch(searchInput.value);
-        const selectedRole = roleFilter.value;
-        const selectedStatus = statusFilter.value;
+        const search = normalizeSearch(searchInput?.value);
+        const selectedRole = roleFilter?.value;
+        const selectedStatus = statusFilter?.value;
         const filtered = accounts.filter(account =>
             [account.TenDangNhap, account.TenNV, account.ChucVu, account.TenVaiTro, account.CCCD, account.SDT, account.Email, account.MaNV, account.MSTCaNhan, account.SoBHXH]
                 .some(value => normalizeSearch(value).includes(search))
             && (!selectedRole || String(account.MaVaiTro) === selectedRole)
             && (selectedStatus === '' || String(account.TrangThai) === selectedStatus)
         );
-        document.getElementById('accCount').textContent = `${filtered.length} tài khoản`;
-        document.getElementById('accActiveCount').textContent = accounts.filter(account => Number(account.TrangThai) === 1).length;
-        document.getElementById('accLockedCount').textContent = accounts.filter(account => Number(account.TrangThai) === 0).length;
-        document.getElementById('accUsedCount').textContent = accounts.filter(account => Boolean(account.LanDangNhapCuoi)).length;
-        document.getElementById('accTableBody').innerHTML = filtered.length ? filtered.map(account => {
+        const accCount = document.getElementById('accCount');
+        if (accCount) accCount.textContent = `${filtered.length} tài khoản`;
+        const active = document.getElementById('accActiveCount');
+        if (active) active.textContent = accounts.filter(account => Number(account.TrangThai) === 1).length;
+        const locked = document.getElementById('accLockedCount');
+        if (locked) locked.textContent = accounts.filter(account => Number(account.TrangThai) === 0).length;
+        const used = document.getElementById('accUsedCount');
+        if (used) used.textContent = accounts.filter(account => Boolean(account.LanDangNhapCuoi)).length;
+        body.innerHTML = filtered.length ? filtered.map(account => {
             const isCurrent = account.MaNV === currentUser.MaNV;
             return `<tr class="acc-row" data-acc-action="detail" data-ma-tk="${account.MaTK}">
                 <td><strong>${escapeHtml(account.TenDangNhap)}</strong><small>${isCurrent ? 'Tài khoản đang sử dụng' : `Mã TK: ${escapeHtml(account.MaTK)}`}</small></td>
@@ -79,14 +85,19 @@
     };
 
     window.loadAccounts = async () => {
-        document.getElementById('accTableBody').innerHTML = '<tr><td colspan="6" class="empty-state">Đang tải dữ liệu...</td></tr>';
+        const body = document.getElementById('accTableBody');
+        if (!body) return;
+        const navSeq = Number(window.FLY_NAV_SEQ || 0);
+        body.innerHTML = '<tr><td colspan="6" class="empty-state">Đang tải dữ liệu...</td></tr>';
         try {
             const res = await fetch(`${API}/accounts`, { headers: { 'Authorization': `Bearer ${token}` } });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Không thể tải tài khoản.');
+            if (Number(window.FLY_NAV_SEQ || 0) !== navSeq || !document.getElementById('accTableBody')) return;
             accounts = data;
             renderAccounts();
         } catch (err) {
+            if (!document.getElementById('accTableBody')) return;
             window.showToast(err.message || 'Lỗi tải tài khoản', 'error');
         }
     };
@@ -96,8 +107,9 @@
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || 'Không thể tải vai trò.');
         roles = data;
-        document.getElementById('maVaiTro').innerHTML = roles.map(role => `<option value="${role.MaVaiTro}">${escapeHtml(role.TenVaiTro)}</option>`).join('');
-        roleFilter.innerHTML = '<option value="">Tất cả vai trò</option>' + roles.map(role => `<option value="${role.MaVaiTro}">${escapeHtml(role.TenVaiTro)}</option>`).join('');
+        const roleSelect = document.getElementById('maVaiTro');
+        if (roleSelect) roleSelect.innerHTML = roles.map(role => `<option value="${role.MaVaiTro}">${escapeHtml(role.TenVaiTro)}</option>`).join('');
+        if (roleFilter) roleFilter.innerHTML = '<option value="">Tất cả vai trò</option>' + roles.map(role => `<option value="${role.MaVaiTro}">${escapeHtml(role.TenVaiTro)}</option>`).join('');
     };
 
     const renderSelectedEmployeeProfile = () => {
@@ -133,6 +145,7 @@
         if (!res.ok) throw new Error(data.message || 'Không thể tải nhân viên.');
         availableEmployees = data;
         const select = document.getElementById('maNV_Acc');
+        if (!select) return;
         select.innerHTML = data.length === 0
             ? '<option value="">Không có nhân viên nào</option>'
             : data.map(employee => `<option value="${escapeHtml(employee.MaNV)}">${escapeHtml(employee.TenNV)} (${escapeHtml(employee.ChucVu)}${employee.CCCD ? ` · ${escapeHtml(employee.CCCD)}` : ''})</option>`).join('');

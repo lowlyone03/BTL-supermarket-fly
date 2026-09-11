@@ -1,9 +1,16 @@
 .fly-vi-date {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr) minmax(0, 1.25fr);
+  gap: 8px;
+  width: 100%;
+  align-items: stretch;
+}
+.fly-vi-date[data-kind="month"] {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 .fly-vi-date select {
+  min-width: 0;
+  width: 100%;
   min-height: 39px;
   padding: 0 10px;
   border: 1px solid #d7e2dc;
@@ -11,7 +18,247 @@
   color: #294237;
   background: #fff;
 }
+.fly-vi-datetime {
+  grid-template-columns: minmax(0, .75fr) minmax(0, .95fr) minmax(0, 1.05fr) minmax(0, .75fr) minmax(0, .8fr);
+}
 .fly-vi-datetime select { min-width: 0; }
+.fly-vi-year-wrap {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+}
+.fly-vi-year-wrap > select.fly-vi-year {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  clip: rect(0 0 0 0);
+}
+.fly-vi-year-trigger {
+  width: 100%;
+  min-height: 39px;
+  height: 100%;
+  padding: 0 10px 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #d7e2dc;
+  border-radius: 10px;
+  color: #294237;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  text-align: left;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+.fly-vi-year-trigger span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fly-vi-year-trigger svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  transform: rotate(90deg);
+  transition: transform .16s ease;
+}
+.fly-vi-year-trigger:hover { border-color: #b7cbbf; background: #fbfdfb; }
+.fly-vi-year-trigger[aria-expanded="true"] {
+  border-color: #6c9f87;
+  box-shadow: 0 0 0 4px rgba(43, 125, 96, .10);
+}
+.fly-vi-year-trigger[aria-expanded="true"] svg { transform: rotate(-90deg); }
+.fly-vi-year-trigger.is-empty { color: #7d8d84; font-weight: 600; }
+.fly-vi-year-trigger:disabled {
+  color: #9aa49f;
+  background: #f4f6f3;
+  cursor: not-allowed;
+}
+.form-group .fly-vi-date select,
+.form-group .fly-vi-year-trigger {
+  height: 42px;
+  min-height: 42px;
+  border-radius: 12px;
+  font-size: 11px;
+}
+.fly-vi-year-panel {
+  position: fixed;
+  z-index: 2600;
+  max-height: min(420px, calc(100vh - 24px));
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid #d5e4db;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 18px 46px rgba(24, 52, 41, .18);
+  animation: fly-vi-year-in .16s ease;
+}
+.fly-vi-year-panel[hidden] { display: none; }
+@keyframes fly-vi-year-in {
+  from { opacity: 0; transform: translateY(-6px) scale(.985); }
+}
+.fly-vi-year-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.fly-vi-year-head strong {
+  display: block;
+  color: #1e392d;
+  font-size: 13px;
+  font-weight: 800;
+}
+.fly-vi-year-head small {
+  display: block;
+  margin-top: 2px;
+  color: #6f7f76;
+  font-size: 10px;
+  line-height: 1.35;
+}
+.fly-vi-year-search {
+  width: 100%;
+  height: 38px;
+  margin-bottom: 10px;
+  padding: 0 12px;
+  border: 1px solid #d7e2dc;
+  border-radius: 11px;
+  color: #294237;
+  background: #f7fbf8;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  outline: 0;
+}
+.fly-vi-year-search:focus {
+  border-color: #6c9f87;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(43, 125, 96, .10);
+}
+.fly-vi-year-decades {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.fly-vi-year-chip {
+  min-width: 52px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid #d7e2dc;
+  border-radius: 999px;
+  color: #3d5348;
+  background: #f4f8f5;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.fly-vi-year-chip:hover { border-color: #9fbfb0; color: #1f684f; }
+.fly-vi-year-chip.is-active {
+  border-color: #2f765b;
+  color: #fff;
+  background: #2f765b;
+}
+.fly-vi-year-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+.fly-vi-year-cell {
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  color: #294237;
+  background: #eef5f0;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.fly-vi-year-cell:hover { background: #dceee4; color: #1f684f; }
+.fly-vi-year-cell.selected {
+  color: #fff;
+  background: #2f765b;
+  box-shadow: 0 6px 14px rgba(47, 118, 91, .28);
+}
+.fly-vi-year-clear,
+.fly-vi-year-option {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  border: 0;
+  border-radius: 10px;
+  color: #3d5047;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.fly-vi-year-clear {
+  margin-top: 8px;
+  color: #6f7f76;
+  background: #f4f8f5;
+  justify-content: center;
+  font-weight: 650;
+}
+.fly-vi-year-clear:hover { color: #1f684f; background: #e7f2eb; }
+.fly-vi-year-list {
+  display: grid;
+  gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.fly-vi-year-option:hover { color: #1f684f; background: #edf5f0; }
+.fly-vi-year-option.selected {
+  color: #fff;
+  background: #2f765b;
+  font-weight: 700;
+}
+html[data-theme="dark"] .fly-vi-year-trigger,
+html[data-theme="soft"] .fly-vi-year-trigger,
+html[data-theme="dark"] .fly-vi-date select,
+html[data-theme="soft"] .fly-vi-date select,
+html[data-theme="dark"] .fly-vi-year-search,
+html[data-theme="soft"] .fly-vi-year-search {
+  background: var(--input-bg, #fff);
+  color: var(--text, #294237);
+  border-color: var(--line, #d7e2dc);
+}
+html[data-theme="dark"] .fly-vi-year-panel,
+html[data-theme="soft"] .fly-vi-year-panel {
+  background: var(--surface, #fff);
+  border-color: var(--line, #d5e4db);
+  color: var(--text, #1e392d);
+}
+html[data-theme="dark"] .fly-vi-year-cell,
+html[data-theme="soft"] .fly-vi-year-cell,
+html[data-theme="dark"] .fly-vi-year-chip,
+html[data-theme="soft"] .fly-vi-year-chip {
+  background: var(--input-bg, #eef5f0);
+  color: var(--text, #294237);
+  border-color: var(--line, #d7e2dc);
+}
+html[data-theme="dark"] .fly-vi-year-cell.selected,
+html[data-theme="dark"] .fly-vi-year-chip.is-active,
+html[data-theme="soft"] .fly-vi-year-cell.selected,
+html[data-theme="soft"] .fly-vi-year-chip.is-active {
+  background: #2f765b;
+  color: #fff;
+}
 .fly-avatar {
   display: inline-grid;
   place-items: center;
@@ -174,19 +421,21 @@
 .pay-method svg { width: 22px; height: 22px; fill: none; stroke: #2f765b; stroke-width: 1.8; }
 .pay-method small { color: #5d6f66; font-size: 11px; font-weight: 700; }
 .warehouse-receipt-line .fly-vi-date {
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.1fr);
   gap: 4px;
 }
-.warehouse-receipt-line .fly-vi-date select {
+.warehouse-receipt-line .fly-vi-date select,
+.warehouse-receipt-line .fly-vi-year-trigger {
   min-height: 42px;
-  max-width: 76px;
-  padding: 0 4px;
+  max-width: none;
+  padding: 0 6px;
   font-size: 11px;
 }
 .date-filter .fly-vi-date,
 .filter-actions .fly-vi-date,
 .form-group .fly-vi-date {
-  flex-wrap: wrap;
+  width: 100%;
 }
 .cashier-customer-hit {
   justify-content: flex-start;

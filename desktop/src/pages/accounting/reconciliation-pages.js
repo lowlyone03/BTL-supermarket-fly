@@ -32,7 +32,15 @@
   };
   const openHandbook = context => {
     try { sessionStorage.setItem('fly_hb_jump', 'hb-s19'); } catch { /* ignore */ }
-    if (typeof context.navigate === 'function') context.navigate('ledger-handbook');
+    const opened = typeof context.navigate === 'function'
+      ? context.navigate('ledger-handbook')
+      : window.FLY_NAV?.open?.('ledger-handbook');
+    if (opened) return;
+    if (typeof window.FLY_HANDBOOK?.openDrawer === 'function') {
+      window.FLY_HANDBOOK.openDrawer(context, { jumpTo: 'hb-s19' });
+      return;
+    }
+    context.showToast?.('Không mở được cẩm nang kế toán. Tải lại trang rồi thử lại.', 'error');
   };
   const badgeClass = status => {
     if (status === 'Khớp tự động' || status === 'Đã xác nhận') return 'recon-badge recon-badge-ok';
@@ -61,9 +69,9 @@
         <h2>${t('recon.why')}</h2>
         <p class="lg-help">${t('recon.whyText')}</p>
         <ul class="recon-note-list">
-          <li>Sao kê ngân hàng được ghép với MoMo QR, phiếu chi NCC, chi lương chuyển khoản và bút toán TK 112.</li>
-          <li>Engine tính điểm cố định — không phải chatbot quyết định khớp.</li>
-          <li>Xác nhận đối soát không tự ghi sổ và không tự trả nhà cung cấp.</li>
+          <li>${t('recon.note1')}</li>
+          <li>${t('recon.note2')}</li>
+          <li>${t('recon.note3')}</li>
         </ul>
         <div class="lg-actions" style="margin:16px 0 0;justify-content:flex-start">
           <button type="button" class="lg-btn lg-btn-primary" id="reconOpenHb2">${t('recon.readHb')}</button>
@@ -447,7 +455,11 @@
                   <p class="lg-lead">Tài khoản này không có quyền nhập sao kê ngân hàng hay xem tóm tắt quản lý.</p>
                 </div>
               </header>
-              <article class="lg-card"><p class="lg-help" style="margin:0">Nhờ Quản lý kiểm tra phân quyền, hoặc mở Cẩm nang kế toán — mục 19.</p></article>`;
+              <article class="lg-card">
+                <p class="lg-help" style="margin:0 0 12px">Nhờ Quản lý kiểm tra phân quyền. Có thể đọc hướng dẫn đối soát ngay tại đây.</p>
+                <button type="button" class="lg-btn lg-btn-primary" id="reconOpenHb">${t('recon.readHb')}</button>
+              </article>`;
+            root.querySelector('#reconOpenHb')?.addEventListener('click', () => openHandbook(context));
           } else await initRecon(root, context);
         } catch (error) {
           root.innerHTML = `<div class="warehouse-empty">${esc(error.message)}</div>`;

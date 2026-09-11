@@ -251,6 +251,16 @@ const KINDS = [
         match: (f) => /bao\s*cao\s*thu\s*kho|thu\s*kho/.test(f) && /bao\s*cao|in\b|tai\b|xem\b/.test(f)
     },
     {
+        id: 'department-report',
+        loai: 'BaoCaoBoPhan',
+        label: 'Báo cáo bộ phận',
+        title: 'BÁO CÁO BỘ PHẬN',
+        source: 'Báo cáo bộ phận',
+        mode: 'report',
+        extraUc: ['UC10'],
+        match: (f) => /bao\s*cao\s*bo\s*phan|bcm|bckt|bctn/.test(f) && /bao\s*cao|in\b|tai\b|xem\b/.test(f)
+    },
+    {
         id: 'trial-balance',
         loai: 'CanDoiPhatSinh',
         label: 'Cân đối phát sinh',
@@ -301,6 +311,8 @@ const KINDS = [
         match: (f) => (/bao\s*cao|\bpnl\b|p\s*&\s*l|lai\s*lo/.test(f)
             && /thang|nay|cua\s*hang|in\b|tai\b|xem\b/.test(f))
             || /in\s+bao\s*cao|tai\s+bao\s*cao|xem\s+bao\s*cao/.test(f)
+            || /doanh\s*(so|thu).*(thang|quy|nam|20\d{2})/.test(f)
+            || /bao\s*cao\s*thang/.test(f)
     }
 ];
 
@@ -557,6 +569,33 @@ const reportAndPrint = {
         });
         return {
             report: { empty, period: { label: period.label }, kpis: { doanhThuThuan: 0, laiGop: 0, kqkdLoiNhuan: 0, soHoaDon: soPn } },
+            print
+        };
+    },
+    async 'department-report'(pool, user, period, spec) {
+        let items = [];
+        try {
+            const { listDepartmentReports } = require('./departmentReportSubmit');
+            items = await listDepartmentReports(pool, { top: 12, latestOnly: true });
+        } catch { items = []; }
+        const print = printOf({
+            title: spec.title,
+            number: period.label,
+            variant: 'report',
+            watermark: items.length ? '' : 'CHƯA CÓ BẢN NỘP',
+            fields: [{ label: 'Kỳ đang xem', value: period.label }],
+            columns: [
+                { key: 'MaBC', label: 'Số BC' },
+                { key: 'BoPhan', label: 'Bộ phận' },
+                { key: 'NhanKy', label: 'Kỳ' },
+                { key: 'TenNV_Lap', label: 'Người lập' },
+                { key: 'TrangThai', label: 'Trạng thái' }
+            ],
+            rows: items,
+            note: 'Snapshot bộ phận đã gửi. Trợ lý chỉ xem/in, không duyệt.'
+        });
+        return {
+            report: { empty: !items.length, period: { label: period.label }, items },
             print
         };
     },
@@ -1016,9 +1055,10 @@ const handleDocumentIntent = async (pool, user, question) => {
             const built = await (reportAndPrint[spec.id] || reportAndPrint['store-report'])(pool, user, period, spec);
             const empty = built.report?.empty;
             const k = built.report?.kpis || {};
+            const moneyVi = (value) => `${Math.round(Number(value) || 0).toLocaleString('vi-VN')} ₫`;
             const answer = empty
-                ? `${period.label} chưa phát sinh. Bạn vẫn xem / in mẫu với số 0, hoặc tải về.`
-                : `${spec.label} · ${period.label}`;
+                ? `${spec.label} · ${period.label}\nDoanh thu thuần ${moneyVi(0)}\nKỳ này chưa phát sinh.`
+                : `${spec.label} · ${period.label}\nDoanh thu thuần ${moneyVi(k.doanhThuThuan)}\nLãi gộp ${moneyVi(k.laiGop)}`;
             return okResult({
                 spec,
                 period,

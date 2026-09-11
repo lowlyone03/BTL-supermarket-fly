@@ -3,7 +3,7 @@ const {
     isTelegramAskEnabled
 } = require('./telegramMessages');
 
-const GUIDE_SOURCE = 'PHUONG_AN_KE_TOAN_DA_CHOT.txt mục 3 · PLAN_TELEGRAM_BOT_P1.txt mục 4 (3 cột tiền) · README.md';
+const GUIDE_SOURCE = 'Công thức kế toán đã chốt trên Fly';
 
 const GUIDE_TOPICS = [
     { id: 'revenue', key: 'guideRev' },

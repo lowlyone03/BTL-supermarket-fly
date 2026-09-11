@@ -39,6 +39,15 @@ const channelIcon = (name) => {
 
 const sectionTitle = (icon, title) => `${icon} <b>${escapeHtml(title)}</b>`;
 
+const TELEGRAM_LEFTOVER_RE = /Bot nhận:|mã ngôn ngữ|Alt menu/i;
+
+const stripTelegramLeftovers = (text) => String(text || '')
+    .split('\n')
+    .filter((line) => !TELEGRAM_LEFTOVER_RE.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
 const tidyLines = (lines = []) => {
     const out = [];
     for (const value of lines) {
@@ -48,13 +57,15 @@ const tidyLines = (lines = []) => {
         out.push(line);
     }
     while (out[out.length - 1] === '') out.pop();
-    return out.join('\n');
+    return stripTelegramLeftovers(out.join('\n'));
 };
 
-const formatMoney = value => {
+const formatMoney = (value) => {
     const number = Number(value);
-    if (!Number.isFinite(number)) return '0đ';
-    return `${Math.round(number).toLocaleString('vi-VN')}đ`;
+    const amount = Number.isFinite(number) ? Math.round(number) : 0;
+    const sign = amount < 0 ? '−' : '';
+    const grouped = String(Math.abs(amount)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return `${sign}${grouped} ₫`;
 };
 
 const escapeHtml = (value) => String(value ?? '')
@@ -64,6 +75,18 @@ const escapeHtml = (value) => String(value ?? '')
 
 const moneyCode = value => `<code>${formatMoney(value)}</code>`;
 const textCode = value => `<code>${escapeHtml(value)}</code>`;
+
+const liteMarkdownToHtml = (value) => {
+    let text = escapeHtml(String(value ?? ''));
+    text = text.replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
+    text = text.replace(/__([^_\n]+)__/g, '<b>$1</b>');
+    text = text.replace(/`([^`]+)`/g, '<b>$1</b>');
+    text = text.replace(/(^|[^\w*])\*(?!\s)([^*\n]+?)\*(?!\*)/g, '$1<i>$2</i>');
+    text = text.replace(/^#{1,6}\s+/gm, '');
+    text = text.replace(/^\s*[-•]\s*/gm, '• ');
+    text = text.replace(/\*\*/g, '');
+    return text;
+};
 
 const splitTelegramText = (text, max = 3900) => {
     const source = String(text || '');
@@ -172,21 +195,21 @@ const I18N = {
         denyLocked: 'Tài khoản cửa hàng đang bị khóa. Không dùng được bot.',
         denyMuted: 'Kênh Telegram của bạn đang tắt. Nhờ Quản lý bật lại trên Fly.',
         denyWrite: 'Không duyệt bằng lệnh /approve. Không /pay, không hoàn thành hóa đơn, không chi NCC từ chat. Việc chờ: bấm nút trên tin chờ duyệt (ghi nhật ký như Fly).',
-        flyHint: 'Duyệt trên Telegram ghi nhật ký (NhatKy) giống bấm trên Fly.',
+        flyHint: 'Duyệt trên Telegram ghi nhật ký giống bấm trên Fly.',
         helpNoWrite: 'Không /pay /complete. Duyệt PO/PX/KK/đổi trả/phiếu chi/công: nút trên tin chờ duyệt — ghi NhatKy như Fly.',
         flyMenu: 'Fly — dashboard cửa hàng (nút không có quyền đã ẩn).',
-        unknownCmd: 'Không khớp nút bàn phím. Bấm Chứng từ, Báo cáo, Việc chờ… hoặc gõ /help /fly.',
+        unknownCmd: 'Bấm 📄 Chứng từ, 📊 Báo cáo, ⏳ Việc chờ hoặc gõ /help /fly.',
         storeBrand: 'SUPERMARKET FLY · Hà Nội',
         welcomeUnboundHi: 'Xin chào! 👋 Mình là companion của Quản lý trên Supermarket Fly.',
-        welcomeUnboundAbout: 'Bot Quản lý: xem số liệu và duyệt việc chờ (ghi nhật ký như Fly). Chưa liên kết — không có số liệu.',
+        welcomeUnboundAbout: 'Xem số liệu và duyệt việc chờ (ghi nhật ký như Fly). Chưa liên kết — chưa có số liệu.',
         welcomeUnboundOtpTitle: 'Liên kết tài khoản (chỉ Quản lý)',
         welcomeUnboundOtp1: '1. Đăng nhập Fly → góc phải → Liên kết Telegram → Tạo mã.',
         welcomeUnboundOtp2: '2. Quay lại chat này, gửi /start kèm 6 số (cách một dấu cách).',
         welcomeUnboundOtp3: 'Mã hết hạn sau 5 phút; sai 5 lần thì tạo mã mới trên Fly. OTP vai trò khác QL sẽ bị từ chối.',
         welcomeUnbound: [
-            'Xin chào! 👋 Mình là companion của Quản lý trên Supermarket Fly.',
+            'Xin chào. Đây là kênh nội bộ Quản lý trên Supermarket Fly.',
             '',
-            'Rất vui được gặp bạn. Bot của Quản lý: xem số liệu và duyệt việc chờ (ghi nhật ký như Fly).',
+            'Xem số liệu và duyệt việc chờ (ghi nhật ký như Fly).',
             '',
             'Chưa liên kết? Trên Fly: góc phải → Liên kết Telegram → Tạo mã, rồi gửi /start kèm 6 số.',
             'Ví dụ: /start 482913'
@@ -194,8 +217,8 @@ const I18N = {
         welcomeBound: 'Kính chào Quản lý {name}. 🌟',
         welcomeBoundHi: 'Kính chào Quản lý {name}. 🌟',
         welcomeBoundP2: 'Kênh nội bộ Fly Hà Nội. Xem số liệu; duyệt PO, phiếu xuất, kiểm kê, đổi trả, phiếu chi, chấm công — ghi Nhật ký như Fly.',
-        welcomeBoundP3: '',
-        welcomeBoundP4: '',
+        welcomeBoundP3: 'Bot giúp xem số liệu vận hành trong ngày và xử lý việc chờ duyệt ngay trên Telegram.',
+        welcomeBoundP4: 'Quản lý duyệt được đơn mua (PO), phiếu xuất, kiểm kê, đổi trả, phiếu chi và chấm công — mỗi lần duyệt hoặc từ chối đều ghi Nhật ký như trên Fly.',
         welcomeDashTitle: 'Cửa hàng hôm nay',
         welcomeDashRevenue: 'Doanh thu',
         welcomeDashPending: 'Việc chờ',
@@ -203,16 +226,24 @@ const I18N = {
         welcomeDashAttendance: 'Công chờ duyệt',
         welcomeBoundGuide: '📄 Chứng từ · /reports · 📚 /guide. Bấm Ẩn menu để đọc hết chat. Lịch sử: Fly → Nhật ký.',
         welcomeBoundNoApprove: 'Việc chờ: bấm ✅ Duyệt / ❌ Từ chối trên tin đó — đã ghi Nhật ký. Không chi lương / không hoàn thành HĐ từ lệnh chat.',
+        welcomeBoundDocs: '📄 Chứng từ gồm đơn mua, phiếu nhập, hóa đơn, xuất kho, kiểm kê, đổi trả, phiếu chi và phiếu công.',
+        welcomeBoundIdle: 'Không còn việc chờ — ngày vận hành đang ổn.',
         welcomeUnboundNote: 'Sau khi liên kết, Quản lý duyệt PO, phiếu xuất, kiểm kê, đổi trả, phiếu chi và chấm công trên tin chờ — ghi Nhật ký như Fly.',
         welcomeBoundLang: '🌐 Đổi nhãn: nút Ngôn ngữ (Tiếng Việt / English / 简体中文).',
+        healthOk: 'Ổn định',
+        healthWatch: 'Cần theo dõi',
+        healthUrgent: 'Cần ưu tiên xử lý',
+        opsWatchTitle: 'Việc cần xử lý',
+        docsSection: 'Chứng từ',
+        opsChips: 'Việc chờ {pending} · Công {attendance} · Ca lệch: {gap}',
         pendingAttendanceNote: 'Ca đã đóng — chờ duyệt công (UC32). Nút ✅ Duyệt ghi nhật ký như Fly → Duyệt công.',
         pendingAttendanceHint: '«Chờ duyệt» = NV đã hết ca. Duyệt trên Telegram hoặc Fly → Duyệt công (cả ngày cũ / ca hành chính).',
         attendanceFlyPath: 'Fly → Duyệt công',
         pushAttendanceTitle: 'CHẤM CÔNG CHỜ DUYỆT',
         welcomeGuest: [
-            'Xin chào! 👋 Mình là bot nội bộ Supermarket Fly.',
+            'Xin chào. Đây là bot nội bộ Supermarket Fly.',
             '',
-            'Rất tiếc nhé — chỉ Quản lý đã liên kết mới xem được số liệu. Bot không trả dữ liệu cửa hàng cho chat này.'
+            'Chỉ Quản lý đã liên kết mới xem được số liệu. Chat này không nhận dữ liệu cửa hàng.'
         ].join('\n'),
         startLinkGuide: [
             'HƯỚNG DẪN LIÊN KẾT (chỉ Quản lý)',
@@ -238,6 +269,8 @@ const I18N = {
         langMenuTitle: 'Chọn ngôn ngữ nhãn (số tiền không đổi).',
         btnLinkGuide: 'Hướng dẫn liên kết',
         btnHelp: 'Trợ giúp /help',
+        flyHome: '🔄 Làm mới',
+        navHome: '🏠 Tổng quan',
         flyToday: '📊 Hôm nay',
         flyRevenue: '💰 Doanh thu',
         flyDebt: '🧾 Công nợ',
@@ -248,25 +281,25 @@ const I18N = {
         flyPayments: '💳 Thanh toán',
         flyAlerts: '🔔 Cảnh báo',
         flyLang: '🌐 Ngôn ngữ',
-        flyHelp: '❓ Help',
+        flyHelp: '❓ Trợ giúp',
         flyDocs: '📄 Chứng từ',
         kbDocs: '📄 Chứng từ',
-        kbLowstock: '🛍️ Sản phẩm / tồn thấp',
-        kbPending: '⏳ Cần duyệt',
+        kbLowstock: '🛍️ Tồn thấp',
+        kbPending: '⏳ Việc chờ',
         kbReports: '📊 Báo cáo',
-        kbRevenue: '💰 Doanh thu hôm nay',
-        kbDebt: '🧾 Công nợ NCC',
+        kbRevenue: '💰 Doanh thu',
+        kbDebt: '🧾 Công nợ',
         kbShifts: '🕐 Ca & quỹ',
         kbPayments: '💳 Thanh toán',
         kbAlerts: '🔔 Cảnh báo',
-        kbFly: '📋 Tóm tắt /fly',
+        kbFly: '🔄 Cập nhật',
         kbLang: '🌐 Ngôn ngữ',
         kbHelp: '❓ Trợ giúp',
         kbAsk: '💬 Hỏi trợ lý',
         askPrompt: 'Bạn muốn hỏi gì? Gõ câu hỏi ở tin tiếp theo, ví dụ: hôm nay cần chú ý gì?',
         askUsage: 'Hỏi Trợ lý Fly. Gõ: /ask hôm nay cần chú ý gì?\nTrợ lý không duyệt chứng từ. Việc chờ: nút trên tin, hoặc /pending.',
-        kbLink: '🔗 Liên kết / Hướng dẫn OTP',
-        kbGuide: '📚 Tài liệu / Quy tắc',
+        kbLink: '🔗 Liên kết',
+        kbGuide: '📚 Tài liệu',
         kbHide: '⬆️ Ẩn menu',
         kbShow: '⬇️ Hiện menu',
         flyGuide: '📚 Tài liệu',
@@ -394,8 +427,14 @@ const I18N = {
         docsListHint: 'Bấm một mã để mở bản in HTML đủ dòng hàng.',
         docsBackTypes: '« Chọn loại',
         reportsPickTitle: 'CHỌN BÁO CÁO',
-        reportsPickHint: 'Bấm một mục. Có báo cáo cửa hàng và báo cáo Thủ kho đã gửi.',
+        reportsPickHint: 'Bấm một mục. Có báo cáo cửa hàng, báo cáo Thủ kho đã gửi và báo cáo bộ phận đã gửi.',
         rptWarehouse: '📦 Báo cáo Thủ kho đã gửi',
+        rptDept: '📥 Báo cáo bộ phận đã gửi',
+        rptDeptTitle: 'BÁO CÁO BỘ PHẬN ĐÃ GỬI',
+        rptDeptHint: 'Bấm một số BCM / BCKT / BCTN để xem tóm tắt KPI. Không duyệt trên Telegram.',
+        rptDeptEmpty: 'Chưa có kỳ nào bộ phận gửi.',
+        rptDeptMissing: 'Không tìm thấy báo cáo bộ phận đã gửi.',
+        rptDeptList: '📋 Kỳ đã gửi',
         rptWarehouseTitle: 'BÁO CÁO THỦ KHO ĐÃ GỬI',
         rptWarehouseHint: 'Bấm một số BCK để xem nhập–xuất–tồn, hàng rời kho bán, tồn thấp và đổi trả.',
         rptWarehouseEmpty: 'Chưa có kỳ nào Thủ kho gửi.',
@@ -403,12 +442,13 @@ const I18N = {
         rptWarehouseList: '📋 Kỳ đã gửi',
         rptStoreReports: '📊 Báo cáo cửa hàng',
         docsTypeBck: 'Báo cáo Thủ kho',
-        rptToday: 'Tóm tắt hôm nay (DT GV lãi gộp — không trừ NCC)',
-        rptDebt: 'Công nợ',
-        rptPending: 'Việc chờ',
-        rptShifts: 'Ca & quỹ',
-        rptLowstock: 'Tồn thấp',
-        rptPnl: 'P&L điều hành (khác lãi gộp)',
+        docsTypeBcm: 'Báo cáo bộ phận (BCM/BCKT/BCTN)',
+        rptToday: '📊 Tóm tắt hôm nay (DT GV lãi gộp — không trừ NCC)',
+        rptDebt: '🧾 Công nợ',
+        rptPending: '⏳ Việc chờ',
+        rptShifts: '🕐 Ca & quỹ',
+        rptLowstock: '📦 Tồn thấp',
+        rptPnl: '📈 P&L điều hành (khác lãi gộp)',
         rptMonth: '📅 Báo cáo tháng',
         rptQuarter: '🗓 Báo cáo quý',
         rptYear: '📆 Báo cáo năm',
@@ -426,7 +466,7 @@ const I18N = {
         helpPayments: '/payments — Thanh toán TM/QR/thẻ/CK',
         helpPending: '/pending — Việc chờ duyệt (nút Duyệt / Từ chối trên tin chờ)',
         helpDocs: '/docs — Chứng từ / giấy tờ (đơn mua, phiếu nhập, HĐ, xuất, KK, đổi trả, phiếu chi, công, BCK)',
-        helpReports: '/reports — Báo cáo cửa hàng + Báo cáo Thủ kho đã gửi (đủ NXT, hàng rời kho bán) — QL',
+        helpReports: '/reports — Báo cáo cửa hàng + Thủ kho (BCK) + bộ phận (BCM/BCKT/BCTN). Không duyệt báo cáo — QL',
         helpGuide: '/guide — Tài liệu / quy tắc (DT, lãi gộp, VAT, công nợ, két, lương) — alias /rules',
         helpAsk: '/ask … — Hỏi tự do (thử nghiệm): số liệu đúng quyền QL, có Nguồn. Không duyệt hộ. /guide vẫn là quy tắc cố định.',
         guideAskHint: 'Hỏi tự do (thử nghiệm): /ask … — số liệu đúng quyền QL, có Nguồn. Không duyệt hộ. /guide vẫn là quy tắc cố định.',
@@ -454,8 +494,8 @@ const I18N = {
         todayTopStock: 'Tồn cần bổ sung (top)',
         todayOpenShift: 'Ca đang mở',
         todayTemplateError: 'Tóm tắt hoạt động hôm nay (lỗi mẫu tin).',
-        dashBrand: 'SUPERMARKET FLY',
-        dashOps: 'Kết quả hôm nay',
+        dashBrand: 'SUPERMARKET FLY · Hà Nội',
+        dashOps: '⚡ Kết quả hôm nay',
         dashPay: '4 kênh thanh toán',
         dashWatch: 'Cần chú ý',
         dashInbox: 'Thông báo mới',
@@ -525,7 +565,7 @@ const I18N = {
         unknownCmd: 'No matching keyboard button. Tap Documents, Reports, Pending… or type /help /fly.',
         storeBrand: 'SUPERMARKET FLY · Hà Nội',
         welcomeUnboundHi: 'Hello! 👋 I am the Store Manager companion on Supermarket Fly.',
-        welcomeUnboundAbout: 'Manager companion: read figures and approve pending work (same NhatKy as Fly). No figures until you link.',
+        welcomeUnboundAbout: 'Read figures and approve pending work (same audit log as Fly). No figures until you link.',
         welcomeUnboundOtpTitle: 'Link account (Store Manager only)',
         welcomeUnboundOtp1: '1. Sign in to Fly → top right → Link Telegram → Create code.',
         welcomeUnboundOtp2: '2. Come back here, send /start and 6 digits (with a space).',
@@ -541,8 +581,8 @@ const I18N = {
         welcomeBound: 'Store Manager {name}, welcome. 🌟',
         welcomeBoundHi: 'Store Manager {name}, welcome. 🌟',
         welcomeBoundP2: 'Internal Fly Hà Nội channel. Read figures; approve PO, issues, counts, returns, payouts, attendance — same NhatKy as Fly.',
-        welcomeBoundP3: '',
-        welcomeBoundP4: '',
+        welcomeBoundP3: 'The bot shows today’s operating figures and lets you handle pending approvals on Telegram.',
+        welcomeBoundP4: 'You may approve purchase orders, issues, stock counts, returns, payment vouchers and attendance — each approve or reject writes the same audit log as Fly.',
         welcomeDashTitle: 'Store today',
         welcomeDashRevenue: 'Revenue',
         welcomeDashPending: 'Pending work',
@@ -550,8 +590,16 @@ const I18N = {
         welcomeDashAttendance: 'Attendance awaiting approval',
         welcomeBoundGuide: '📄 Documents · /reports · 📚 /guide. Tap Hide menu to read the chat. History: Fly → Nhật ký.',
         welcomeBoundNoApprove: 'Pending work: tap ✅ Approve / ❌ Reject on that card — NhatKy is written. No payroll payout / no invoice complete from chat commands.',
+        welcomeBoundDocs: '📄 Documents include purchase orders, receipts, invoices, issues, counts, returns, payment vouchers and attendance sheets.',
+        welcomeBoundIdle: 'No pending work — the operating day is clear.',
         welcomeUnboundNote: 'After linking, the Store Manager approves PO, issues, counts, returns, payouts, and attendance on the pending card — same NhatKy as Fly.',
         welcomeBoundLang: '🌐 Labels: Language button (Tiếng Việt / English / 简体中文).',
+        healthOk: 'Stable',
+        healthWatch: 'Needs attention',
+        healthUrgent: 'Needs priority handling',
+        opsWatchTitle: 'Work to handle',
+        docsSection: 'Documents',
+        opsChips: 'Pending {pending} · Attendance {attendance} · Variance: {gap}',
         pendingAttendanceNote: 'Shift closed — attendance awaits approval (UC32). ✅ Approve writes the same log as Fly → Duyệt công.',
         pendingAttendanceHint: '“Pending” = the shift ended. Approve here or in Fly → Duyệt công (older dates and office shifts included).',
         attendanceFlyPath: 'Fly → Duyệt công',
@@ -585,38 +633,40 @@ const I18N = {
         langMenuTitle: 'Choose label language (amounts stay the same).',
         btnLinkGuide: 'Link guide',
         btnHelp: 'Help /help',
-        flyToday: '📊 Hôm nay',
-        flyRevenue: '💰 Doanh thu',
-        flyDebt: '🧾 Công nợ',
+        flyHome: '🔄 Refresh',
+        navHome: '🏠 Overview',
+        flyToday: '📊 Today',
+        flyRevenue: '💰 Revenue',
+        flyDebt: '🧾 Payables',
         flyLowstock: '📦 Low stock',
-        flyPending: '⏳ Việc chờ',
-        flyReports: '📊 Báo cáo',
-        flyShifts: '🕐 Ca',
-        flyPayments: '💳 Thanh toán',
-        flyAlerts: '🔔 Cảnh báo',
-        flyLang: '🌐 Ngôn ngữ',
+        flyPending: '⏳ Pending',
+        flyReports: '📊 Reports',
+        flyShifts: '🕐 Shifts',
+        flyPayments: '💳 Payments',
+        flyAlerts: '🔔 Alerts',
+        flyLang: '🌐 Language',
         flyHelp: '❓ Help',
         flyDocs: '📄 Documents',
         kbDocs: '📄 Documents',
-        kbLowstock: '🛍️ Products / low stock',
-        kbPending: '⏳ Cần duyệt',
-        kbReports: '📊 Báo cáo',
+        kbLowstock: '🛍️ Low stock',
+        kbPending: '⏳ Pending',
+        kbReports: '📊 Reports',
         kbRevenue: '💰 Today revenue',
-        kbDebt: '🧾 Supplier AP',
+        kbDebt: '🧾 Payables',
         kbShifts: '🕐 Shifts & cash',
         kbPayments: '💳 Payments',
         kbAlerts: '🔔 Alerts',
-        kbFly: '📋 Summary /fly',
+        kbFly: '🔄 Refresh',
         kbLang: '🌐 Language',
         kbHelp: '❓ Help',
-        kbAsk: '💬 Ask assistant',
+        kbAsk: '💬 Ask',
         askPrompt: 'What do you want to ask? Type the next message, e.g. what needs attention today?',
         askUsage: 'Ask Fly Assistant. Type: /ask what needs attention today?\nThe assistant does not approve documents. Pending work: buttons on the card, or /pending.',
-        kbLink: '🔗 Link / OTP guide',
-        kbGuide: '📚 Docs / Rules',
+        kbLink: '🔗 Link account',
+        kbGuide: '📚 Guide',
         kbHide: '⬆️ Hide menu',
         kbShow: '⬇️ Show menu',
-        flyGuide: '📚 Rules',
+        flyGuide: '📚 Guide',
         hideOk: 'Keyboard hidden. Read the chat freely.',
         showOk: 'Menu is back.',
         showHint: 'Show again: tap ⬇️ Show menu, or send /fly /start.',
@@ -741,8 +791,14 @@ const I18N = {
         docsListHint: 'Tap a code to open the full HTML print.',
         docsBackTypes: '« Types',
         reportsPickTitle: 'CHOOSE REPORT',
-        reportsPickHint: 'Tap one item. Store report and submitted warehouse-keeper reports.',
+        reportsPickHint: 'Tap one item. Store reports, submitted warehouse reports and submitted department reports.',
         rptWarehouse: '📦 Submitted warehouse report',
+        rptDept: '📥 Submitted department reports',
+        rptDeptTitle: 'SUBMITTED DEPARTMENT REPORTS',
+        rptDeptHint: 'Tap a BCM / BCKT / BCTN number for the KPI summary. No approval on Telegram.',
+        rptDeptEmpty: 'No department report has been sent yet.',
+        rptDeptMissing: 'That department report was not found.',
+        rptDeptList: '📋 Submitted periods',
         rptWarehouseTitle: 'SUBMITTED WAREHOUSE REPORTS',
         rptWarehouseHint: 'Tap a BCK number to see stock movement, written-off goods, low stock and returns.',
         rptWarehouseEmpty: 'No warehouse report has been sent yet.',
@@ -750,12 +806,13 @@ const I18N = {
         rptWarehouseList: '📋 Submitted periods',
         rptStoreReports: '📊 Store reports',
         docsTypeBck: 'Warehouse report',
-        rptToday: 'Today summary (rev COGS gross — no supplier payout)',
-        rptDebt: 'Payables',
-        rptPending: 'Pending work',
-        rptShifts: 'Shifts & cash',
-        rptLowstock: 'Low stock',
-        rptPnl: 'Operating P&L (not gross profit)',
+        docsTypeBcm: 'Department reports (BCM/BCKT/BCTN)',
+        rptToday: '📊 Today summary (rev COGS gross — no supplier payout)',
+        rptDebt: '🧾 Payables',
+        rptPending: '⏳ Pending work',
+        rptShifts: '🕐 Shifts & cash',
+        rptLowstock: '📦 Low stock',
+        rptPnl: '📈 Operating P&L (not gross profit)',
         rptMonth: '📅 Monthly report',
         rptQuarter: '🗓 Quarterly report',
         rptYear: '📆 Annual report',
@@ -773,7 +830,7 @@ const I18N = {
         helpPayments: '/payments — Cash/QR/card/transfer',
         helpPending: '/pending — Pending approvals (Approve / Reject buttons on the card)',
         helpDocs: '/docs — Papers / documents (PO, receipt, invoice, issue, count, return, payout, attendance, BCK)',
-        helpReports: '/reports — Store report + submitted warehouse-keeper report — Manager',
+        helpReports: '/reports — Store + warehouse (BCK) + department (BCM/BCKT/BCTN). No report approval — Manager',
         helpGuide: '/guide — Rules (revenue, gross profit, VAT, AP, cash, payroll) — alias /rules',
         helpAsk: '/ask … — Free question (trial): figures match manager rights, with Sources. Does not approve. /guide stays static.',
         guideAskHint: 'Free question (trial): /ask … — figures match manager rights, with Sources. Does not approve. /guide stays static.',
@@ -801,8 +858,8 @@ const I18N = {
         todayTopStock: 'SKUs to restock (top)',
         todayOpenShift: 'Open shifts',
         todayTemplateError: 'Today’s operations summary (message template error).',
-        dashBrand: 'SUPERMARKET FLY',
-        dashOps: 'Today’s result',
+        dashBrand: 'SUPERMARKET FLY · Hà Nội',
+        dashOps: '⚡ Today’s result',
         dashPay: '4 payment channels',
         dashWatch: 'Watch list',
         dashInbox: 'Latest alerts',
@@ -869,10 +926,10 @@ const I18N = {
         flyHint: '在 Telegram 审批会写入与 Fly 相同的 NhatKy 日志。',
         helpNoWrite: '没有 /pay /complete。采购/出库/盘点/退换/付款/考勤：在待办卡片上点按钮 — 与 Fly 同一本 NhatKy。',
         flyMenu: 'Fly — 门店看板（无权限的按钮已隐藏）。',
-        unknownCmd: '未匹配到键盘按钮。请点 单据、报表、待办… 或输入 /help /fly。',
+        unknownCmd: '未匹配到键盘按钮。请点 📄 单据、📊 报表、⏳ 待办… 或输入 /help /fly。',
         storeBrand: 'SUPERMARKET FLY · Hà Nội',
         welcomeUnboundHi: '您好！👋 我是 Supermarket Fly 的店长助手。',
-        welcomeUnboundAbout: '店长助手：可查看数据并审批待办（与 Fly 同一本 NhatKy）。尚未关联，没有数据。',
+        welcomeUnboundAbout: '查看数据并审批待办（与 Fly 同一日志）。尚未关联，没有数据。',
         welcomeUnboundOtpTitle: '关联账号（仅店长）',
         welcomeUnboundOtp1: '1. 登录 Fly → 右上角 → 关联 Telegram → 生成验证码。',
         welcomeUnboundOtp2: '2. 回到本对话，发送 /start 和 6 位数字（中间有空格）。',
@@ -888,8 +945,8 @@ const I18N = {
         welcomeBound: '店长 {name}，您好。🌟',
         welcomeBoundHi: '店长 {name}，您好。🌟',
         welcomeBoundP2: 'Fly 河内内部通道。查看数据；审批采购、出库、盘点、退换、付款、考勤 — 与 Fly 写入同一本 NhatKy。',
-        welcomeBoundP3: '',
-        welcomeBoundP4: '',
+        welcomeBoundP3: '机器人可查看当日经营数据，并在 Telegram 处理待审批事项。',
+        welcomeBoundP4: '店长可审批采购单、出库、盘点、退换、付款凭证和考勤 — 每次批准或拒绝都会写入与 Fly 相同的日志。',
         welcomeDashTitle: '今日门店',
         welcomeDashRevenue: '销售额',
         welcomeDashPending: '待办',
@@ -897,8 +954,16 @@ const I18N = {
         welcomeDashAttendance: '待审批考勤',
         welcomeBoundGuide: '📄 单据 · /reports · 📚 /guide。点 隐藏菜单 以便读完聊天。历史：Fly → Nhật ký。',
         welcomeBoundNoApprove: '待办：在该卡片上点 ✅ 审批 / ❌ 拒绝 — 会写入 NhatKy。不能用命令发工资或完成销售单。',
+        welcomeBoundDocs: '📄 单据包括采购单、入库、发票、出库、盘点、退换、付款凭证和考勤单。',
+        welcomeBoundIdle: '没有待办 — 经营日运行平稳。',
         welcomeUnboundNote: '关联后，店长可在待办消息上审批采购、出库、盘点、退换、付款和考勤 — 与 Fly 写入同一本 NhatKy。',
         welcomeBoundLang: '🌐 标签语言：语言按钮（Tiếng Việt / English / 简体中文）。',
+        healthOk: '运行平稳',
+        healthWatch: '需要关注',
+        healthUrgent: '需要优先处理',
+        opsWatchTitle: '待处理事项',
+        docsSection: '单据',
+        opsChips: '待办 {pending} · 考勤 {attendance} · 长短款：{gap}',
         pendingAttendanceNote: '班次已结束 — 待审批考勤（UC32）。点 ✅ 审批会写入与 Fly → Duyệt công 相同的日志。',
         pendingAttendanceHint: '“待审批”= 员工已下班。可在此或 Fly → Duyệt công 审批（含旧日期与行政班）。',
         attendanceFlyPath: 'Fly → Duyệt công',
@@ -932,38 +997,40 @@ const I18N = {
         langMenuTitle: '选择标签语言（金额不变）。',
         btnLinkGuide: '关联说明',
         btnHelp: '帮助 /help',
-        flyToday: '📊 Hôm nay',
-        flyRevenue: '💰 Doanh thu',
-        flyDebt: '🧾 Công nợ',
+        flyHome: '🔄 刷新',
+        navHome: '🏠 总览',
+        flyToday: '📊 今日',
+        flyRevenue: '💰 销售',
+        flyDebt: '🧾 应付',
         flyLowstock: '📦 低库存',
-        flyPending: '⏳ Việc chờ',
-        flyReports: '📊 Báo cáo',
-        flyShifts: '🕐 Ca',
-        flyPayments: '💳 Thanh toán',
-        flyAlerts: '🔔 Cảnh báo',
-        flyLang: '🌐 Ngôn ngữ',
-        flyHelp: '❓ Help',
+        flyPending: '⏳ 待办',
+        flyReports: '📊 报表',
+        flyShifts: '🕐 班次',
+        flyPayments: '💳 支付',
+        flyAlerts: '🔔 提醒',
+        flyLang: '🌐 语言',
+        flyHelp: '❓ 帮助',
         flyDocs: '📄 单据',
         kbDocs: '📄 单据',
-        kbLowstock: '🛍️ 商品 / 低库存',
-        kbPending: '⏳ Cần duyệt',
-        kbReports: '📊 Báo cáo',
+        kbLowstock: '🛍️ 低库存',
+        kbPending: '⏳ 待办',
+        kbReports: '📊 报表',
         kbRevenue: '💰 今日销售',
-        kbDebt: '🧾 供应商应付',
+        kbDebt: '🧾 应付',
         kbShifts: '🕐 班次与钱箱',
         kbPayments: '💳 支付',
         kbAlerts: '🔔 提醒',
-        kbFly: '📋 摘要 /fly',
+        kbFly: '🔄 刷新',
         kbLang: '🌐 语言',
         kbHelp: '❓ 帮助',
         kbAsk: '💬 问助手',
         askPrompt: '您想问什么？请在下一条消息输入，例如：今天要注意什么？',
         askUsage: '问 Fly 助手。输入：/ask 今天要注意什么？\n助手不代审批。待办：卡片上的按钮，或 /pending。',
-        kbLink: '🔗 关联 / OTP 说明',
-        kbGuide: '📚 文档 / 规则',
+        kbLink: '🔗 关联',
+        kbGuide: '📚 文档',
         kbHide: '⬆️ 隐藏菜单',
         kbShow: '⬇️ 显示菜单',
-        flyGuide: '📚 规则',
+        flyGuide: '📚 文档',
         hideOk: '已隐藏键盘。请阅读聊天。',
         showOk: '菜单已恢复。',
         showHint: '再显示：点 ⬇️ 显示菜单，或发送 /fly /start。',
@@ -1005,8 +1072,14 @@ const I18N = {
         docsListHint: '点一个编号打开完整 HTML 打印。',
         docsBackTypes: '« 选择类型',
         reportsPickTitle: '选择报表',
-        reportsPickHint: '点一项。含门店报表和仓管已提交的库存报告。',
+        reportsPickHint: '点一项。含门店报表、仓管已提交报告和部门已提交报告。',
         rptWarehouse: '📦 仓管已提交报告',
+        rptDept: '📥 部门已提交报告',
+        rptDeptTitle: '部门已提交报告',
+        rptDeptHint: '点 BCM / BCKT / BCTN 编号查看 KPI 摘要。不能在 Telegram 审批。',
+        rptDeptEmpty: '部门尚未提交任何报告。',
+        rptDeptMissing: '找不到该部门报告。',
+        rptDeptList: '📋 已提交期',
         rptWarehouseTitle: '仓管已提交报告',
         rptWarehouseHint: '点 BCK 编号查看进出存、离库商品、低库存和退货。',
         rptWarehouseEmpty: '仓管尚未提交任何报告。',
@@ -1014,12 +1087,13 @@ const I18N = {
         rptWarehouseList: '📋 已提交期',
         rptStoreReports: '📊 门店报表',
         docsTypeBck: '仓管报告',
-        rptToday: '今日摘要（销售额 成本 毛利 — 不扣供应商款）',
-        rptDebt: '应付',
-        rptPending: '待办',
-        rptShifts: '班次与钱箱',
-        rptLowstock: '低库存',
-        rptPnl: '经营 P&L（不是毛利）',
+        docsTypeBcm: '部门报表（BCM/BCKT/BCTN）',
+        rptToday: '📊 今日摘要（销售额 成本 毛利 — 不扣供应商款）',
+        rptDebt: '🧾 应付',
+        rptPending: '⏳ 待办',
+        rptShifts: '🕐 班次与钱箱',
+        rptLowstock: '📦 低库存',
+        rptPnl: '📈 经营 P&L（不是毛利）',
         rptMonth: '📅 月报',
         rptQuarter: '🗓 季报',
         rptYear: '📆 年报',
@@ -1037,7 +1111,7 @@ const I18N = {
         helpPayments: '/payments — 现金/QR/卡/转账',
         helpPending: '/pending — 待审批（在待办卡片上点审批 / 拒绝）',
         helpDocs: '/docs — 单据 / 证件（采购、入库、发票、出库、盘点、退换、付款、考勤、BCK）',
-        helpReports: '/reports — 门店报表 + 仓管已提交库存报告 — 店长',
+        helpReports: '/reports — 门店 + 仓管(BCK) + 部门(BCM/BCKT/BCTN)。不能审批报表 — 店长',
         helpGuide: '/guide — 规则（销售、毛利、VAT、应付、钱箱、工资）— 别名 /rules',
         helpAsk: '/ask … — 自由提问（试用）：按店长权限给数字，含来源。不代审批。/guide 仍是固定规则。',
         guideAskHint: '自由提问（试用）：/ask … — 按店长权限给数字，含来源。不代审批。/guide 仍是固定规则。',
@@ -1065,8 +1139,8 @@ const I18N = {
         todayTopStock: '需补货（前几项）',
         todayOpenShift: '未结束班次',
         todayTemplateError: '今日经营摘要（消息模板错误）。',
-        dashBrand: 'SUPERMARKET FLY',
-        dashOps: '今日结果',
+        dashBrand: 'SUPERMARKET FLY · Hà Nội',
+        dashOps: '⚡ 今日结果',
         dashPay: '4 个支付渠道',
         dashWatch: '需关注',
         dashInbox: '最新通知',
@@ -1158,6 +1232,53 @@ const headerBlock = (title) => [`╭${RULE_TOP}`, title, `╰${RULE}`].join('\n'
 
 const hintLine = (lang) => `<i>${escapeHtml(t(lang, 'flyHint'))}</i>`;
 
+const opsHealth = (urgentCount, pendingCount, lang = DEFAULT_LANG) => {
+    if (Number(urgentCount) > 0) return t(lang, 'healthUrgent');
+    if (Number(pendingCount) > 0) return t(lang, 'healthWatch');
+    return t(lang, 'healthOk');
+};
+
+const moneyLine = (label, value) => `${escapeHtml(label)}: ${moneyCode(value)}`;
+
+const buildOpsKpiBlock = (summary = {}, inbox = [], lang = DEFAULT_LANG) => {
+    const dayRaw = summary.operatingDay || operatingDayOf();
+    const dayText = formatVnDate(dayRaw, lang);
+    const revenue = summary.DoanhThuThuan ?? summary.DoanhThuHoaDon ?? 0;
+    const cogs = summary.GiaVonHangBanThuan ?? summary.GiaVon ?? 0;
+    const gross = summary.LoiNhuanGop ?? 0;
+    const pending = (inbox || []).length;
+    const attendance = countAttendancePending(inbox);
+    const gaps = summary.caLech || [];
+    const none = t(lang, 'todayNone');
+    const gapText = gaps.slice(0, 8).join(', ') || none;
+    const urgentCount = Number(summary.congNoDenHan || 0)
+        + Number(summary.choXacNhan || 0)
+        + Number(summary.spCanBoSung || 0)
+        + gaps.length
+        + (inbox || []).filter(item => item?.tone === 'urgent').length;
+    const healthLabel = opsHealth(urgentCount, pending, lang);
+    const healthIcon = urgentCount > 4 ? '🔴' : ((urgentCount || pending) ? '🟡' : '🟢');
+    const healthDetail = pending
+        ? `${healthIcon} ${escapeHtml(healthLabel)} · ${pending} ${escapeHtml(t(lang, 'welcomeDashPending').toLocaleLowerCase('vi-VN'))}`
+        : `${healthIcon} ${escapeHtml(healthLabel)}`;
+    const idle = !pending && !attendance && !gaps.length
+        ? `<i>${escapeHtml(t(lang, 'welcomeBoundIdle'))}</i>`
+        : '';
+    return tidyLines([
+        sectionTitle('⚡', t(lang, 'welcomeDashTitle')),
+        dayText ? `<i>${escapeHtml(t(lang, 'todayDay', { day: dayText }))}</i>` : '',
+        `<blockquote><b>${healthDetail}</b></blockquote>`,
+        `💰 <b>${escapeHtml(t(lang, 'todayRevenue'))}</b>  ${moneyCode(revenue)}`,
+        `📦 <b>${escapeHtml(t(lang, 'todayCogs'))}</b>  ${moneyCode(cogs)}`,
+        `${Number(gross) >= 0 ? '📈' : '📉'} <b>${escapeHtml(t(lang, 'todayGross'))}</b>  ${moneyCode(gross)}`,
+        `<i>${escapeHtml(t(lang, 'reportsGrossNote'))}</i>`,
+        `⏳ ${escapeHtml(t(lang, 'welcomeDashPending'))}: ${textCode(String(pending))}`,
+        `📋 ${escapeHtml(t(lang, 'welcomeDashAttendance'))}: ${textCode(String(attendance))}`,
+        `🕐 ${escapeHtml(t(lang, 'welcomeDashGap'))}: ${textCode(gapText)}`,
+        idle
+    ]);
+};
+
 const buildStartWelcomeUnbound = (botHandle, lang = DEFAULT_LANG) => {
     const raw = String(botHandle || '').replace(/^@/, '').trim();
     const handle = raw ? `Bot: ${textCode('@' + raw)}` : '';
@@ -1174,12 +1295,9 @@ const buildStartWelcomeUnbound = (botHandle, lang = DEFAULT_LANG) => {
         escapeHtml(t(lang, 'welcomeUnboundOtp3')),
         handle,
         '',
-        `<i>${escapeHtml(t(lang, 'welcomeUnboundNote'))}</i>`,
-        escapeHtml(t(lang, 'welcomeBoundLang'))
+        `<i>${escapeHtml(t(lang, 'welcomeUnboundNote'))}</i>`
     ].filter(line => line !== '').join('\n');
 };
-
-const hasMoney = (value) => value != null && Number.isFinite(Number(value));
 
 const welcomeNameFallback = (lang) => {
     const key = normalizeLang(lang);
@@ -1190,47 +1308,25 @@ const welcomeNameFallback = (lang) => {
 
 const buildStartWelcomeBound = (user, lang = DEFAULT_LANG, dash = {}) => {
     const name = escapeHtml(String(user?.TenNV || '').trim() || welcomeNameFallback(lang));
-    const summary = dash.summary || {};
+    const summary = { ...(dash.summary || {}), operatingDay: dash.summary?.operatingDay || dash.day };
     const inbox = dash.inbox || [];
-    const none = t(lang, 'todayNone');
-    const lech = (summary.caLech || []).slice(0, 5).join(', ') || none;
-    const attendance = countAttendancePending(inbox);
-    const dayRaw = summary.operatingDay || dash.day || operatingDayOf();
-    const dayText = formatVnDate(dayRaw, lang);
-    const revenue = summary.DoanhThuThuan ?? summary.DoanhThuHoaDon;
-    const cogs = summary.GiaVonHangBanThuan ?? summary.GiaVon;
-    const gross = summary.LoiNhuanGop;
-    const urgentCount = Number(summary.congNoDenHan || 0)
-        + Number(summary.choXacNhan || 0)
-        + Number(summary.spCanBoSung || 0)
-        + Number((summary.caLech || []).length)
-        + inbox.filter(item => item?.tone === 'urgent').length;
-    const health = urgentCount > 4 ? '🔴 Cần ưu tiên xử lý' : (urgentCount ? '🟡 Có việc cần theo dõi' : '🟢 Vận hành ổn định');
-    const dashLines = [
-        sectionTitle('⚡', t(lang, 'welcomeDashTitle')),
-        dayText ? `<i>${escapeHtml(t(lang, 'todayDay', { day: dayText }))}</i>` : '',
-        `<blockquote>${health}</blockquote>`,
-        hasMoney(revenue) ? `💰 <b>${escapeHtml(t(lang, 'todayRevenue'))}</b>  ${moneyCode(revenue)}` : '',
-        hasMoney(cogs) ? `📦 <b>${escapeHtml(t(lang, 'todayCogs'))}</b>  ${moneyCode(cogs)}` : '',
-        hasMoney(gross) ? `${Number(gross) >= 0 ? '📈' : '📉'} <b>${escapeHtml(t(lang, 'todayGross'))}</b>  ${moneyCode(gross)}` : '',
-        hasMoney(gross) ? `<i>${escapeHtml(t(lang, 'reportsGrossNote'))}</i>` : '',
-        `⏳ ${escapeHtml(t(lang, 'welcomeDashPending'))}: ${textCode(String(inbox.length))}`,
-        `🕐 ${escapeHtml(t(lang, 'welcomeDashGap'))}: ${textCode(lech)}`,
-        `📋 ${escapeHtml(t(lang, 'welcomeDashAttendance'))}: ${textCode(String(attendance))}`
-    ].filter(Boolean);
-    return [
+    return tidyLines([
         headerBlock(`🏪 <b>${escapeHtml(t(lang, 'storeBrand'))}</b>`),
         t(lang, 'welcomeBoundHi', { name: `<b>${name}</b>` }),
         '',
         escapeHtml(t(lang, 'welcomeBoundP2')),
-        t(lang, 'welcomeBoundP3') ? escapeHtml(t(lang, 'welcomeBoundP3')) : '',
-        t(lang, 'welcomeBoundP4') ? escapeHtml(t(lang, 'welcomeBoundP4')) : '',
+        escapeHtml(t(lang, 'welcomeBoundP3')),
+        escapeHtml(t(lang, 'welcomeBoundP4')),
         '',
-        ...dashLines,
+        buildOpsKpiBlock(summary, inbox, lang),
+        '',
+        sectionTitle('📄', t(lang, 'docsSection')),
+        escapeHtml(t(lang, 'welcomeBoundDocs')),
         '',
         escapeHtml(t(lang, 'welcomeBoundGuide')),
+        escapeHtml(t(lang, 'welcomeBoundNoApprove')),
         escapeHtml(t(lang, 'welcomeBoundLang'))
-    ].filter(line => line !== '').join('\n');
+    ]);
 };
 
 const buildStartWelcomeGuest = (lang = DEFAULT_LANG) => t(lang, 'welcomeGuest');
@@ -1325,7 +1421,7 @@ const buildA2Message = (row, lang = DEFAULT_LANG) => {
             kv('Thu ngân', textCode(row.TenNV || row.MaNV || '—')),
             kv('Tiền hệ thống', moneyCode(row.TienMatHeThong)),
             kv('Thực nộp', moneyCode(row.TienThucNop)),
-            kv('Chênh lệch', `<code>${sign}${formatMoney(lech)}</code>`),
+            kv('Chênh lệch', `<b>${sign}${formatMoney(lech)}</b>`),
             kv('Lý do', textCode(row.LyDo || 'Chưa nhập trên phiếu thu')),
             'Trạng thái: Cần xử lý',
             'Mở Fly → Đối soát / Phiếu thu'
@@ -1344,57 +1440,45 @@ const buildB12Message = (row, lang = DEFAULT_LANG) => buildPushCard({
 }, lang);
 
 const buildA3Message = (summary, { sentAt } = {}) => {
-    const day = summary.operatingDay;
     const sent = sentAt ? formatVnDate(sentAt) : '';
-    const lech = (summary.caLech || []).join(', ') || 'Không';
-    return [
-        headerBlock(`🏪 <b>SUPERMARKET FLY — Ngày vận hành ${formatVnDate(day)}</b>`),
-        sent ? `<i>(gửi ${sent} ~06:10, sau ca đêm 22:00–06:00)</i>` : '<i>(sau ca đêm 22:00–06:00)</i>',
-        '<b>TÓM TẮT HOẠT ĐỘNG</b>',
+    return tidyLines([
+        headerBlock(`🏪 <b>SUPERMARKET FLY · Hà Nội</b>`),
+        buildOpsKpiBlock(summary, [], 'vi'),
         '',
-        `Doanh thu (HĐ hoàn thành): ${moneyCode(summary.DoanhThuThuan ?? summary.DoanhThuHoaDon)}`,
-        `Giá vốn: ${moneyCode(summary.GiaVonHangBanThuan ?? summary.GiaVon)}`,
-        `Lãi gộp: ${moneyCode(summary.LoiNhuanGop)}`,
-        `Tiền mặt / QR / Thẻ / Chuyển khoản: ${moneyCode(summary.TienMat)} / ${moneyCode(summary.TienQR)} / ${moneyCode(summary.TienThe)} / ${moneyCode(summary.TienCK)}`,
-        '',
-        `Công nợ đến hạn: ${textCode(String(summary.congNoDenHan ?? 0))} khoản`,
-        `GD chưa đối soát / chờ xác nhận: ${textCode(String(summary.choXacNhan ?? 0))}`,
-        `SP cần bổ sung: ${textCode(String(summary.spCanBoSung ?? 0))}`,
-        `Ca lệch quỹ: ${textCode(lech)}`,
-        summary.caDangMo ? `Ca đang mở: ${textCode(String(summary.caDangMo))}` : '',
-        '',
-        '<i>Không trừ tiền trả NCC vào lãi gộp.</i>'
-    ].filter(Boolean).join('\n');
+        sectionTitle('💳', 'TÓM TẮT HOẠT ĐỘNG'),
+        moneyLine('Tiền mặt', summary.TienMat),
+        moneyLine('QR', summary.TienQR),
+        moneyLine('Thẻ', summary.TienThe),
+        moneyLine('Chuyển khoản', summary.TienCK),
+        sent ? `<i>Gửi ${escapeHtml(sent)} sau ca đêm.</i>` : '<i>Sau ca đêm 22:00–06:00.</i>'
+    ]);
 };
 
 const moneyBlock = (summary, lang) => [
-    `💰 <b>${escapeHtml(t(lang, 'todayRevenue'))}</b>  ${moneyCode(summary.DoanhThuThuan ?? summary.DoanhThuHoaDon)}`,
-    `📦 <b>${escapeHtml(t(lang, 'todayCogs'))}</b>  ${moneyCode(summary.GiaVonHangBanThuan ?? summary.GiaVon)}`,
-    `${Number(summary.LoiNhuanGop || 0) >= 0 ? '📈' : '📉'} <b>${escapeHtml(t(lang, 'todayGross'))}</b>  ${moneyCode(summary.LoiNhuanGop)}`
+    moneyLine(t(lang, 'todayRevenue'), summary.DoanhThuThuan ?? summary.DoanhThuHoaDon),
+    moneyLine(t(lang, 'todayCogs'), summary.GiaVonHangBanThuan ?? summary.GiaVon),
+    moneyLine(t(lang, 'todayGross'), summary.LoiNhuanGop)
 ];
 
 const channelBlock = (summary, lang) => {
     const channels = [
-        ['💵', t(lang, 'todayCash'), Number(summary.TienMat || 0)],
-        ['📱', t(lang, 'todayQr'), Number(summary.TienQR || 0)],
-        ['💳', t(lang, 'todayCard'), Number(summary.TienThe || 0)],
-        ['🏦', t(lang, 'todayTransfer'), Number(summary.TienCK || 0)]
+        [t(lang, 'todayCash'), Number(summary.TienMat || 0)],
+        [t(lang, 'todayQr'), Number(summary.TienQR || 0)],
+        [t(lang, 'todayCard'), Number(summary.TienThe || 0)],
+        [t(lang, 'todayTransfer'), Number(summary.TienCK || 0)]
     ];
-    const total = channels.reduce((sum, row) => sum + row[2], 0);
-    return channels.map(([icon, label, value]) => (
-        `${icon} ${escapeHtml(label)}  ${moneyCode(value)}  <code>${progressBar(value, total, 5)}</code>`
-    ));
+    return channels.map(([label, value]) => `${channelIcon(label)} <b>${escapeHtml(label)}</b>  ${moneyCode(value)}`);
 };
 
 const alertBlock = (summary, lang) => {
     const none = t(lang, 'todayNone');
     return [
-        `<b>${escapeHtml(t(lang, 'todayAlerts'))}</b>`,
-        `• ${t(lang, 'todayDebtDue')}: ${textCode(String(summary.congNoDenHan ?? 0))} ${t(lang, 'todayKhoan')}`,
-        `• ${t(lang, 'todayPayPending')}: ${textCode(String(summary.choXacNhan ?? 0))}`,
-        `• ${t(lang, 'todayRestock')}: ${textCode(String(summary.spCanBoSung ?? 0))}`,
-        `• ${t(lang, 'todayShiftGap')}: ${textCode((summary.caLech || []).join(', ') || none)}`,
-        summary.caDangMo != null ? `• ${t(lang, 'todayOpenShift')}: ${textCode(String(summary.caDangMo))}` : ''
+        sectionTitle('🔔', t(lang, 'todayAlerts')),
+        `• ${t(lang, 'todayDebtDue')}: <b>${summary.congNoDenHan ?? 0}</b> ${t(lang, 'todayKhoan')}`,
+        `• ${t(lang, 'todayPayPending')}: <b>${summary.choXacNhan ?? 0}</b>`,
+        `• ${t(lang, 'todayRestock')}: <b>${summary.spCanBoSung ?? 0}</b>`,
+        `• ${t(lang, 'todayShiftGap')}: <b>${escapeHtml((summary.caLech || []).join(', ') || none)}</b>`,
+        summary.caDangMo != null ? `• ${t(lang, 'todayOpenShift')}: <b>${summary.caDangMo}</b>` : ''
     ].filter(Boolean);
 };
 
@@ -1406,11 +1490,10 @@ const detailLines = (rows, mapFn, empty) => {
 const buildTodayMessage = (summary, lang = DEFAULT_LANG) => {
     const lines = [
         headerBlock(`📊 <b>${escapeHtml(t(lang, 'todayTitle'))}</b>`),
-        `<i>${escapeHtml(t(lang, 'todayDay', { day: formatVnDate(summary.operatingDay) }))}</i>`,
-        '',
-        ...moneyBlock(summary, lang),
+        buildOpsKpiBlock(summary, [], lang),
         summary.SoHoaDon != null ? `${t(lang, 'todayInvoices')}: ${textCode(String(summary.SoHoaDon))}` : '',
         '',
+        sectionTitle('💳', t(lang, 'dashPay')),
         ...channelBlock(summary, lang),
         '',
         ...alertBlock(summary, lang)
@@ -1435,7 +1518,7 @@ const buildRevenueMessage = (summary, lang = DEFAULT_LANG) => tidyLines([
     ...moneyBlock(summary, lang),
     summary.SoHoaDon != null ? `${t(lang, 'todayInvoices')}: ${textCode(String(summary.SoHoaDon))}` : '',
     '',
-    `<b>${escapeHtml(t(lang, 'dashPay'))}</b>`,
+    sectionTitle('💳', t(lang, 'dashPay')),
     ...channelBlock(summary, lang),
     summary.invoices?.length ? '' : '',
     ...(summary.invoices?.length ? [
@@ -1464,33 +1547,16 @@ const inboxLine = (item, lang = DEFAULT_LANG) => {
 };
 
 const buildFlyDashboard = ({ summary = {}, inbox = [] } = {}, lang = DEFAULT_LANG) => {
-    const none = t(lang, 'todayNone');
-    const lech = (summary.caLech || []).slice(0, 5).join(', ') || none;
     const latest = inbox.slice(0, 5);
-    const alertCount = Number(summary.congNoDenHan || 0)
-        + Number(summary.choXacNhan || 0)
-        + Number(summary.spCanBoSung || 0)
-        + Number((summary.caLech || []).length);
-    const pulse = alertCount > 4 ? '🔴 Ưu tiên xử lý' : (alertCount ? '🟡 Cần theo dõi' : '🟢 Ổn định');
     return tidyLines([
         headerBlock(`🏪 <b>${escapeHtml(t(lang, 'dashBrand'))}</b>`),
-        `<i>${escapeHtml(t(lang, 'todayDay', { day: formatVnDate(summary.operatingDay) }))}</i>`,
-        '',
-        `<blockquote>⚡ <b>Trạng thái vận hành</b>  ${pulse}</blockquote>`,
-        sectionTitle('📊', t(lang, 'dashOps')),
-        ...moneyBlock(summary, lang),
+        buildOpsKpiBlock(summary, inbox, lang),
         summary.SoHoaDon != null ? `${t(lang, 'todayInvoices')}: ${textCode(String(summary.SoHoaDon))}` : '',
         '',
-        sectionTitle('💠', t(lang, 'dashPay')),
+        sectionTitle('💳', t(lang, 'dashPay')),
         ...channelBlock(summary, lang),
         '',
-        sectionTitle('🛰', t(lang, 'dashWatch')),
-        `⏳ ${t(lang, 'dashPending')}: ${textCode(String(inbox.length))}`,
-        `🧾 ${t(lang, 'dashDebtDue')}: ${textCode(String(summary.congNoDenHan ?? 0))}`,
-        `🕐 ${t(lang, 'dashOpenShift')}: ${textCode(String(summary.caDangMo ?? 0))} · ${t(lang, 'dashGapShift')}: ${textCode(lech)}`,
-        `📦 ${t(lang, 'dashRestock')}: ${textCode(String(summary.spCanBoSung ?? 0))}`,
-        '',
-        `<b>🔔 ${escapeHtml(t(lang, 'dashInbox'))}</b>`,
+        sectionTitle('🔔', t(lang, 'dashInbox')),
         ...(latest.length ? latest.map(item => inboxLine(item, lang)) : [`<i>${escapeHtml(t(lang, 'dashInboxEmpty'))}</i>`]),
         latest.some(isAttendanceInbox) ? `<i>${escapeHtml(t(lang, 'attendanceFlyPath'))}</i>` : '',
         '',
@@ -1504,7 +1570,7 @@ const buildDebtMessage = ({ summary = {}, rows = [] } = {}, lang = DEFAULT_LANG)
     const lines = [
         headerBlock(`🧾 <b>${escapeHtml(t(lang, 'debtTitle'))}</b>`),
         `<blockquote>${overdue ? '🔴' : '🟢'} <b>${escapeHtml(t(lang, 'debtRemain'))}</b>  ${moneyCode(summary.TongConLai)}\n${escapeHtml(t(lang, 'debtOverdue'))}: ${textCode(String(overdue))} · ${escapeHtml(t(lang, 'debtSoon'))}: ${textCode(String(summary.SapHan || 0))}</blockquote>`,
-        `${t(lang, 'debtCount')}: ${textCode(String(total))}  <code>${progressBar(total - overdue, total, 7)}</code>`,
+        `${t(lang, 'debtCount')}: ${textCode(String(total))}  ${progressBar(total - overdue, total, 7)}`,
         '',
         `<b>${escapeHtml(t(lang, 'debtTop'))}</b>`
     ];
@@ -1528,7 +1594,7 @@ const buildLowstockMessage = (rows, lang = DEFAULT_LANG) => {
             const current = Number(row.SLTon || 0);
             const minimum = Number(row.TonKhoToiThieu || 0);
             const tone = current <= 0 ? '🔴' : (current < minimum / 2 ? '🟠' : '🟡');
-            return `${tone} <b>${escapeHtml(row.TenSP)}</b>  ${textCode(`${current}/${minimum}`)}\n   <code>${progressBar(current, minimum, 8)}</code>`;
+            return `${tone} <b>${escapeHtml(row.TenSP)}</b>  ${textCode(`${current}/${minimum}`)}\n   ${progressBar(current, minimum, 8)}`;
         })
     ].join('\n');
 };
@@ -1717,7 +1783,7 @@ const buildPayrollSummaryMessage = (summary, month, lang = DEFAULT_LANG) => [
     `${t(lang, 'payrollStaff')}: ${textCode(String(summary.SoNV || 0))}`,
     `✅ ${t(lang, 'payrollPaid')}: ${textCode(String(summary.DaChi || 0))}`,
     `⏳ ${t(lang, 'payrollUnpaid')}: ${textCode(String(summary.ChuaChi || 0))}`,
-    `<code>${progressBar(summary.DaChi, summary.SoNV, 10)}</code>`
+    `${progressBar(summary.DaChi, summary.SoNV, 10)}`
 ].join('\n');
 
 const buildPayrollOneMessage = (row, maNV, month, lang = DEFAULT_LANG) => [
@@ -1769,7 +1835,7 @@ const buildSimplePush = (title, fields, lang = DEFAULT_LANG) => buildPushCard({
     title,
     rows: Object.entries(fields).map(([label, value]) => kv(label, typeof value === 'number' || /đ$/.test(String(value))
         ? (Number.isFinite(Number(String(value).replace(/\D/g, ''))) && /đ$/.test(String(value))
-            ? `<code>${escapeHtml(String(value))}</code>`
+            ? `<b>${escapeHtml(String(value))}</b>`
             : textCode(formatTelegramValue(value, lang)))
         : textCode(formatTelegramValue(value, lang))))
 }, lang);
@@ -1797,6 +1863,8 @@ const REPLY_CMD_KEYS = [
 ];
 
 const FLY_LABEL_KEYS = [
+    { key: 'flyHome', name: 'fly' },
+    { key: 'navHome', name: 'fly' },
     { key: 'flyDocs', name: 'docs' },
     { key: 'btnDocs', name: 'docs' },
     { key: 'flyReports', name: 'reports' },
@@ -1829,7 +1897,7 @@ const REPLY_NEEDLES = [
     { name: 'payments', needles: ['thanh toán', 'payments', '支付'] },
     { name: 'alerts', needles: ['cảnh báo', 'alerts', '提醒'] },
     { name: 'today', needles: ['hôm nay', 'today', '今日经营'] },
-    { name: 'fly', needles: ['tóm tắt /fly', 'summary /fly', '摘要 /fly', 'tóm tắt', 'summary'] },
+    { name: 'fly', needles: ['tóm tắt /fly', 'summary /fly', '摘要 /fly', 'tóm tắt', 'summary', 'cập nhật', 'tổng quan', 'làm mới', 'refresh', '刷新'] },
     { name: 'langmenu', needles: ['ngôn ngữ', 'language', '语言'] },
     { name: 'help', needles: ['trợ giúp', 'help', '帮助'] },
     { name: 'askwait', needles: ['hỏi trợ lý', 'ask assistant', '问助手'] },
@@ -1849,7 +1917,7 @@ const REPLY_FALLBACK = [
     { name: 'shifts', re: /ca\s*&\s*quỹ|shifts\s*&\s*cash|班次与钱箱|^🕐/i },
     { name: 'payments', re: /thanh toán|payments|支付/i },
     { name: 'alerts', re: /cảnh báo|alerts|提醒/i },
-    { name: 'fly', re: /tóm tắt|summary\s*\/fly|摘要\s*\/fly/i },
+    { name: 'fly', re: /tóm tắt|summary\s*\/fly|摘要\s*\/fly|cập nhật|tổng quan|làm mới|^refresh$/i },
     { name: 'langmenu', re: /ngôn ngữ|language|语言/i },
     { name: 'help', re: /trợ giúp|\/help|帮助/i },
     { name: 'askwait', re: /hỏi trợ lý|ask assistant|问助手/i },
@@ -1917,6 +1985,7 @@ const matchReplyCommand = (text) => {
 
 const REPORT_MENU_ITEMS = [
     { id: 'wh', key: 'rptWarehouse' },
+    { id: 'dept', key: 'rptDept' },
     { id: 'today', key: 'rptToday' },
     { id: 'debt', key: 'rptDebt' },
     { id: 'pending', key: 'rptPending' },
@@ -2032,19 +2101,19 @@ const buildManagementReportMessage = ({ report, previousReport } = {}, lang = DE
         `<blockquote>${statusIcon} <b>${escapeHtml(op.trangThai || 'CHƯA XÁC ĐỊNH')}</b>  ${moneyCode(net)}\nBiên lãi gộp ${textCode(percentText(grossMargin))} · Biên sau chi phí ${textCode(percentText(netMargin))}</blockquote>`,
         '',
         sectionTitle('💰', 'KẾT QUẢ KINH DOANH'),
-        `Doanh thu hóa đơn: ${moneyCode(sales.doanhThuHoaDon)}`,
-        `Trừ hoàn tiền: −${moneyCode(sales.tienHoan)}`,
-        `<b>Doanh thu thuần:</b> ${moneyCode(revenue)}`,
-        `Giá vốn thuần: −${moneyCode(cogs.giaVonThuan)}`,
-        `<b>Lãi gộp:</b> ${moneyCode(gross)}`,
-        `Chi NCC + cước: −${moneyCode(op.chiPhiBenThu3)}`,
-        `Lương đã khóa: −${moneyCode(op.chiPhiNhanVien)}`,
-        `<b>= Lãi/lỗ sau chi phí:</b> ${moneyCode(net)}`,
+        `🧾 Doanh thu hóa đơn: ${moneyCode(sales.doanhThuHoaDon)}`,
+        `↩️ Trừ hoàn tiền: −${moneyCode(sales.tienHoan)}`,
+        `💰 <b>Doanh thu thuần:</b> ${moneyCode(revenue)}`,
+        `📦 Giá vốn thuần: −${moneyCode(cogs.giaVonThuan)}`,
+        `📈 <b>Lãi gộp:</b> ${moneyCode(gross)}`,
+        `🏭 Chi NCC + cước: −${moneyCode(op.chiPhiBenThu3)}`,
+        `💼 Lương đã khóa: −${moneyCode(op.chiPhiNhanVien)}`,
+        `${statusIcon} <b>= Lãi/lỗ sau chi phí:</b> ${moneyCode(net)}`,
         '',
         sectionTitle('📈', 'TỶ LỆ DỄ NHÌN'),
-        `Giá vốn  <code>${progressBar(cogsRate, 100, 8)}</code>`,
-        `Lãi gộp  <code>${progressBar(Math.max(0, grossMargin), 100, 8)}</code>`,
-        `${netMargin < 0 ? 'Mức lỗ ' : 'Sau chi phí'} <code>${progressBar(Math.abs(netMargin), 100, 8)}</code>`,
+        `📦 Giá vốn  <code>${progressBar(cogsRate, 100, 8)}</code>`,
+        `📈 Lãi gộp  <code>${progressBar(Math.max(0, grossMargin), 100, 8)}</code>`,
+        `${netMargin < 0 ? '🔴 Mức lỗ ' : '🟢 Sau chi phí'} <code>${progressBar(Math.abs(netMargin), 100, 8)}</code>`,
         '',
         sectionTitle('🔄', `SO VỚI ${previousLabel.toLocaleUpperCase('vi-VN')}`),
         reportDeltaLine('Doanh thu thuần', revenue, previous.doanhThuThuan),
@@ -2057,9 +2126,9 @@ const buildManagementReportMessage = ({ report, previousReport } = {}, lang = DE
         `Đổi trả: ${textCode(String(reportNumber(sales.soPhieuDoiTra)))} phiếu · Hoàn ${moneyCode(sales.tienHoan)} (${textCode(percentText(returnRate))})`,
         '',
         sectionTitle('💳', 'TIỀN ĐÃ THU'),
-        `Tổng thu ghi nhận: ${moneyCode(cash.tongTienThu)}`,
-        `Tiền mặt: ${moneyCode(cash.tienMatPhieuThu)} · QR: ${moneyCode(cash.qr)}`,
-        `Thẻ: ${moneyCode(cash.the)} · Chuyển khoản: ${moneyCode(cash.chuyenKhoan)}`
+        `💵 Tổng thu ghi nhận: ${moneyCode(cash.tongTienThu)}`,
+        `💵 Tiền mặt: ${moneyCode(cash.tienMatPhieuThu)} · 📱 QR: ${moneyCode(cash.qr)}`,
+        `💳 Thẻ: ${moneyCode(cash.the)} · 🏦 Chuyển khoản: ${moneyCode(cash.chuyenKhoan)}`
     ];
     if (topSuppliers.length) {
         lines.push('', sectionTitle('🏭', 'CHI NCC LỚN NHẤT'));
@@ -2101,7 +2170,7 @@ const managementReportKeyboard = ({ periodType, period, previous, next, canNext,
     return { inline_keyboard: rows };
 };
 
-const removeKeyboardMarkup = () => ({ remove_keyboard: true });
+const removeKeyboardMarkup = () => ({ remove_keyboard: true }); // ReplyKeyboardRemove only — never ChatMenuButton
 
 const showMenuInlineKeyboard = (lang = DEFAULT_LANG) => ({
     inline_keyboard: [[{ text: t(lang, 'kbShow'), callback_data: 'cmd:showkb' }]]
@@ -2137,6 +2206,8 @@ const replyKeyboard = (lang = DEFAULT_LANG, { bound = false } = {}) => {
 module.exports = {
     formatMoney,
     escapeHtml,
+    liteMarkdownToHtml,
+    stripTelegramLeftovers,
     moneyCode,
     textCode,
     progressBar,

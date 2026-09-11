@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { logAudit } = require('../services/auditLog');
 const { validateNewPassword } = require('../services/fieldValidators');
+const { loadEffectiveCodes, attachEffectivePermissions } = require('../services/effectivePermissions');
 
 const login = async (req, res) => {
     try {
@@ -67,12 +68,7 @@ const login = async (req, res) => {
             console.log('Lỗi ghi nhật ký đăng nhập:', err.message);
         }
 
-        const permissionResult = await pool.request()
-            .input('MaVaiTro', sql.Int, user.MaVaiTro)
-            .query(`SELECT MaChucNang
-                    FROM VaiTro_ChucNang
-                    WHERE MaVaiTro = @MaVaiTro AND DuocPhep = 1
-                    ORDER BY MaChucNang`);
+        const quyen = await loadEffectiveCodes(pool, user);
 
         let preferences = { ngonNgu: 'vi', giaoDien: 'light' };
         try {
@@ -98,7 +94,7 @@ const login = async (req, res) => {
                 TenNV: user.TenNV,
                 MaVaiTro: user.MaVaiTro,
                 TenVaiTro: user.TenVaiTro,
-                Quyen: permissionResult.recordset.map(item => item.MaChucNang)
+                Quyen: quyen
             },
             preferences
         });
@@ -166,7 +162,38 @@ const changePassword = async (req, res) => {
     }
 };
 
+const getSession = async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const row = await pool.request()
+            .input('MaTK', sql.Int, req.user.MaTK)
+            .query(`SELECT t.MaTK, t.MaNV, t.MaVaiTro, v.TenVaiTro, n.TenNV
+                    FROM TaiKhoan t
+                    JOIN VaiTro v ON t.MaVaiTro = v.MaVaiTro
+                    JOIN NhanVien n ON t.MaNV = n.MaNV
+                    WHERE t.MaTK = @MaTK`);
+        if (!row.recordset.length) {
+            return res.status(404).json({ message: 'Không tìm thấy tài khoản.' });
+        }
+        const session = row.recordset[0];
+        await attachEffectivePermissions(pool, session);
+        res.json({
+            user: {
+                MaNV: session.MaNV,
+                TenNV: session.TenNV,
+                MaVaiTro: session.MaVaiTro,
+                TenVaiTro: session.TenVaiTro,
+                Quyen: session.Quyen
+            }
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Không tải được phiên làm việc.' });
+    }
+};
+
 module.exports = {
     login,
-    changePassword
+    changePassword,
+    getSession
 };

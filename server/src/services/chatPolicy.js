@@ -1,22 +1,26 @@
 'use strict';
 
-/** Ma trận kênh CHỐT MỚI — kho ↔ mua hàng; TN không vào #kế-toán. */
+/** Chat nội bộ: một kênh chung. Các KenhVaiTro giữ seed để đồng bộ ẩn, không mở lại. */
 const ROOM_SEED = [
     { MaPhong: 'CH_CUAHANG', Khoa: 'cua-hang', TenPhong: '#cửa-hàng', LoaiPhong: 'KenhChung', VaiTroNeo: null },
     { MaPhong: 'CH_QUANLY', Khoa: 'quan-ly', TenPhong: '#quản-lý', LoaiPhong: 'KenhVaiTro', VaiTroNeo: 'Quản lý' },
     { MaPhong: 'CH_KHO', Khoa: 'kho', TenPhong: '#kho', LoaiPhong: 'KenhVaiTro', VaiTroNeo: 'Thủ kho' },
     { MaPhong: 'CH_MUAHANG', Khoa: 'mua-hang', TenPhong: '#mua-hàng', LoaiPhong: 'KenhVaiTro', VaiTroNeo: 'Nhân viên mua hàng' },
     { MaPhong: 'CH_KETOAN', Khoa: 'ke-toan', TenPhong: '#kế-toán', LoaiPhong: 'KenhVaiTro', VaiTroNeo: 'Kế toán' },
-    { MaPhong: 'CH_THUNGAN', Khoa: 'thu-ngan', TenPhong: '#thu-ngân', LoaiPhong: 'KenhVaiTro', VaiTroNeo: 'Thu ngân' }
+    { MaPhong: 'CH_THUNGAN', Khoa: 'thu-ngan', TenPhong: '#thu-ngân', LoaiPhong: 'KenhVaiTro', VaiTroNeo: 'Thu ngân' },
+    { MaPhong: 'CH_GIAHAN', Khoa: 'gia-han-ncc', TenPhong: '#gia-hạn NCC', LoaiPhong: 'KenhChung', VaiTroNeo: null }
 ];
 
+const ALL_STORE_ROLES = ['Quản lý', 'Nhân viên mua hàng', 'Thủ kho', 'Thu ngân', 'Kế toán'];
+
 const ROOM_MATRIX = {
-    'cua-hang': ['Quản lý', 'Nhân viên mua hàng', 'Thủ kho', 'Thu ngân', 'Kế toán'],
-    'quan-ly': ['Quản lý'],
-    'kho': ['Quản lý', 'Thủ kho', 'Nhân viên mua hàng'],
-    'mua-hang': ['Quản lý', 'Nhân viên mua hàng', 'Thủ kho'],
-    'ke-toan': ['Quản lý', 'Kế toán'],
-    'thu-ngan': ['Quản lý', 'Thu ngân']
+    'cua-hang': ALL_STORE_ROLES,
+    'quan-ly': [],
+    'kho': [],
+    'mua-hang': [],
+    'ke-toan': [],
+    'thu-ngan': [],
+    'gia-han-ncc': []
 };
 
 const ROLE_FOLD = (value) => String(value || '').trim().toLocaleLowerCase('vi-VN');
@@ -66,7 +70,7 @@ const scanMessage = (text) => {
     const hints = [];
     if (hasTwelve) hints.push(SOFT_TWELVE);
     if (PAY_HINT_RE.test(raw)) {
-        hints.push('Kênh có thể hiện với nhiều bộ phận. Lương / số tài khoản để #kế-toán (và Quản lý).');
+        hints.push('Kênh chung hiện với mọi bộ phận. Lương / số tài khoản không gửi ở đây.');
     }
     if (APPROVE_HINT_RE.test(raw)) {
         hints.push('Mở Trung tâm phê duyệt hoặc nút Telegram. Chat không duyệt được chứng từ.');

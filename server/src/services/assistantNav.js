@@ -3,6 +3,7 @@ const SCREENS = {
     approvals: { target: 'manager-purchase-approvals', label: 'Trung tâm phê duyệt' },
     managerPayables: { target: 'manager-payables', label: 'Theo dõi công nợ' },
     managerReports: { target: 'manager-reports', label: 'Báo cáo cửa hàng' },
+    deptReports: { target: 'admin-department-reports', label: 'Báo cáo bộ phận' },
     kqkd: { target: 'ledger-kqkd', label: 'Kết quả kinh doanh' },
     cashflow: { target: 'ledger-cf', label: 'Lưu chuyển tiền tệ' },
     trial: { target: 'ledger-trial', label: 'Cân đối phát sinh' },
@@ -24,7 +25,7 @@ const SCREENS = {
 const byRole = (user) => {
     const role = String(user?.TenVaiTro || '').trim().toLocaleLowerCase('vi-VN');
     if (role === 'quản lý') {
-        return [SCREENS.home, SCREENS.approvals, SCREENS.managerPayables, SCREENS.managerReports, SCREENS.kqkd, SCREENS.cashflow];
+        return [SCREENS.home, SCREENS.approvals, SCREENS.managerPayables, SCREENS.managerReports, SCREENS.deptReports, SCREENS.kqkd, SCREENS.cashflow];
     }
     if (role === 'nhân viên mua hàng') {
         return [SCREENS.purchasingInbox, SCREENS.purchaseOrders, SCREENS.suppliers];

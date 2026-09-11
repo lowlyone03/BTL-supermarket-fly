@@ -1,5 +1,7 @@
 const { poolPromise } = require('../config/db');
 const { ask, getBrief, runUserScenario } = require('../services/assistantService');
+const { catalogFor } = require('../services/assistantScenarios');
+const { attachEffectivePermissions } = require('../services/effectivePermissions');
 const { humanizeSources } = require('../services/assistantCopy');
 const {
     canReadPurchase,
@@ -153,6 +155,16 @@ const postScenario = async (req, res) => {
     }
 };
 
+const getScenarios = async (req, res) => {
+    try {
+        const db = await poolPromise;
+        await attachEffectivePermissions(db, req.user);
+        res.json(catalogFor(req.user));
+    } catch (error) {
+        fail(res, error);
+    }
+};
+
 const getDocument = async (req, res) => {
     try {
         const result = await getDocumentPrint(await poolPromise, req.user, req.params.kind, req.params.id);
@@ -168,6 +180,7 @@ module.exports = {
     getAlerts,
     getInsights,
     postScenario,
+    getScenarios,
     getPurchaseInvoices,
     getPurchaseInvoice,
     getSalesInvoices,

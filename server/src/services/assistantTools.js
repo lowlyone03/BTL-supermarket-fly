@@ -1,12 +1,5 @@
-const { ROLE_PERMISSION_CODES } = require('../constants/permissions');
 const { listForRole, roleOf, isRole } = require('./inboxService');
-
-const codesOf = (user) => {
-    const key = String(user?.TenVaiTro || '').trim().toLocaleLowerCase('vi-VN');
-    return ROLE_PERMISSION_CODES[key] || [];
-};
-
-const hasUc = (user, code) => codesOf(user).includes(code);
+const { codesOf, hasUc } = require('./effectivePermissions');
 
 const money = (value) => {
     const number = Number(value);

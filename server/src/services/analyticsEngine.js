@@ -1,16 +1,10 @@
 const { sql } = require('../config/db');
 const { resolveReportingPeriod } = require('./reportingPeriod');
 const { listForRole, isRole } = require('./inboxService');
-const { ROLE_PERMISSION_CODES } = require('../constants/permissions');
+const { codesOf, hasUc } = require('./effectivePermissions');
 const { action } = require('./assistantNav');
 const { scoreSupplier, scorePurchaseOrder, scoreShift } = require('./riskEngine');
 const storeProfitLoss = require('./storeProfitLoss');
-
-const codesOf = (user) => {
-    const key = String(user?.TenVaiTro || '').trim().toLocaleLowerCase('vi-VN');
-    return ROLE_PERMISSION_CODES[key] || [];
-};
-const hasUc = (user, code) => codesOf(user).includes(code);
 
 const n = (value) => {
     const parsed = Number(value);

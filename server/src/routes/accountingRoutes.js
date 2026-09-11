@@ -20,8 +20,11 @@ router.get('/purchase-invoices/:id', requirePermission('UC27'), controller.getIn
 router.post('/purchase-invoices', requirePermission('UC27'), controller.createInvoice);
 router.post('/purchase-invoices/:id/reconcile', requirePermission('UC27'), controller.reconcileInvoice);
 router.get('/payables', requirePermission('UC28'), paymentVoucher.listPayables);
-router.get('/payables/:id', requirePermission('UC28'), paymentVoucher.getPayable);
+router.get('/extension-queue', requireAnyPermission(['UC11', 'UC10', 'UC28']), paymentVoucher.listExtensionQueue);
+router.get('/payables/:id', requireAnyPermission(['UC28', 'UC11', 'UC10']), paymentVoucher.getPayable);
 router.post('/payables/:id/payment-voucher', requirePermission('UC28'), paymentVoucher.createVoucher);
+router.post('/payables/:id/extension-request', requireAnyPermission(['UC28', 'UC11', 'UC10']), paymentVoucher.requestExtension);
+router.post('/payables/:id/extension-grant', requireAnyPermission(['UC11', 'UC10']), paymentVoucher.grantExtension);
 router.post('/payment-vouchers/bulk', requirePermission('UC28'), paymentVoucher.createVouchersBulk);
 router.post('/payment-vouchers/:id/resubmit', requirePermission('UC28'), paymentVoucher.resubmitVoucher);
 router.post('/payment-vouchers/:id/pay', requirePermission('UC28'), paymentVoucher.payVoucher);
@@ -30,6 +33,10 @@ router.get('/shift-settlements/:id', requirePermission('UC29'), settlement.getSh
 router.post('/shift-settlements/:id/receipt', requirePermission('UC29'), settlement.createReceipt);
 router.post('/shift-receipts/:id/confirm', requirePermission('UC29'), settlement.confirmReceipt);
 router.get('/reports/financial-summary', requirePermission('UC29'), reportController.getFinancialReport);
+router.post('/reports/submit', requireAnyPermission(['UC29', 'UC43']), (req, res) => reportController.submitDepartmentReport(req, res, 'KT_NOI_BO'));
+router.get('/reports/submissions', requireAnyPermission(['UC29', 'UC43']), (req, res) => reportController.listMyDepartmentReports(req, res, 'KT_NOI_BO'));
+router.get('/reports/submissions/:id', requireAnyPermission(['UC29', 'UC43']), reportController.getAdminDepartmentReport);
+router.delete('/reports/submissions/:id', requireAnyPermission(['UC29', 'UC43']), reportController.withdrawDepartmentReport);
 router.get('/reports/financial-documents', requirePermission('UC29'), reportController.getReportDocuments);
 router.get('/activity-log', requireRole('Kế toán'), requireAnyPermission(['UC27', 'UC28', 'UC29', 'UC33']), payrollVoucher.getAccountantActivity);
 router.get('/payroll-payouts', accountantPayroll, payrollVoucher.getPayoutHistory);

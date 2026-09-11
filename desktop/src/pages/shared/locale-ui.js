@@ -11,10 +11,46 @@
     return { year: get('year'), month: get('month'), day: get('day') };
   };
   const currentYear = () => Number(vietnamNow().year);
-  const yearList = (selected) => {
-    const selectedYear = Number(selected) || currentYear();
-    const years = new Set([selectedYear, ...Array.from({ length: 16 }, (_, index) => currentYear() - 8 + index)]);
-    return [...years].filter(year => year >= 2000 && year <= 2100).sort((a, b) => a - b);
+  const YEAR_PRESETS = {
+    birth: { min: () => 1940, max: now => now - 16 },
+    issue: { min: () => 1980, max: now => now },
+    hire: { min: () => 1990, max: now => now + 1 },
+    report: { min: now => now - 8, max: now => now + 7 },
+    expiry: { min: now => now - 2, max: now => now + 20 },
+    general: { min: () => 2000, max: now => now + 5 }
+  };
+  const PRESET_TITLES = {
+    birth: 'Năm sinh',
+    issue: 'Năm cấp CCCD',
+    hire: 'Năm vào làm',
+    expiry: 'Năm hết hạn',
+    report: 'Năm kỳ báo cáo',
+    general: 'Chọn năm'
+  };
+  const inferYearPreset = ({ id = '', extraClass = '', dataset = {} } = {}) => {
+    const explicit = String(dataset.dateRange || dataset.yearRange || dataset.yearPreset || '').trim();
+    if (explicit && YEAR_PRESETS[explicit]) return explicit;
+    const hay = `${id} ${extraClass}`.toLowerCase();
+    if (/ngaysinh|birthday|namsinh/.test(hay)) return 'birth';
+    if (/ngaycapcccd|ngaycap/.test(hay)) return 'issue';
+    if (/ngayvaolam|ngaybatdau/.test(hay)) return 'hire';
+    if (/\bexpiry\b|hansudung|ngayhethan/.test(hay)) return 'expiry';
+    if (/report(day|month|year)/.test(hay)) return 'report';
+    return 'general';
+  };
+  const yearList = (selected, preset = 'report') => {
+    const now = currentYear();
+    const spec = YEAR_PRESETS[preset] || YEAR_PRESETS.general;
+    const min = spec.min(now);
+    const max = spec.max(now);
+    const years = [];
+    for (let year = min; year <= max; year += 1) years.push(year);
+    const selectedYear = Number(selected);
+    if (Number.isInteger(selectedYear) && selectedYear >= 1800 && selectedYear <= 2200 && !years.includes(selectedYear)) {
+      years.push(selectedYear);
+      years.sort((a, b) => a - b);
+    }
+    return years;
   };
   const calendarKeyFromDate = date => {
     if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
@@ -70,8 +106,16 @@
     const matched = selected !== '' && selected != null && (Number(value) === Number(selected) || String(value) === String(selected));
     return `<option value="${value}" ${matched ? 'selected' : ''}>${labelFn ? labelFn(value) : value}</option>`;
   }).join('');
+  const yearChevron = '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const yearControlHtml = (years, selectedYear, optional) => {
+    const empty = optional ? '<option value="">—</option>' : '';
+    const hasValue = selectedYear !== '' && selectedYear != null;
+    const label = hasValue ? `Năm ${selectedYear}` : 'Chọn năm';
+    return `<div class="fly-vi-year-wrap"><select class="fly-vi-year" tabindex="-1" aria-hidden="true">${empty}${options(years, hasValue ? selectedYear : '', year => `Năm ${year}`)}</select><button type="button" class="fly-vi-year-trigger${hasValue ? '' : ' is-empty'}" aria-haspopup="listbox" aria-expanded="false" aria-label="Chọn năm"><span>${label}</span>${yearChevron}</button></div>`;
+  };
 
-  const dateField = (id, iso = '', extraClass = '', optional = false) => {
+  const dateField = (id, iso = '', extraClass = '', optional = false, preset) => {
+    const range = preset && YEAR_PRESETS[preset] ? preset : inferYearPreset({ id, extraClass });
     const now = vietnamNow();
     const parsed = parseIsoDate(iso) || { year: Number(now.year), month: Number(now.month), day: Number(now.day) };
     const days = Array.from({ length: daysInMonth(parsed.year, parsed.month) }, (_, index) => index + 1);
@@ -80,30 +124,36 @@
     const selectedMonth = iso ? parsed.month : (optional ? '' : parsed.month);
     const selectedYear = iso ? parsed.year : (optional ? '' : parsed.year);
     const value = iso || (optional ? '' : `${parsed.year}-${pad(parsed.month)}-${pad(parsed.day)}`);
-    return `<div class="fly-vi-date" data-kind="date" ${optional ? 'data-optional="1"' : ''}><select class="fly-vi-day" aria-label="Ngày">${empty}${options(days, selectedDay, day => `Ngày ${day}`)}</select><select class="fly-vi-month" aria-label="Tháng">${empty}${options([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], selectedMonth, month => MONTHS[month - 1])}</select><select class="fly-vi-year" aria-label="Năm">${empty}${options(yearList(parsed.year), selectedYear, year => `Năm ${year}`)}</select><input type="hidden" id="${id}" class="${extraClass}" value="${value}"></div>`;
+    return `<div class="fly-vi-date" data-kind="date" data-year-preset="${range}" ${optional ? 'data-optional="1"' : ''}><select class="fly-vi-day" aria-label="Ngày">${empty}${options(days, selectedDay, day => `Ngày ${day}`)}</select><select class="fly-vi-month" aria-label="Tháng">${empty}${options([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], selectedMonth, month => MONTHS[month - 1])}</select>${yearControlHtml(yearList(selectedYear, range), selectedYear, optional)}<input type="hidden" id="${id}" class="${extraClass}" value="${value}"></div>`;
   };
 
-  const monthField = (id, ym = '') => {
+  const monthField = (id, ym = '', preset) => {
+    const range = preset && YEAR_PRESETS[preset] ? preset : inferYearPreset({ id });
     const now = vietnamNow();
     const parsed = parseIsoMonth(ym) || parseIsoMonth(`${now.year}-${now.month}`);
-    return `<div class="fly-vi-date" data-kind="month"><select class="fly-vi-month" aria-label="Tháng">${options([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], parsed.month, month => MONTHS[month - 1])}</select><select class="fly-vi-year" aria-label="Năm">${options(yearList(parsed.year), parsed.year, year => `Năm ${year}`)}</select><input type="hidden" id="${id}" value="${ym || `${parsed.year}-${pad(parsed.month)}`}"></div>`;
+    return `<div class="fly-vi-date" data-kind="month" data-year-preset="${range}"><select class="fly-vi-month" aria-label="Tháng">${options([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], parsed.month, month => MONTHS[month - 1])}</select>${yearControlHtml(yearList(parsed.year, range), parsed.year, false)}<input type="hidden" id="${id}" value="${ym || `${parsed.year}-${pad(parsed.month)}`}"></div>`;
   };
 
-  const datetimeField = (id, isoLocal = '') => {
+  const datetimeField = (id, isoLocal = '', preset) => {
+    const range = preset && YEAR_PRESETS[preset] ? preset : inferYearPreset({ id });
     const parsed = parseIsoDateTime(isoLocal) || parseIsoDateTime(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16));
     const days = Array.from({ length: daysInMonth(parsed.year, parsed.month) }, (_, index) => index + 1);
     const hours = Array.from({ length: 24 }, (_, index) => index);
     const minutes = Array.from({ length: 12 }, (_, index) => index * 5);
     const nearestMinute = minutes.reduce((best, item) => Math.abs(item - parsed.minute) < Math.abs(best - parsed.minute) ? item : best, 0);
-    return `<div class="fly-vi-date fly-vi-datetime" data-kind="datetime"><select class="fly-vi-day" aria-label="Ngày">${options(days, parsed.day, day => `Ngày ${day}`)}</select><select class="fly-vi-month" aria-label="Tháng">${options([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], parsed.month, month => MONTHS[month - 1])}</select><select class="fly-vi-year" aria-label="Năm">${options(yearList(parsed.year), parsed.year, year => `Năm ${year}`)}</select><select class="fly-vi-hour" aria-label="Giờ">${options(hours, parsed.hour, hour => `${pad(hour)} giờ`)}</select><select class="fly-vi-minute" aria-label="Phút">${options(minutes, nearestMinute, minute => `${pad(minute)} phút`)}</select><input type="hidden" id="${id}" value="${isoLocal || `${parsed.year}-${pad(parsed.month)}-${pad(parsed.day)}T${pad(parsed.hour)}:${pad(nearestMinute)}`}"></div>`;
+    return `<div class="fly-vi-date fly-vi-datetime" data-kind="datetime" data-year-preset="${range}"><select class="fly-vi-day" aria-label="Ngày">${options(days, parsed.day, day => `Ngày ${day}`)}</select><select class="fly-vi-month" aria-label="Tháng">${options([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], parsed.month, month => MONTHS[month - 1])}</select>${yearControlHtml(yearList(parsed.year, range), parsed.year, false)}<select class="fly-vi-hour" aria-label="Giờ">${options(hours, parsed.hour, hour => `${pad(hour)} giờ`)}</select><select class="fly-vi-minute" aria-label="Phút">${options(minutes, nearestMinute, minute => `${pad(minute)} phút`)}</select><input type="hidden" id="${id}" value="${isoLocal || `${parsed.year}-${pad(parsed.month)}-${pad(parsed.day)}T${pad(parsed.hour)}:${pad(nearestMinute)}`}"></div>`;
   };
 
   const refillDays = (wrap, year, month, selectedDay) => {
     const daySelect = wrap.querySelector('.fly-vi-day');
     if (!daySelect) return selectedDay;
     const max = daysInMonth(year, month);
-    const day = Math.min(Number(selectedDay) || 1, max);
-    daySelect.innerHTML = options(Array.from({ length: max }, (_, index) => index + 1), day, value => `Ngày ${value}`);
+    const optional = wrap.dataset.optional === '1';
+    const empty = optional ? '<option value="">—</option>' : '';
+    const day = (selectedDay === '' || selectedDay == null) && optional
+      ? ''
+      : Math.min(Number(selectedDay) || 1, max);
+    daySelect.innerHTML = `${empty}${options(Array.from({ length: max }, (_, index) => index + 1), day, value => `Ngày ${value}`)}`;
     return day;
   };
 
@@ -135,10 +185,246 @@
     hidden.dispatchEvent(new Event('change', { bubbles: true }));
   };
 
+  const syncYearTrigger = select => {
+    const trigger = select?.closest?.('.fly-vi-year-wrap')?.querySelector('.fly-vi-year-trigger');
+    if (!trigger) return;
+    const label = trigger.querySelector('span');
+    const selected = select.options[select.selectedIndex];
+    if (label) label.textContent = selected?.value ? selected.textContent : 'Chọn năm';
+    trigger.classList.toggle('is-empty', !select.value);
+    trigger.disabled = select.disabled;
+  };
+
+  const refillYears = (wrap, selectedYear) => {
+    const yearSelect = wrap.querySelector('.fly-vi-year');
+    if (!yearSelect) return;
+    const hidden = wrap.querySelector('input[type="hidden"]');
+    const preset = wrap.dataset.yearPreset || inferYearPreset({ id: hidden?.id || '', extraClass: hidden?.className || '' });
+    wrap.dataset.yearPreset = preset;
+    const optional = wrap.dataset.optional === '1';
+    const empty = optional ? '<option value="">—</option>' : '';
+    const current = selectedYear === '' || selectedYear == null ? '' : selectedYear;
+    yearSelect.innerHTML = `${empty}${options(yearList(current, preset), current, year => `Năm ${year}`)}`;
+    yearSelect.value = current === '' ? '' : String(current);
+    syncYearTrigger(yearSelect);
+  };
+
+  let yearPanel = null;
+  let yearPanelSelect = null;
+  let yearPanelDecade = 0;
+
+  const closeYearPanel = () => {
+    if (!yearPanel) return;
+    yearPanel.hidden = true;
+    yearPanel.replaceChildren();
+    document.querySelectorAll('.fly-vi-year-trigger[aria-expanded="true"]').forEach(btn => btn.setAttribute('aria-expanded', 'false'));
+    yearPanelSelect = null;
+  };
+
+  const ensureYearPanel = () => {
+    if (yearPanel) return yearPanel;
+    yearPanel = document.createElement('div');
+    yearPanel.className = 'fly-vi-year-panel';
+    yearPanel.hidden = true;
+    yearPanel.setAttribute('role', 'dialog');
+    yearPanel.setAttribute('aria-label', 'Chọn năm');
+    document.body.appendChild(yearPanel);
+    yearPanel.addEventListener('mousedown', event => event.stopPropagation());
+    yearPanel.addEventListener('click', event => event.stopPropagation());
+    return yearPanel;
+  };
+
+  const decadesOf = years => [...new Set(years.map(year => Math.floor(year / 10) * 10))].sort((a, b) => a - b);
+
+  const defaultDecade = (years, selected, preset) => {
+    if (selected) return Math.floor(Number(selected) / 10) * 10;
+    const list = decadesOf(years);
+    if (preset === 'birth') {
+      const guess = Math.floor((currentYear() - 28) / 10) * 10;
+      return list.includes(guess) ? guess : (list[Math.max(0, Math.floor(list.length * 0.6))] || list[0] || guess);
+    }
+    const nowDecade = Math.floor(currentYear() / 10) * 10;
+    return list.includes(nowDecade) ? nowDecade : (list[list.length - 1] || nowDecade);
+  };
+
+  const pickYearValue = (select, value) => {
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    syncYearTrigger(select);
+    closeYearPanel();
+  };
+
+  const renderYearPanelBody = (select, trigger, searchText = '') => {
+    const panel = ensureYearPanel();
+    const wrap = select.closest('.fly-vi-date');
+    const preset = wrap?.dataset.yearPreset || 'general';
+    const years = Array.from(select.options).filter(opt => opt.value !== '').map(opt => Number(opt.value));
+    const hasEmpty = Array.from(select.options).some(opt => opt.value === '');
+    const selected = select.value;
+    const useGrid = years.length > 20;
+    const decades = decadesOf(years);
+    if (!decades.includes(yearPanelDecade)) {
+      yearPanelDecade = defaultDecade(years, selected, preset);
+    }
+    const decadeYears = years.filter(year => Math.floor(year / 10) * 10 === yearPanelDecade);
+    const title = PRESET_TITLES[preset] || 'Chọn năm';
+    const hint = preset === 'birth'
+      ? 'Nhân viên cửa hàng — chọn năm sinh (có thể gõ 1994)'
+      : 'Gõ 4 số để nhảy tới năm';
+
+    panel.innerHTML = useGrid ? `
+      <div class="fly-vi-year-head">
+        <div>
+          <strong>${title}</strong>
+          <small>${hint}</small>
+        </div>
+      </div>
+      <input class="fly-vi-year-search" type="text" inputmode="numeric" maxlength="4" placeholder="Ví dụ: 1988" autocomplete="off" aria-label="Tìm năm" value="${searchText.replaceAll('"', '&quot;')}">
+      <div class="fly-vi-year-decades">${decades.map(decade => `<button type="button" class="fly-vi-year-chip${decade === yearPanelDecade ? ' is-active' : ''}" data-decade="${decade}">${decade}</button>`).join('')}</div>
+      <div class="fly-vi-year-grid" role="listbox">${decadeYears.map(year => `<button type="button" class="fly-vi-year-cell${String(year) === String(selected) ? ' selected' : ''}" role="option" data-year="${year}" aria-selected="${String(year) === String(selected)}">${year}</button>`).join('')}</div>
+      ${hasEmpty ? '<button type="button" class="fly-vi-year-clear" data-year="">Để trống</button>' : ''}
+    ` : `
+      <div class="fly-vi-year-head"><div><strong>${title}</strong><small>Cuộn để chọn năm</small></div></div>
+      <div class="fly-vi-year-list" role="listbox">
+        ${hasEmpty ? `<button type="button" class="fly-vi-year-option${selected === '' ? ' selected' : ''}" data-year="">—</button>` : ''}
+        ${years.map(year => `<button type="button" class="fly-vi-year-option${String(year) === String(selected) ? ' selected' : ''}" role="option" data-year="${year}">Năm ${year}</button>`).join('')}
+      </div>
+    `;
+
+    panel.querySelectorAll('[data-year]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.preventDefault();
+        pickYearValue(select, button.getAttribute('data-year'));
+      });
+    });
+    panel.querySelectorAll('[data-decade]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.preventDefault();
+        yearPanelDecade = Number(button.dataset.decade);
+        const typed = panel.querySelector('.fly-vi-year-search')?.value || '';
+        renderYearPanelBody(select, trigger, typed);
+        panel.querySelector('.fly-vi-year-search')?.focus();
+      });
+    });
+    const search = panel.querySelector('.fly-vi-year-search');
+    if (search) {
+      search.addEventListener('input', () => {
+        const raw = search.value.replace(/\D/g, '').slice(0, 4);
+        if (raw !== search.value) search.value = raw;
+        let nextDecade = yearPanelDecade;
+        if (raw.length === 4) nextDecade = Math.floor(Number(raw) / 10) * 10;
+        else if (raw.length === 3) nextDecade = Number(raw) * 10;
+        if (decades.includes(nextDecade) && nextDecade !== yearPanelDecade) {
+          yearPanelDecade = nextDecade;
+          renderYearPanelBody(select, trigger, raw);
+          const next = yearPanel?.querySelector('.fly-vi-year-search');
+          if (next) {
+            next.focus();
+            next.value = raw;
+            next.setSelectionRange(raw.length, raw.length);
+          }
+          return;
+        }
+        if (raw.length === 4) {
+          panel.querySelectorAll('.fly-vi-year-cell').forEach(cell => {
+            cell.classList.toggle('selected', cell.dataset.year === raw);
+          });
+        }
+      });
+      search.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          const raw = search.value.replace(/\D/g, '');
+          if (raw.length === 4 && years.includes(Number(raw))) pickYearValue(select, raw);
+        }
+      });
+    }
+
+    panel.hidden = false;
+    const rect = trigger.getBoundingClientRect();
+    const width = Math.max(rect.width, useGrid ? 296 : 220);
+    const panelWidth = Math.min(width, window.innerWidth - 24);
+    panel.style.width = `${panelWidth}px`;
+    panel.style.left = `${Math.min(Math.max(12, rect.left), window.innerWidth - panelWidth - 12)}px`;
+    panel.style.top = `${Math.max(10, rect.bottom + 8)}px`;
+    requestAnimationFrame(() => {
+      const menuHeight = panel.offsetHeight;
+      const left = Math.min(Math.max(12, rect.left), window.innerWidth - panel.offsetWidth - 12);
+      const top = rect.bottom + 8 + menuHeight > window.innerHeight - 10
+        ? rect.top - menuHeight - 8
+        : rect.bottom + 8;
+      panel.style.left = `${left}px`;
+      panel.style.top = `${Math.max(10, top)}px`;
+      const selectedCell = panel.querySelector('.selected');
+      selectedCell?.scrollIntoView({ block: 'nearest' });
+    });
+  };
+
+  const openYearPanel = (select, trigger) => {
+    if (select.disabled) return;
+    if (yearPanelSelect === select && yearPanel && !yearPanel.hidden) {
+      closeYearPanel();
+      return;
+    }
+    closeYearPanel();
+    yearPanelSelect = select;
+    const selected = select.value;
+    const wrap = select.closest('.fly-vi-date');
+    const years = Array.from(select.options).filter(opt => opt.value !== '').map(opt => Number(opt.value));
+    yearPanelDecade = defaultDecade(years, selected, wrap?.dataset.yearPreset || 'general');
+    trigger.setAttribute('aria-expanded', 'true');
+    renderYearPanelBody(select, trigger);
+  };
+
+  const ensureYearWrap = wrap => {
+    const yearSelect = wrap.querySelector('.fly-vi-year');
+    if (!yearSelect) return null;
+    let yearWrap = yearSelect.closest('.fly-vi-year-wrap');
+    if (!yearWrap) {
+      yearWrap = document.createElement('div');
+      yearWrap.className = 'fly-vi-year-wrap';
+      yearSelect.before(yearWrap);
+      yearWrap.appendChild(yearSelect);
+      yearWrap.insertAdjacentHTML('beforeend', `<button type="button" class="fly-vi-year-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Chọn năm"><span></span>${yearChevron}</button>`);
+    }
+    return yearWrap;
+  };
+
   const bindWidget = wrap => {
     if (wrap.dataset.bound === '1') return;
     wrap.dataset.bound = '1';
-    wrap.querySelectorAll('select').forEach(select => select.addEventListener('change', () => writeHidden(wrap)));
+    if (!wrap.dataset.yearPreset) {
+      const hidden = wrap.querySelector('input[type="hidden"]');
+      wrap.dataset.yearPreset = inferYearPreset({ id: hidden?.id || '', extraClass: hidden?.className || '' });
+    }
+    wrap.querySelectorAll('select').forEach(select => select.addEventListener('change', () => {
+      writeHidden(wrap);
+      if (select.classList.contains('fly-vi-year')) syncYearTrigger(select);
+    }));
+    const yearSelect = wrap.querySelector('.fly-vi-year');
+    const yearWrap = ensureYearWrap(wrap);
+    const trigger = yearWrap?.querySelector('.fly-vi-year-trigger');
+    if (yearSelect && trigger) {
+      syncYearTrigger(yearSelect);
+      trigger.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        openYearPanel(yearSelect, trigger);
+      });
+      trigger.addEventListener('keydown', event => {
+        if (/^\d$/.test(event.key)) {
+          event.preventDefault();
+          openYearPanel(yearSelect, trigger);
+          const search = yearPanel?.querySelector('.fly-vi-year-search');
+          if (search) {
+            search.value = event.key;
+            search.dispatchEvent(new Event('input', { bubbles: true }));
+            search.focus();
+          }
+        }
+      });
+      new MutationObserver(() => syncYearTrigger(yearSelect)).observe(yearSelect, { attributes: true, attributeFilter: ['disabled'] });
+    }
   };
 
   const mount = (root = document) => {
@@ -149,22 +435,25 @@
     const wrap = hidden?.closest?.('.fly-vi-date');
     if (!wrap) return;
     const kind = wrap.dataset.kind;
+    const yearSelect = wrap.querySelector('.fly-vi-year');
     if (!hidden.value) {
       wrap.querySelectorAll('select').forEach(select => { select.value = ''; });
+      if (yearSelect) refillYears(wrap, '');
       return;
     }
     if (kind === 'month') {
       const parsed = parseIsoMonth(hidden.value) || parseIsoMonth(`${currentYear()}-${pad(new Date().getMonth() + 1)}`);
-      wrap.querySelector('.fly-vi-year').value = String(parsed.year);
+      refillYears(wrap, parsed.year);
       wrap.querySelector('.fly-vi-month').value = String(parsed.month);
     } else {
       const parsed = kind === 'datetime' ? parseIsoDateTime(hidden.value) : parseIsoDate(hidden.value);
       if (!parsed) {
         hidden.value = '';
         wrap.querySelectorAll('select').forEach(select => { select.value = ''; });
+        if (yearSelect) refillYears(wrap, '');
         return;
       }
-      wrap.querySelector('.fly-vi-year').value = String(parsed.year);
+      refillYears(wrap, parsed.year);
       wrap.querySelector('.fly-vi-month').value = String(parsed.month);
       refillDays(wrap, parsed.year, parsed.month, parsed.day);
       if (kind === 'datetime') {
@@ -172,6 +461,11 @@
         wrap.querySelector('.fly-vi-minute').value = String(parsed.minute - (parsed.minute % 5));
       }
     }
+  };
+
+  const sync = (root = document) => {
+    const scope = root?.querySelectorAll ? root : document;
+    scope.querySelectorAll?.('.fly-vi-date input[type="hidden"]').forEach(refresh);
   };
 
   const hydrateNative = (root = document) => {
@@ -182,11 +476,12 @@
       const id = input.id || `fly-date-${Math.random().toString(36).slice(2, 8)}`;
       if (!input.id) input.id = id;
       const optional = !input.required;
+      const preset = inferYearPreset({ id, extraClass: input.className, dataset: input.dataset });
       const html = type === 'month'
-        ? monthField(id, input.value)
+        ? monthField(id, input.value, preset)
         : type === 'datetime-local'
-          ? datetimeField(id, input.value)
-          : dateField(id, input.value, input.className, optional);
+          ? datetimeField(id, input.value, preset)
+          : dateField(id, input.value, input.className, optional, preset);
       const holder = document.createElement('div');
       holder.innerHTML = html.trim();
       const widget = holder.firstElementChild;
@@ -240,6 +535,18 @@
     queueMicrotask(() => { scanQueued = false; scan(document); });
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener('click', closeYearPanel);
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeYearPanel(); });
+  document.addEventListener('scroll', event => {
+    if (yearPanel && event.target && (event.target === yearPanel || yearPanel.contains(event.target))) return;
+    closeYearPanel();
+  }, true);
+  window.addEventListener('resize', closeYearPanel);
+  document.addEventListener('reset', event => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    queueMicrotask(() => form.querySelectorAll('.fly-vi-date input[type="hidden"]').forEach(refresh));
+  }, true);
 
   const reportPeriodDefaults = () => {
     const now = vietnamNow();
@@ -330,7 +637,7 @@
     });
   };
 
-  window.FLY_VI_DATE = { MONTHS, dateField, monthField, datetimeField, mount, refresh, hydrate: hydrateNative, periodToolbar, formatDateVN, dateKeyVN };
+  window.FLY_VI_DATE = { MONTHS, dateField, monthField, datetimeField, mount, refresh, sync, hydrate: hydrateNative, periodToolbar, formatDateVN, dateKeyVN };
   window.FLY_REPORT_PERIOD = { defaults: reportPeriodDefaults, set: setReportPeriod, syncFromReport, activeFallbackBanner };
   window.FLY_UI = { avatar, person, kpi, kpiGrid, bars, hue };
   window.FLY_QTY = { parsePositiveInteger, stockLeftText, stockExceededMessage, stepperMarkup, bind: bindStepper };

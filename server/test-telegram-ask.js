@@ -108,6 +108,13 @@ const manager = { MaNV: 'NV001', MaTK: 1, TenVaiTro: 'Quản lý', TenNV: 'Quả
             name: 'ask', arg: 'xin chào'
         });
         assert.equal(bot.parseCommand('doanh số tuần này thế nào?').name, 'unknown');
+        assert.deepEqual(bot.parseCommand('ask cho mình doanh số tháng 8'), {
+            name: 'ask', arg: 'cho mình doanh số tháng 8'
+        });
+        assert.deepEqual(bot.parseCommand('Ask: doanh số tháng 8'), {
+            name: 'ask', arg: 'doanh số tháng 8'
+        });
+        assert.equal(bot.parseCommand('Ask').name, 'askwait');
         assert.equal(bot.matchReplyCommand('/ask'), null);
         assert.equal(bot.matchReplyCommand('/ask hôm nay cần chú ý gì?'), null);
         assert.equal(bot.parseCommand('/ask hôm nay cần chú ý gì?').name, 'ask');
@@ -204,7 +211,7 @@ const manager = { MaNV: 'NV001', MaTK: 1, TenVaiTro: 'Quản lý', TenNV: 'Quả
             assert.equal(payload.channel, 'telegram');
             assert.equal(payload.user.MaNV, 'NV001');
             assert.equal(payload.user.TenVaiTro, 'Quản lý');
-            assert.match(sentText(sent), /Đang hỏi trợ lý Fly/);
+            assert.match(sentText(sent), /Đang hỏi trợ lý Fly|Đang lấy số liệu/);
             assert.match(sentText(sent), /doanh thu 1\.000\.000/);
             assert.match(sentText(sent), /Nguồn/);
             assert.match(sentText(sent), /Dashboard quản lý/);
@@ -322,7 +329,7 @@ const manager = { MaNV: 'NV001', MaTK: 1, TenVaiTro: 'Quản lý', TenNV: 'Quả
             await waitUntil(() => n === 1);
             assert.equal(n, 1);
             assert.equal(seen.length, 500);
-            assert.match(sentText(sent), /Đang hỏi trợ lý Fly/);
+            assert.match(sentText(sent), /Đang hỏi trợ lý Fly|Đang lấy số liệu/);
         });
         bot.setAskOverride(null);
     });
@@ -399,7 +406,7 @@ const manager = { MaNV: 'NV001', MaTK: 1, TenVaiTro: 'Quản lý', TenNV: 'Quả
             }, res);
             assert.deepEqual(body, { ok: true });
             assert.equal(started, false);
-            assert.match(sentText(sent), /Đang hỏi trợ lý Fly/);
+            assert.match(sentText(sent), /Đang hỏi trợ lý Fly|Đang lấy số liệu/);
             assert.doesNotMatch(sentText(sent), /xong-ask/);
             release();
             await waitUntil(() => sent.some((item) => /xong-ask/.test(item.text || '')));
@@ -521,7 +528,7 @@ const manager = { MaNV: 'NV001', MaTK: 1, TenVaiTro: 'Quản lý', TenNV: 'Quả
             period: { key: '2026-08', label: 'Tháng 8/2026' },
             sources: ['Hóa đơn mua hàng']
         });
-        assert.match(formatted.texts[0], /1\. <b>HDMH01<\/b> — NCC A — 2\.160\.000 đ/);
+        assert.match(formatted.texts[0], /1\. <b>HDMH01<\/b> — NCC A — 2\.160\.000 ₫/);
         assert.match(formatted.texts[0], /2\. <b>HDMH02<\/b>/);
         assert.doesNotMatch(formatted.texts[0], /Chọn một dòng rồi bấm Xem/);
         assert.doesNotMatch(formatted.texts[0], /\/api\/|\bUC\d+/);
@@ -544,9 +551,14 @@ const manager = { MaNV: 'NV001', MaTK: 1, TenVaiTro: 'Quản lý', TenNV: 'Quả
             items: [],
             sources: ['KQKD']
         });
-        const reportBtns = report.extra.reply_markup.inline_keyboard[0].map((btn) => btn.text);
-        assert.deepEqual(reportBtns, ['Tải PDF hệ thống', 'Giấy trắng']);
-        assert.equal(report.extra.reply_markup.inline_keyboard[0][0].callback_data, 'askd:s:kq:2026-08');
+        const reportRows = report.extra.reply_markup.inline_keyboard;
+        assert.deepEqual(reportRows[0].map((btn) => btn.text), ['📊 Báo cáo tháng', '📈 KQKD']);
+        assert.equal(reportRows[0][0].callback_data, 'period:month:2026-08');
+        assert.equal(reportRows[0][1].callback_data, 'askd:s:kq:2026-08');
+        assert.deepEqual(reportRows[1].map((btn) => btn.text), ['📄 Tải PDF hệ thống', 'Giấy trắng']);
+        assert.equal(reportRows[1][0].callback_data, 'askd:s:kq:2026-08');
+        assert.match(report.texts[0], /<b>KQKD · Tháng 8\/2026<\/b>/);
+        assert.doesNotMatch(report.texts[0], /\*\*/);
 
         const plain = teleAsk.formatAskAnswer({
             answer: 'Dòng một.\n\nDòng hai.\n- gạch đầu dòng',
@@ -557,6 +569,102 @@ const manager = { MaNV: 'NV001', MaTK: 1, TenVaiTro: 'Quản lý', TenNV: 'Quả
         assert.doesNotMatch(plain.texts[0], /Dòng một\. Dòng hai/);
         assert.doesNotMatch(plain.texts[0], /GET \/api/);
         assert.equal(plain.extra, undefined);
+
+        const markdown = teleAsk.formatAskAnswer({
+            answer: 'Doanh số tháng 8 nằm trong **Báo cáo tháng**. Bấm **In** hoặc **Tải**.',
+            sources: ['GET /api/admin/dashboard', 'GET /api/admin/approvals/queues']
+        }, 'doanh số tháng 8');
+        assert.match(markdown.texts[0], /<b>Báo cáo tháng<\/b>/);
+        assert.match(markdown.texts[0], /<b>In<\/b>/);
+        assert.doesNotMatch(markdown.texts[0], /\*\*/);
+        assert.match(markdown.texts[0], /Nguồn: Dashboard quản lý · Hàng chờ duyệt/);
+        assert.doesNotMatch(markdown.texts[0], /GET \/api/);
+
+        const dump = [
+            'Doanh số tháng 8 — bạn vào **Báo cáo tháng** hoặc **KQKD** để xem chi tiết.',
+            '',
+            'Hiện tại hệ thống chưa cung cấp dữ liệu tháng 9/2026, doanh số tháng 8 là 34.173.400,0',
+            '',
+            'Để lấy doanh số tháng 8, hãy:',
+            '-Chọn **Báo cáo tháng** → chọn tháng 8 → **Xem** hoặc **Tải**',
+            '-Hoặc vào **KQKD** → lọc theo kỳ tháng 8 → **In** hoặc **Tải**',
+            '',
+            'Cần hỗ trợ gì thêm?',
+            '',
+            'Nguồn',
+            '• Hộp thư',
+            '• Dashboard',
+            '• Hàng chờ duyệt',
+            '• Công nợ',
+            '• Báo cáo ca',
+            '• Đơn mua hàng',
+            '• KQKD',
+            '• Lưu chuyển tiền tệ'
+        ].join('\n');
+        const month8 = teleAsk.formatAskAnswer({
+            answer: dump,
+            sources: ['Hộp thư', 'Dashboard', 'Hàng chờ duyệt', 'Công nợ', 'Báo cáo ca', 'Đơn mua hàng', 'KQKD']
+        }, 'ask cho mình doanh số tháng 8');
+        assert.doesNotMatch(month8.texts.join('\n'), /\*\*/);
+        assert.match(month8.texts[0], /<b>Báo cáo tháng<\/b>/);
+        assert.match(month8.texts[0], /<b>KQKD<\/b>/);
+        assert.doesNotMatch(month8.texts[0], /Hộp thư[\s\S]*Lưu chuyển/);
+        assert.match(month8.texts[0], /Nguồn: Hộp thư · Dashboard · Hàng chờ duyệt · Công nợ/);
+        const month8Btns = month8.extra?.reply_markup?.inline_keyboard?.[0]?.map((btn) => btn.text) || [];
+        assert.deepEqual(month8Btns, ['📊 Báo cáo tháng', '📈 KQKD']);
+
+        const salesCard = teleAsk.formatAskAnswer({
+            answer: dump,
+            kind: 'store-report',
+            report: {
+                kpis: { doanhThuThuan: 34173400, laiGop: 12000000, kqkdLoiNhuan: 8000000 },
+                period: { label: 'Tháng 8/2026' }
+            },
+            print: { mau: { title: 'BÁO CÁO CỬA HÀNG THEO THÁNG', number: '2026-08' } },
+            period: { key: '2026-08', label: 'Tháng 8/2026' },
+            sources: ['Báo cáo cửa hàng']
+        }, 'doanh số tháng 8');
+        assert.doesNotMatch(salesCard.texts.join('\n'), /\*\*/);
+        assert.doesNotMatch(salesCard.texts.join('\n'), /<pre>|<code>/);
+        assert.match(salesCard.texts[0], /<b>Doanh số · Tháng 8\/2026<\/b>/);
+        assert.match(salesCard.texts[0], /34\.173\.400 ₫/);
+        assert.match(salesCard.texts[0], /Nguồn/);
+        assert.match(salesCard.texts[0], /Không trừ tiền trả NCC/);
+        assert.doesNotMatch(salesCard.texts[0], /Chọn \*\*|bạn vào|Cần hỗ trợ/);
+        assert.deepEqual(
+            salesCard.extra.reply_markup.inline_keyboard[0].map((btn) => btn.text),
+            ['📊 Báo cáo tháng', '📈 KQKD']
+        );
+    });
+
+    await test('ask doanh số tháng 8 (không slash) không lộ **', async () => {
+        await withAskFlag('1', async () => {
+            bot.resetUpdateDedup();
+            bot.resetChatLangCache();
+            bot.setAskOverride(async () => ({
+                answer: [
+                    'Doanh số tháng 8 — bạn vào **Báo cáo tháng** hoặc **KQKD**.',
+                    '-Chọn **Báo cáo tháng** → **Xem** hoặc **Tải**',
+                    '',
+                    'Nguồn',
+                    '• Hộp thư',
+                    '• Dashboard'
+                ].join('\n'),
+                sources: ['Dashboard quản lý', 'KQKD']
+            }));
+            const sent = collectSent(qlRow);
+            const result = await bot.handleUpdate({
+                update_id: 81990,
+                message: { chat: { id: 42, type: 'private' }, text: 'ask cho mình doanh số tháng 8' }
+            });
+            assert.equal(result.queued, true);
+            await waitUntil(() => sent.some((item) => /Báo cáo tháng|Doanh số/i.test(item.text || '')));
+            assert.doesNotMatch(sentText(sent), /\*\*/);
+            assert.match(sentText(sent), /<b>Báo cáo tháng<\/b>/);
+            assert.equal(sent.find((item) => item.parse_mode)?.parse_mode || 'HTML', 'HTML');
+            assert.ok(sent.some((item) => item.parse_mode === 'HTML'));
+        });
+        bot.setAskOverride(null);
     });
 
     await test('/ask hóa đơn tháng 8 gửi list + bàn phím', async () => {
@@ -587,7 +695,7 @@ const manager = { MaNV: 'NV001', MaTK: 1, TenVaiTro: 'Quản lý', TenNV: 'Quả
             await waitUntil(() => sent.some((item) => /HDMH01/.test(item.text || '')));
             const card = sent.find((item) => item.reply_markup?.inline_keyboard);
             assert.ok(card, 'thiếu inline keyboard');
-            assert.match(card.text, /1\. <b>HDMH01<\/b> — NCC A — 2\.160\.000 đ/);
+            assert.match(card.text, /1\. <b>HDMH01<\/b> — NCC A — 2\.160\.000 ₫/);
             assert.equal(card.reply_markup.inline_keyboard[0][0].callback_data, 'askd:s:hdm:HDMH01');
             assert.doesNotMatch(sentText(sent), /\/api\/|\bUC\d+|\/approve/);
         });

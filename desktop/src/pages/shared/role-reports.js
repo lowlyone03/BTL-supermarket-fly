@@ -170,6 +170,100 @@
     }
     return `${window.FLY_VI_DATE.periodToolbar(reportDefaults(), extraButtons, 'loadRoleReport')}<div id="roleReportBody"><div class="welcome-card report-idle"><h2>Chưa lập báo cáo</h2><p>Chọn kỳ rồi bấm <strong>Lập báo cáo</strong> để tổng hợp số liệu. Trang này không tự chạy truy vấn nặng khi vừa mở.</p></div></div>`;
   };
+  const warehouseIdleHtml = () => `<div class="welcome-card report-idle report-idle-keeper">
+      <span class="report-idle-mark" aria-hidden="true"><svg><use href="#i-report"></use></svg></span>
+      <h2>Chưa lập báo cáo</h2>
+      <p>Chọn ngày, tháng, quý hoặc năm ở thanh trên, rồi bấm <strong>Lập báo cáo</strong>. Xuất file và gửi Quản lý chỉ hiện sau khi đã có số liệu.</p>
+      <ol class="report-idle-steps">
+        <li><b>1</b><span>Chọn kỳ</span></li>
+        <li><b>2</b><span>Lập báo cáo</span></li>
+        <li><b>3</b><span>Gửi Quản lý</span></li>
+      </ol>
+    </div>`;
+  const warehousePeriodCard = () => {
+    if (!window.FLY_VI_DATE?.periodToolbar) {
+      return `<div id="roleReportBody">${failBox('Giao diện kỳ báo cáo chưa tải. Hãy đóng ứng dụng và chạy lại npm start.')}</div>`;
+    }
+    return `${window.FLY_VI_DATE.periodToolbar(reportDefaults(), '', 'loadRoleReport')}
+      <div class="report-followup-actions" hidden>
+        <div class="report-followup-exports">
+          <button class="warehouse-secondary" id="exportRoleReportCsv" disabled>Xuất CSV</button>
+          <button class="warehouse-secondary" id="exportRoleReportExcel" disabled>Xuất Excel</button>
+          <button class="warehouse-secondary" id="printRoleReport" disabled>Xem bản in / PDF</button>
+        </div>
+        <button class="warehouse-primary" id="submitWarehouseReport" disabled>Gửi báo cáo kho</button>
+      </div>
+      <div id="roleReportBody">${warehouseIdleHtml()}</div>
+      <div id="warehouseSubmitHost"></div>`;
+  };
+  const deptPeriodCard = (kind) => {
+    const dept = window.FLY_DEPARTMENT_REPORT || {};
+    const meta = dept.KIND_META?.[kind] || {};
+    if (!window.FLY_VI_DATE?.periodToolbar) {
+      return `<div id="roleReportBody">${failBox('Giao diện kỳ báo cáo chưa tải. Hãy đóng ứng dụng và chạy lại npm start.')}</div>`;
+    }
+    return `${window.FLY_VI_DATE.periodToolbar(reportDefaults(), '', 'loadRoleReport')}
+      ${dept.followupButtons?.(kind) || ''}
+      <div id="roleReportBody">${dept.idleHtml?.(meta.send) || warehouseIdleHtml()}</div>
+      <div id="departmentSubmitHost"></div>`;
+  };
+  const wireDeptSend = (root, context, { kind, endpoint, getReport, onAfter }) => {
+    const dept = () => window.FLY_DEPARTMENT_REPORT || {};
+    const refresh = () => dept().mountDueAndStrip?.(root, context, {
+      listPath: `${endpoint.replace(/\/submit$/, '')}/submissions`,
+      withdrawPath: `${endpoint.replace(/\/submit$/, '')}/submissions`,
+      kind,
+      currentReport: getReport(),
+      onChanged: () => refresh()
+    });
+    root.querySelector('#exportRoleReportExcel')?.addEventListener('click', () => {
+      const report = getReport();
+      if (!report) return;
+      window.FLY_DEPARTMENT_EXPORT?.downloadExcel?.(kind, report, {
+        preparedBy: context.user?.TenNV,
+        number: report.submittedNumber
+      });
+    });
+    root.querySelector('#submitDepartmentReport')?.addEventListener('click', () => {
+      const report = getReport();
+      if (!report?.period) return;
+      const same = (root._deptSubmissions || []).find(item => item.GiaTriKy === report.period.period);
+      dept().openSubmitModal?.({
+        periodLabel: report.period.label || report.period.period,
+        kind,
+        versionHint: same ? `Kỳ này đã có ${same.MaBC} (phiên ${same.SoPhien || 1}). Gửi lần này tạo phiên mới, không ghi đè.` : '',
+        warnings: dept().collectClientWarnings?.(kind, report) || [],
+        onSubmit: async note => {
+          const response = await fetch(`${context.apiBase}${endpoint}`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${context.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ report, note, kind })
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data.message || 'Không gửi được báo cáo bộ phận.');
+          if (report) report.submittedNumber = data.MaBC;
+          context.showToast?.(data.message, 'success');
+          if (data.warnings?.length) context.showToast?.(data.warnings.join(' '), 'warning');
+          await refresh();
+          onAfter?.(data);
+        }
+      });
+    });
+    const enable = () => {
+      const row = root.querySelector('.report-followup-actions');
+      if (row) row.hidden = false;
+      const isMgr = String(context?.user?.TenVaiTro || '').trim().toLocaleLowerCase('vi-VN') === 'quản lý';
+      root.querySelectorAll('#exportRoleReportCsv, #exportRoleReportExcel, #printRoleReport').forEach(button => {
+        button.disabled = false;
+      });
+      const sendBtn = root.querySelector('#submitDepartmentReport, #submitWarehouseReport');
+      if (sendBtn) {
+        if (isMgr) sendBtn.remove();
+        else sendBtn.disabled = false;
+      }
+    };
+    return { enable, refresh };
+  };
   const bindPeriod = (root, load) => {
     const selected = () => {
       const type = root.querySelector('#reportPeriodType')?.value;
@@ -426,10 +520,7 @@
     let currentReport = null;
     let currentSubmissions = [];
     const wh = () => window.FLY_WAREHOUSE_REPORT || {};
-    root.innerHTML = `${heading('THỦ KHO / BÁO CÁO TỔNG KHO', 'Báo cáo kho theo ngày, tháng, quý, năm', 'Tổng hợp nhập–xuất–tồn cả kho trong kỳ đã chọn. In bản hệ thống hoặc giấy trắng mực đen, xuất Excel/CSV chuẩn doanh nghiệp, rồi gửi cho Quản lý xem riêng — không phải báo cáo tổng cửa hàng.')}${periodCard(wh().warehouseButtons?.() || reportActionButtons)}`;
-    root.querySelector('.report-idle p')?.replaceChildren();
-    const idle = root.querySelector('.report-idle p');
-    if (idle) idle.innerHTML = 'Chọn <strong>ngày / tháng / quý / năm</strong> rồi bấm <strong>Lập báo cáo</strong>. Đây là báo cáo tổng kho. Sau khi kiểm tra số, bấm <strong>Gửi báo cáo kho</strong> để Quản lý xem ở menu Báo cáo Thủ kho.';
+    root.innerHTML = `${heading('THỦ KHO / BÁO CÁO TỔNG KHO', 'Báo cáo kho theo ngày, tháng, quý, năm', 'Tổng hợp nhập–xuất–tồn theo kỳ đã chọn. Nút chính là Lập báo cáo; xuất file và gửi Quản lý hiện sau khi đã có số.')}${warehousePeriodCard()}`;
     const refreshSubmissions = async () => {
       try {
         const data = await api(context, '/warehouse/reports/submissions');
@@ -439,6 +530,10 @@
     const paintSubmitStrip = () => {
       const host = root.querySelector('#warehouseSubmitHost');
       if (!host) return;
+      if (!currentSubmissions.length && !currentReport) {
+        host.innerHTML = '';
+        return;
+      }
       host.innerHTML = wh().submittedStrip?.(currentSubmissions) || '';
       wh().bindSubmittedStrip?.(host, {
         onWithdraw: async id => {
@@ -592,8 +687,7 @@
             ])}</article>
           </div>
           ${wh().writeoffSection?.(data.hangRoiKhoBan, data.period) || hangRoiKhoBanPanel(data.hangRoiKhoBan)}
-          ${doiTraPanel(data.doiTra, { title: 'Hàng khách trả đã/đang kiểm', subtitle: 'Nhập lại = cộng tồn bán. Loại bỏ/vứt = không cộng tồn vì đã trừ lúc bán — không trừ lần nữa. Chờ kiểm tra là việc của Thủ kho.', productTitle: 'Mặt hàng trả về kho' })}
-          <div id="warehouseSubmitHost">${wh().submittedStrip?.(currentSubmissions) || ''}</div>`;
+          ${doiTraPanel(data.doiTra, { title: 'Hàng khách trả đã/đang kiểm', subtitle: 'Nhập lại = cộng tồn bán. Loại bỏ/vứt = không cộng tồn vì đã trừ lúc bán — không trừ lần nữa. Chờ kiểm tra là việc của Thủ kho.', productTitle: 'Mặt hàng trả về kho' })}`;
         window.FLY_REPORT_LAYOUT?.enhance(root.querySelector('#roleReportBody'), { actor: 'Thủ kho', analysisTitle: 'Biến động và sức khỏe tồn kho', detailTitle: 'Mặt hàng cần bổ sung' });
         (wh().bindWarehouseChartActions || bindWarehouseChartActions)(charts, context);
         if (wh().bindWriteoffWorkbench) {
@@ -622,11 +716,17 @@
       });
     }
     await refreshSubmissions();
+    paintSubmitStrip();
   };
 
   const initSalesReport = async (root, context) => {
     let currentReport = null;
-    root.innerHTML = `${heading('THU NGÂN / BÁO CÁO', 'Báo cáo ca và bán hàng của bạn', 'Chỉ hóa đơn, phương thức thanh toán, hoàn tiền và ca do chính bạn lập. Không gồm doanh thu thu ngân khác.')}${periodCard()}`;
+    root.innerHTML = `${heading('THU NGÂN / BÁO CÁO', 'Báo cáo ca và bán hàng của bạn', 'Chỉ hóa đơn, phương thức thanh toán, hoàn tiền và ca do chính bạn lập. Không gồm doanh thu thu ngân khác. Gửi Quản lý xem ở Báo cáo bộ phận.')}${deptPeriodCard('TN_BAN_HANG')}`;
+    const deptWire = wireDeptSend(root, context, {
+      kind: 'TN_BAN_HANG',
+      endpoint: '/cashier/reports/submit',
+      getReport: () => currentReport
+    });
     let loadReport = async () => {};
     const selected = bindPeriod(root, () => { loadReport(); });
     loadReport = async () => {
@@ -690,12 +790,16 @@
           ${doiTraPanel(data.doiTra, { title: 'Đổi trả trên ca của bạn', subtitle: 'Cột Hàng đi đâu ghi rõ nhập lại kho bán (cộng tồn) hoặc loại bỏ/vứt (không cộng, đã trừ lúc bán). Không trừ kho lần nữa.', productTitle: 'Hàng khách trả trên hóa đơn của bạn' })}`;
         window.FLY_REPORT_LAYOUT?.enhance(root.querySelector('#roleReportBody'), { actor: 'Thu ngân', analysisTitle: 'Doanh thu và phương thức thanh toán', detailTitle: 'Ca bán hàng cá nhân' });
         enableReportActions(root);
+        deptWire.enable();
       } catch (error) {
         context.showToast(error.message, 'error');
         const body = root.querySelector('#roleReportBody');
         if (body) body.innerHTML = failBox(error.message);
       }
       finally { const live = root.querySelector('#loadRoleReport'); if (live) live.disabled = false; }
+      if (currentReport) {
+        try { await deptWire.refresh(); } catch { /* Gửi strip is secondary */ }
+      }
     };
     root.querySelector('#printRoleReport')?.addEventListener('click', () => {
       if (!currentReport) return;
@@ -717,13 +821,19 @@
     root.querySelector('#exportRoleReportCsv')?.addEventListener('click', () => {
       if (!currentReport) return;
       const s = currentReport.sales || {}; const m = currentReport.methods || {};
-      downloadCsv(`bao-cao-thu-ngan-${currentReport.period.period}.csv`, [['BÁO CÁO CA VÀ BÁN HÀNG CÁ NHÂN', currentReport.period.label], ['Hóa đơn', s.SoHoaDon], ['Doanh thu hóa đơn', s.DoanhThuHoaDon], ['Tiền hoàn', s.TienHoan], ['Tiền mặt', m.TienMat], ['QR', m.QR], ['Thẻ', m.The], ['Chuyển khoản', m.ChuyenKhoan], [], ['Mã ca', 'Mở ca', 'Đóng ca', 'Hóa đơn', 'Doanh thu', 'Đổi trả', 'Tiền hoàn', 'Trạng thái'], ...(currentReport.shifts || []).map(row => [row.MaCa, fmtDateTime(row.ThoiGianBatDau), fmtDateTime(row.ThoiGianKetThuc), row.SoHoaDon, row.DoanhThu, row.SoDoiTra, row.TienHoan, row.TrangThai]), ...returnCsvRows(currentReport.doiTra)]);
+      downloadCsv(`bao-cao-thu-ngan-${currentReport.period.period}.csv`, [['BÁO CÁO CA VÀ BÁN HÀNG CÁ NHÂN', currentReport.period.label], ['Hóa đơn', s.SoHoaDon], ['Doanh thu hóa đơn', s.DoanhThuHoaDon], ['Tiền hoàn', s.TienHoan], ['Tiền mặt', m.TienMat], ['QR', m.QR], ['Thẻ', m.The], ['Chuyển khoản', m.ChuyenKhoan], [], ['Mã ca', 'Mở ca', 'Đóng ca', 'Hóa đơn', 'Doanh thu', 'Đổi trả', 'Tiền hoàn', 'Trạng thái'],       ...(currentReport.shifts || []).map(row => [row.MaCa, fmtDateTime(row.ThoiGianBatDau), fmtDateTime(row.ThoiGianKetThuc), row.SoHoaDon, row.DoanhThu, row.SoDoiTra, row.TienHoan, row.TrangThai]), ...returnCsvRows(currentReport.doiTra)]);
     });
+    await loadReport();
   };
 
   const initPurchasingReport = async (root, context) => {
     let currentReport = null;
-    root.innerHTML = `${heading('MUA HÀNG / BÁO CÁO', 'Báo cáo đơn mua và giao hàng', 'Theo dõi đơn đã lập, giá trị theo trạng thái, số lượng còn thiếu và Nhà cung cấp trong kỳ.')}${periodCard()}`;
+    root.innerHTML = `${heading('MUA HÀNG / BÁO CÁO', 'Báo cáo đơn mua và giao hàng', 'Theo dõi đơn đã lập, giá trị theo trạng thái, số lượng còn thiếu và Nhà cung cấp trong kỳ. Gửi Quản lý xem ở Báo cáo bộ phận.')}${deptPeriodCard('MH_DON_MUA')}`;
+    const deptWire = wireDeptSend(root, context, {
+      kind: 'MH_DON_MUA',
+      endpoint: '/purchasing/reports/submit',
+      getReport: () => currentReport
+    });
     let loadReport = async () => {};
     const selected = bindPeriod(root, () => { loadReport(); });
     loadReport = async () => {
@@ -773,12 +883,16 @@
           <details class="report-detail-disclosure"><summary>Xem cơ cấu trạng thái đơn mua</summary><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>TRẠNG THÁI</th><th>SỐ ĐƠN</th><th>GIÁ TRỊ</th></tr></thead><tbody>${byStatus.length ? byStatus.map(row => `<tr><td>${esc(row.TrangThai)}</td><td class="num">${row.SoDon}</td><td class="num">${money(row.GiaTri)}</td></tr>`).join('') : '<tr><td colspan="3" class="warehouse-empty">Kỳ này chưa có đơn mua.</td></tr>'}</tbody></table></div></details>`;
         window.FLY_REPORT_LAYOUT?.enhance(root.querySelector('#roleReportBody'), { actor: 'Mua hàng', analysisTitle: 'Giá trị đơn và tiến độ giao hàng', detailTitle: 'Trạng thái đơn và Nhà cung cấp' });
         enableReportActions(root);
+        deptWire.enable();
       } catch (error) {
         context.showToast(error.message, 'error');
         const body = root.querySelector('#roleReportBody');
         if (body) body.innerHTML = failBox(error.message);
       }
       finally { const live = root.querySelector('#loadRoleReport'); if (live) live.disabled = false; }
+      if (currentReport) {
+        try { await deptWire.refresh(); } catch { /* Gửi strip is secondary */ }
+      }
     };
     root.querySelector('#printRoleReport')?.addEventListener('click', () => {
       if (!currentReport) return;
@@ -798,8 +912,9 @@
     root.querySelector('#exportRoleReportCsv')?.addEventListener('click', () => {
       if (!currentReport) return;
       const s = currentReport.summary || {};
-      downloadCsv(`bao-cao-mua-hang-${currentReport.period.period}.csv`, [['BÁO CÁO ĐƠN MUA VÀ GIAO HÀNG', currentReport.period.label], ['Đơn mua hợp lệ', s.SoDonMua], ['Giá trị đơn mua', s.GiaTriDonMua], ['Phiếu nhập', s.SoPhieuNhap], ['Giá trị nhập', s.GiaTriNhap], ['Số lượng còn thiếu', s.SLConThieu], [], ['Mã NCC', 'Nhà cung cấp', 'Số đơn', 'Giá trị'], ...(currentReport.suppliers || []).map(row => [row.MaNCC, row.TenNCC, row.SoDon, row.GiaTri]), ...returnCsvRows(currentReport.doiTra)]);
+      downloadCsv(`bao-cao-mua-hang-${currentReport.period.period}.csv`, [['BÁO CÁO ĐƠN MUA VÀ GIAO HÀNG', currentReport.period.label], ['Đơn mua hợp lệ', s.SoDonMua], ['Giá trị đơn mua', s.GiaTriDonMua], ['Phiếu nhập', s.SoPhieuNhap], ['Giá trị nhập', s.GiaTriNhap], ['Số lượng còn thiếu', s.SLConThieu], [], ['Mã NCC', 'Nhà cung cấp', 'Số đơn', 'Giá trị'],       ...(currentReport.suppliers || []).map(row => [row.MaNCC, row.TenNCC, row.SoDon, row.GiaTri]), ...returnCsvRows(currentReport.doiTra)]);
     });
+    await loadReport();
   };
 
   window.FLY_ROLE_PAGES = {

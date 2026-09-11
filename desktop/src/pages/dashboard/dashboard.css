@@ -36,6 +36,34 @@ button { color: inherit; }
 .svg-library { position: absolute; width: 0; height: 0; overflow: hidden; }
 
 .app-shell { position: relative; z-index: 1; display: flex; width: 100vw; height: 100vh; }
+html[data-fly-role]:not([data-fly-role="manager"]) #managerHomeNav,
+html[data-fly-role]:not([data-fly-role="manager"]) #managerApprovalNav,
+html[data-fly-role]:not([data-fly-role="manager"]) #managerPayablesNav,
+html[data-fly-role]:not([data-fly-role="manager"]) #managerWorkforceNav,
+html[data-fly-role]:not([data-fly-role="manager"]) #managerWorkforceApproveNav,
+html[data-fly-role]:not([data-fly-role="manager"]) #managerHolidaysNav,
+html[data-fly-role]:not([data-fly-role="manager"]) #managerLoyaltyNav,
+html[data-fly-role]:not([data-fly-role="manager"]) #navTitleReports,
+html[data-fly-role]:not([data-fly-role="manager"]) #managerReportNav,
+html[data-fly-role]:not([data-fly-role="manager"]) #managerWarehouseReportNav,
+html[data-fly-role]:not([data-fly-role="manager"]) #managerDeptReportNav,
+html[data-fly-role]:not([data-fly-role="manager"]) #managerLedgerKqkdNav,
+html[data-fly-role]:not([data-fly-role="manager"]) #managerLedgerCfNav,
+html[data-fly-role]:not([data-fly-role="manager"]) #managerLedgerBsNav,
+html[data-fly-role]:not([data-fly-role="manager"]) #managerReconNav,
+html[data-fly-role]:not([data-fly-role="manager"]) #managerHandbookNav {
+  display: none !important;
+}
+html[data-fly-role="warehouse"] #navGroupWarehouse,
+html[data-fly-role="purchasing"] #navGroupPurchasing,
+html[data-fly-role="accounting"] #navGroupAccounting,
+html[data-fly-role="cashier"] #navGroupCashier {
+  display: block;
+}
+html[data-fly-role="manager"] #submitDepartmentReport,
+html[data-fly-role="manager"] #submitWarehouseReport {
+  display: none !important;
+}
 .sidebar {
   width: 264px;
   flex: 0 0 264px;
@@ -104,6 +132,7 @@ button { color: inherit; }
 .nav-item:hover { color: #fff; background: rgba(255,255,255,.055); }
 .nav-item.active { color: #fff; background: var(--green-700); }
 .nav-item.is-coming { cursor: pointer; }
+.nav-item-help { color: #9bb8ab; font-size: 12.5px; }
 .nav-badge { min-width: 20px; padding: 3px 6px; color: #f5cc67; background: #4b4825; border-radius: 10px; font-size: 9px; text-align: center; }
 
 .sidebar-footer { padding: 14px 20px 18px; border-top: 1px solid rgba(255,255,255,.08); }
@@ -398,15 +427,26 @@ button { color: inherit; }
 .toast.visible { opacity: 1; transform: translateY(0); }
 .toast.error { background: #a64c3a; }
 .toast.success { background: var(--green-700); }
-.telegram-lead { margin: 0 0 10px; color: #5c6f66; font-size: 13px; line-height: 1.5; }
-.telegram-bot { margin: 0 0 14px; color: var(--green-700); font-size: 13px; font-weight: 700; }
-.telegram-status { padding: 12px 14px; border: 1px solid #dce7df; border-radius: 12px; background: var(--green-50); color: #35584a; font-size: 13px; line-height: 1.45; }
-.telegram-otp-block { margin-top: 16px; }
-.telegram-otp-block label { display: block; margin-bottom: 8px; color: #394a41; font-size: 11px; font-weight: 700; }
+.telegram-lead { margin: 0 0 8px; color: #4a5f56; font-size: 13.5px; line-height: 1.55; }
+.telegram-bot { margin: 0; color: #0f766e; font-size: 13px; font-weight: 700; letter-spacing: .01em; }
+.telegram-modal { width: min(520px, 94vw); overflow: hidden; border-radius: 22px; }
+.telegram-modal-head { background: linear-gradient(135deg, #0ea5e9 0%, #134e4a 100%); color: #fff; }
+.telegram-modal-head h3, .telegram-modal-head .module-kicker { color: #fff; }
+.telegram-modal-head .module-kicker { letter-spacing: .12em; opacity: .86; }
+.telegram-modal-head .close-btn { color: #fff; background: rgba(255,255,255,.14); }
+.telegram-hero { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 16px; }
+.telegram-hero-mark {
+  flex: 0 0 52px; width: 52px; height: 52px; display: grid; place-items: center;
+  border-radius: 18px; background: linear-gradient(160deg, #38bdf8, #0f766e); color: #fff;
+  font-size: 12px; font-weight: 800; letter-spacing: .08em; box-shadow: 0 10px 24px rgba(14,116,144,.22);
+}
+.telegram-status { padding: 13px 15px; border: 1px solid #cfe8f3; border-radius: 14px; background: linear-gradient(180deg, #f3fbff, #eef8fc); color: #164e63; font-size: 13px; line-height: 1.5; }
+.telegram-otp-block { margin-top: 16px; padding: 14px; border: 1px solid #d7e3dc; border-radius: 16px; background: #f7faf8; }
+.telegram-otp-block label { display: block; margin-bottom: 8px; color: #394a41; font-size: 11px; font-weight: 700; letter-spacing: .06em; }
 .telegram-otp-row { display: flex; align-items: center; gap: 10px; }
-.telegram-otp-row strong { flex: 1; letter-spacing: .28em; font-size: 28px; font-weight: 700; color: #173f34; font-variant-numeric: tabular-nums; }
+.telegram-otp-row strong { flex: 1; letter-spacing: .28em; font-size: 28px; font-weight: 700; color: #134e4a; font-variant-numeric: tabular-nums; }
 .telegram-otp-block small { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.45; }
-.telegram-otp-block code { font-size: 12px; }
+.telegram-otp-block code { font-size: 12px; background: #e7f1ec; padding: 1px 6px; border-radius: 6px; }
 .inbox-toast[hidden] { display: none !important; }
 .inbox-toast {
   position: fixed; top: 78px; right: 24px; z-index: 1600;

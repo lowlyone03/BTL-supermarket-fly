@@ -8,6 +8,14 @@
     (function () {
       try {
         var user = JSON.parse(localStorage.getItem('fly_user') || '{}');
+        var role = String(user.TenVaiTro || '').toLocaleLowerCase('vi-VN');
+        var kind = role === 'quản lý' ? 'manager'
+          : role === 'thủ kho' ? 'warehouse'
+          : role === 'nhân viên mua hàng' ? 'purchasing'
+          : role === 'kế toán' ? 'accounting'
+          : role === 'thu ngân' ? 'cashier'
+          : (user.MaNV ? 'staff' : '');
+        if (kind) document.documentElement.setAttribute('data-fly-role', kind);
         var key = user && user.MaNV ? 'fly_pref_' + user.MaNV : 'fly_pref_guest';
         var prefs = JSON.parse(localStorage.getItem(key) || localStorage.getItem('fly_pref_last') || '{}');
         if (prefs.giaoDien) document.documentElement.setAttribute('data-theme', prefs.giaoDien);
@@ -21,21 +29,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="dashboard.css?v=theme-dark-2">
-  <link rel="stylesheet" href="../admin/admin.css?v=tax-ui-2">
-  <link rel="stylesheet" href="../warehouse/warehouse.css?v=i18n-approve-1">
+  <link rel="stylesheet" href="dashboard.css?v=role-hide-3">
+  <link rel="stylesheet" href="../admin/admin.css?v=perm-ui-4">
+  <link rel="stylesheet" href="../warehouse/warehouse.css?v=fly-dialog-1">
   <link rel="stylesheet" href="../workforce/workforce.css?v=approve-fix-2">
   <link rel="stylesheet" href="../cashier/cashier.css?v=loy-apply-1">
-  <link rel="stylesheet" href="../shared/locale-ui.css?v=vi-date-3">
+  <link rel="stylesheet" href="../shared/locale-ui.css?v=vi-date-4">
   <link rel="stylesheet" href="../shared/ui-polish.css?v=count-click-1">
-  <link rel="stylesheet" href="../shared/report-charts.css?v=wh-report-6">
+  <link rel="stylesheet" href="../shared/report-charts.css?v=dept-ui-4">
   <link rel="stylesheet" href="../shared/product-images.css?v=products-1">
   <link rel="stylesheet" href="overview-modern.css?v=theme-dark-2">
-  <link rel="stylesheet" href="../accounting/ledger.css?v=recon-ui-3">
+  <link rel="stylesheet" href="../accounting/ledger.css?v=hb-drawer-1">
   <link rel="stylesheet" href="../accounting/ledger-print.css?v=ledger-print-1">
   <link rel="stylesheet" href="../admin/loyalty.css?v=loy-apply-1">
   <link rel="stylesheet" href="assistant.css?v=assist-ui-10">
-  <link rel="stylesheet" href="chat.css?v=chat-p5-6">
+  <link rel="stylesheet" href="chat.css?v=chat-p8">
   <link rel="stylesheet" href="../shared/theme.css?v=i18n-approve-1">
 </head>
 <body>
@@ -98,26 +106,27 @@
 
       <nav class="sidebar-nav" id="sidebarNav">
         <div class="nav-group-title" data-i18n="nav.ops">ĐIỀU HÀNH</div>
-        <a href="#" class="nav-item active" id="managerHomeNav" data-target="home"><svg><use href="#i-grid"/></svg><span data-i18n="nav.overview">Tổng quan</span></a>
+        <a href="#" class="nav-item" id="personalScheduleNav" data-target="cashier-schedule" style="display:none"><svg><use href="#i-calendar"/></svg><span data-i18n="nav.mySchedule">Lịch làm việc</span></a>
+        <a href="#" class="nav-item" id="managerHomeNav" data-target="home"><svg><use href="#i-grid"/></svg><span data-i18n="nav.overview">Tổng quan</span></a>
         <a href="#" class="nav-item" id="managerApprovalNav" data-target="manager-purchase-approvals"><svg><use href="#i-approve"/></svg><span data-i18n="nav.approvals">Trung tâm phê duyệt</span><b class="nav-badge" id="approvalNavBadge">0</b></a>
         <a href="#" class="nav-item" id="managerPayablesNav" data-target="manager-payables"><svg><use href="#i-report"/></svg><span data-i18n="nav.payables">Theo dõi công nợ</span></a>
         <a href="#" class="nav-item" id="managerWorkforceNav" data-target="manager-workforce"><svg><use href="#i-calendar"/></svg><span data-i18n="nav.schedule">Phân ca</span></a>
         <a href="#" class="nav-item" id="managerWorkforceApproveNav" data-target="manager-workforce-approve"><svg><use href="#i-approve"/></svg><span data-i18n="nav.approveWork">Duyệt công</span></a>
         <a href="#" class="nav-item" id="managerHolidaysNav" data-target="manager-holidays"><svg><use href="#i-calendar"/></svg><span data-i18n="nav.holidays">Ngày lễ năm</span></a>
-        <a href="#" class="nav-item" id="managerReportNav" data-target="manager-reports"><svg><use href="#i-report"/></svg><span data-i18n="nav.storeReport">Báo cáo cửa hàng</span></a>
         <a href="#" class="nav-item" id="managerLoyaltyNav" data-target="manager-loyalty"><svg><use href="#i-users"/></svg><span data-i18n="nav.loyalty">Khách hàng thân thiết</span></a>
+        <div class="nav-group-title" id="navTitleReports" data-i18n="nav.reportsGroup">BÁO CÁO</div>
+        <a href="#" class="nav-item" id="managerReportNav" data-target="manager-reports"><svg><use href="#i-report"/></svg><span data-i18n="nav.storeReport">Báo cáo cửa hàng</span></a>
         <a href="#" class="nav-item" id="managerWarehouseReportNav" data-target="admin-warehouse-reports"><svg><use href="#i-inventory"/></svg><span data-i18n="nav.whReport">Báo cáo Thủ kho</span></a>
+        <a href="#" class="nav-item" id="managerDeptReportNav" data-target="admin-department-reports"><svg><use href="#i-report"/></svg><span data-i18n="nav.deptReports">Báo cáo bộ phận</span></a>
         <a href="#" class="nav-item" id="managerLedgerKqkdNav" data-target="ledger-kqkd"><svg><use href="#i-report"/></svg><span data-i18n="nav.kqkd">Kết quả kinh doanh</span></a>
         <a href="#" class="nav-item" id="managerLedgerCfNav" data-target="ledger-cf"><svg><use href="#i-report"/></svg><span data-i18n="nav.cf">Lưu chuyển tiền tệ</span></a>
         <a href="#" class="nav-item" id="managerLedgerBsNav" data-target="ledger-bs"><svg><use href="#i-report"/></svg><span data-i18n="nav.bs">Bảng cân đối kế toán</span></a>
-        <a href="#" class="nav-item" id="managerLedgerHandbookNav" data-target="ledger-handbook"><svg><use href="#i-book"/></svg><span data-i18n="nav.handbook">Cẩm nang kế toán</span></a>
         <a href="#" class="nav-item" id="managerReconNav" data-target="ledger-reconciliation"><svg><use href="#i-approve"/></svg><span data-i18n="nav.recon">Đối soát ngân hàng thông minh</span></a>
+        <a href="#" class="nav-item" id="managerHandbookNav" data-target="ledger-handbook"><svg><use href="#i-log"/></svg><span data-i18n="nav.handbook">Cẩm nang kế toán</span></a>
 
         <div class="nav-group" id="navGroupWarehouse" style="display:none">
-          <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span data-i18n="nav.mySchedule">Lịch làm việc</span></a>
-          <a href="#" class="nav-item" data-target="warehouse-home"><svg><use href="#i-grid"/></svg><span data-i18n="nav.whHome">Tổng quan kho</span></a>
-          <a href="#" class="nav-item" data-target="warehouse-history"><svg><use href="#i-log"/></svg><span data-i18n="nav.whHistory">Lịch sử kho</span></a>
           <div class="nav-group-title" data-i18n="nav.whManage">QUẢN LÝ KHO</div>
+          <a href="#" class="nav-item" data-target="warehouse-home"><svg><use href="#i-grid"/></svg><span data-i18n="nav.whHome">Tổng quan kho</span></a>
           <a href="#" class="nav-item" data-target="warehouse-inventory"><svg><use href="#i-inventory"/></svg><span data-i18n="nav.inventory">Tồn kho &amp; cảnh báo</span></a>
           <a href="#" class="nav-item" data-target="warehouse-inventory-counts"><svg><use href="#i-approve"/></svg><span data-i18n="nav.counts">Kiểm kê kho</span></a>
           <a href="#" class="nav-item" data-target="warehouse-stock-issues"><svg><use href="#i-request"/></svg><span data-i18n="nav.issues">Phiếu xuất kho</span></a>
@@ -126,20 +135,19 @@
           <a href="#" class="nav-item" data-target="warehouse-receiving"><svg><use href="#i-truck"/></svg><span data-i18n="nav.receiving">Nhận &amp; kiểm tra hàng</span></a>
           <a href="#" class="nav-item" data-target="warehouse-receipts"><svg><use href="#i-request"/></svg><span data-i18n="nav.receipts">Phiếu nhập kho</span></a>
           <a href="#" class="nav-item" data-target="warehouse-returns"><svg><use href="#i-refresh"/></svg><span data-i18n="nav.returns">Kiểm tra đổi trả</span></a>
+          <a href="#" class="nav-item" data-target="warehouse-history"><svg><use href="#i-log"/></svg><span data-i18n="nav.whHistory">Lịch sử kho</span></a>
           <a href="#" class="nav-item" data-target="warehouse-reports"><svg><use href="#i-report"/></svg><span data-i18n="nav.whReports">Báo cáo kho</span></a>
         </div>
 
         <div class="nav-group" id="navGroupPurchasing" style="display:none">
-          <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span data-i18n="nav.mySchedule">Lịch làm việc</span></a>
-          <a href="#" class="nav-item" data-target="purchasing-inbox"><svg><use href="#i-request"/></svg><span data-i18n="nav.fromWarehouse">Đề nghị từ kho</span><b class="nav-badge" id="purchasingNavBadge">0</b></a>
           <div class="nav-group-title" data-i18n="nav.purchasing">MUA HÀNG</div>
+          <a href="#" class="nav-item" data-target="purchasing-inbox"><svg><use href="#i-request"/></svg><span data-i18n="nav.fromWarehouse">Đề nghị từ kho</span><b class="nav-badge" id="purchasingNavBadge">0</b></a>
           <a href="#" class="nav-item" data-target="purchasing-suppliers"><svg><use href="#i-store"/></svg><span data-i18n="nav.suppliers">Nhà cung cấp</span></a>
           <a href="#" class="nav-item" data-target="purchasing-orders"><svg><use href="#i-approve"/></svg><span data-i18n="nav.orders">Đơn mua hàng</span></a>
           <a href="#" class="nav-item" data-target="purchasing-reports"><svg><use href="#i-report"/></svg><span data-i18n="nav.poReports">Báo cáo mua hàng</span></a>
         </div>
 
         <div class="nav-group" id="navGroupAccounting" style="display:none">
-          <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span data-i18n="nav.mySchedule">Lịch làm việc</span></a>
           <a href="#" class="nav-item" data-target="accounting-invoices"><svg><use href="#i-approve"/></svg><span data-i18n="nav.acctInvoices">Đối chiếu hóa đơn</span></a>
           <div class="nav-group-title" data-i18n="nav.acctBuy">KẾ TOÁN MUA HÀNG</div>
           <a href="#" class="nav-item" data-target="accounting-payables"><svg><use href="#i-report"/></svg><span data-i18n="nav.acctPayables">Công nợ Nhà cung cấp</span></a>
@@ -150,7 +158,6 @@
           <a href="#" class="nav-item" data-target="accounting-payroll"><svg><use href="#i-team"/></svg><span data-i18n="nav.payroll">Bảng lương tháng</span></a>
           <a href="#" class="nav-item" data-target="accounting-history"><svg><use href="#i-log"/></svg><span data-i18n="nav.acctHistory">Lịch sử hoạt động</span></a>
           <div class="nav-group-title" data-i18n="nav.acctCore">KẾ TOÁN TỔNG HỢP</div>
-          <a href="#" class="nav-item" data-target="ledger-handbook"><svg><use href="#i-book"/></svg><span data-i18n="nav.handbook">Cẩm nang kế toán</span></a>
           <a href="#" class="nav-item" data-target="ledger-coa"><svg><use href="#i-report"/></svg><span data-i18n="nav.coa">Hệ thống tài khoản</span></a>
           <a href="#" class="nav-item" data-target="ledger-periods"><svg><use href="#i-calendar"/></svg><span data-i18n="nav.periods">Kỳ kế toán</span></a>
           <a href="#" class="nav-item" data-target="ledger-expenses"><svg><use href="#i-approve"/></svg><span data-i18n="nav.expenses">Chi phí vận hành</span></a>
@@ -167,10 +174,11 @@
           <a href="#" class="nav-item" data-target="ledger-assets"><svg><use href="#i-box"/></svg><span data-i18n="nav.assets">Tài sản cố định</span></a>
           <a href="#" class="nav-item" data-target="ledger-bank"><svg><use href="#i-store"/></svg><span data-i18n="nav.bank">Ngân hàng &amp; sao kê CSV</span></a>
           <a href="#" class="nav-item" data-target="ledger-reconciliation"><svg><use href="#i-approve"/></svg><span data-i18n="nav.recon">Đối soát ngân hàng thông minh</span></a>
+          <div class="nav-group-title" data-i18n="nav.acctHelp">TRỢ GIÚP</div>
+          <a href="#" class="nav-item" id="accountingHandbookNav" data-target="ledger-handbook"><svg><use href="#i-log"/></svg><span data-i18n="nav.handbook">Cẩm nang kế toán</span></a>
         </div>
 
         <div class="nav-group" id="navGroupCashier" style="display:none">
-          <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span data-i18n="nav.mySchedule">Lịch làm việc</span></a>
           <a href="#" class="nav-item" data-target="cashier-shifts"><svg><use href="#i-clock"/></svg><span data-i18n="nav.shifts">Ca bán hàng</span></a>
           <div class="nav-group-title" data-i18n="nav.posGroup">BÁN HÀNG TẠI QUẦY</div>
           <a href="#" class="nav-item" data-target="cashier-pos"><svg><use href="#i-report"/></svg><span data-i18n="nav.pos">Bán hàng</span></a>
@@ -195,6 +203,28 @@
           <a href="#" class="nav-item" id="btnChangePassword"><svg><use href="#i-settings"/></svg><span data-i18n="nav.password">Đổi mật khẩu</span></a>
         </div>
       </nav>
+      <script>
+        (function () {
+          var kind = document.documentElement.getAttribute('data-fly-role');
+          var managerIds = ['managerHomeNav','managerApprovalNav','managerPayablesNav','managerWorkforceNav','managerWorkforceApproveNav','managerHolidaysNav','managerLoyaltyNav','navTitleReports','managerReportNav','managerWarehouseReportNav','managerDeptReportNav','managerLedgerKqkdNav','managerLedgerCfNav','managerLedgerBsNav','managerReconNav','managerHandbookNav'];
+          var showMgr = kind === 'manager';
+          managerIds.forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.style.display = showMgr ? '' : 'none';
+          });
+          var groups = { warehouse: 'navGroupWarehouse', purchasing: 'navGroupPurchasing', accounting: 'navGroupAccounting', cashier: 'navGroupCashier' };
+          if (kind && kind !== 'manager' && groups[kind]) {
+            var g = document.getElementById(groups[kind]);
+            if (g) g.style.display = 'block';
+          }
+          var home = document.getElementById('managerHomeNav');
+          if (showMgr) {
+            var sys = document.getElementById('navGroupSystem');
+            if (sys) sys.style.display = 'block';
+            if (home) home.classList.add('active');
+          } else if (home) home.classList.remove('active');
+        })();
+      </script>
 
       <div class="sidebar-footer">
         <div class="role-caption"><svg><use href="#i-shield"/></svg><span><span data-i18n="role.caption">Vai trò:</span> <strong id="sidebarRole">Quản lý cửa hàng</strong></span></div>
@@ -253,7 +283,7 @@
       </header>
 
       <span id="pageTitle" hidden data-i18n="overview.title">Tổng quan</span>
-      <main class="content-area" id="contentArea"><div class="overview-loading" data-i18n="empty.loading">Đang tải dữ liệu điều hành...</div></main>
+      <main class="content-area" id="contentArea"><div class="overview-loading" data-i18n="empty.page">Đang tải nội dung...</div></main>
     </div>
   </div>
 
@@ -285,15 +315,20 @@
     </div>
   </div>
 
-  <div class="modal-backdrop" id="telegramModal" style="display:none">
-    <div class="modal">
-      <div class="modal-header">
-        <div><p class="module-kicker" data-i18n="tg.kicker">KÊNH ĐIỆN THOẠI</p><h3 data-i18n="tg.title">Liên kết Telegram</h3></div>
+  <div class="modal-backdrop telegram-modal-shell" id="telegramModal" style="display:none">
+    <div class="modal telegram-modal">
+      <div class="modal-header telegram-modal-head">
+        <div><p class="module-kicker" data-i18n="tg.kicker">BOT NỘI BỘ</p><h3 data-i18n="tg.title">Liên kết Telegram</h3></div>
         <button type="button" class="close-btn" id="closeTelegramModal">×</button>
       </div>
       <div class="modal-body">
-        <p class="telegram-lead" id="telegramLead" data-i18n="tg.lead">Tạo mã 6 số, rồi gửi trong chat riêng với bot. Bot xem số liệu theo quyền; có thể duyệt chứng từ chờ (nút inline + nhật ký). Không hoàn thành hóa đơn, không trả NCC.</p>
-        <p class="telegram-bot" id="telegramBotName">Bot: @supermarket_flybot</p>
+        <div class="telegram-hero">
+          <span class="telegram-hero-mark">TG</span>
+          <div>
+            <p class="telegram-lead" id="telegramLead" data-i18n="tg.lead">Tạo mã 6 số, gửi trong chat riêng với bot. Xem số liệu theo quyền; duyệt chứng từ bằng nút trên từng việc chờ. Trợ lý chat không duyệt hộ.</p>
+            <p class="telegram-bot" id="telegramBotName">Bot: @supermarket_flybot</p>
+          </div>
+        </div>
         <div class="telegram-status" id="telegramStatusBox" data-i18n="tg.loading">Đang tải trạng thái...</div>
         <div class="telegram-otp-block" id="telegramOtpBlock" hidden>
           <label data-i18n="tg.code">Mã liên kết</label>
@@ -342,6 +377,9 @@
               <option value="PhieuXuat" data-i18n="chat.voucherOut">Phiếu xuất</option>
               <option value="HoaDon" data-i18n="chat.voucherSale">Hóa đơn bán</option>
               <option value="HoaDonMuaHang" data-i18n="chat.voucherBuy">Hóa đơn mua</option>
+              <option value="PhieuChi">Phiếu chi NCC</option>
+              <option value="CongNoPhaiTra">Công nợ NCC</option>
+              <option value="GiaHanCongNo">Xin gia hạn NCC</option>
             </select>
             <input id="chatVoucherQ" type="search" data-i18n-placeholder="chat.voucherPh" placeholder="Mã chứng từ…" autocomplete="off">
           </div>
@@ -350,7 +388,7 @@
         <div class="chat-composer">
           <input id="chatFileInput" type="file" accept=".pdf,image/png,image/jpeg,image/webp,application/pdf" hidden>
           <div class="chat-composer-box">
-            <textarea id="chatInput" rows="1" maxlength="1000" data-i18n-placeholder="chat.inputPh" placeholder="Nhắn trong Cửa hàng…"></textarea>
+            <textarea id="chatInput" rows="1" maxlength="1000" data-i18n-placeholder="chat.inputPh" placeholder="Nhắn trong chat chung…"></textarea>
             <div class="chat-composer-actions">
               <button type="button" class="chat-icon-btn" id="chatAttachVoucher" data-i18n-title="chat.attachVoucher" title="Đính chứng từ hệ thống">
                 <svg aria-hidden="true"><use href="#i-doc"></use></svg>
@@ -421,17 +459,18 @@
     </div>
   </aside>
 
-  <script src="../../i18n/vi.js?v=i18n-assist-10"></script>
-  <script src="../../i18n/en.js?v=i18n-assist-10"></script>
-  <script src="../../i18n/zh.js?v=i18n-assist-10"></script>
+  <script src="../../i18n/vi.js?v=chat-one-2"></script>
+  <script src="../../i18n/en.js?v=chat-one-2"></script>
+  <script src="../../i18n/zh.js?v=chat-one-2"></script>
   <script src="../../i18n/ops.js?v=i18n-approve-1"></script>
   <script src="../../i18n/i18n.js?v=i18n-assist-10"></script>
   <script src="../../i18n/appearance.js"></script>
   <script src="../shared/escape-key.js"></script>
+  <script src="../shared/fly-dialog.js?v=fly-dialog-1"></script>
   <script src="../shared/api-config.js"></script>
   <script src="../shared/field-validators.js?v=close-confirm-1"></script>
-  <script src="../shared/employee-profile.js?v=emp-syll-1"></script>
-  <script src="../shared/locale-ui.js?v=date-vn-1"></script>
+  <script src="../shared/employee-profile.js?v=emp-date-1"></script>
+  <script src="../shared/locale-ui.js?v=date-vn-2"></script>
   <script src="../shared/search-tools.js?v=i18n-full-1"></script>
   <script src="../shared/product-images.js?v=products-1"></script>
   <script src="../shared/report-charts.js?v=charts-9-widebars"></script>
@@ -439,26 +478,30 @@
   <script src="../shared/print-documents.js?v=i18n-full-1"></script>
   <script src="../shared/warehouse-export.js?v=wh-report-5"></script>
   <script src="../shared/warehouse-xlsx.js?v=wh-report-5"></script>
-  <script src="../shared/warehouse-report-ui.js?v=wh-report-5"></script>
-  <script src="../admin/admin-page-templates.js?v=tax-ui-1"></script>
+  <script src="../shared/warehouse-report-ui.js?v=dept-ui-2"></script>
+  <script src="../admin/admin-page-templates.js?v=perm-ui-6"></script>
   <script src="../warehouse/warehouse-pages.js?v=scrap-qty-1"></script>
-  <script src="../warehouse/supplier-pages.js?v=search-2"></script>
+  <script src="../warehouse/supplier-pages.js?v=giahan-1"></script>
   <script src="../warehouse/purchase-order-pages.js?v=i18n-approve-1"></script>
   <script src="../warehouse/receipt-pages.js?v=search-2"></script>
   <script src="../warehouse/stock-issue-pages.js?v=scrap-qty-1"></script>
   <script src="../accounting/store-pnl.js?v=store-pnl-2"></script>
-  <script src="../accounting/accounting-pages.js?v=date-vn-2"></script>
+  <script src="../accounting/accounting-pages.js?v=dept-report-4"></script>
   <script src="../accounting/ledger-print.js?v=ledger-print-1"></script>
-  <script src="../accounting/ledger-pages.js?v=hb-recon-20"></script>
-  <script src="../accounting/reconciliation-pages.js?v=recon-3"></script>
+  <script src="../accounting/ledger-pages.js?v=hb-full-2"></script>
+  <script src="../accounting/reconciliation-pages.js?v=hb-full-2"></script>
   <script src="../admin/loyalty-pages.js?v=loy-apply-1"></script>
   <script src="../workforce/workforce-pages.js?v=close-confirm-1"></script>
   <script src="../cashier/cashier-pages.js?v=loy-apply-1"></script>
-  <script src="../shared/role-reports.js?v=wh-report-5"></script>
-  <script src="../shared/warehouse-keeper-reports.js?v=wh-report-5"></script>
+  <script src="../shared/role-reports.js?v=dept-report-2"></script>
+  <script src="../shared/warehouse-keeper-reports.js?v=dept-ui-2"></script>
+  <script src="../shared/department-export.js?v=dept-report-1"></script>
+  <script src="../shared/department-report-ui.js?v=dept-ui-5"></script>
+  <script src="../shared/department-keeper-reports.js?v=dept-ui-3"></script>
+  <script src="../shared/department-ledger-submit.js?v=dept-report-2"></script>
   <script src="../admin/appearance-pages.js?v=theme-i18n-1"></script>
-  <script src="dashboard.js?v=i18n-approve-1"></script>
-  <script src="chat-panel.js?v=chat-p5-6"></script>
-  <script src="assistant-panel.js?v=assist-ui-10"></script>
+  <script src="dashboard.js?v=role-boot-3"></script>
+  <script src="chat-panel.js?v=chat-one-3"></script>
+  <script src="assistant-panel.js?v=assist-ui-11"></script>
 </body>
 </html>

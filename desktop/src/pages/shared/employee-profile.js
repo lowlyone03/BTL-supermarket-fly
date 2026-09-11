@@ -153,6 +153,10 @@
     if (tonGiao && !tonGiao.value) tonGiao.value = 'Không';
     const choO = byId('choOHienNay', prefix);
     if (choO && !choO.value && emp.DiaChi) choO.value = emp.DiaChi;
+    ['ngaySinh', 'ngayVaoLam', 'ngayCapCCCD'].forEach((id) => {
+      const el = byId(id, prefix);
+      if (el) window.FLY_VI_DATE?.refresh?.(el);
+    });
   };
 
   const resetFormDefaults = (prefix = '') => {
@@ -162,6 +166,10 @@
     if (danToc) danToc.value = 'Kinh';
     const tonGiao = byId('tonGiao', prefix);
     if (tonGiao) tonGiao.value = 'Không';
+    ['ngaySinh', 'ngayVaoLam', 'ngayCapCCCD'].forEach((id) => {
+      const el = byId(id, prefix);
+      if (el) window.FLY_VI_DATE?.refresh?.(el);
+    });
   };
 
   const applyProfileErrors = (errors, validateField, prefix = '') => {
@@ -222,14 +230,14 @@
         <div class="form-grid">
           ${fieldGroup(p + 'tenNV', 'Họ và tên', `<input type="text" id="${p}tenNV" maxlength="150">`)}
           ${fieldGroup(p + 'cccd', 'Số CCCD', `<input type="text" id="${p}cccd" inputmode="numeric" maxlength="12" placeholder="12 số hoặc CMND 9 số">`)}
-          ${fieldGroup(p + 'ngayCapCCCD', 'Ngày cấp CCCD', `<input type="date" id="${p}ngayCapCCCD">`)}
+          ${fieldGroup(p + 'ngayCapCCCD', 'Ngày cấp CCCD', `<input type="date" id="${p}ngayCapCCCD" data-date-range="issue">`)}
           ${fieldGroup(p + 'noiCapCCCD', 'Nơi cấp CCCD', `<input type="text" id="${p}noiCapCCCD" maxlength="200">`)}
-          ${fieldGroup(p + 'ngaySinh', 'Ngày sinh', `<input type="date" id="${p}ngaySinh">`)}
+          ${fieldGroup(p + 'ngaySinh', 'Ngày sinh', `<input type="date" id="${p}ngaySinh" data-date-range="birth">`)}
           ${fieldGroup(p + 'gioiTinh', 'Giới tính', `<select id="${p}gioiTinh">${optionHtml(f.EMPLOYEE_GENDERS)}</select>`)}
           ${fieldGroup(p + 'sdt', 'Số điện thoại', `<input type="text" id="${p}sdt" maxlength="20">`)}
           ${fieldGroup(p + 'email', 'Email', `<input type="email" id="${p}email" maxlength="150">`)}
           ${fieldGroup(p + 'diaChi', 'Địa chỉ liên hệ / nơi ở hiện nay', `<input type="text" id="${p}diaChi" maxlength="300">`, true)}
-          ${fieldGroup(p + 'ngayVaoLam', 'Ngày vào làm', `<input type="date" id="${p}ngayVaoLam">`)}
+          ${fieldGroup(p + 'ngayVaoLam', 'Ngày vào làm', `<input type="date" id="${p}ngayVaoLam" data-date-range="hire">`)}
         </div>
       </div>
       <div class="emp-form-section">

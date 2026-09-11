@@ -2,7 +2,7 @@ require('./src/config/loadEnv').loadEnv();
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const express = require('express');
-const { isForbiddenQuestion, ask, FORBIDDEN_ANSWER, usage, clipHistory, packContext, SYSTEM_PROMPT } = require('./src/services/assistantService');
+const { isForbiddenQuestion, isOutOfScopeQuestion, ask, FORBIDDEN_ANSWER, SCOPE_ANSWER, usage, clipHistory, packContext, SYSTEM_PROMPT } = require('./src/services/assistantService');
 const { detectInvoiceIntent, parsePeriod, compactStoreReport } = require('./src/services/assistantInvoices');
 const { sourceLabel, humanizeSources, replaceUcCodes } = require('./src/services/assistantCopy');
 const { pickFaq, parseFaqFile } = require('./src/services/assistantFaq');
@@ -51,6 +51,11 @@ const run = async () => {
         assert.equal(isForbiddenQuestion('Trả NCC giúp tôi'), true);
         assert.equal(isForbiddenQuestion('/ask /approve PO1'), true);
         assert.equal(isForbiddenQuestion('bấm duyệt hộ'), true);
+        assert.equal(isForbiddenQuestion('Duyệt phiếu chi giúp tôi'), true);
+        assert.equal(isForbiddenQuestion('Cấp quyền giúp tôi'), true);
+        assert.equal(isForbiddenQuestion('Ghi sổ hộ kỳ này'), true);
+        assert.equal(isForbiddenQuestion('Hoàn tiền giúp khách'), true);
+        assert.equal(isForbiddenQuestion('Những phiếu nào đang chờ tôi duyệt?'), false);
     });
 
     await test('Câu duyệt hộ không gọi LLM', async () => {
@@ -66,23 +71,27 @@ const run = async () => {
         assert.equal(result.answer, FORBIDDEN_ANSWER);
     });
 
-    await test('Thu ngân hỏi công nợ: context không có mã CN', async () => {
-        let captured = '';
+    await test('Thu ngân hỏi công nợ: ngoài phạm vi, không gọi LLM', async () => {
+        let called = 0;
         usage.clear();
-        await ask({
+        assert.equal(isOutOfScopeQuestion('Công nợ NCC sắp hạn bao nhiêu?', cashier), true);
+        assert.equal(isOutOfScopeQuestion('Công nợ NCC sắp hạn bao nhiêu?', manager), false);
+        const result = await ask({
             user: cashier,
             question: 'Công nợ NCC sắp hạn bao nhiêu?',
             pool: deadPool,
             provider: {
-                complete: async ({ user }) => {
-                    captured = String(user || '');
-                    return { text: 'Tài khoản thu ngân không xem công nợ NCC.\nNguồn: phân quyền UC', model: 'mock' };
+                complete: async () => {
+                    called += 1;
+                    return { text: 'KHÔNG', model: 'mock' };
                 }
             }
         });
-        assert.doesNotMatch(captured, /CN\d{4,}/);
-        assert.match(captured, /Thu ngân/i);
-        assert.doesNotMatch(captured, /UC28/);
+        assert.equal(called, 0);
+        assert.equal(result.outOfScope, true);
+        assert.equal(result.blocked, true);
+        assert.equal(result.answer, SCOPE_ANSWER);
+        assert.doesNotMatch(result.answer, /\bUC\d+/);
     });
 
     await test('Key trống: Gemini/CodeCraft/Genspark ném 503, load module không throw', async () => {
@@ -296,6 +305,12 @@ const run = async () => {
         const thangTam = detectInvoiceIntent('báo cáo tháng 8');
         assert.equal(thangTam.kind, 'store-report');
         assert.equal(thangTam.period.month, 8);
+        const doanhSo = detectInvoiceIntent('doanh số tháng 8');
+        assert.equal(doanhSo.kind, 'store-report');
+        assert.equal(doanhSo.period.month, 8);
+        const askDoanhSo = detectInvoiceIntent('ask cho mình doanh số tháng 8');
+        assert.equal(askDoanhSo.kind, 'store-report');
+        assert.equal(askDoanhSo.period.month, 8);
         const pnl = detectInvoiceIntent('xem P&L tháng 9');
         assert.equal(pnl.kind, 'store-report');
         assert.equal(pnl.period.month, 9);

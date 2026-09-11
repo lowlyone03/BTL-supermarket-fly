@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { sql, poolPromise } = require('../config/db');
+const { permissionSqlFilter, ensureEmployeePermissionSchema } = require('../services/effectivePermissions');
 
 // Middleware xác thực Token (Để dùng cho các API sau này)
 const tokenFromRequest = req => {
@@ -54,17 +55,13 @@ const requireAnyPermission = (permissionCodes) => {
                 return res.status(403).json({ message: 'Tài khoản chưa được cấp quyền sử dụng chức năng này.' });
             }
             const pool = await poolPromise;
-            const request = pool.request().input('MaVaiTro', sql.Int, req.user.MaVaiTro);
-            const placeholders = codes.map((code, index) => {
-                const name = `MaChucNang${index}`;
-                request.input(name, sql.VarChar, code);
-                return `@${name}`;
-            });
-            const result = await request.query(`SELECT 1 AS DuocPhep
-                    FROM VaiTro_ChucNang
-                    WHERE MaVaiTro = @MaVaiTro
-                      AND MaChucNang IN (${placeholders.join(', ')})
-                      AND DuocPhep = 1`);
+            await ensureEmployeePermissionSchema(pool);
+            const request = pool.request();
+            const result = await request.query(permissionSqlFilter(request, {
+                maNV: req.user.MaNV,
+                maVaiTro: req.user.MaVaiTro,
+                codes
+            }));
             if (!result.recordset.length) {
                 return res.status(403).json({ message: 'Tài khoản chưa được cấp quyền sử dụng chức năng này.' });
             }

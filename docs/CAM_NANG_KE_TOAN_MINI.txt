@@ -4,7 +4,7 @@ HỆ THỐNG QUẢN LÝ NỘI BỘ — SUPERMARKET FLY
 Dành cho Kế toán cửa hàng (không phải lập trình viên)
 ================================================================================
 
-Phiên bản nghiệp vụ khớp    : PLAN kế toán mini 1.5 FINAL (09/09/2026)
+Phiên bản nghiệp vụ          : Cẩm nang kế toán cửa hàng (09/09/2026)
 Cách bấm trên màn hình      : đúng nhãn nút / menu trên app Electron đang chạy
 Cửa hàng                    : 1 siêu thị, 1 kỳ kế toán đang Mở (khuyến nghị)
 Không dùng file này cho     : MISA, FAST, Bravo, SAP, tờ khai thuế nhà nước
@@ -24,7 +24,7 @@ Cách đọc
       Bước bấm trên màn = viên số (Bước 1, 2, 3…).
       Thuật ngữ chốt / chờ ghi sổ / tạm tính / NULL / 0% được tô nền.
 
-[CHOT] Mở cẩm nang trong hệ thống: đăng nhập Kế toán → nhóm KẾ TOÁN TỔNG HỢP → Cẩm nang kế toán. Quản lý cũng thấy cùng mục trên menu điều hành. Mục 19 (Đối soát ngân hàng thông minh) có trên mục lục của cả hai vai trò. Đây không chỉ là file TXT cạnh máy.
+[CHOT] Trên trang Đối soát ngân hàng thông minh, bấm “Mở cẩm nang · mục 19” hoặc “Đọc cẩm nang đối soát”. Panel trượt ra bên phải, bắt đầu ở mục 19. Không có Cẩm nang trên menu trái.
 
 --------------------------------------------------------------------------------
 MỤC LỤC
@@ -934,10 +934,11 @@ Sau khi chốt, muốn sửa 111?
   Không ghi sổ.
 
 ----- Cẩm nang kế toán -----
-  KT: KẾ TOÁN TỔNG HỢP → Cẩm nang kế toán.
-  QL: menu điều hành → Cẩm nang kế toán.
+  QL: BÁO CÁO → Cẩm nang kế toán.
+  KT: TRỢ GIÚP (cuối menu kế toán) → Cẩm nang kế toán.
+  Từ màn Đối soát: nút Đọc cẩm nang đối soát / Mở cẩm nang · mục 19.
   Cùng một sổ tay. Mục lục trái. Ô tìm trên cùng.
-  Đối soát ngân hàng thông minh = mục 19 (cả QL và KT đều thấy).
+  Đối soát ngân hàng thông minh = mục 19 (cả QL và KT đều đọc được).
 
 ----- Đối chiếu hóa đơn -----
   Tiêu đề: Đối chiếu hóa đơn Nhà cung cấp
@@ -2038,7 +2039,7 @@ KQKD thuần các GD trên (bỏ số dư): DT 200.000 − GV 140.000 − 642 10
 19. ĐỐI SOÁT NGÂN HÀNG THÔNG MINH
 ================================================================================
 
-19.1. Mục đích AIS — sao kê gặp chứng từ
+19.1. Mục đích — sao kê gặp chứng từ
 
   Siêu thị nhận tiền bán QR (MoMo) vào tài khoản ngân hàng (TK 112) và
   chi chuyển khoản: trả nhà cung cấp, chi lương. Sao kê CSV là “sự thật
@@ -2050,26 +2051,25 @@ KQKD thuần các GD trên (bỏ số dư): DT 200.000 − GV 140.000 − 642 10
 
   Mục đích: biết dòng nào đã có chứng từ tương ứng, dòng nào lệch tiền,
   dòng nào chưa tìm ra (phí ngân hàng, chuyển khoản lạ…). Đây là đối soát
-  AIS trong mô hình mini — không phải Open Banking và không phải AI tự quyết.
+  trong mô hình mini — không phải Open Banking và không phải máy tự quyết.
 
-[CHOT] Engine chỉ tính điểm và xếp loại. Nút cuối cùng luôn là Kế toán:
+[CHOT] Hệ thống chỉ tính điểm và xếp loại. Nút cuối cùng luôn là Kế toán:
   “Xác nhận đối soát” hoặc “Bỏ gợi ý”. Máy không tự ghi sổ, không tự trả NCC.
 
 19.2. Ai làm gì trên app
 
   Vai trò | Việc được làm | Việc không làm
-  Kế toán (UC42) | Nhập sao kê CSV, chạy engine, xem từng dòng, xác nhận / bỏ gợi ý, xác nhận hàng loạt khớp tự động | Không nhờ máy tự ghi sổ (postJournal)
-  Quản lý (UC10) | Xem tóm tắt: số dòng chờ, tổng tiền chưa đối soát, số gợi ý / chênh lệch | Không xem từng dòng sao kê, không nhập CSV, không bấm xác nhận
+  Kế toán | Nhập sao kê CSV, chạy đối soát, xem từng dòng, xác nhận / bỏ gợi ý, xác nhận hàng loạt khớp tự động | Không nhờ máy tự ghi sổ
+  Quản lý | Xem tóm tắt: số dòng chờ, tổng tiền chưa đối soát, số gợi ý / chênh lệch | Không xem từng dòng sao kê, không nhập CSV, không bấm xác nhận
 
   Mở trên app — đúng nhãn menu
     Kế toán: nhóm KẾ TOÁN MỞ RỘNG → Đối soát ngân hàng thông minh
-    Quản lý: menu điều hành → Đối soát ngân hàng thông minh (chỉ tóm tắt)
-    Cẩm nang (cả hai vai trò đều mở được mục này):
-      Kế toán: KẾ TOÁN TỔNG HỢP → Cẩm nang kế toán → mục lục trái → 19
-      Quản lý: menu điều hành → Cẩm nang kế toán → mục lục trái → 19
-      Ô tìm trên cẩm nang: gõ “đối soát”, “MoMo”, “sao kê”.
+    Quản lý: BÁO CÁO → Đối soát ngân hàng thông minh (chỉ tóm tắt)
+    Đọc hướng dẫn này: ngay trên trang đối soát, bấm
+      “Mở cẩm nang · mục 19” hoặc “Đọc cẩm nang đối soát”.
+      Panel trượt bên phải, cuộn từ 19.1 tới 19.8.
 
-[LUU_Y] Quản lý không thấy bảng từng dòng sao kê. Đó là đúng plan UC10,
+[LUU_Y] Quản lý không thấy bảng từng dòng sao kê. Đó là đúng phân vai,
   không phải lỗi giao diện.
 
 19.3. Chuỗi MoMo — từ quầy tới ngoại lệ
@@ -2084,7 +2084,7 @@ KQKD thuần các GD trên (bỏ số dư): DT 200.000 − GV 140.000 − 642 10
 [LUU_Y] 112 không vào két. Đối soát két tiền mặt (Phiếu thu ca) là việc khác
   — menu Ca & Phiếu thu. Đừng trộn hai quỹ.
 
-19.4. Thang điểm cố định — không LLM
+19.4. Thang điểm cố định
 
   Điều kiện | Điểm
   Số tiền khớp (giá trị tuyệt đối) | +50
@@ -2101,13 +2101,12 @@ KQKD thuần các GD trên (bỏ số dư): DT 200.000 − GV 140.000 − 642 10
 
   Một chứng từ không được gán cho hai dòng sao kê.
 
-19.5. AI / trợ lý không quyết định khớp
+19.5. Máy không tự khớp hộ bạn
 
-  Trợ lý chỉ được đọc số đếm (bao nhiêu dòng chờ, tổng tiền).
-  Không được chọn ứng viên, không được bấm xác nhận hộ bạn.
-  LLM không nằm trong engine đối soát.
+  Hệ thống chỉ tính điểm. Kế toán mới bấm “Xác nhận đối soát” hoặc “Bỏ gợi ý”.
+  Trợ lý chat không được chọn ứng viên hay xác nhận hộ.
 
-[KHONG] Không để AI “tự khớp vì điểm cao”. Nút cuối là Kế toán.
+[KHONG] Không để máy “tự khớp vì điểm cao”. Nút cuối là Kế toán.
 
 19.6. Cách nhập CSV và các nút trên màn
 

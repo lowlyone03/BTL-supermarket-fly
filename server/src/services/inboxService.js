@@ -89,7 +89,7 @@ const listPendingAttendance = async (pool, { top = 8 } = {}) => {
 const inboxHint = {
     'Quản lý': 'Việc nhân viên vừa gửi hiện ngay. Chấm công chờ duyệt: mở menu Duyệt công (cả ngày cũ và ca hành chính). Chuông kêu một tiếng khi có việc mới — không cần F5.',
     'Thủ kho': 'Đổi trả, xe đến kho, phiếu xuất đã duyệt hoặc kiểm kê bị từ chối cần đếm lại hiện ngay. Chuông kêu một tiếng khi có việc mới.',
-    'Nhân viên mua hàng': 'Đề nghị từ kho và đơn mua đã duyệt được đẩy sang đây ngay. Chuông kêu một tiếng khi có việc mới.',
+    'Nhân viên mua hàng': 'Đề nghị từ kho, đơn mua đã duyệt, và việc kế toán nhờ xin gia hạn NCC hiện ngay. Chuông kêu một tiếng khi có việc mới.',
     'Kế toán': 'Ca đã chốt, hóa đơn chờ đối chiếu, phiếu chi Quản lý vừa duyệt hoặc từ chối, và phiếu sẵn sàng thanh toán hiện ngay. Chuông kêu một tiếng khi có việc mới.',
     'Thu ngân': 'Lịch hôm nay, đổi trả chờ kho/quản lý, và phiếu đã duyệt cần xác nhận — hiện ngay khi có việc mới.'
 };
@@ -277,6 +277,17 @@ const listForRole = async (pool, user) => {
             ...many(revise.recordset, r => row(`po-fix:${r.MaPO}`, 'purchasing-orders', 'Đơn mua cần chỉnh theo Quản lý',
                 `${r.MaPO} · ${r.TenNCC} · ${r.LyDoTuChoi || ''}`, r.NgayLap, 'info'))
         );
+        const giaHan = await safeRows(() => q().query(`
+            SELECT TOP 8 g.MaGiaHan, g.MaCNPTra, g.NgayYeuCau, g.HanCu, ncc.TenNCC, cn.SoTienConLai, nv.TenNV
+            FROM CongNoGiaHan g
+            JOIN CongNoPhaiTra cn ON cn.MaCNPTra = g.MaCNPTra
+            JOIN NhaCungCap ncc ON ncc.MaNCC = g.MaNCC
+            LEFT JOIN NhanVien nv ON nv.MaNV = g.MaNV_YeuCau
+            WHERE g.TrangThai IN (N'ChoLienHe', N'DaLienHe') AND cn.SoTienConLai > 0
+            ORDER BY g.NgayYeuCau DESC`));
+        items.push(...many(giaHan, r => row(`gh:${r.MaGiaHan}`, 'purchasing-suppliers', 'Kế toán nhờ xin gia hạn NCC',
+            joinDetail(r.TenNCC, r.MaCNPTra, moneyVi(r.SoTienConLai), r.HanCu ? `hạn cũ ${vnDay(r.HanCu)}` : '', r.TenNV),
+            r.NgayYeuCau, 'urgent')));
     }
 
     if (isRole(user, 'Kế toán')) {

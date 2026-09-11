@@ -46,9 +46,13 @@
   };
 
   window.loadPromotions = async () => {
+    const navSeq = Number(window.FLY_NAV_SEQ || 0);
     try {
       const search = document.getElementById('promoSearch')?.value || '';
       const data = await api(`/promotions?search=${encodeURIComponent(search)}`);
+      if (Number(window.FLY_NAV_SEQ || 0) !== navSeq) return;
+      const body = document.getElementById('promoTableBody');
+      if (!body) return;
       items = data.items || [];
 
       const statusFilter = document.getElementById('promoStatusFilter')?.value || '';
@@ -60,12 +64,13 @@
       const expiredCount = items.filter(i => getPromoStatus(i) === 'expired').length;
 
       const el = id => document.getElementById(id);
-      el('promoCount').textContent = `${items.length} chương trình`;
+      const count = el('promoCount');
+      if (count) count.textContent = `${items.length} chương trình`;
       if (el('promoActiveCount')) el('promoActiveCount').textContent = activeCount;
       if (el('promoPausedCount')) el('promoPausedCount').textContent = pausedCount;
       if (el('promoExpiredCount')) el('promoExpiredCount').textContent = expiredCount;
 
-      el('promoTableBody').innerHTML = filtered.length ? filtered.map(item => {
+      body.innerHTML = filtered.length ? filtered.map(item => {
         const status = getPromoStatus(item);
         const countdown = getCountdown(item);
         return `<tr>
@@ -78,7 +83,10 @@
       }).join('') : `<tr><td colspan="5" class="empty-state">${search
         ? esc(window.FLY_SEARCH?.emptyMessage?.(search, 'chương trình khuyến mãi', 'Không tìm thấy chương trình khuyến mãi.') || 'Không tìm thấy chương trình khuyến mãi.')
         : `<div class="promo-empty-state"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="22" stroke="#d3e1d8" stroke-width="2"/><path d="M16 24l6 6 10-12" stroke="#40916c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg><strong>Chưa có chương trình khuyến mãi</strong><span>Tạo chương trình mới để thu ngân có thể chọn trên POS.</span></div>`}</td></tr>`;
-    } catch (error) { window.showToast(error.message, 'error'); }
+    } catch (error) {
+      if (!document.getElementById('promoTableBody')) return;
+      window.showToast(error.message, 'error');
+    }
   };
 
   window.suggestPromoCode = () => {
@@ -270,7 +278,8 @@
       backdrop.innerHTML = `<div class="modal" style="max-width:480px"><div class="modal-header"><div><p class="module-kicker">XEM TRƯỚC KHUYẾN MÃI</p><h3>Kiểm tra trước khi lưu</h3></div><button type="button" class="close-btn" onclick="document.getElementById('promoPreviewModal').style.display='none'">×</button></div><div class="modal-body" id="promoPreviewContent">${previewHtml}</div><div class="modal-footer"><button class="btn btn-secondary" onclick="document.getElementById('promoPreviewModal').style.display='none'">Đóng</button></div></div>`;
       document.body.appendChild(backdrop);
     } else {
-      document.getElementById('promoPreviewContent').innerHTML = previewHtml;
+      const content = document.getElementById('promoPreviewContent');
+      if (content) content.innerHTML = previewHtml;
       modal.style.display = 'flex';
     }
   };

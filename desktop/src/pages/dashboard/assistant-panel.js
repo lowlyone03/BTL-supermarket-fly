@@ -724,6 +724,7 @@
     if (root.dataset.ready === '1') return;
     root.dataset.ready = '1';
     root.innerHTML = `<div class="assistant-workspace">
+      <div class="assistant-deny-banner">Trợ lý được hỏi đáp, soạn thảo, điều hướng — không được duyệt phiếu chi, hoàn tiền, phân quyền hay bất kỳ nút phê duyệt nào.</div>
       <div class="assistant-card">
         <h3>${escapeHtml(tx('assist.scenarioTitle', 'Kịch bản có kiểm soát'))}</h3>
         <p class="assistant-muted">${escapeHtml(tx('assist.scenarioLead', 'Engine tính. AI không bịa công thức. Không lập PO, không ghi sổ. Tháng lấy từ ô Tháng trên widget.'))}</p>
@@ -739,6 +740,12 @@
           </label>
           <button type="submit" class="assistant-send">${escapeHtml(tx('assist.scenarioRun', 'Phân tích'))}</button>
         </form>
+      </div>
+      <div class="assistant-card" id="assistantScenarioCatalog">
+        <h3>Kịch bản nghiệp vụ cửa hàng</h3>
+        <p class="assistant-muted" id="scenarioCatalogLead">Bấm một thẻ để hỏi trợ lý. Lọc theo từ khóa. Engine số nằm ở form trên.</p>
+        <input id="scenarioCatalogQ" type="search" placeholder="Tìm kịch bản: công nợ, ca, SOP, KM..." autocomplete="off">
+        <div id="scenarioCatalogList" class="assistant-scenario-groups">Đang tải kịch bản...</div>
       </div>
       <div id="scenarioResult"></div>
     </div>`;
@@ -797,6 +804,51 @@
         box.innerHTML = `<div class="assistant-card"><p>${escapeHtml(friendlyNetError(error))}</p></div>`;
       }
     });
+    const catalogRoot = document.getElementById('scenarioCatalogList');
+    const catalogLead = document.getElementById('scenarioCatalogLead');
+    let catalogGroups = [];
+    const foldText = (text) => String(text || '').toLocaleLowerCase('vi-VN').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const paintCatalog = (query = '') => {
+      if (!catalogRoot) return;
+      const q = foldText(query);
+      const groups = catalogGroups.map((group) => ({
+        group: group.group,
+        scenarios: (group.scenarios || []).filter((item) => {
+          if (!q) return true;
+          return foldText(`${item.title} ${item.prompt}`).includes(q);
+        })
+      })).filter((group) => group.scenarios.length);
+      if (!groups.length) {
+        catalogRoot.innerHTML = '<p class="assistant-muted">Không có kịch bản khớp từ khóa hoặc quyền của bạn.</p>';
+        return;
+      }
+      catalogRoot.innerHTML = groups.map((group) => `<section class="assistant-sc-group"><h4>${escapeHtml(group.group)}</h4><div class="assistant-sc-grid">${group.scenarios.map((item) => `<button type="button" class="assistant-sc-card" data-sc="${escapeHtml(item.id)}" data-engine="${escapeHtml(item.engine?.type || '')}"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.prompt)}</span></button>`).join('')}</div></section>`).join('');
+      catalogRoot.querySelectorAll('.assistant-sc-card').forEach((card) => {
+        card.addEventListener('click', () => {
+          const id = card.dataset.sc;
+          const found = catalogGroups.flatMap((group) => group.scenarios).find((item) => item.id === id);
+          if (!found) return;
+          if (found.engine?.type && SCENARIO_META[found.engine.type]) {
+            typeSel.value = found.engine.type;
+            syncType();
+          }
+          sendQuestion(found.prompt);
+        });
+      });
+    };
+    fetch(`${API_BASE}/assistant/scenarios`, { headers: authHeaders() })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (handleAuth(response, data)) return;
+        if (!response.ok) throw new Error(data.message || 'Không tải được kịch bản.');
+        catalogGroups = data.groups || [];
+        if (catalogLead && data.lead) catalogLead.textContent = `${data.lead} (${data.total || 0} kịch bản trong quyền của bạn).`;
+        paintCatalog();
+      })
+      .catch((error) => {
+        if (catalogRoot) catalogRoot.innerHTML = `<p class="assistant-muted">${escapeHtml(friendlyNetError(error))}</p>`;
+      });
+    document.getElementById('scenarioCatalogQ')?.addEventListener('input', (event) => paintCatalog(event.target.value));
   };
 
   const setTab = (tab) => {

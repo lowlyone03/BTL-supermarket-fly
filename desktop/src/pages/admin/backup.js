@@ -21,25 +21,33 @@
   let backups = [];
 
   const loadBackups = async () => {
+    const navSeq = Number(window.FLY_NAV_SEQ || 0);
     try {
       const data = await api('/backups');
+      if (Number(window.FLY_NAV_SEQ || 0) !== navSeq) return;
       backups = data.items || [];
-      document.getElementById('backupTotalCount').textContent = backups.length;
+      const total = document.getElementById('backupTotalCount');
+      if (total) total.textContent = backups.length;
       if (backups.length) {
-        document.getElementById('backupLastTime').textContent = fmtTime(backups[0].createdAt);
-        document.getElementById('backupLastFile').textContent = backups[0].fileName;
+        const lastTime = document.getElementById('backupLastTime');
+        const lastFile = document.getElementById('backupLastFile');
+        if (lastTime) lastTime.textContent = fmtTime(backups[0].createdAt);
+        if (lastFile) lastFile.textContent = backups[0].fileName;
       }
       renderBackups();
     } catch (error) {
-      document.getElementById('backupTableBody').innerHTML = `<tr><td colspan="4" class="empty-state error-text">${esc(error.message)}</td></tr>`;
+      const body = document.getElementById('backupTableBody');
+      if (body) body.innerHTML = `<tr><td colspan="4" class="empty-state error-text">${esc(error.message)}</td></tr>`;
     }
   };
 
   const renderBackups = () => {
+    const body = document.getElementById('backupTableBody');
+    if (!body) return;
     const normalizeSearch = window.FLY_SEARCH?.normalize || (value => String(value ?? '').toLowerCase());
     const keyword = normalizeSearch(document.getElementById('backupSearch')?.value || '');
     const filtered = keyword ? backups.filter(b => normalizeSearch(b.fileName).includes(keyword)) : backups;
-    document.getElementById('backupTableBody').innerHTML = filtered.length
+    body.innerHTML = filtered.length
       ? filtered.map(b => `<tr>
           <td><strong>${esc(b.fileName)}</strong></td>
           <td>${fmtSize(b.size)}</td>
@@ -56,15 +64,19 @@
       const today = new Date().toLocaleDateString('vi-VN', { timeZone: HANOI });
       const todayCount = logs.filter(l => new Date(l.ThoiGian).toLocaleDateString('vi-VN', { timeZone: HANOI }) === today).length;
       document.getElementById('securityEventCount').textContent = todayCount;
-      document.getElementById('securityLogBody').innerHTML = logs.length
+      const logBody = document.getElementById('securityLogBody');
+      if (logBody) {
+        logBody.innerHTML = logs.length
         ? logs.map(l => `<tr>
             <td><small>${fmtTime(l.ThoiGian)}</small></td>
             <td><strong>${esc(l.NguoiThaoTac)}</strong><small>${esc(l.TenVaiTro || '')}</small></td>
             <td>${esc(l.HanhDong)}<small>${esc(l.NoiDung || '')}</small></td>
           </tr>`).join('')
         : '<tr><td colspan="3" class="empty-state">Chưa có sự kiện bảo mật.</td></tr>';
+      }
     } catch (error) {
-      document.getElementById('securityLogBody').innerHTML = `<tr><td colspan="3" class="empty-state error-text">${esc(error.message)}</td></tr>`;
+      const logBody = document.getElementById('securityLogBody');
+      if (logBody) logBody.innerHTML = `<tr><td colspan="3" class="empty-state error-text">${esc(error.message)}</td></tr>`;
     }
   };
 

@@ -186,8 +186,10 @@
 
         const roleColors = { 'Quản lý': '#2d6a4f', 'Nhân viên mua hàng': '#1b7fa3', 'Thủ kho': '#7c5cbf', 'Thu ngân': '#c97a0a', 'Kế toán': '#c4553d' };
         const getRoleColor = role => roleColors[role] || '#40916c';
+        const tbody = document.getElementById('empTableBody');
+        if (!tbody) return;
 
-        document.getElementById('empTableBody').innerHTML = filtered.length ? filtered.map(emp => {
+        tbody.innerHTML = filtered.length ? filtered.map(emp => {
             const initials = getInitials(emp.TenNV);
             const roleColor = getRoleColor(emp.ChucVu);
             const isActive = emp.TrangThai === 'Đang làm việc';
@@ -211,6 +213,7 @@
 
     window.loadEmployees = async () => {
         const tbody = document.getElementById('empTableBody');
+        if (!tbody) return;
         const requestSeq = ++employeesRequestSeq;
         if (employeesRequestController) employeesRequestController.abort();
         employeesRequestController = new AbortController();
@@ -232,8 +235,9 @@
             renderEmployees();
         } catch (err) {
             if (err.name === 'AbortError') return;
+            if (requestSeq !== employeesRequestSeq) return;
             console.error('loadEmployees failed:', err);
-            tbody.innerHTML = `<tr><td colspan="${getTableColspan()}" class="empty-state error-text">Không thể tải dữ liệu.</td></tr>`;
+            if (tbody.isConnected) tbody.innerHTML = `<tr><td colspan="${getTableColspan()}" class="empty-state error-text">Không thể tải dữ liệu.</td></tr>`;
             window.showToast(err.message || 'Lỗi tải danh sách nhân viên', 'error');
         }
     };
@@ -248,6 +252,7 @@
         document.querySelectorAll('#empForm .input-error').forEach(el => el.classList.remove('input-error'));
         empForm.reset();
         window.FLY_EMP_PROFILE?.resetFormDefaults?.();
+        window.FLY_VI_DATE?.sync?.(empForm);
         document.querySelectorAll('.req-create').forEach(el => { el.hidden = false; });
         updateAvatarPreview();
         empModal.style.display = 'flex';
@@ -274,6 +279,7 @@
         document.getElementById('ngayVaoLam').value = toDateInput(emp.NgayVaoLam);
         document.getElementById('trangThai').value = emp.TrangThai;
         window.FLY_EMP_PROFILE?.fillForm?.(emp);
+        window.FLY_VI_DATE?.sync?.(empForm);
         document.querySelectorAll('.req-create').forEach(el => { el.hidden = true; });
         document.querySelectorAll('.emp-field-error').forEach(el => { el.textContent = ''; el.style.display = 'none'; });
         document.querySelectorAll('#empForm .input-error').forEach(el => el.classList.remove('input-error'));

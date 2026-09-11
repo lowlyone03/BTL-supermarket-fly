@@ -277,6 +277,29 @@
 .source-state.ready strong { color:#1f684f; }
 .source-state.ready small { color:#59766a; }
 .warehouse-confirm-modal { width:min(680px,95vw); }
+.fly-dialog-modal { width:min(460px,95vw); }
+.fly-dialog-lead { margin:0 0 14px; color:#52675c; font-size:13px; line-height:1.55; }
+.fly-dialog-error { margin:10px 0 0; color:#ae4a35; font-size:12px; font-weight:650; }
+.fly-dialog-choices { display:grid; gap:10px; }
+.fly-dialog-choice {
+  display:grid;
+  grid-template-columns:20px minmax(0,1fr);
+  align-items:start;
+  gap:10px;
+  padding:12px 14px;
+  border:1px solid #d5dfd9;
+  border-radius:14px;
+  background:#fff;
+  cursor:pointer;
+}
+.fly-dialog-choice:has(input:checked) {
+  border-color:#65a58d;
+  background:#f3faf6;
+  box-shadow:0 0 0 3px rgba(46,134,103,.1);
+}
+.fly-dialog-choice input { margin-top:3px; accent-color:#2c8565; }
+.fly-dialog-choice strong, .fly-dialog-choice small { display:block; }
+.fly-dialog-choice small { margin-top:3px; color:#6f7d75; }
 .source-return-summary { margin-top:0; }
 .order-edit-actions { justify-content:space-between; }
 .order-edit-actions-left { flex:1 1 auto; }
@@ -558,6 +581,14 @@ html[data-lang="zh"] .payroll-ky-card header p {
 .payment-voucher-amount span { color:#608072; font-size:9px; font-weight:850; letter-spacing:.09em; }
 .payment-voucher-amount strong { margin:7px 0 4px; color:#1f523f; font-size:24px; }
 .payment-voucher-amount small { color:#71847a; }
+.pay-type-row { display:flex; flex-wrap:wrap; gap:10px 16px; margin:0 0 12px; }
+.pay-type-row label { display:flex; align-items:center; gap:8px; padding:8px 12px; border:1px solid #d5e2da; border-radius:12px; background:#fff; font-size:13px; cursor:pointer; }
+.pay-type-row input { accent-color:#2d8967; }
+.payable-overdue-45 { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; margin:0 0 16px; padding:14px 16px; border:1px solid #f0c4b6; border-radius:14px; background:#fff4ef; }
+.payable-overdue-45 strong { display:block; color:#8b2e1a; }
+.payable-overdue-45 span { color:#6a3d32; font-size:13px; line-height:1.45; }
+.payable-overdue-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.payable-ledger-title { margin:16px 0 8px; color:#1c4a3d; font-size:13px; }
 .payment-voucher-fields { margin-top:16px; }
 .payment-voucher-fields .full { grid-column:1/-1; }
 .payment-voucher-fields input,.payment-voucher-fields select,.payment-voucher-fields textarea { width:100%; box-sizing:border-box; }

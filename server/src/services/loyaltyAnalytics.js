@@ -1,14 +1,8 @@
 'use strict';
 
-const { ROLE_PERMISSION_CODES } = require('../constants/permissions');
 const { LOYALTY_POLICY, offerForSegment, loadLoyaltyPolicy, publicPolicy } = require('./loyaltyPolicy');
 const { vietnamDateKey } = require('./reportingPeriod');
-
-const codesOf = (user) => {
-    const key = String(user?.TenVaiTro || '').trim().toLocaleLowerCase('vi-VN');
-    return ROLE_PERMISSION_CODES[key] || [];
-};
-const hasUc = (user, code) => codesOf(user).includes(code);
+const { codesOf, hasUc } = require('./effectivePermissions');
 const isRole = (user, name) => String(user?.TenVaiTro || '').trim().toLocaleLowerCase('vi-VN')
     === String(name || '').trim().toLocaleLowerCase('vi-VN');
 
