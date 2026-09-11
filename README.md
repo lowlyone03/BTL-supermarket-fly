@@ -924,11 +924,67 @@ Mã nguồn đồ án học tập. Desktop: MIT. Server: ISC. Không phải sả
 
 ---
 
+## Tuyên bố miễn trừ trách nhiệm — Hình ảnh sản phẩm
+
+> **QUAN TRỌNG — VUI LÒNG ĐỌC KỸ TRƯỚC KHI SỬ DỤNG**
+
+### Mục đích sử dụng
+
+Toàn bộ hình ảnh sản phẩm (bao gồm nhưng không giới hạn: ảnh minh họa hàng hóa, bao bì, nhãn hiệu, logo nhà sản xuất) xuất hiện trong dự án này — dù được lưu trữ trong thư mục `server/uploads/`, hiển thị trên giao diện ứng dụng, hay xuất hiện trong tài liệu — **được thu thập và sử dụng DUY NHẤT cho mục đích nghiên cứu học thuật và minh họa công nghệ** trong khuôn khổ đồ án môn học tại cơ sở đào tạo.
+
+### Cam kết không sử dụng thương mại
+
+- ⛔ **KHÔNG** sử dụng bất kỳ hình ảnh nào trong dự án này cho mục đích thương mại, kinh doanh, quảng cáo, tiếp thị, hoặc bất kỳ hoạt động nào nhằm mục đích thu lợi nhuận.
+- ⛔ **KHÔNG** phân phối, bán lại, cấp phép lại (sublicense), hoặc chuyển nhượng các hình ảnh sản phẩm cho bên thứ ba dưới bất kỳ hình thức nào.
+- ⛔ **KHÔNG** sử dụng hình ảnh để tạo ấn tượng rằng dự án này được tài trợ, liên kết, hoặc chứng nhận bởi bất kỳ thương hiệu, nhà sản xuất, hoặc nhà phân phối nào.
+
+### Quyền sở hữu trí tuệ
+
+- Tất cả hình ảnh sản phẩm, logo, nhãn hiệu, và tên thương hiệu xuất hiện trong dự án đều thuộc **quyền sở hữu hợp pháp của các chủ sở hữu tương ứng**.
+- Nhóm thực hiện đồ án **không tuyên bố quyền sở hữu** đối với bất kỳ hình ảnh, nhãn hiệu, hoặc tài sản trí tuệ nào của bên thứ ba.
+- Việc sử dụng các hình ảnh này nằm trong phạm vi **"sử dụng hợp lý" (fair use)** theo quy định pháp luật về sở hữu trí tuệ, phục vụ mục đích giáo dục, nghiên cứu, và minh họa phi thương mại.
+
+### Giới hạn trách nhiệm
+
+- Nhóm thực hiện đồ án **không chịu trách nhiệm** về bất kỳ thiệt hại trực tiếp, gián tiếp, ngẫu nhiên, đặc biệt, mang tính hậu quả, hoặc mang tính trừng phạt nào phát sinh từ việc sử dụng hoặc không thể sử dụng các hình ảnh trong dự án này.
+- Nhóm thực hiện đồ án **không chịu trách nhiệm** nếu bất kỳ bên thứ ba nào sao chép, tải xuống, hoặc sử dụng lại các hình ảnh từ dự án này cho mục đích vi phạm quyền sở hữu trí tuệ.
+- Nếu bạn là chủ sở hữu hợp pháp của bất kỳ hình ảnh nào trong dự án và muốn yêu cầu gỡ bỏ, vui lòng liên hệ nhóm thực hiện — chúng tôi sẽ xử lý yêu cầu trong thời gian sớm nhất.
+
+### Phạm vi áp dụng
+
+Tuyên bố miễn trừ trách nhiệm này áp dụng cho:
+
+1. **Toàn bộ mã nguồn** (source code) của dự án Supermarket Fly.
+2. **Toàn bộ hình ảnh** được lưu trữ trong repository, bao gồm thư mục `server/uploads/` và các tài liệu đính kèm.
+3. **Mọi phiên bản** (version, branch, tag, fork) của dự án, bao gồm các bản sao trên GitHub hoặc bất kỳ nền tảng lưu trữ nào khác.
+4. **Mọi bản build** hoặc bản phân phối (distribution) được tạo từ mã nguồn này.
+
+### Cơ sở pháp lý
+
+Việc sử dụng hình ảnh sản phẩm trong dự án này tuân thủ:
+
+- **Luật Sở hữu trí tuệ Việt Nam** (Luật số 50/2005/QH11, sửa đổi bổ sung 2009, 2019, 2022) — Điều 25: Các trường hợp sử dụng tác phẩm đã công bố không phải xin phép, không phải trả tiền nhuận bút, thù lao — bao gồm mục đích giảng dạy, nghiên cứu khoa học.
+- **Nguyên tắc Fair Use** — Sử dụng phi thương mại, phi lợi nhuận, mang tính giáo dục, không ảnh hưởng đến thị trường hoặc giá trị thương mại của tác phẩm gốc.
+
+---
+
+## Thông tin nhóm thực hiện
+
 <div align="center">
+
+### 👨‍💻 Được thực hiện bởi
+
+**TriThuc** & **PhuongAnh**
+
+*Đồ án môn học — Ứng dụng Hệ thống Thông tin Kế toán*
+
+---
 
 **Supermarket Fly** · Quản lý nội bộ siêu thị · AIS 2026
 
 *12 nhân viên · 5 vai trò · 43 use case · 37+ bảng · 34 migration · 79 service*
 
-</div>
+*Dự án được thực hiện cho mục đích học tập và nghiên cứu công nghệ.*
+*Mọi hình ảnh sản phẩm thuộc quyền sở hữu của các chủ sở hữu tương ứng.*
 
+</div>
