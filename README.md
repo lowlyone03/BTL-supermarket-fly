@@ -2,7 +2,7 @@
 
 # 🛒 Supermarket Fly
 
-**Hệ thống quản lý nội bộ siêu thị — Accounting Information System (AIS)**
+**APP Hệ thống quản lý nội bộ Supermarket Fly — Accounting Information System (AIS)**
 
 ![Node.js](https://img.shields.io/badge/Node.js-Express_5-339933?logo=nodedotjs&logoColor=white)
 ![Electron](https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white)
@@ -410,7 +410,68 @@ Hệ thống kế toán kép đầy đủ với **18 tài khoản chuẩn** theo
 
 ### 6.6 Nhân sự & Tiền lương
 
-**Quy trình lương (tất toán mùng 10 tháng sau):**
+#### 6.6.1 Phân ca & Quầy bán hàng
+
+**Loại ca (`LoaiCa`):** Hệ thống định nghĩa sẵn các loại ca làm việc:
+
+| Mã loại ca | Tên | Nhóm | Giờ |
+| --- | --- | --- | --- |
+| `CA_SANG` | Ca sáng | Ca bán hàng | 06:00 – 14:00 |
+| `CA_CHIEU` | Ca chiều | Ca bán hàng | 14:00 – 22:00 |
+| `HANH_CHINH` | Ca hành chính | Hành chính | 08:00 – 17:00 |
+
+**Quầy bán hàng (`QuayBanHang`):** Mỗi quầy có mã riêng, thu ngân check-in vào quầy được phân công. Một NV chỉ mở **1 ca tại 1 thời điểm** (unique index trên `CaLamViec`).
+
+**Lịch làm việc (`LichLamViec`):** QL phân ca theo tuần → **Công bố** → Thu ngân mới thấy lịch → Check-in đúng ngày + đúng khung giờ.
+
+#### 6.6.2 Chấm công & Điều chỉnh
+
+- **Chấm công (`ChamCong`):** Ghi nhận thời gian thực tế vào/ra, tính phút ngày/đêm, phút tăng ca.
+- **Điều chỉnh chấm công (`DieuChinhChamCong`):** NV đề xuất sửa giờ → QL duyệt hoặc từ chối → ghi lý do.
+- **Trạng thái công:** `Chờ duyệt` → `Đã duyệt` / `Từ chối`. Chỉ công **Đã duyệt** mới tính vào bảng lương.
+
+#### 6.6.3 Lịch ngày lễ Việt Nam — Tuân thủ BLLĐ 2019
+
+> **Căn cứ pháp lý:** Bộ luật Lao động 2019 (Luật số 45/2019/QH14), Điều 112 — Nghỉ lễ, tết.
+> Thông báo số 9441/TB-BNV của Bộ Nội vụ quy định lịch nghỉ Tết Âm lịch và ngày Quốc khánh liền kề.
+
+Bảng `NgayLeNam` lưu trữ **lịch ngày lễ chính thức theo từng năm**, phân loại nguồn gốc (`CoDinh` / `AmLich` / `QuocKhanhLienKe`) và cho phép QL điều chỉnh nếu nhà nước thay đổi:
+
+**Dữ liệu seed năm 2026:**
+
+| Ngày | Tên ngày lễ | Nhóm | Nguồn | Ghi chú |
+| --- | --- | --- | --- | --- |
+| 01/01/2026 | Tết Dương lịch | TetDuongLich | Cố định | Cố định 01/01 hàng năm |
+| 16/02/2026 | Tết Âm lịch — 29 tháng Chạp Ất Tỵ | TetAmLich | Âm lịch | TB 9441/BNV: 5 ngày Tết 16–20/02/2026 |
+| 17/02/2026 | Tết Âm lịch — Mùng 1 Bính Ngọ | TetAmLich | Âm lịch | TB 9441/BNV |
+| 18/02/2026 | Tết Âm lịch — Mùng 2 | TetAmLich | Âm lịch | TB 9441/BNV |
+| 19/02/2026 | Tết Âm lịch — Mùng 3 | TetAmLich | Âm lịch | TB 9441/BNV |
+| 20/02/2026 | Tết Âm lịch — Mùng 4 | TetAmLich | Âm lịch | TB 9441/BNV |
+| 26/04/2026 | Giỗ Tổ Hùng Vương (10/03 Âm lịch) | GioTo | Âm lịch | 10/03 âm lịch 2026 = 26/04/2026. QL sửa được |
+| 30/04/2026 | Ngày Chiến thắng | ChienThang | Cố định | Cố định 30/04 hàng năm |
+| 01/05/2026 | Ngày Quốc tế Lao động | LaoDong | Cố định | Cố định 01/05 hàng năm |
+| 01/09/2026 | Quốc khánh — Ngày liền kề | QuocKhanhLienKe | Liền kề QK | TB 9441/BNV chọn 01/09. QL có thể đổi sang 03/09 |
+| 02/09/2026 | Quốc khánh nước CHXHCN Việt Nam | QuocKhanh | Cố định | Cố định 02/09 hàng năm |
+
+**Quy tắc nghiệp vụ lễ Tết:**
+- Nhân viên làm ngày lễ → Hệ số **300%** (ca ngày), **330%** (ca đêm), **360%** (tăng ca ngày), **390%** (tăng ca đêm).
+- Nhân viên **nghỉ lễ** hưởng nguyên lương: 8 giờ chuẩn × đơn giá giờ — **chỉ NV có công được duyệt trong kỳ mới được tính**.
+- QL có thể **thêm / sửa / khóa** ngày lễ từng năm trên giao diện Phân ca → Ngày lễ.
+- Nguồn `AmLich`: Thay đổi mỗi năm (VD: Tết 2027 sẽ khác ngày). QL phải cập nhật hoặc hệ thống seed khi chạy migration năm mới.
+
+#### 6.6.4 Hệ số lương — BLLĐ 2019 (Điều 98, 97)
+
+Bảng `HeSoLuongNgay` lưu 12 hệ số chuẩn, tuân thủ **mức tối thiểu** theo Bộ luật Lao động 2019:
+
+| Loại ngày | Ca ngày (min) | Ca đêm (min) | Tăng ca ngày (min) | Tăng ca đêm (min) |
+| --- | --- | --- | --- | --- |
+| Ngày thường | 100% | 130% | 150% | 200% |
+| Nghỉ tuần (Chủ nhật) | 200% | 230% | 240% | 270% |
+| Lễ / Tết | 300% | 330% | 360% | 390% |
+
+> **Ghi chú:** Cột `MinHeSo` trong DB lưu mức tối thiểu pháp luật. `HeSo` là mức thực tế áp dụng. Ràng buộc `CHECK HeSo >= MinHeSo` đảm bảo cửa hàng **không được trả thấp hơn luật định**.
+
+#### 6.6.5 Quy trình tính lương (tất toán mùng 10 tháng sau)
 
 ```mermaid
 flowchart TD
@@ -426,17 +487,15 @@ flowchart TD
   K --> L[Chi thành công → Đã thanh toán]
 ```
 
-**Hệ số lương BLLĐ 2019 (`payrollEngine.js`):**
-
-| Loại ngày | Ca ngày | Ca đêm | Tăng ca ngày | Tăng ca đêm |
-| --- | --- | --- | --- | --- |
-| Ngày thường | 100% | 130% | 150% | 200% |
-| Nghỉ tuần (CN) | 200% | 230% | 240% | 270% |
-| Lễ / Tết | 300% | 330% | 360% | 390% |
-
-- Ngày lễ hưởng lương: 8h chuẩn × đơn giá — **chỉ NV có công duyệt trong kỳ**.
-- Ngày lễ seed 2026: Tết 16–20/02, Giỗ Tổ 26/04, 30/04, 01/05, Quốc khánh 01–02/09.
+**Chi tiết engine lương (`payrollEngine.js` — 273 dòng):**
+- Đọc `MucLuongNhanVien` (đơn giá giờ riêng từng NV).
+- Duyệt từng ngày trong kỳ → phân loại `Thuong` / `NghiTuan` / `LeTet` (tra bảng `NgayLeNam`).
+- Tách phút ngày / phút đêm (`splitDayNightMinutes` — ca đêm tính từ 22:00–06:00).
+- Nhân với hệ số tương ứng từ `HeSoLuongNgay` → tổng hợp lương.
+- Tự sinh `ChiTietBangLuong` cho từng dòng công (ghi rõ `LoaiNgay`, `LoaiGio`, `HeSoApDung`).
+- Ngày tất toán: **mùng 10 tháng sau** (tháng 12 → mùng 10 tháng 1 năm sau).
 - Quỹ lương: QL giao **một cục cho KT** (khác phiếu chi NCC giao từng phiếu).
+- Phương thức chi: `Tiền mặt` hoặc `Chuyển khoản` (qua tài khoản NH trong `HoSoNhanVien`).
 
 ### 6.7 Báo cáo lãi / lỗ cửa hàng
 
@@ -980,7 +1039,7 @@ Việc sử dụng hình ảnh sản phẩm trong dự án này tuân thủ:
 
 ---
 
-**Supermarket Fly** · Quản lý nội bộ siêu thị · AIS 2026
+**APP Supermarket Fly** · Hệ thống quản lý nội bộ siêu thị · AIS 2026
 
 *12 nhân viên · 5 vai trò · 43 use case · 37+ bảng · 34 migration · 79 service*
 
