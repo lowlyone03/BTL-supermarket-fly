@@ -1,659 +1,934 @@
-# Supermarket Fly
+<![CDATA[<div align="center">
 
-Phần mềm quản lý **nội bộ một cửa hàng** siêu thị — giao diện: *Supermarket FLY · Hà Nội*.
+# 🛒 Supermarket Fly
 
-Đọc file này để **hiểu dự án đang giải quyết việc gì**, dùng công nghệ nào, và tiền–hàng đi trong hệ thống ra sao. Phần cài máy, tài khoản test, API nằm ở nửa sau.
+**Hệ thống quản lý nội bộ siêu thị — Accounting Information System (AIS)**
 
-Tài liệu test / kế toán đã chốt: **[docs/](docs/README.md)** · UC và tài liệu môn: `../TaiLieu_Du_An/`
+![Node.js](https://img.shields.io/badge/Node.js-Express_5-339933?logo=nodedotjs&logoColor=white)
+![Electron](https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white)
+![SQL Server](https://img.shields.io/badge/SQL_Server-ODBC_17-CC2927?logo=microsoftsqlserver&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT_/_ISC-blue)
 
-**Người nhận dự án (làm tiếp FE + BE + CSDL):** đọc ngay
-[`docs/BAN_GIAO_LAM_TIEP_TOAN_BO_HE_THONG_2026-09-07.txt`](docs/BAN_GIAO_LAM_TIEP_TOAN_BO_HE_THONG_2026-09-07.txt).
-Backup CSDL: `../TaiLieu_Du_An/05_Backup/Database_Backups/SupermarketFlyDB_2026-09-07_191855.bak`.
+*Bài tập lớn môn Ứng dụng Hệ thống Thông tin Kế toán — Phần mềm chạy thật cho một cửa hàng siêu thị mini.*
 
----
-
-## 1. Bối cảnh
-
-Đây là **bài tập lớn (BTL)** môn *Ứng dụng hệ thống thông tin kế toán* (AIS): làm một hệ thống thật sự chạy được cho cửa hàng, không phải slide hay form giả.
-
-Bối cảnh nghiệp vụ nhóm chọn:
-
-- Một siêu thị **một địa điểm**, một kho logic **Kho cửa hàng** — không chuỗi, không điều chuyển chi nhánh.
-- **12 nhân viên, 5 vai trò:** 1 quản lý, 1 mua hàng, 1 thủ kho, 8 thu ngân, 1 kế toán.
-- **Khách** đến quầy trả đủ tiền rồi lấy hàng. **Nhà cung cấp** giao hàng, cửa hàng nợ 30–45 ngày rồi trả **một lần đủ**.
-- Quản lý cần biết: hàng còn không, ca thu ngân có đúng không, đã trả NCC chưa, lương tháng trả thế nào, cửa hàng **lãi hay lỗ** sau chi phí.
-
-Nếu không có phần mềm: đề nghị mua viết tay, nhập kho lệch hóa đơn, két ca không đối được với máy, công nợ “duyệt là đã trả”, cuối tháng không biết tiền bán có đủ trả lương.
-
-Hệ thống thay việc đó bằng **chứng từ điện tử + phân quyền + nhật ký**: mỗi việc có người làm, trạng thái, và số chỉ đổi khi bước hợp lệ xong.
+</div>
 
 ---
 
-## 2. Dự án này là gì — và không phải gì
+## Mục lục
 
-**Là:** AIS vận hành cửa hàng. Chuỗi *đề nghị → mua → nhập → bán → quỹ ca → công nợ NCC → lương → sổ cái mini / báo cáo*.
+- [1. Tổng quan](#1-tổng-quan)
+- [2. Kiến trúc hệ thống](#2-kiến-trúc-hệ-thống)
+- [3. Công nghệ sử dụng](#3-công-nghệ-sử-dụng)
+- [4. Cơ sở dữ liệu](#4-cơ-sở-dữ-liệu)
+- [5. Năm vai trò & phân quyền](#5-năm-vai-trò--phân-quyền)
+- [6. Các phân hệ nghiệp vụ](#6-các-phân-hệ-nghiệp-vụ)
+  - [6.1 Mua hàng & Nhập kho](#61-mua-hàng--nhập-kho)
+  - [6.2 Quản lý kho](#62-quản-lý-kho)
+  - [6.3 Bán hàng tại quầy (POS)](#63-bán-hàng-tại-quầy-pos)
+  - [6.4 Kế toán nghiệp vụ](#64-kế-toán-nghiệp-vụ)
+  - [6.5 Kế toán tổng hợp (Sổ cái mini)](#65-kế-toán-tổng-hợp-sổ-cái-mini)
+  - [6.6 Nhân sự & Tiền lương](#66-nhân-sự--tiền-lương)
+  - [6.7 Báo cáo lãi / lỗ cửa hàng](#67-báo-cáo-lãi--lỗ-cửa-hàng)
+- [7. Tính năng nâng cao](#7-tính-năng-nâng-cao)
+- [8. API Reference](#8-api-reference)
+- [9. Cấu trúc thư mục](#9-cấu-trúc-thư-mục)
+- [10. Cài đặt & Chạy](#10-cài-đặt--chạy)
+- [11. Tài khoản test](#11-tài-khoản-test)
+- [12. Database Migrations](#12-database-migrations)
+- [13. Lệnh npm & Test](#13-lệnh-npm--test)
+- [14. Xử lý sự cố](#14-xử-lý-sự-cố)
+- [15. Những gì cố ý chưa làm](#15-những-gì-cố-ý-chưa-làm)
+- [16. Tài liệu liên quan](#16-tài-liệu-liên-quan)
 
-Hai lớp kế toán **đã có trong code** (cập nhật 10/09/2026):
+---
 
-1. **Kế toán nghiệp vụ (P0, UC27–UC33):** đối chiếu 3 chứng từ, công nợ phải trả, phiếu thu/chi, lãi **gộp** (doanh thu thuần − giá vốn thuần), bảng lương theo công.
-2. **Kế toán mini (UC34–UC43):** `TaiKhoanKeToan`, `ButToan`, `KyKeToan`, VAT POS (511/33311), nhật ký chung, sổ cái, CĐPS, KQKD, LCTT, BCĐKT thu gọn, TSCĐ, sao kê CSV 112. Menu Kế toán tổng hợp + cẩm nang.
+## 1. Tổng quan
 
-Quản lý xem **hai báo cáo tách nhau**: KQKD / lãi kế toán (`kqkdLoiNhuan` = lãi gộp − lương đã khóa − cước; **không** trừ tiền trả NCC) và báo cáo **dòng tiền / thu-chi** (có chi NCC). Field cũ `laiLoSauChiPhi` (trừ NCC) vẫn trả API cho tương thích, **không** dùng làm “vì sao lỗ kế toán”.
+**Supermarket Fly** là phần mềm quản lý nội bộ hoàn chỉnh cho **một cửa hàng siêu thị mini** — từ mua hàng, nhập kho, bán hàng POS, đến kế toán kép, tính lương theo BLLĐ 2019, và báo cáo tài chính.
 
-**Không phải:**
+### Bối cảnh nghiệp vụ
 
-| Không phải | Vì sao |
+| Đặc điểm | Chi tiết |
 | --- | --- |
-| Website bán hàng / app khách | Khách không đăng nhập |
-| ERP nhiều công ty, nhiều kho | Một cửa hàng, một kho |
-| MISA / FAST đầy đủ | Sổ cái **mini** (18 TK, 1 TKNH); không BHXH, không tờ khai thuế nhà nước |
-| Phần mềm BHXH – bảng lương nhà nước | Không tính BHXH/BHYT; lương theo giờ công + ngày lễ luật VN |
+| **Quy mô** | Một cửa hàng, một kho logic, không chuỗi |
+| **Nhân sự** | 12 nhân viên, 5 vai trò (Quản lý, Mua hàng, Thủ kho, 8 Thu ngân, Kế toán) |
+| **Khách hàng** | Trả đủ tại quầy — không bán chịu, không công nợ phải thu |
+| **Nhà cung cấp** | Giao hàng trước, cửa hàng nợ 30–45 ngày rồi trả **một lần đủ** |
+| **Thanh toán** | Tiền mặt + QR ZaloPay (sandbox) — VNPay/MoMo là stub |
 
-Cổng QR POS đang chạy: **ZaloPay sandbox** (`PAYMENT_PROVIDER=zalopay`), không phải VNPay/MoMo. VNPay/PayOS/MoMo là stub `Provider chưa bật`. Telegram companion **đã có**, gồm nút duyệt inline + audit (`telegramApprove.js`). Trợ lý AI **P2-MIN đã có** (nút Trợ lý trên dashboard, `POST /api/assistant/ask`). Chưa có: OCR HĐ NCC, e-receipt token, webcam barcode, replenishment theo doanh số 7 ngày. **P3 đối soát NH thông minh** và **P4 RFM khách** đã có plan + code demo (không nhét vào P2-ĐỦ).
+### Hệ thống giải quyết vấn đề gì?
+
+Nếu không có phần mềm: đề nghị mua viết tay, nhập kho lệch hóa đơn, két ca không đối được với máy, công nợ "duyệt là đã trả", cuối tháng không biết tiền bán có đủ trả lương.
+
+Supermarket Fly thay việc đó bằng **chứng từ điện tử + phân quyền UC + nhật ký kiểm toán**: mỗi nghiệp vụ có người chịu trách nhiệm, trạng thái rõ ràng, và số liệu chỉ thay đổi khi bước hợp lệ hoàn thành.
+
+### Không phải
+
+| Không phải | Lý do |
+| --- | --- |
+| Website bán hàng online | Khách không có tài khoản đăng nhập |
+| ERP nhiều công ty / chuỗi | Một cửa hàng duy nhất |
+| MISA / FAST đầy đủ | Sổ cái **mini** (18 TK, 1 TKNH); không tờ khai thuế nhà nước |
+| Phần mềm BHXH | Không tính BHXH/BHYT; lương đơn thuần theo giờ công |
+
+---
+
+## 2. Kiến trúc hệ thống
+
+```
+ Máy nhân viên                  Máy cửa hàng (hoặc cùng máy)        SQL Server
+┌─────────────────┐            ┌──────────────────────────┐        ┌────────────────┐
+│  Electron 43    │   HTTP     │  Node.js / Express 5     │  ODBC  │ SupermarketFly │
+│  (Desktop App)  │   JWT ──►  │  REST API :3000           │  17 ─► │ DB             │
+│  HTML/CSS/JS    │            │  + Telegram Bot           │  WinA  │ (giờ Hà Nội)   │
+└─────────────────┘            │  + ZaloPay Gateway        │        └────────────────┘
+                               │  + SSE Notifications      │
+                               │  + Chat Hub (polling)     │
+                               └──────────────────────────┘
+                                        ▲
+                               Cloudflare Tunnel (tùy chọn)
+                                        │
+                               ┌────────┴────────┐
+                               │  Telegram Bot    │
+                               │  ZaloPay IPN     │
+                               └─────────────────┘
+```
+
+**Luồng hoạt động:**
+1. Nhân viên mở ứng dụng Electron → hiện trang Landing → Đăng nhập.
+2. Sau login, `dashboard.js` tải sidebar động theo `TenVaiTro` (quyền khác nhau thấy menu khác nhau).
+3. Mọi thao tác gọi REST API `/api/*` qua JWT — quyền kiểm tra realtime từ DB (không chỉ dựa token).
+4. API xử lý nghiệp vụ → ghi SQL Server → trả kết quả → tự động hạch toán kế toán kép nếu cần.
 
 ---
 
 ## 3. Công nghệ sử dụng
 
-Mô hình **ứng dụng desktop + API + SQL Server** — đúng kiểu phần mềm nội bộ cửa hàng (cài máy tính nhân viên, không host public).
+| Tầng | Công nghệ | Vai trò |
+| --- | --- | --- |
+| **Giao diện** | Electron 43 (Forge), HTML/CSS/JS thuần | Ứng dụng desktop Windows; không React/Vue |
+| **API** | Node.js, Express 5, JWT (8h), bcrypt (salt 10) | REST API; phân quyền theo mã UC realtime |
+| **Ảnh / File** | Multer + Sharp | Upload ảnh sản phẩm (bắt buộc), file chat, sao kê CSV |
+| **CSDL** | SQL Server (SQLEXPRESS) + mssql/msnodesqlv8 | Windows Auth, ODBC 17, `useUTC: false` (giờ VN) |
+| **Thanh toán** | ZaloPay sandbox + qrcode | QR động, IPN callback, hoàn tiền |
+| **Bot** | Telegram Bot API | Dashboard QL, duyệt chứng từ inline, OTP |
+| **Tunnel** | Cloudflare Tunnel (trycloudflare.com) | Expose localhost cho Webhook ZaloPay/Telegram |
+| **AI** | OpenAI API (tùy chọn) | Trợ lý hỏi đáp nghiệp vụ trên dashboard |
+| **Build** | concurrently, Electron Forge, PowerShell scripts | `npm start` = API + Desktop đồng thời |
 
-```text
-Máy nhân viên                Máy / cùng máy cửa hàng              SQL Server
-┌─────────────────┐          ┌──────────────────────┐            ┌────────────────┐
-│ Electron        │  HTTP    │ Node.js Express      │   ODBC 17  │ Supermarket-   │
-│ (cửa sổ Windows)│  JWT ──► │ cổng 3000            │ ─────────► │ FlyDB          │
-│ HTML/CSS/JS     │          │ REST /api/...        │  Windows   │ giờ địa phương │
-└─────────────────┘          └──────────────────────┘  Auth      └────────────────┘
+### Dependencies chính
+
+**Backend (`server/`):** express 5, cors, dotenv, bcrypt, jsonwebtoken, mssql, msnodesqlv8, multer, sharp, qrcode.
+
+**Desktop (`desktop/`):** electron 43, electron-forge (squirrel, zip, deb, rpm makers), electron-squirrel-startup.
+
+---
+
+## 4. Cơ sở dữ liệu
+
+Schema gốc: **37+ bảng**, **68+ khóa ngoại**, chia thành 6 nhóm cốt lõi + các migration mở rộng.
+
+### Sơ đồ nhóm bảng
+
+```
+NHÓM 1: Hệ thống & Phân quyền (5 bảng)
+├── VaiTro                    5 vai trò chuẩn
+├── TaiKhoan                  Đăng nhập, JWT, bcrypt
+├── NhatKy                    Audit log (BIGINT identity)
+├── ChucNang                  43 mã UC
+└── VaiTro_ChucNang           Ma trận phân quyền N–N
+    └── NhanVien_ChucNang     Ghi đè quyền cá nhân (override)
+
+NHÓM 2: Danh mục gốc (7 bảng)
+├── DanhMuc → SanPham         Ngành hàng → Sản phẩm (mã vạch, giá, VAT)
+├── NhaCungCap                Đối tác mua hàng
+├── KhachHang                 Thẻ thành viên, điểm tích lũy, hạng RFM
+├── NhanVien                  Hồ sơ nhân sự, CCCD
+│   └── HoSoNhanVien          Chi tiết 1:1 (BHXH, MST, ngân hàng)
+└── Kho                       Kho hàng logic duy nhất
+
+NHÓM 3: Mua hàng & Nhập kho (7 bảng)
+├── DeNghiMuaHang + CT        TK lập đề nghị
+├── DonMuaHang + CT           MH lập PO → QL duyệt
+├── ThongBaoGiaoHang          Theo dõi chuyến giao NCC
+└── PhieuNhap + CT            TK kiểm nhận → cộng tồn
+
+NHÓM 4: Bán hàng & Đổi trả (8 bảng)
+├── KhuyenMai                 Giảm %, tiền, đồng giá
+├── CaLamViec                 Check-in/out, đối soát két
+├── HoaDon + CT               POS bán lẻ (snapshot DonGiaVon)
+├── ThanhToan                 TM/QR/Thẻ/CK (mã giao dịch unique)
+├── PhieuDoiTra + CT          Đổi/hoàn (QL duyệt nếu lệch giá)
+└── PhieuThu                  Bàn giao tiền mặt cuối ca (1 ca = 1 PT)
+
+NHÓM 5: Quản lý kho (6 bảng)
+├── TonKho                    Tồn sổ (SLTon ≥ 0, giá BQ gia quyền)
+├── GiaoDichKho               Thẻ kho (nhập/xuất/điều chỉnh)
+├── PhieuXuat + CT            Xuất hủy/trả NCC → QL duyệt
+└── KiemKe + CT               Kiểm đếm thực tế → điều chỉnh
+
+NHÓM 6: Kế toán mua & Công nợ (4 bảng)
+├── HoaDonMuaHang + CT        HĐ GTGT NCC → đối chiếu 3 bên
+├── CongNoPhaiTra             Nợ NCC (sinh khi 3-way khớp)
+└── PhieuChi                  Thanh toán NCC (QL duyệt + giao quỹ)
+
+NHÓM 7: Nhân sự & Lương (migration 20260903)
+├── LoaiCa / QuayBanHang      Định nghĩa ca, quầy
+├── LichLamViec               Phân ca (QL công bố)
+├── ChamCong + DieuChinh      Chấm công, OT có phút
+├── NgayLeNam                 Lịch lễ Tết VN (seed 2026)
+├── HeSoLuongNgay             12 hệ số BLLĐ 2019
+├── KyLuong / BangLuong       Kỳ, bảng, chi tiết lương
+├── MucLuongNhanVien          Đơn giá giờ theo NV
+└── PhieuChiLuong             Chi trả (TM/CK, quỹ chung QL)
+
+NHÓM 8: Kế toán tổng hợp (migration 20260909)
+├── TaiKhoanKeToan            18 TK chuẩn (111→911)
+├── KyKeToan                  Kỳ tháng (Mở/Khóa)
+├── SoDuDauKy                 Số dư đầu kỳ (chốt 1 lần)
+├── ButToan + CT              Nhật ký chung kép (Nợ = Có)
+├── ChoGhiSo                  Hàng đợi chứng từ chưa ghi sổ
+├── LoaiChiPhi / ChiPhiVanHanh  Chi phí 642
+├── TaiSanCoDinh / KhauHao    TSCĐ + khấu hao đường thẳng
+├── TaiKhoanNganHang          TKNH siêu thị (TK 112)
+├── SaoKeNganHang / DongSaoKe Import CSV sao kê
+└── vw_SoCaiDong              View sổ cái (NKC/CĐPS)
+
+NHÓM 9: Đối soát NH thông minh (migration 20260910)
+├── KetQuaDoiSoatNganHang     Kết quả khớp (điểm 0-100)
+└── UngVienDoiSoat            Ứng viên gợi ý cho KT
+
+NHÓM 10: Chat nội bộ (migration 20260911)
+├── PhongChat                 6 kênh theo vai trò
+├── ThanhVienPhongChat        Membership tự đồng bộ
+├── TinNhan                   Text/Ảnh/File/Chứng từ
+└── DaDocTinNhan              Watermark đã đọc
 ```
 
-| Tầng | Công nghệ | Việc trong dự án |
+### Ràng buộc toàn vẹn nổi bật
+
+| Bảng | Ràng buộc | Ý nghĩa |
 | --- | --- | --- |
-| Giao diện | **Electron** (Forge), HTML/CSS/JS thuần | Một cửa sổ Windows; sau login, sidebar đổi theo vai trò. Không React/Vue. |
-| API | **Node.js**, **Express 5**, **JWT**, **bcrypt**, **CORS** | Mọi nghiệp vụ đi API; quyền theo mã use case (`UC05`, `UC27`…). |
-| Ảnh SP | **Multer**, thư mục `server/uploads`, URL `/uploads` | Bắt buộc có ảnh khi tạo sản phẩm. |
-| Dữ liệu | **SQL Server** + **mssql** / **msnodesqlv8** | Quan hệ chứng từ (đơn, phiếu nhập, HĐ, công nợ, ca, lương). `useUTC: false` vì DATETIME là giờ Hà Nội. |
-| Máy chủ DB | Instance mặc định `localhost\SQLEXPRESS`, **Windows Authentication** | File `.env.example` có user `sa` nhưng `db.js` đang trusted connection. |
-| Công cụ | **npm**, `concurrently`, file `.bat` | `npm start` = API + desktop cùng lúc. |
-
-**Vì sao stack này:** môn học quen SQL Server; Electron cho cảm giác “phần mềm cửa hàng” không cần trình duyệt; Node đủ viết API và gắn ODBC. Git chỉ ở thư mục `supermarket-fly/` (thư mục cha `BTL/` không phải repo).
-
-![Sơ đồ kiến trúc Electron — API cổng 3000 — SQL Server](docs/images/kien-truc-he-thong.png)
+| `ButToan` | `CHECK TongNo = TongCo` | Nguyên tắc kế toán kép |
+| `ChiTietButToan` | `CHECK (No > 0 AND Co = 0) OR (Co > 0 AND No = 0)` | Mỗi dòng chỉ Nợ hoặc Có |
+| `HoaDonMuaHang` | `CHECK khớp → PO IS NOT NULL AND PN IS NOT NULL` | Đối chiếu 3 bên bắt buộc |
+| `ChiTietPhieuNhap` | `CHECK SoLuongGiao = ChapNhan + TuChoi` | Toàn vẹn số lượng giao/nhận |
+| `TonKho` | `CHECK SLTon >= 0` | Không cho tồn âm |
+| `PhieuThu` | `CHECK lệch → LyDoChenhLech IS NOT NULL` | Bắt buộc giải trình chênh lệch két |
+| `DonMuaHang` | `CHECK SoNgayThanhToan BETWEEN 30 AND 45` | Quy tắc công nợ chuẩn |
 
 ---
 
-## 4. Cách hiểu hệ thống (tiền và hàng)
+## 5. Năm vai trò & phân quyền
 
-Ba “cột tiền” **không được trộn**:
+### Ma trận vai trò
 
-1. **Hàng và giá vốn** — bán xong trừ tồn, dòng hóa đơn giữ `DonGiaVon`. Lãi gộp = tiền bán thuần − giá vốn thuần. Đổi trả làm giảm doanh thu/giá vốn, không sửa tay tồn.
-2. **Két ca thu ngân** — chỉ tiền mặt khách đưa tại quầy (trừ hoàn tiền mặt). Cuối ca nộp phiếu thu. QR/thẻ **không** vào két. Phiếu thu **không** cộng thêm một lần doanh thu.
-3. **Công nợ NCC và quỹ lương** — nợ NCC chỉ sinh khi kế toán **đối chiếu khớp** đơn + phiếu nhập + hóa đơn mua. Duyệt phiếu / giao quỹ **chưa** phải đã trả. Lương: quản lý giao **một quỹ cho kế toán**, kế toán mới chi từng người. Ngày tất toán lương (và hướng cước vận chuyển) là **mùng 10**.
+| Vai trò | Trong cửa hàng | Mã UC chính |
+| --- | --- | --- |
+| **Quản lý (QL)** | Phê duyệt mọi chứng từ, giao quỹ, phân ca, xem P&L, nhật ký | UC01–10, UC30, UC32, UC38–39, UC43 |
+| **Mua hàng (MH)** | NCC, đọc đề nghị kho, lập đơn mua, theo dõi giao hàng | UC01, UC11–14, UC31 |
+| **Thủ kho (TK)** | Tồn kho, kiểm đếm, nhận hàng, nhập/xuất, kiểm kê | UC01, UC15–21, UC31 |
+| **Thu ngân (TN)** | Lịch ca, check-in POS, bán hàng, đổi trả, đóng ca | UC01, UC22–26, UC31 |
+| **Kế toán (KT)** | Đối chiếu 3 bên, công nợ, phiếu thu ca, lương, sổ cái, báo cáo | UC01, UC27–29, UC31, UC33–43 |
 
-Hàng đi: *đề nghị (sau khi thủ kho đếm thật) → đơn mua (QL duyệt) → giao → kiểm → nhập (chỉ SL chấp nhận) → kệ → bán / đổi trả / xuất hủy*.
+### Cơ chế phân quyền
 
-Người dùng không nhìn “bảng SQL”. Họ nhìn **chứng từ và trạng thái**: Chờ duyệt → Đã duyệt → Thành công / Thất bại.
+Quyền được kiểm tra **realtime từ DB** mỗi API call (không chỉ dựa token JWT):
+
+1. **Ưu tiên 1:** Kiểm tra bảng `NhanVien_ChucNang` — quyền ghi đè riêng cho cá nhân.
+2. **Ưu tiên 2:** Nếu không có ghi đè → kế thừa từ `VaiTro_ChucNang` theo vai trò.
+
+Quản lý phân quyền lại có hiệu lực **ngay lập tức** mà nhân viên không cần đăng xuất.
+
+### Danh mục 43 Use Case
+
+<details>
+<summary>Xem đầy đủ 43 UC</summary>
+
+| UC | Tên | Nhóm |
+| --- | --- | --- |
+| UC01 | Đăng nhập và sử dụng tài khoản | Hệ thống |
+| UC02 | Quản lý tài khoản và phân quyền | Hệ thống |
+| UC03 | Xem nhật ký hệ thống | Hệ thống |
+| UC04 | Quản lý nhân viên, sản phẩm, khuyến mãi | Danh mục |
+| UC05 | Quản lý Nhà cung cấp | Mua hàng |
+| UC06 | Lập và quản lý Đơn mua hàng | Mua hàng |
+| UC07 | Quản lý tồn kho và nhập/xuất | Kho |
+| UC08 | Lập Phiếu đề nghị mua hàng | Kho |
+| UC09 | Phê duyệt chứng từ | Phê duyệt |
+| UC10 | Chương trình khách hàng thành viên | Loyalty |
+| UC11 | Quản lý Nhà cung cấp (MH) | Mua hàng |
+| UC12 | Tiếp nhận Phiếu đề nghị | Mua hàng |
+| UC13 | Lập Đơn mua hàng | Mua hàng |
+| UC14 | Theo dõi giao hàng | Mua hàng |
+| UC15 | Tra cứu tồn kho và cảnh báo | Kho |
+| UC16 | Lập Phiếu đề nghị mua | Kho |
+| UC17 | Tiếp nhận và kiểm tra hàng | Kho |
+| UC18 | Lập Phiếu nhập kho | Kho |
+| UC19 | Lập Phiếu xuất kho | Kho |
+| UC20 | Kiểm kê tồn kho | Kho |
+| UC21 | Kiểm tra hàng đổi trả | Kho |
+| UC22 | Mở/đóng ca bán hàng | Bán hàng |
+| UC23 | Quản lý thông tin khách hàng | Bán hàng |
+| UC24 | Lập Hóa đơn bán hàng | Bán hàng |
+| UC25 | Ghi nhận thanh toán | Bán hàng |
+| UC26 | Xử lý đổi trả | Bán hàng |
+| UC27 | Đối chiếu HĐ mua hàng 3 bên | Kế toán |
+| UC28 | Theo dõi và thanh toán công nợ NCC | Kế toán |
+| UC29 | Đối soát doanh thu, lập Phiếu thu ca | Kế toán |
+| UC30 | Phân công ca và giám sát chấm công | Nhân sự |
+| UC31 | Xem lịch và chấm công cá nhân | Nhân sự |
+| UC32 | Duyệt công và tổng hợp lương | Nhân sự |
+| UC33 | Lập, khóa và thanh toán bảng lương | Nhân sự |
+| UC34 | Quản lý hệ thống tài khoản kế toán | Sổ cái |
+| UC35 | Mở kỳ và nhập số dư đầu kỳ | Sổ cái |
+| UC36 | Ghi nhận chi phí vận hành | Sổ cái |
+| UC37 | Xem và ghi sổ bút toán | Sổ cái |
+| UC38 | Xem sổ kế toán (NKC, sổ cái, CĐPS) | Báo cáo |
+| UC39 | Khóa kỳ, kết chuyển và mở lại | Sổ cái |
+| UC40 | Bảng kê thuế GTGT | Thuế |
+| UC41 | Quản lý tài sản cố định | TSCĐ |
+| UC42 | Tài khoản ngân hàng và sao kê CSV | Đối soát |
+| UC43 | Báo cáo tài chính (KQKD, LCTT, BCĐKT) | Báo cáo |
+
+</details>
 
 ---
 
-## 5. Ai dùng phần mềm
+## 6. Các phân hệ nghiệp vụ
 
-Năm **actor** (loại vai trò). Tám thu ngân vẫn là một actor.
-
-| Vai trò | Trong cửa hàng làm gì |
-| --- | --- |
-| Quản lý (QL) | Phê duyệt việc lớn, giao quỹ, phân ca, xem cửa hàng lãi/lỗ, nhật ký khi có sự cố |
-| Mua hàng (MH) | Nhà cung cấp, biến đề nghị kho thành đơn mua, theo dõi giao hàng |
-| Thủ kho (TK) | Đếm hàng, đề nghị khi hết/thiếu, nhận hàng, nhập–xuất, kiểm kê |
-| Thu ngân (TN) | Đúng ca mới vào quầy; bán, thu tiền, đóng ca |
-| Kế toán (KT) | Đối chiếu mua, công nợ, phiếu thu ca, lập/khóa/chi lương, báo cáo nội bộ |
-
-Khách và NCC **không có tài khoản**.
-
----
-
-## 6. Ảnh demo giao diện thật
-
-Hai ảnh dưới chụp từ `desktop/src/pages` khi chạy static (`localhost:4173`). Đăng nhập nội bộ, không phải web khách.
-
-![Trang giới thiệu](docs/images/demo-landing.png)
-
-*Trang giới thiệu — 5 phân hệ và 5 vai trò. Một số câu trên landing mang tính giới thiệu (ví dụ “công nợ khách hàng”); **nghiệp vụ thật không bán chịu**, không có công nợ phải thu.*
-
-![Màn đăng nhập kem + 2 cột](docs/images/demo-login.png)
-
-*Đăng nhập: trái minh họa mua / kho / quầy / kế toán; phải form tài khoản nội bộ (`admin`, `thukho`, `ketoan`…).*
-
-Các màn sau login (kho, POS, lương, quỹ, lãi/lỗ) — minh họa đúng palette xanh FLY:
-
-| Kho (Thủ kho) | Quầy (Thu ngân) |
-| --- | --- |
-| ![Tồn kho & cảnh báo](docs/images/demo-ton-kho.png) | ![POS bán hàng](docs/images/demo-pos.png) |
-
-| Lương (Kế toán) | Giao quỹ (Quản lý) |
-| --- | --- |
-| ![Bảng lương tháng](docs/images/demo-bang-luong.png) | ![Giao quỹ cho kế toán](docs/images/demo-giao-quy-luong.png) |
-
-![Báo cáo lãi lỗ cửa hàng](docs/images/demo-lai-lo.png)
-
----
-
-## 7. Ba quy trình chuẩn (đúng logic đã chốt)
-
-Ba quy trình này là xương sống đồ án. Số trên chứng từ **chỉ đổi đúng bước**; mũi tên đứt = chưa được phép.
-
-### Quy trình 1 — Mua hàng và nhập kho
-
-![Sơ đồ quy trình mua — nhập — đối chiếu](docs/images/quy-trinh-1-mua-nhap.png)
+### 6.1 Mua hàng & Nhập kho
 
 ```mermaid
 flowchart LR
   A[TK đếm thực tế] --> B{Còn đủ?}
-  B -->|Có| Z[Dừng — không đề nghị]
-  B -->|Hết / thiếu| C[Phiếu đề nghị mua]
-  B -->|Hỏng hết hạn| X[Phiếu xuất hủy]
-  X --> X1[QL duyệt]
-  X1 --> X2[TK xác nhận mới trừ tồn]
+  B -->|Có| Z[Dừng]
+  B -->|Thiếu| C[Phiếu đề nghị]
+  B -->|Hỏng/Hết hạn| X[Phiếu xuất hủy]
+  X --> X1[QL duyệt] --> X2[TK xác nhận → trừ tồn]
   C --> D[MH lập Đơn mua]
   D --> E[QL duyệt PO]
   E --> F[NCC giao]
-  F --> G[TK kiểm — chỉ SL chấp nhận]
-  G --> H[Phiếu nhập cộng tồn]
-  H --> I[KT nhập HĐ mua]
+  F --> G[TK kiểm → chỉ SL chấp nhận]
+  G --> H[Phiếu nhập → cộng tồn]
+  H --> I[KT nhập HĐ GTGT]
   I --> J{Đối chiếu 3 chứng từ}
   J -->|Khớp| K[Sinh công nợ phải trả]
   J -->|Lệch| L[Không ghi nợ]
 ```
 
-| Bước | Ai | Hệ thống được / không được |
-| --- | --- | --- |
-| 1. Cảnh báo tồn &lt; min | Máy | Chỉ **gợi ý**. Không tự thành đơn mua, không “đề nghị khai trương”. |
-| 2. Kiểm đếm thực tế | TK | Đợt kiểm kê **đúng mặt hàng đã chọn**. Số đếm ≠ sổ thì ghi trên kiểm kê; tồn sổ chỉ đổi sau QL duyệt điều chỉnh. |
-| 3a. Còn đủ | TK | **Không** lập đề nghị. |
-| 3b. Hết / thiếu sau đếm | TK | Lập **Phiếu đề nghị** → gửi MH. **QL không duyệt đề nghị.** |
-| 3c. Hỏng / hết hạn | TK | **Phiếu xuất hủy** → QL duyệt → TK xác nhận mới trừ tồn. |
-| 4. Đơn mua | MH | Chọn NCC, số lượng, giá. |
-| 5. Duyệt PO | QL | **Lần duyệt duy nhất** trên đơn. |
-| 6. Nhận hàng | TK | Đạt / thiếu / sai / hư. Chỉ `SoLuongChapNhan` vào phiếu nhập. Hàng hư **không** cộng tồn. |
-| 7. Đối chiếu 3 bên | KT | Đơn + phiếu nhập + HĐ GTGT (SP, SL, đơn giá, thuế mua, tổng). |
-| 8. Công nợ | Máy | **Chỉ khi khớp.** Hạn = ngày đối chiếu + 30–45 ngày. Trả một lần đủ. |
+**Quy tắc đã chốt:**
+- Cảnh báo tồn < min chỉ là **gợi ý**, không tự thành đơn mua.
+- TK phải kiểm đếm **thực tế** mới được lập đề nghị. QL **không** duyệt đề nghị.
+- Đối chiếu 3 bên: Đơn + Phiếu nhập + HĐ GTGT. **Chỉ khi khớp** mới sinh `CongNoPhaiTra`.
+- Nợ 30–45 ngày, trả **một lần đủ**. Cấm trả trước, trả góp.
 
-**Cấm:** trả trước, trả từng phần, giảm nợ lúc lập phiếu chi hoặc lúc QL duyệt phiếu chi NCC. Nợ chỉ về 0 khi KT ghi thanh toán **thành công**.
+### 6.2 Quản lý kho
 
----
+- **Tồn kho:** Theo dõi `SLTon` (CHECK ≥ 0), `DonGiaBinhQuan` (bình quân gia quyền di động), `GiaTriTon`.
+- **Giao dịch kho:** Mọi biến động ghi vào `GiaoDichKho` (thẻ kho) — Nhập mua, Xuất bán, Xuất hủy, Điều chỉnh kiểm kê.
+- **Kiểm kê:** TK đếm → ghi chênh lệch → QL duyệt điều chỉnh → mới UPDATE tồn sổ.
+- **Xuất hủy/trả NCC:** QL duyệt → TK xác nhận → mới trừ tồn.
 
-### Quy trình 2 — Bán tại quầy và quỹ ca
-
-![Sơ đồ bán hàng — đóng ca — phiếu thu](docs/images/quy-trinh-2-ban-quy-ca.png)
+### 6.3 Bán hàng tại quầy (POS)
 
 ```mermaid
 flowchart TD
-  P[QL công bố lịch ca] --> Q{TN đúng ngày + trong giờ ca?}
-  Q -->|Không / hết ca| R[API 403 — không vào POS]
-  Q -->|Có, sớm tối đa ~10 phút| S[Check-in / mở ca]
-  S --> T[Bán — khách trả đủ]
+  P[QL công bố lịch ca] --> Q{TN đúng ngày + trong giờ?}
+  Q -->|Không| R[API 403]
+  Q -->|Có, sớm ~10 phút| S[Check-in]
+  S --> T[Bán → khách trả đủ]
   T --> U[Trừ tồn + snapshot DonGiaVon]
   U --> V[Đóng ca]
   V --> W[KT lập Phiếu thu]
   W --> Y[TM hệ thống = TM thu − hoàn TM]
 ```
 
-| Bước | Ai | Logic đã chốt |
+**Kiểm soát ca (`cashierDuty.js`):**
+- Thu ngân chỉ vào POS khi có lịch **Đã công bố đúng hôm nay** và **trong khung giờ ca** (vào sớm tối đa 10 phút, grace sau ca 15 phút chỉ để đóng ca/hoàn trả).
+- **Hết giờ ca: API trả 403** — không chỉ khóa nút trên giao diện.
+- Một NV chỉ mở **1 ca tại 1 thời điểm** (unique index trên `CaLamViec`).
+- Đóng ca → tự động tính `TienMatHeThong = TM thu − hoàn TM`. QR/Thẻ/CK **không** vào két.
+
+**Thanh toán đa kênh:**
+- Tiền mặt: Ghi nhận ngay → hoàn thành HĐ.
+- ZaloPay QR: Tạo QR động → khách quét → IPN callback xác nhận → hoàn thành HĐ.
+- Hỗ trợ **thanh toán nhiều phương thức** trên 1 HĐ (VD: một phần TM + một phần QR).
+
+**Đổi trả:**
+- Ngang giá: Thu ngân tự xử lý.
+- Lệch giá: QL duyệt.
+- Hoàn tiền mặt trừ vào két ca. Hoàn CK có mã giao dịch.
+
+### 6.4 Kế toán nghiệp vụ
+
+| Nghiệp vụ | Ai làm | Logic |
 | --- | --- | --- |
-| Phân ca | QL | Lịch **Đã công bố**. Ca hành chính T2–T7; thu ngân theo ngày có lịch. |
-| Vào quầy | TN | Phải đúng **hôm nay** và **trong khung giờ**. Hết giờ ca / đã đóng: **không vào lại, không bán**. |
-| Bán | TN | Thanh toán **đủ** tại quầy. Không công nợ phải thu, không TK 131. |
-| Tồn và lãi gộp | Máy | HĐ hoàn thành mới trừ tồn. DT thuần − GV thuần = lãi gộp. |
-| Đổi trả | TN (+ QL nếu lệch giá) | Không cộng doanh thu lần hai. |
-| Két ca | TN → KT | Chỉ **tiền mặt**. QR / thẻ / CK **không** vào két. Một ca **một** phiếu thu. |
-| Phiếu thu | KT | Không phải biên bản chênh lệch riêng — lý do ghi trên phiếu. **Không** Co doanh thu lần hai. |
+| **Đối chiếu 3 bên** | KT | So Đơn + Phiếu nhập + HĐ GTGT (SP, SL, đơn giá, thuế). Khớp → sinh công nợ |
+| **Công nợ NCC** | KT lập phiếu chi → QL duyệt + giao quỹ → KT chi | Chỉ khi KT ghi thanh toán **thành công** thì `SoTienConLai = 0` |
+| **Phiếu thu ca** | KT | Đối soát tiền mặt ca. Chênh lệch bắt buộc giải trình. Một ca một phiếu thu |
+| **Gia hạn nợ** | KT đề xuất → QL duyệt | Ghi lịch sử gia hạn (`CongNoGiaHan`) |
 
----
+### 6.5 Kế toán tổng hợp (Sổ cái mini)
 
-### Quy trình 3 — Lương tháng (tất toán mùng 10)
+Hệ thống kế toán kép đầy đủ với **18 tài khoản chuẩn** theo Thông tư 133/200:
 
-![Sơ đồ lương — duyệt — giao quỹ cho kế toán — chi](docs/images/quy-trinh-3-luong.png)
+```
+111 Tiền mặt            │ 331  Phải trả người bán
+112 Tiền gửi ngân hàng   │ 33311 Thuế GTGT đầu ra
+1331 Thuế GTGT khấu trừ  │ 334  Phải trả người lao động
+138 Phải thu khác        │ 411  Vốn chủ sở hữu
+156 Hàng hóa             │ 421  LNST chưa phân phối
+211 TSCĐ hữu hình        │ 511  Doanh thu bán hàng
+214 Hao mòn TSCĐ         │ 5212 Giảm giá / chiết khấu
+632 Giá vốn hàng bán     │ 642  Chi phí QLDN
+711 Thu nhập khác         │ 911  Xác định KQKD
+```
+
+**Hạch toán tự động khi chứng từ hợp lệ (`journalEngine.js` + `accountingHooks.js`):**
+
+| Sự kiện | Định khoản |
+| --- | --- |
+| Bán hàng POS | Nợ 111/112, Có 511 + 33311 (VAT) |
+| Ghi nhận giá vốn | Nợ 632, Có 156 |
+| Khóa kỳ lương | Nợ 642, Có 334 |
+| Chi lương | Nợ 334, Có 111/112 |
+| Đối chiếu mua (3-way khớp) | Nợ 156 + 1331, Có 331 |
+| Trả NCC | Nợ 331, Có 111/112 |
+| Chi phí vận hành | Nợ 642 + 1331, Có 111/112 |
+| Mua TSCĐ | Nợ 211 + 1331, Có 111/112 |
+| Khấu hao TSCĐ | Nợ 642, Có 214 |
+
+**Báo cáo tài chính:**
+- Nhật ký chung (NKC)
+- Sổ cái chi tiết theo TK
+- Bảng cân đối phát sinh (CĐPS)
+- Báo cáo Kết quả Kinh doanh (KQKD)
+- Báo cáo Lưu chuyển Tiền tệ (LCTT)
+- Bảng Cân đối Kế toán (BCĐKT) thu gọn
+
+### 6.6 Nhân sự & Tiền lương
+
+**Quy trình lương (tất toán mùng 10 tháng sau):**
 
 ```mermaid
 flowchart TD
-  A[QL duyệt công — OT có phút] --> B[KT bấm Lập / tính lại]
-  B --> C{Còn công chờ / chưa ai có công duyệt?}
-  C -->|Có chờ| D[Chặn lập]
-  C -->|Không có NV đã làm| E[Bảng trống]
-  C -->|Có NV đã chấm công duyệt| F[Tính giờ + lễ chỉ cho người đó]
+  A[QL duyệt công] --> B[KT bấm Lập/tính lại]
+  B --> C{Còn công chờ duyệt?}
+  C -->|Có| D[Chặn lập]
+  C -->|Không| F[Tính giờ + lễ cho NV có công]
   F --> G[KT khóa kỳ]
-  G --> H[KT lập phiếu — mỗi NV TM hoặc CK]
-  H --> I[QL duyệt từng người hoặc Duyệt tất cả]
-  I --> J[QL giao quỹ CHUNG cho kế toán — một lần]
-  J --> K[KT chi từng NV từ quỹ]
-  K --> L[Chỉ lúc chi thành công mới Đã thanh toán]
+  G --> H[KT lập phiếu chi lương]
+  H --> I[QL duyệt từng/tất cả]
+  I --> J[QL giao quỹ CHUNG cho KT]
+  J --> K[KT chi từng NV]
+  K --> L[Chi thành công → Đã thanh toán]
 ```
 
-| Bước | Ai | Logic đã chốt |
+**Hệ số lương BLLĐ 2019 (`payrollEngine.js`):**
+
+| Loại ngày | Ca ngày | Ca đêm | Tăng ca ngày | Tăng ca đêm |
+| --- | --- | --- | --- | --- |
+| Ngày thường | 100% | 130% | 150% | 200% |
+| Nghỉ tuần (CN) | 200% | 230% | 240% | 270% |
+| Lễ / Tết | 300% | 330% | 360% | 390% |
+
+- Ngày lễ hưởng lương: 8h chuẩn × đơn giá — **chỉ NV có công duyệt trong kỳ**.
+- Ngày lễ seed 2026: Tết 16–20/02, Giỗ Tổ 26/04, 30/04, 01/05, Quốc khánh 01–02/09.
+- Quỹ lương: QL giao **một cục cho KT** (khác phiếu chi NCC giao từng phiếu).
+
+### 6.7 Báo cáo lãi / lỗ cửa hàng
+
+**Hai góc nhìn tách biệt:**
+
+1. **KQKD điều hành:** Doanh thu thuần − Giá vốn thuần − Lương đã khóa − Cước vận chuyển. **Không trừ** tiền trả NCC (vì trả NCC là nghĩa vụ nợ, không phải chi phí).
+
+2. **Dòng tiền / Thu-chi:** Tiền thu khách − Tiền trả NCC − Trả lương − Chi phí đã chi. Chi NCC chỉ hiện ở đây.
+
+Khi **lỗ KQKD**: QL bắt buộc nhập kế hoạch điều chỉnh (≥ 50 ký tự) → gửi thông báo toàn cửa hàng.
+
+---
+
+## 7. Tính năng nâng cao
+
+### 7.1 Cổng thanh toán QR (ZaloPay Sandbox)
+
+```
+Khách quét QR → ZaloPay xử lý → IPN callback → API cập nhật HĐ
+```
+
+- Tạo mã QR động (`qrcode` library) cho từng hóa đơn.
+- IPN handler (`paymentGatewayService.js`): Xác thực MAC, phân loại `success/failure/pending`, cập nhật trạng thái thanh toán, tự động hoàn thành HĐ khi đủ tiền.
+- Hỗ trợ query trạng thái và resolve thủ công cho QR chờ xác nhận.
+- Cloudflare Tunnel tự động cấu hình IPN URL cho localhost.
+
+### 7.2 Telegram Companion Bot
+
+Bot Telegram cho Quản lý với đầy đủ tính năng:
+
+- **Dashboard trạng thái:** Doanh thu, giá vốn, lãi gộp, tỷ trọng 4 kênh thanh toán, cảnh báo.
+- **Duyệt chứng từ inline:** PO, phiếu xuất, kiểm kê, đổi trả, phiếu chi NCC, chấm công — duyệt ngay trên Telegram bằng nút inline button.
+- **Báo cáo Tháng/Quý/Năm:** So sánh cùng tiến độ kỳ trước.
+- **Bảo mật:** OTP xác thực, kiểm tra vai trò/quyền UC, webhook secret, chống gửi lặp, ghi nhật ký.
+
+### 7.3 Đối soát ngân hàng thông minh (P3)
+
+- Import file CSV sao kê → Engine chấm điểm mờ (0-100) so khớp với giao dịch hệ thống.
+- Khớp tự động (100 điểm) hoặc gợi ý ứng viên cho KT xác nhận 1-click.
+- Tiêu chí: Số tiền, ngày giao dịch, mã tham chiếu, nội dung chuyển khoản.
+
+### 7.4 Chat nội bộ
+
+- 6 kênh phân theo vai trò (`#cửa-hàng` chung, `#kho`, `#mua-hàng`, `#kế-toán`, `#thu-ngân`, `#quản-lý`).
+- Gửi text, ảnh, file, **trích dẫn chứng từ** (PO, Phiếu nhập, Bảng lương...).
+- Tự động đồng bộ membership khi đăng nhập.
+- Watermark đã đọc, chính sách lưu trữ 90 ngày.
+
+### 7.5 Trợ lý AI
+
+- Nút "Trợ lý" trên dashboard → `POST /api/assistant/ask`.
+- Đọc tài liệu nội bộ, FAQ, hướng dẫn xử lý tình huống.
+- Gợi ý thao tác, in PDF chứng từ.
+
+### 7.6 Chương trình khách hàng thành viên (P4 MVP)
+
+- Phân hạng RFM (Recency, Frequency, Monetary).
+- Tích điểm khi mua, trừ điểm quy đổi giảm giá.
+- QL cấu hình chính sách loyalty.
+
+### 7.7 Nhật ký & Thông báo
+
+- **Nhật ký hệ thống (QL):** Lọc 1 hàng + lịch, panel chi tiết, xuất CSV. Mặc định 7 ngày.
+- **Chuông thông báo (SSE polling 12s):** Phê duyệt, kế hoạch lỗ, công chờ duyệt.
+- **Lịch sử theo vai trò:** KT xem lịch sử kế toán, TK xem lịch sử kho.
+
+---
+
+## 8. API Reference
+
+Base URL: `http://localhost:3000/api`
+
+### Xác thực & Hệ thống
+
+| Method | Endpoint | Mô tả |
 | --- | --- | --- |
-| Ngày lễ | QL | Khai năm (Tết âm, Giỗ Tổ, liền kề 02/09). |
-| Chấm công | NV / QL duyệt | Chỉ **Đã duyệt** vào lương. |
-| Lập bảng | **Chỉ KT** | GET **không** tự tạo số. QL lập → 403. |
-| Ai có dòng | Máy | Chỉ NV **phút công duyệt &gt; 0**. Lễ 8h chỉ cộng cho người đã đi làm trong kỳ. Không lập kỳ tương lai. |
-| Ngày trả | Máy | **Mùng 10 tháng sau** (kỳ 08 → 10/09). Sau 10 vẫn chi được, gắn trễ. |
-| Kênh | KT | Mỗi NV/kỳ **một** kênh: TM **hoặc** CK. |
-| Duyệt | QL | Từng phiếu hoặc **Duyệt tất cả**. Duyệt **chưa** trả lương. |
-| Giao quỹ | QL | **Một cục cho kế toán** (không giao từng NV). Khác phiếu chi NCC (vẫn giao từng phiếu). |
-| Chi | KT | Rút từ quỹ đã nhận. CK bắt buộc mã GD. Fail → cùng phiếu, làm lại. |
-| Lãi gộp | Máy | **Không** trừ bảng lương. QL xem lãi/lỗ sau chi phí ở báo cáo cửa hàng (trừ lương đã khóa). |
+| POST | `/auth/login` | Đăng nhập → JWT (8h) |
+| POST | `/auth/check-connection` | Kiểm tra kết nối server |
+| GET | `/health` | Health check |
+| GET | `/test-db` | Test kết nối DB (cần JWT) |
+
+### Quản lý tài khoản & vai trò
+
+| Method | Endpoint | UC | Mô tả |
+| --- | --- | --- | --- |
+| GET/POST/PUT/DELETE | `/accounts/*` | UC01 | CRUD tài khoản, khóa/mở, reset mật khẩu |
+| GET | `/roles` | — | Danh sách vai trò |
+| GET/PUT | `/roles/:id/permissions` | UC01 | Xem/sửa phân quyền vai trò |
+
+### Quản trị (Admin)
+
+| Method | Endpoint | UC | Mô tả |
+| --- | --- | --- | --- |
+| GET | `/admin/dashboard` | UC02 | Dashboard tổng quan |
+| GET | `/admin/approvals` | UC02 | Trung tâm phê duyệt |
+| PUT | `/admin/approvals/purchase-orders/:id/approve` | UC06 | Duyệt đơn mua |
+| PUT | `/admin/approvals/stock-issues/:id/approve` | UC06 | Duyệt phiếu xuất |
+| PUT | `/admin/approvals/inventory-counts/:id/approve` | UC06 | Duyệt kiểm kê |
+| PUT | `/admin/approvals/returns/:id/approve` | UC06 | Duyệt đổi trả |
+| PUT | `/admin/approvals/payment-vouchers/:id/approve` | UC06 | Duyệt phiếu chi NCC |
+| POST | `/admin/approvals/payroll-vouchers/approve-all` | UC06 | Duyệt tất cả phiếu lương |
+| POST | `/admin/approvals/payroll-fund/:month/handover` | UC06 | Giao quỹ lương cho KT |
+| GET/POST/PUT/DELETE | `/admin/products/*` | UC02 | CRUD sản phẩm (bắt buộc ảnh) |
+| GET/POST/PUT | `/admin/categories/*` | UC02 | CRUD danh mục |
+| GET/POST/PUT/DELETE | `/admin/employees/*` | UC04 | CRUD nhân viên + hồ sơ |
+| GET/POST/PUT/DELETE | `/admin/promotions/*` | UC02 | CRUD khuyến mãi |
+| GET | `/admin/audit-log` | UC02 | Nhật ký hệ thống |
+| GET | `/admin/reports/store-profit-loss` | UC02 | Báo cáo lãi/lỗ |
+| POST | `/admin/reports/store-profit-loss/plan` | UC02 | Nộp kế hoạch khi lỗ |
+
+### Kho & Mua hàng
+
+| Method | Endpoint | UC | Mô tả |
+| --- | --- | --- | --- |
+| GET | `/warehouse/stock` | UC07 | Tồn kho |
+| POST | `/warehouse/requisitions` | UC08 | Lập đề nghị mua |
+| POST | `/warehouse/receipts` | UC07 | Lập phiếu nhập |
+| PUT | `/warehouse/receipts/:id/confirm` | UC07 | Xác nhận nhập kho → cộng tồn |
+| POST | `/warehouse/stock-issues` | UC07 | Lập phiếu xuất |
+| POST | `/warehouse/inventory-counts` | UC07 | Lập kiểm kê |
+| GET/POST | `/purchasing/purchase-orders` | UC06 | CRUD đơn mua |
+| GET/POST/PUT | `/suppliers/*` | UC05 | CRUD nhà cung cấp |
+
+### Thu ngân & POS
+
+| Method | Endpoint | UC | Mô tả |
+| --- | --- | --- | --- |
+| GET | `/cashier/schedule` | UC12 | Lịch ca của tôi |
+| POST | `/cashier/check-in` | UC12 | Mở ca (kiểm tra giờ) |
+| POST | `/cashier/close-shift` | UC12 | Đóng ca |
+| POST | `/cashier/invoices` | UC24 | Tạo hóa đơn POS |
+| POST | `/cashier/invoices/:id/payment` | UC25 | Thanh toán (TM/QR) |
+| POST | `/cashier/returns` | UC26 | Tạo đổi trả |
+| POST | `/cashier/invoices/:id/zalopay` | UC25 | Tạo QR ZaloPay |
+
+### Kế toán
+
+| Method | Endpoint | UC | Mô tả |
+| --- | --- | --- | --- |
+| POST | `/accounting/purchase-invoices` | UC27 | Nhập HĐ GTGT mua |
+| POST | `/accounting/purchase-invoices/:id/reconcile` | UC27 | Đối chiếu 3 bên |
+| GET | `/accounting/payables` | UC28 | Danh sách công nợ |
+| POST | `/accounting/payment-vouchers` | UC28 | Lập phiếu chi NCC |
+| POST | `/accounting/payment-vouchers/:id/settle` | UC28 | Ghi thanh toán thành công |
+| POST | `/accounting/shifts/:id/receipt` | UC29 | Lập phiếu thu ca |
+| POST | `/accounting/payroll/:month/build` | UC30 | Lập/tính lại bảng lương |
+| POST | `/accounting/payroll/:month/lock` | UC30 | Khóa kỳ lương |
+| POST | `/accounting/payroll-vouchers` | UC30 | Lập phiếu chi lương |
+| POST | `/accounting/payroll-vouchers/:id/disburse` | UC30 | Chi trả lương |
+
+### Kế toán tổng hợp (Sổ cái)
+
+| Method | Endpoint | UC | Mô tả |
+| --- | --- | --- | --- |
+| GET/POST | `/ledger/accounts` | UC34 | CRUD tài khoản kế toán |
+| GET/POST | `/ledger/periods` | UC35 | Kỳ kế toán |
+| POST | `/ledger/periods/:maKy/open` | UC35 | Mở kỳ |
+| POST | `/ledger/periods/:maKy/close` | UC35 | Khóa kỳ |
+| POST | `/ledger/periods/:maKy/carry-forward` | UC35 | Kết chuyển cuối kỳ |
+| GET/POST | `/ledger/expenses` | UC36 | Chi phí vận hành |
+| POST | `/ledger/expenses/:id/confirm` | UC36 | Xác nhận → ghi sổ |
+| GET/POST | `/ledger/journals` | UC37 | Bút toán (thủ công/tự động) |
+| POST | `/ledger/journals/:id/reverse` | UC37 | Đảo bút toán |
+| GET | `/ledger/reports/journal` | UC38 | Nhật ký chung |
+| GET | `/ledger/reports/general-ledger` | UC38 | Sổ cái theo TK |
+| GET | `/ledger/reports/trial-balance` | UC39 | Bảng CĐPS |
+| GET | `/ledger/reports/kqkd` | UC40 | Kết quả kinh doanh |
+| GET | `/ledger/reports/lctt` | UC40 | Lưu chuyển tiền tệ |
+| GET | `/ledger/reports/balance-sheet` | UC40 | Cân đối kế toán |
+| GET/POST | `/ledger/assets` | UC41 | TSCĐ |
+| POST | `/ledger/assets/:id/depreciate` | UC41 | Trích khấu hao |
+| POST | `/ledger/bank-statements/upload` | UC42 | Import sao kê CSV |
+
+### Thanh toán, Thông báo & Khác
+
+| Method | Endpoint | Mô tả |
+| --- | --- | --- |
+| POST | `/payments/gateway/ipn` | IPN callback ZaloPay (public) |
+| GET | `/payments/gateway/return` | Return URL ZaloPay |
+| GET | `/notifications` | Chuông thông báo |
+| POST | `/telegram/webhook` | Webhook Telegram |
+| POST | `/assistant/ask` | Trợ lý AI |
+| GET/POST | `/chat/*` | Chat nội bộ |
+| GET/PUT | `/me/preferences` | Tùy chọn giao diện |
 
 ---
 
-## Mục lục (vận hành kỹ thuật)
+## 9. Cấu trúc thư mục
 
-1. [Cài đặt và chạy](#cài-đặt-và-chạy)
-2. [Tài khoản test](#tài-khoản-test)
-3. [Năm actor và phạm vi](#năm-actor-và-phạm-vi)
-4. [Kiến trúc](#kiến-trúc)
-5. [Cây thư mục](#cây-thư-mục)
-6. [Luồng nghiệp vụ chính](#luồng-nghiệp-vụ-chính)
-7. [Kế toán nghiệp vụ đã chốt](#kế-toán-nghiệp-vụ-đã-chốt)
-8. [Lương, ngày lễ, quỹ chung](#lương-ngày-lễ-quỹ-chung)
-9. [Báo cáo lãi / lỗ cửa hàng (QL)](#báo-cáo-lãi--lỗ-cửa-hàng-ql)
-10. [Nhật ký và thông báo](#nhật-ký-và-thông-báo)
-11. [API](#api)
-12. [CSDL và migration](#csdl-và-migration)
-13. [Lệnh npm / test](#lệnh-npm--test)
-14. [Những gì cố ý chưa làm](#những-gì-cố-ý-chưa-làm)
-15. [Xử lý sự cố thường gặp](#xử-lý-sự-cố-thường-gặp)
-16. [Tài liệu liên quan](#tài-liệu-liên-quan)
+```
+supermarket-fly/
+├── 1_CAI_DAT_LAN_DAU.bat          Cài đặt npm install tất cả
+├── 2_CHAY_SUPERMARKET_FLY.bat      npm start (API + Electron)
+├── 3_KIEM_TRA_TU_DONG.bat          Chạy test tự động
+├── 4_CHAY_MAY_CHU_NHOM.bat         Máy chủ cho test nhóm
+├── 5_CHAY_MAY_THANH_VIEN.bat       Máy thành viên (không cần SQL)
+├── 6_MO_DUONG_HAM_CLOUDFLARE.bat   Cloudflare Tunnel
+├── 7_CHAY_APP_VA_TUNNEL_MOMO.bat   App + Tunnel cho ZaloPay/Telegram
+├── package.json                     Root: npm start, setup:next, test:next
+│
+├── desktop/                         ⬅ ELECTRON APP
+│   ├── src/
+│   │   ├── index.js                 Main process (IPC: save PDF, backup)
+│   │   ├── preload.js               contextBridge → window.flyDesktop
+│   │   └── pages/
+│   │       ├── landing/             Trang giới thiệu
+│   │       ├── login/               Đăng nhập
+│   │       ├── dashboard/           Vỏ app + sidebar theo vai trò
+│   │       ├── admin/               QL: SP, NV, TK, KM, phân quyền, nhật ký
+│   │       │   ├── products.js      Quản lý sản phẩm (34K)
+│   │       │   ├── employees.js     Quản lý nhân viên (30K)
+│   │       │   ├── permissions.js   Phân quyền UC (23K)
+│   │       │   ├── loyalty-pages.js Loyalty RFM (22K)
+│   │       │   └── ...
+│   │       ├── warehouse/           TK + MH
+│   │       │   ├── warehouse-pages.js    Tồn kho, kiểm kê (111K)
+│   │       │   ├── purchase-order-pages.js  Đơn mua (93K)
+│   │       │   ├── stock-issue-pages.js     Phiếu xuất (35K)
+│   │       │   └── ...
+│   │       ├── cashier/             POS, ca
+│   │       ├── accounting/          KT + P&L
+│   │       │   ├── accounting-pages.js    Đối chiếu, công nợ, lương (238K!)
+│   │       │   ├── ledger-pages.js        Sổ cái, kỳ, TSCĐ (148K)
+│   │       │   ├── reconciliation-pages.js Đối soát NH (24K)
+│   │       │   ├── store-pnl.js           Báo cáo P&L (20K)
+│   │       │   └── cam-nang.txt           Cẩm nang kế toán mini (122K!)
+│   │       ├── workforce/           Phân ca, ngày lễ
+│   │       └── shared/              In, chart, locale VI
+│   └── package.json
+│
+├── server/                          ⬅ EXPRESS API
+│   ├── src/
+│   │   ├── app.js                   Mount /api/*, health, Telegram, ensure schema
+│   │   ├── config/
+│   │   │   ├── db.js                SQL Server pool (Windows Auth, query gate)
+│   │   │   └── loadEnv.js           Nạp .env (ưu tiên server/.env)
+│   │   ├── routes/ (17 files)       Routing theo phân hệ
+│   │   ├── controllers/ (33 files)  Xử lý request
+│   │   │   ├── ledgerController.js  Kế toán sổ cái (1651 dòng, 86K!)
+│   │   │   ├── reportController.js  Báo cáo tổng hợp (73K)
+│   │   │   ├── returnsController.js Đổi trả (69K)
+│   │   │   ├── telegramBotController.js  Bot Telegram (84K!)
+│   │   │   └── ...
+│   │   ├── services/ (79 files!)    Logic nghiệp vụ
+│   │   │   ├── journalEngine.js     Engine hạch toán kép (481 dòng)
+│   │   │   ├── payrollEngine.js     Tính lương BLLĐ 2019 (273 dòng)
+│   │   │   ├── cashierDuty.js       Kiểm soát ca (507 dòng)
+│   │   │   ├── paymentGatewayService.js  ZaloPay IPN (743 dòng)
+│   │   │   ├── telegramMessages.js  Tin nhắn Telegram (125K!)
+│   │   │   ├── reconciliationEngine.js  Đối soát NH (11K)
+│   │   │   ├── auditLog.js          Nhật ký kiểm toán (57K)
+│   │   │   ├── storeProfitLoss.js   Tính P&L (27K)
+│   │   │   └── ...
+│   │   ├── middlewares/
+│   │   │   └── authMiddleware.js    JWT + phân quyền UC realtime
+│   │   └── constants/
+│   │       └── permissions.js       43 UC + ma trận vai trò
+│   ├── migrations/ (34 files)       Schema DB + mở rộng
+│   ├── uploads/                     Ảnh sản phẩm, file chat
+│   ├── seed-accounts.js             12 tài khoản test
+│   ├── seed-permissions.js          43 UC + phân quyền
+│   └── package.json
+│
+├── scripts/                         ⬅ AUTOMATION
+│   ├── fly-term.ps1                 UI console (banner, spinner)
+│   ├── run-cloudflared-tunnel.ps1   Duy trì tunnel
+│   └── start-app-with-momo-tunnel.ps1  Auto tunnel + .env + npm start
+│
+├── docs/                            ⬅ TÀI LIỆU
+│   ├── README.md                    Mục lục docs
+│   ├── PHUONG_AN_KE_TOAN_DA_CHOT.txt
+│   ├── CAM_NANG_KE_TOAN_MINI.txt
+│   ├── BAN_TEST_CHUC_NANG_KE_TOAN_MINI_A_Z.txt
+│   ├── PLAN_ZALOPAY_TEST_P1.txt
+│   ├── PLAN_AI_CHATBOT_TRO_LY.txt
+│   ├── PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt
+│   ├── PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt
+│   └── ...
+│
+└── cloudflared.exe                  Binary Cloudflare Tunnel
+```
 
 ---
 
+## 10. Cài đặt & Chạy
 
-## Cài đặt và chạy
+### Yêu cầu
 
-### Yêu cầu máy
-
-- Windows, **Node.js** và **npm** trên PATH
-- **SQL Server** (thường SQL Express) + **ODBC Driver 17 for SQL Server**
-- Kết nối trong `server/src/config/db.js`: Windows Authentication, instance `localhost\SQLEXPRESS`, database `SupermarketFlyDB`, `useUTC: false` (giờ Hà Nội). File `.env.example` có `DB_USER`/`DB_PASSWORD` nhưng **runtime hiện dùng trusted connection** trong `db.js`
+- **Windows** (Electron + msnodesqlv8 chỉ hỗ trợ Windows)
+- **Node.js** ≥ 18 + npm trên PATH
+- **SQL Server** (SQL Express recommended) + **ODBC Driver 17 for SQL Server**
+- Instance mặc định: `localhost\SQLEXPRESS`, **Windows Authentication**
 
 ### Lần đầu
 
-1. Tạo database `SupermarketFlyDB` (script gốc `server/migrations/SupermarketFly_CreateDB.sql` nếu máy trống).
-2. Trong thư mục này:
+```bash
+# 1. Tạo database SupermarketFlyDB
+#    (dùng SSMS hoặc chạy script server/migrations/SupermarketFly_CreateDB.sql)
 
-```text
+# 2. Cài đặt dependencies
 1_CAI_DAT_LAN_DAU.bat
-```
+# hoặc: npm install && cd server && npm install && cd ../desktop && npm install
 
-Hoặc: `npm install` ở root, `server/`, `desktop/`.
-
-3. Migration + seed quyền/tài khoản + dọn dữ liệu demo:
-
-```text
+# 3. Migration + seed tài khoản + phân quyền + dọn dữ liệu demo
 npm run setup:next
+
+# 4. (Tùy chọn) Copy server/.env.example → server/.env
 ```
 
-(`migrate:next` lần lượt chạy các file SQL từ 20260825 đến 20260905, rồi seed permissions/accounts, xóa SP demo thừa, thu ngân thừa, chuẩn bị kho.)
+### Chạy hàng ngày
 
-4. Copy `server/.env.example` → `server/.env` nếu cần (cổng 3000). **Không commit `.env`.**
-
-### Chạy hàng ngày (một máy)
-
-```text
+```bash
+# Cách 1: File .bat
 2_CHAY_SUPERMARKET_FLY.bat
+
+# Cách 2: npm
+npm start
+# → API: http://localhost:3000
+# → Desktop: cửa sổ Electron tự mở
 ```
 
-hoặc `npm start` (mở song song API và Electron).
+### Chạy với ZaloPay/Telegram (cần tunnel)
 
-### Test nhóm trên một database
-
-Một người (máy chủ) giữ SQL Server + API. Các thành viên chỉ mở desktop, nhập IP máy chủ ở màn đăng nhập, mỗi người một vai trò — không cần đăng xuất để test bước tiếp theo.
-
-```text
-4_CHAY_MAY_CHU_NHOM.bat      (máy chủ, giữ cửa sổ mở, gửi IP vào nhóm)
-5_CHAY_MAY_THANH_VIEN.bat    (máy thành viên — không cần SQL Server)
+```bash
+# Tự động: mở tunnel + cập nhật .env + khởi chạy app
+7_CHAY_APP_VA_TUNNEL_MOMO.bat
+# hoặc: npm run start:zalopay
 ```
 
-Chi tiết: [docs/HUONG_DAN_TEST_DB_CHUNG.md](docs/HUONG_DAN_TEST_DB_CHUNG.md).
+### Test nhóm (nhiều máy, 1 database)
 
-- API: `http://localhost:3000` — kiểm tra `GET /api/health`, `GET /api/test-db`
-- Desktop: cửa sổ Electron. **Đóng hẳn app rồi mở lại** khi vừa kéo JS mới (không chỉ F5)
+```bash
+# Máy chủ (giữ SQL Server + API):
+4_CHAY_MAY_CHU_NHOM.bat
 
-Test tự động: `3_KIEM_TRA_TU_DONG.bat` hoặc `npm run test:next`.
+# Máy thành viên (chỉ Electron, nhập IP máy chủ):
+5_CHAY_MAY_THANH_VIEN.bat
+```
 
 ---
 
-## Tài khoản test
+## 11. Tài khoản test
 
-Mật khẩu mặc định **`123`** (seed `server/seed-accounts.js`).
+Mật khẩu mặc định: **`123`** (seed bởi `server/seed-accounts.js`).
 
-| Đăng nhập | Vai trò | Nhân viên |
+| Đăng nhập | Vai trò | Nhân viên | Mã NV |
+| --- | --- | --- | --- |
+| `admin` | Quản lý | Nguyễn Minh Anh | NV_QL01 |
+| `muahang` | Mua hàng | Trần Thu Hà | NV_MH01 |
+| `thukho` | Thủ kho | Lê Đức Long | NV_TK01 |
+| `ketoan` | Kế toán | Hoàng Minh Châu | NV_KT01 |
+| `thungan` | Thu ngân | Phạm Thảo Vy | NV_TN01 |
+| `thungan02` | Thu ngân | Nguyễn Hoàng Nam | NV_TN02 |
+| `thungan03` | Thu ngân | Đỗ Khánh Linh | NV_TN03 |
+| `thungan04` | Thu ngân | Vũ Minh Quân | NV_TN04 |
+| `thungan05` | Thu ngân | Bùi Ngọc Mai | NV_TN05 |
+| `thungan06` | Thu ngân | Phan Tuấn Kiệt | NV_TN06 |
+| `thungan07` | Thu ngân | Tạ Thu Trang | NV_TN07 |
+| `thungan08` | Thu ngân | Đặng Gia Huy | NV_TN08 |
+
+---
+
+## 12. Database Migrations
+
+Thư mục `server/migrations/`, chạy lần lượt bởi `npm run setup:next`:
+
+| File | Ngày | Nội dung |
 | --- | --- | --- |
-| `admin` | Quản lý cửa hàng (QL) | Nguyễn Minh Anh |
-| `muahang` | Nhân viên mua hàng (MH) | Trần Thu Hà |
-| `thukho` | Thủ kho (TK) | Lê Đức Long |
-| `ketoan` | Kế toán (KT) | Hoàng Minh Châu |
-| `thungan` | Thu ngân (TN) | Phạm Thảo Vy |
-| `thungan02` … `thungan08` | Thu ngân | 7 thu ngân còn lại |
-
-Đúng **5 vai trò** trên Use Case. Tám thu ngân không tạo actor thứ sáu.
-
----
-
-## Năm actor và phạm vi
-
-| Actor | Việc chính | Thư mục UI |
-| --- | --- | --- |
-| **QL** | Phê duyệt PO / kiểm kê / xuất kho / đổi trả / phiếu chi NCC; giao **quỹ lương cho kế toán**; phân ca, duyệt công, ngày lễ năm; SP–giá–KM–NV–TK; nhật ký hệ thống; báo cáo cửa hàng và **lãi/lỗ** | `desktop/src/pages/admin/`, `dashboard/`, `workforce/` |
-| **MH** | NCC, đọc đề nghị từ kho, lập đơn mua, theo dõi giao hàng | `warehouse/supplier-pages.js`, `purchase-order-pages.js` |
-| **TK** | Tồn kho, kiểm đếm thực tế rồi mới đề nghị mua (hết giai đoạn khai trương), nhận hàng, phiếu nhập, xuất hủy, kiểm kê, kiểm đổi trả | `warehouse/` |
-| **TN** | Lịch ca, check-in, POS, hóa đơn, đổi trả, đóng ca | `cashier/` |
-| **KT** | Đối chiếu 3 chứng từ mua, công nợ NCC, phiếu thu ca, bảng lương, chi lương từ quỹ QL đã giao, **kế toán mini (sổ cái, VAT, TSCĐ, sao kê)**, báo cáo nội bộ | `accounting/`, `accounting/ledger-pages.js` |
-
-**Không có** actor Nhân sự riêng, không BHXH/BHYT trên phiếu lương, không nhiều chi nhánh, không bán chịu (không TK 131).
-
----
-
-## Kiến trúc
-
-```text
-[ Electron desktop ]  --HTTP JWT-->  [ Express :3000 ]  -->  [ SQL Server ]
-     pages theo vai trò                 routes / controllers
-                                        services (lương, P&L, ca…)
-                                        /uploads ảnh sản phẩm
-```
-
-- Sau login, `dashboard.html` + `dashboard.js` load trang động (`window.FLY_ROLE_PAGES`) theo `TenVaiTro`.
-- Quyền theo **mã UC** (`requirePermission('UC27')` …), không chỉ tên vai trò.
-- Ảnh sản phẩm: bắt buộc khi tạo SP; file tĩnh `/uploads`.
+| `SupermarketFly_CreateDB.sql` | — | Tạo DB, 37 bảng gốc, 68 FK |
+| `20260824_OpeningCatalog` | 24/08 | Catalog sản phẩm khai trương |
+| `20260824_DeliveryTracking` | 24/08 | Bảng theo dõi giao hàng NCC |
+| `20260824_CleanupLegacyCategories` | 24/08 | Dọn nhóm hàng cũ |
+| `20260825_WorkforceScheduling` | 25/08 | Ca, loại ca, quầy, lịch, chấm công |
+| `20260825_SalesAndWorkforceV2` | 25/08 | Mở rộng bán hàng + nhân sự |
+| `20260825_OfficeHours` | 25/08 | Giờ hành chính |
+| `20260830_ProductImages` | 30/08 | Ảnh sản phẩm (bắt buộc) |
+| `20260901_PaymentFundHandover` | 01/09 | Giao quỹ phiếu chi NCC |
+| `20260902_AuditLog` | 02/09 | Mở rộng nhật ký kiểm toán |
+| `20260903_PayrollEngine` | 03/09 | **Engine lương: Lễ, hệ số BLLĐ, PhieuChiLuong** |
+| `20260904_PayrollCommonFund` | 04/09 | Quỹ lương chung QL → KT |
+| `20260905_StoreProfitLoss` | 05/09 | Kế hoạch điều chỉnh khi lỗ |
+| `20260906_BumpSellPrices` | 06/09 | Điều chỉnh giá bán |
+| `20260907_ReturnHandoverAndCountScrap` | 07/09 | Đổi trả + hủy kiểm kê |
+| `20260907_HoSoNhanVien` | 07/09 | Hồ sơ nhân viên chi tiết |
+| `20260907_EmployeeProfileCccd` | 07/09 | CCCD nhân viên |
+| `20260907_PhieuThuAllowNegativeHandover` | 07/09 | Cho phép phiếu thu âm |
+| `20260908_TelegramCompanion` | 08/09 | Telegram OTP, ChatId |
+| `20260908_InventoryCountSuccessor` | 08/09 | Kiểm kê kế thừa |
+| `20260908_StockIssueDiscardLink` | 08/09 | Liên kết xuất hủy |
+| `20260909_AccountingCore` | 09/09 | **Sổ cái mini: 18 TK, ButToan, TSCĐ, sao kê** |
+| `20260909_LedgerUiLabels` | 09/09 | Nhãn hiển thị kế toán |
+| `20260909_WarehouseReportSubmit` | 09/09 | Báo cáo kho |
+| `20260910_PaymentGateway` | 10/09 | Cổng ZaloPay/MoMo |
+| `20260910_PaymentGatewayQr` | 10/09 | QR thanh toán pending |
+| `20260910_SmartBankReconciliation` | 10/09 | **Đối soát NH thông minh** |
+| `20260911_ChatNoiBo` | 11/09 | **Chat nội bộ 5 bộ phận** |
+| `20260911_AppearancePrefs` | 11/09 | Tùy chọn giao diện |
+| `20260911_DepartmentReportSubmit` | 11/09 | Nộp báo cáo bộ phận |
+| `20260911_EmployeePermsPartialPay` | 11/09 | Phân quyền cá nhân + chi trả |
+| `20260911_ZaloPayQrPending` | 11/09 | QR ZaloPay chờ xác nhận |
+| `20260911_ZaloPayRefund` | 11/09 | Hoàn tiền ZaloPay |
 
 ---
 
-## Cây thư mục
+## 13. Lệnh npm & Test
 
-```text
-supermarket-fly/
-├── 1_CAI_DAT_LAN_DAU.bat
-├── 2_CHAY_SUPERMARKET_FLY.bat
-├── 3_KIEM_TRA_TU_DONG.bat
-├── package.json              npm start, setup:next, test:next
-├── docs/                     hướng dẫn test, bàn giao, kế toán đã chốt
-├── desktop/src/
-│   ├── index.js, preload.js
-│   └── pages/
-│       ├── landing, login
-│       ├── dashboard         vỏ app + sidebar
-│       ├── admin             QL: SP, NV, TK, KM, phân quyền, nhật ký
-│       ├── warehouse         TK + MH
-│       ├── cashier           POS, ca
-│       ├── accounting        KT + P&L nhúng cho QL
-│       ├── workforce         phân ca, ngày lễ
-│       └── shared            in, chart, ảnh, locale VI
-└── server/
-    ├── apply-migration.js
-    ├── seed-accounts.js, seed-permissions.js
-    ├── migrations/           CreateDB + chuỗi đến 20260910 (gồm sổ cái + MoMo)
-    ├── uploads/
-    └── src/
-        ├── app.js            mount /api/*
-        ├── config/db.js
-        ├── routes/           accounting, ledger, cashier, telegram, paymentGateway…
-        ├── controllers/
-        ├── services/         journalEngine, paymentGateway (MoMo), telegram*,
-        │                     payrollEngine, storeProfitLoss, cashierDuty…
-        └── middlewares/      auth, upload ảnh
-```
+### Root repo
 
-Workspace Cursor còn `../TaiLieu_Du_An/` (không commit vào repo này).
-
----
-
-## Luồng nghiệp vụ chính
-
-### Mua hàng và nhập kho (đã qua khai trương)
-
-1. Hệ thống **cảnh báo** tồn dưới mức tối thiểu — chỉ là gợi ý.
-2. Thủ kho **kiểm đếm thực tế** (đợt kiểm kê đúng mặt hàng đã chọn). Còn đủ → thôi. Thiếu → **Phiếu đề nghị mua hàng** gửi MH (không duyệt QL ở bước này). Hỏng / hết hạn → **Phiếu xuất hủy** (QL duyệt, TK xác nhận mới trừ tồn).
-3. MH chọn NCC, lập **Đơn mua**.
-4. QL **phê duyệt PO** (lần duyệt duy nhất trên đơn).
-5. NCC giao → TK kiểm (đạt / thiếu / sai / hư) → **Phiếu nhập**. Chỉ `SoLuongChapNhan` cộng tồn khi xác nhận.
-6. KT nhập HĐ GTGT mua, **đối chiếu 3 chứng từ** (đơn + phiếu nhập + HĐ). Khớp mới sinh `CongNoPhaiTra`. Lệch không ghi nợ.
-
-Nút **Lập đề nghị khai trương** đã bỏ.
-
-### Bán tại quầy
-
-- Bán **đủ**, không bán chịu.
-- Thu ngân chỉ mở POS khi có **lịch Đã công bố đúng hôm nay** và **trong khung giờ ca** (vào sớm tối đa khoảng 10 phút). **Hết ca không vào lại, không bán** — API trả 403, không chỉ khóa nút.
-- Hóa đơn hoàn thành trừ tồn, snapshot giá vốn dòng.
-- Đổi trả: quy tắc ngang giá / duyệt QL tùy UC đã cài.
-- Đóng ca → KT lập **Phiếu thu** (tiền mặt hệ thống = TM thu − hoàn TM). QR/thẻ/CK không vào két. Một ca một phiếu thu. Chênh lệch ghi lý do trên phiếu. Phiếu thu **không** ghi doanh thu lần hai.
-
-### Công nợ NCC và phiếu chi
-
-- Nợ 30–45 ngày; trả **một lần đủ**, không trả trước / trả góp.
-- KT lập phiếu chi (có thể sớm); số tiền khóa = còn lại.
-- **Lập phiếu / QL duyệt-giao quỹ NCC chưa giảm nợ.** Chỉ khi KT ghi thanh toán **thành công** thì `SoTienConLai = 0`.
-- QL duyệt phiếu chi NCC = giao quỹ theo **từng phiếu** (TM hoặc ủy quyền CK). Khác quỹ lương (xem dưới).
-
-### Kho sau nhận hàng
-
-- Kiểm kê định kỳ: lệch → chờ QL duyệt điều chỉnh; không UPDATE `TonKho` tay.
-- Xuất thủ công / hủy: QL duyệt → TK xác nhận mới trừ tồn.
-
----
-
-## Kế toán nghiệp vụ đã chốt
-
-Chi tiết P0: [docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt](docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt) (luật tiền–hàng–nợ **vẫn đúng**; đoạn “chưa sổ cái” ở cuối file đó là mốc 02/09 — **đã làm sau đó**).
-
-- Lãi gộp nội bộ = DT thuần − GV thuần. **Bảng lương không trừ vào lãi gộp.**
-- Kỳ báo cáo theo `Asia/Ho_Chi_Minh`. Ngày 1–3: ô tháng mặc định lùi tháng trước. Nút **Lập báo cáo** trên màn điều hành = tổng hợp chứng từ P0, **không** chi tiền.
-- **Kế toán mini đã code (09/09/2026):** migration `20260909_AccountingCore`, `journalEngine.js`, `ledgerController.js`, menu `ledger-*`. Hạch toán lúc chứng từ hợp lệ: bán Nợ 111/112 Có 511+33311; giá vốn Nợ 632 Có 156; khóa lương Nợ 642 Có 334; chi lương Nợ 334 Có 111/112; khớp 3 bên Nợ 156+1331 Có 331; trả NCC Nợ 331 Có 111/112.
-- Cẩm nang + 74 case test tay: [docs/CAM_NANG_KE_TOAN_MINI.txt](docs/CAM_NANG_KE_TOAN_MINI.txt), [docs/BAN_TEST_CHUC_NANG_KE_TOAN_MINI_A_Z.txt](docs/BAN_TEST_CHUC_NANG_KE_TOAN_MINI_A_Z.txt).
-
----
-
-## Lương, ngày lễ, quỹ chung
-
-### Ai làm gì
-
-| Bước | Ai | Việc |
-| --- | --- | --- |
-| Phân ca, ngày lễ, duyệt công | QL | UC30, UC32. OT ngoài ca phải xác nhận phút |
-| Lập / tính lại / khóa kỳ | **Chỉ KT** | API 403 nếu QL bấm lập. GET **không** tự tạo bảng lương |
-| Lập phiếu chi lương | KT | Mỗi NV/kỳ một phiếu, **TM hoặc CK** (không vừa TM vừa CK) |
-| Duyệt phiếu | QL | Từng người hoặc **Duyệt tất cả** |
-| Giao quỹ | QL | **Một lần cho kế toán** (không giao từng NV). Nút: *Giao quỹ cho kế toán* |
-| Chi lương | KT | Rút từng NV từ quỹ đã nhận. CK bắt buộc mã GD |
-
-### Ngày trả
-
-Tất toán **mùng 10 tháng sau** kỳ lương (kỳ 08 → 10/09). Chi sau ngày 10 vẫn được, gắn trễ + lý do.
-
-### Ai có mặt trên bảng lương
-
-- Chỉ khi KT bấm **Lập / tính lại**.
-- Chỉ NV có **chấm công Đã duyệt**, phút công > 0 trong kỳ. Không cộng ngày lễ cho cả cửa hàng khi chưa ai làm.
-- Không lập kỳ tương lai. Còn công chờ duyệt thì không lập được.
-
-### Hệ số (BLLĐ 2019 + NĐ 145/2020)
-
-Ngày thường 100%, đêm 130%, OT ngày 150%, nghỉ tuần 200%, lễ trong ca 300% (+ đêm/OT lễ theo nghị định). Nghỉ lễ hưởng lương: 8 giờ chuẩn × đơn giá — **chỉ người đã có công duyệt trong kỳ**. BHXH không tính (`Thuong`/`KhauTru` = 0).
-
-QL khai **Ngày lễ năm** (Tết âm, Giỗ Tổ, ngày liền kề 02/09). Seed 2026: Tết 16–20/02 (TB 9441/BNV), Giỗ Tổ 26/04, liền kề Quốc khánh mặc định 01/09.
-
-### Tách quỹ
-
-Phiếu chi **NCC** vẫn duyệt + giao **từng phiếu**. Phiếu chi **lương** dùng bảng riêng (`PhieuChiLuong`), không tái sử dụng `PhieuChi` (ràng buộc `MaCongNo`).
-
----
-
-## Báo cáo lãi / lỗ cửa hàng (QL)
-
-Tab đầu **Báo cáo cửa hàng**: *Cửa hàng đang lãi hay lỗ*. Không thay báo cáo lãi gộp cũ. Không thay KQKD sổ cái (UC43).
-
-**KQKD điều hành (đúng, dùng để bảo vệ)**
-
-Doanh thu thuần − giá vốn thuần − lương **đã khóa** − cước (khi có chứng từ 642). **Không trừ** Phiếu chi NCC thành công. Code: `storeProfitLossMath.kqkdLoiNhuan`.
-
-**Dòng tiền / thu-chi (tab cùng màn, không gọi là lãi kế toán)**
-
-Tiền thu khách − tiền trả NCC − trả lương − chi phí đã chi. Chi NCC chỉ hiện ở đây. Field API cũ `laiLoSauChiPhi` vẫn trừ NCC — **deprecated**, không dùng làm “cửa hàng lỗ”.
-
-**Tiền có trả lương không?** Phiếu thu ca (TM) + đã thu CK/QR/thẻ so với lương đã khóa.
-
-Chi phí điện/nước/thuê mặt bằng: đã có chứng từ UC36 trên Kế toán tổng hợp; màn P&L điều hành P0 **không** cộng đủ mọi 642 (xem KQKD sổ cái). Cước 4.000 đ/km + bồi 20% **chưa code**.
-
-Khi **lỗ KQKD** (hoặc DT thuần < lương khóa): hiện nguyên nhân theo số thật (không lấy `chi_ncc_lon` làm lỗ kế toán); QL bắt buộc nhập kế hoạch điều chỉnh (≥ 50 ký tự) → **Lưu và gửi thông báo toàn cửa hàng**. Kỳ lãi không bắt plan. Lịch sử plan không xóa.
-
----
-
-## Nhật ký và thông báo
-
-- **QL — Nhật ký hệ thống:** việc làm tiếng Việt, lọc 1 hàng + lịch Từ–Đến, panel chi tiết, xuất CSV, không xóa/sửa log. Mặc định 7 ngày, có thể ẩn đăng nhập.
-- **KT — Lịch sử hoạt động:** việc của kế toán đang login + lịch sử chi lương từ quỹ chung.
-- **TK — Lịch sử kho:** việc đã làm tại kho (kiểm kê, nhập, xuất, đề nghị).
-- Chuông thông báo 12s: phê duyệt, kế hoạch lỗ, công chờ duyệt, v.v.
-
-### Telegram companion cho Quản lý
-
-- Dashboard dạng card: trạng thái vận hành, doanh thu, giá vốn, lãi gộp, tỷ trọng 4 kênh thanh toán và các cảnh báo cần ưu tiên.
-- Menu ba ngôn ngữ, nút dùng màu mặc định tương thích mọi giao diện Telegram, điều hướng **Tổng quan / Làm mới / Báo cáo / Chứng từ** và cập nhật ngay trên tin hiện tại để không làm đầy chat.
-- Báo cáo quản trị **Tháng / Quý / Năm**: doanh thu hóa đơn, hoàn tiền, doanh thu thuần, giá vốn, lãi gộp, chi NCC/cước, lương đã khóa, lãi/lỗ sau chi phí, biên lợi nhuận, dòng tiền và so sánh cùng tiến độ kỳ trước.
-- Công nợ, tồn thấp, ca, thanh toán, lương và việc chờ có badge màu, progress bar và phân cấp nội dung rõ trên màn hình điện thoại.
-- Khi tải dữ liệu/chứng từ, Telegram hiện animation `typing` / `upload_photo`. **Code đã có nút duyệt inline** (PO, phiếu xuất, kiểm kê, đổi trả, phiếu chi NCC, chấm công) qua `telegramApprove.js` + audit; lệnh chữ `/approve` bị chặn. PLAN_12 gốc (05/09) ghi “không duyệt” — **lệch với code hiện tại**.
-- Có thể bật message effect cho chat riêng bằng `TELEGRAM_EFFECT_SUCCESS_ID` và `TELEGRAM_EFFECT_ALERT_ID`; để trống thì bot vẫn chạy bình thường.
-- Bảo mật giữ nguyên: OTP từ Fly, kiểm tra vai trò/quyền UC ở mỗi lệnh, webhook secret, chống gửi lặp và ghi Nhật ký hệ thống.
-
----
-
-## API
-
-Prefix `/api`. Health: `GET /api/health`.
-
-| Prefix | Việc |
+| Lệnh | Mô tả |
 | --- | --- |
-| `/api/auth` | Đăng nhập |
-| `/api/accounts`, `/roles`, `/employees` | TK, vai trò, NV |
-| `/api/admin` | QL: catalog, phê duyệt, báo cáo, phân ca, ngày lễ, P&L |
-| `/api/warehouse` | Tồn, kiểm kê, nhập, xuất, đề nghị |
-| `/api/purchasing`, `/api/suppliers` | Đơn mua, NCC, đề nghị inbox |
-| `/api/accounting` | Đối chiếu, công nợ, phiếu thu, lương, quỹ, lịch sử KT |
-| `/api/ledger` | Kế toán mini UC34–UC43: COA, kỳ, bút toán, NKC/sổ cái/CĐPS, KQKD/LCTT/BCĐKT, TSCĐ, sao kê |
-| `/api/accounting/reconciliation` | P3 đối soát NH thông minh (UC42): import CSV, chạy engine, KT xác nhận |
-| `/api/admin/loyalty` | P4 RFM thành viên (QL UC10). TN: `GET /api/cashier/customers/:id/loyalty` |
-| `/api/cashier` | Ca, POS, HĐ, đổi trả, thanh toán ZaloPay QR |
-| `/api/payments/gateway` | IPN/return ZaloPay (không JWT) |
-| `/api/notifications` | Chuông |
-| `/api/telegram` | Liên kết OTP, trạng thái kênh và webhook Telegram |
+| `npm start` | Chạy API + Electron đồng thời |
+| `npm run setup:next` | Migration + seed + dọn demo |
+| `npm run test:next` | Syntax check + test nghiệp vụ + ảnh + tìm kiếm + in + ca |
+| `npm run start:zalopay` | App + Cloudflare Tunnel (ZaloPay/Telegram) |
 
-Một số endpoint lương / quỹ:
+### Server
 
-- `POST /api/accounting/payroll/:month/build` — chỉ KT
-- `POST /api/admin/approvals/payroll-vouchers/approve-all`
-- `POST /api/admin/approvals/payroll-fund/:month/handover` — giao quỹ cho KT
-- `GET /api/admin/reports/store-profit-loss`
-- `POST /api/admin/reports/store-profit-loss/plan`
-
----
-
-## CSDL và migration
-
-Thư mục `server/migrations/`:
-
-| File | Việc |
+| Lệnh | Mô tả |
 | --- | --- |
-| `SupermarketFly_CreateDB.sql` | Tạo DB / bảng lõi |
-| `20260824_OpeningCatalog` / `DeliveryTracking` / `CleanupLegacyCategories` | Catalog, giao hàng, dọn nhóm cũ |
-| `20260825_WorkforceScheduling` / `SalesAndWorkforceV2` / `OfficeHours` | Ca, bán, giờ hành chính |
-| `20260830_ProductImages` | Ảnh SP |
-| `20260901_PaymentFundHandover` | Giao quỹ phiếu chi NCC |
-| `20260902_AuditLog` | Cột nhật ký mở rộng |
-| `20260903_PayrollEngine` | Lễ, hệ số, phiếu chi lương |
-| `20260904_PayrollCommonFund` | Quỹ lương chung QL → KT |
-| `20260905_StoreProfitLoss` | Kế hoạch điều chỉnh khi lỗ |
-| `20260907_*` | Đổi trả bàn giao, hồ sơ NV, phiếu thu số âm |
-| `20260908_TelegramCompanion` (+ kiểm kê/xuất) | Telegram OTP / ChatId |
-| `20260909_AccountingCore` (+ LedgerUiLabels) | Sổ cái mini UC34–UC43 |
-| `20260910_PaymentGateway` (+ Qr) | Cổng MoMo: `NguonXacNhan`, `MaThamChieuCong` |
-| `20260910_SmartBankReconciliation` | P3: `KetQuaDoiSoatNganHang`, `UngVienDoiSoat`, `MaThamChieu` |
-
-Chạy lẻ: `cd server && node apply-migration.js <tên-file.sql>`  
-Hoặc cả chuỗi: `npm run setup:next` / `npm run migrate:next`.
-
-Một số controller còn `ensure*Schema()` lúc gọi API (máy cũ tự ALTER), nhưng máy setup mới nên chạy migration.
+| `npm start` | Chạy API (`node src/app.js`) |
+| `npm test` | Syntax check toàn bộ (100+ files) |
+| `npm run test:business` | Test nghiệp vụ mua/bán/kho |
+| `npm run test:payroll` | Test tính lương |
+| `npm run test:payroll-fund` | Test quỹ lương |
+| `npm run test:store-pnl` | Test báo cáo P&L |
+| `npm run test:telegram` | Test Telegram bot |
+| `npm run migrate:next` | Chạy 34 migration tuần tự |
+| `npm run seed:accounts` | Seed 12 tài khoản |
+| `npm run seed:permissions` | Seed 43 UC + phân quyền |
 
 ---
 
-## Lệnh npm / test
-
-Ở **root repo**:
-
-| Lệnh | Việc |
-| --- | --- |
-| `npm start` | API + Electron |
-| `npm run setup:next` | migrate + seed + dọn demo |
-| `npm run test:next` | syntax check + test nghiệp vụ / ảnh / tìm kiếm / in / ca |
-
-Ở **server** thêm: `test:payroll`, `test:payroll-fund`, `test:store-pnl`, `test:business`, `test:telegram`, …
-
----
-
-## Những gì cố ý chưa làm
-
-| Hạng mục | Ghi chú |
-| --- | --- |
-| Trợ lý AI (`POST /api/assistant/ask`) | PLAN_12 #2 — **P2-MIN đã có**. P2-ĐỦ chưa hết. **P3/P4 không thuộc P2-ĐỦ** — AI chỉ đọc summary qua tool |
-| Đối soát NH thông minh (P3) | **Đã demo** · UC42 · `docs/PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt` · engine không LLM, KT xác nhận, không tự ghi sổ |
-| Loyalty RFM (P4) | **MVP** · UC10/UC23 · `docs/PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt` · không email/SMS/app KH |
-| OCR hóa đơn NCC | PLAN_12 #4 — chưa code |
-| E-receipt token / QR xem HĐ trên điện thoại | PLAN_12 #8 — chưa; in PDF nội bộ đã có |
-| Webcam / ZXing trên POS | PLAN_12 #5 — mới gõ tay + USB HID vào ô tìm |
-| Smart replenishment (TB bán 7 ngày) | PLAN_12 #6 — mới cảnh báo tồn min + `SLDatMua` |
-| VNPay / PayOS / MoMo chạy thật | Stub; cổng đang dùng = **ZaloPay sandbox** |
-| Sentry, n8n, Firebase, Ollama riêng, thời tiết | Cắt hoặc không slide (PLAN_12 #7, #9–#12) |
-| BHXH / BHYT / BHTN / công đoàn | Ngoài phạm vi BTL |
-| Cước vận chuyển 4.000 đ/km, bồi thường 20% (NCC + nhà xe cùng chịu) khi hư ≥ 1/3 | **Đã chốt plan, chưa code** |
-| TK 242, kho FEFO/lô, nhiều cửa hàng, HĐĐT nhà nước, bán chịu | Cắt |
-
-Sổ cái / VAT POS / TSCĐ / sao kê / LCTT / BCĐKT **đã có** (UC34–UC43) — không còn nằm mục “chưa làm”.
-
-Cước giao hàng (plan): siêu thị trả cước cho đơn vị NCC thuê; chuyến 10–100 km; thanh toán cước mùng 10; bồi **một gói 20%** giá trị chuyến chia mặc định 10% + 10%. Công nợ **hàng** vẫn chỉ khi đối chiếu 3 chứng từ khớp.
-
----
-
-## Xử lý sự cố thường gặp
+## 14. Xử lý sự cố
 
 | Hiện tượng | Hướng xử lý |
 | --- | --- |
-| *Không thể mở trang / Failed to fetch* trên kho | API chết **hoặc** JS trang không load. Chạy `npm start`, xem `GET /api/health`. Đóng/mở lại Electron |
-| Báo cáo đầu tháng trống / kẹt “Đang tải” | Đã sửa kỳ VN + lùi tháng ngày 1–3. Bấm **Lập báo cáo** khi nút đã bật. Tháng không có HĐ hoàn thành thì số = 0 |
-| Bảng lương tháng 9 có 880k dù chưa làm | Rule cũ cộng lễ cho mọi NV. **Lập / tính lại** sau khi QL duyệt hết công. Chỉ người đã chấm công mới còn dòng |
-| Không lập được kỳ lương | Còn `ChamCong` chờ duyệt, hoặc không phải KT |
-| Không thấy “giao quỹ cho kế toán” | Nút là giao **một cục quỹ cho KT** sau khi duyệt phiếu. Không giao từng NV. Phiếu NCC vẫn giao từng phiếu |
-| Thu ngân không vào được POS | Không có ca công bố hôm nay, **hoặc** ngoài giờ / đã hết ca |
-| SQL không kết nối | Instance không phải `SQLEXPRESS`, thiếu ODBC 17, chưa tạo `SupermarketFlyDB`, Windows auth |
+| *Failed to fetch* / trang trắng | API chưa chạy. Kiểm tra `npm start`, `GET /api/health`. Đóng/mở lại Electron |
+| Báo cáo đầu tháng trống | Bấm **Lập báo cáo**. Ngày 1–3 tháng: ô tháng mặc định lùi tháng trước |
+| Bảng lương có tiền dù chưa ai làm | Lập / tính lại sau khi QL duyệt hết công. Chỉ NV có công duyệt mới có dòng |
+| Không lập được kỳ lương | Còn chấm công chờ duyệt, hoặc không phải KT |
+| Không thấy "giao quỹ cho KT" | Nút giao **một cục** cho KT sau khi duyệt phiếu. Phiếu NCC vẫn giao từng phiếu |
+| Thu ngân không vào POS | Không có ca công bố hôm nay, hoặc ngoài giờ / đã hết ca |
+| SQL không kết nối | Kiểm tra: instance `SQLEXPRESS`, ODBC 17, database `SupermarketFlyDB`, Windows Auth |
+| Cổng 3000 bị chiếm | Đóng process Node cũ (`taskkill /IM node.exe /F`) rồi chạy lại |
+| Tunnel không mở | Kiểm tra `cloudflared.exe` tồn tại. Script tự tìm ở root/Desktop/Downloads |
 
 ---
 
-## Tài liệu liên quan
+## 15. Những gì cố ý chưa làm
+
+| Hạng mục | Trạng thái |
+| --- | --- |
+| VNPay / PayOS / MoMo chạy thật | Stub — cổng đang dùng = **ZaloPay sandbox** |
+| OCR hóa đơn NCC | Chưa code |
+| E-receipt token (QR xem HĐ trên điện thoại) | Chưa — in PDF nội bộ đã có |
+| Webcam barcode trên POS | Chưa — gõ tay + USB HID |
+| Smart replenishment (TB bán 7 ngày) | Mới cảnh báo tồn min |
+| Cước vận chuyển 4.000đ/km + bồi thường 20% | Đã chốt plan, chưa code |
+| BHXH / BHYT / BHTN / Công đoàn | Ngoài phạm vi BTL |
+| TK 242, kho FEFO/lô, nhiều cửa hàng, HĐĐT nhà nước | Cắt |
+| Sentry, Firebase, Ollama, thời tiết | Cắt |
+
+---
+
+## 16. Tài liệu liên quan
 
 | File | Nội dung |
 | --- | --- |
-| [docs/README.md](docs/README.md) | Mục lục toàn bộ file trong `docs/` |
-| [docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt](docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt) | Luật P0 đang chạy (tiền–hàng–nợ); đoạn “chưa sổ cái” là mốc 02/09 |
-| [docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt](docs/PHAM_VI_KE_TOAN_DA_CHOT_LAI_31-08.txt) | Plan A: giữ / cắt (đã triển khai 09/09) |
-| [docs/PLAN_ZALOPAY_TEST_P1.txt](docs/PLAN_ZALOPAY_TEST_P1.txt) | Cổng QR **đang dùng**: ZaloPay sandbox |
-| [docs/PLAN_MOMO_TEST_P1.txt](docs/PLAN_MOMO_TEST_P1.txt) | Lịch sử cổng MoMo (10/09) |
-| [docs/PLAN_AI_CHATBOT_TRO_LY.txt](docs/PLAN_AI_CHATBOT_TRO_LY.txt) | Plan + P2-MIN đã chạy (chưa P2-ĐỦ) |
-| [docs/PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt](docs/PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt) | P3 đối soát NH thông minh |
-| [docs/PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt](docs/PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt) | P4 RFM khách thành viên |
+| [docs/README.md](docs/README.md) | Mục lục toàn bộ docs |
+| [docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt](docs/PHUONG_AN_KE_TOAN_DA_CHOT.txt) | Luật P0 tiền–hàng–nợ |
+| [docs/CAM_NANG_KE_TOAN_MINI.txt](docs/CAM_NANG_KE_TOAN_MINI.txt) | Cẩm nang sổ cái mini |
+| [docs/BAN_TEST_CHUC_NANG_KE_TOAN_MINI_A_Z.txt](docs/BAN_TEST_CHUC_NANG_KE_TOAN_MINI_A_Z.txt) | 74 case test kế toán |
+| [docs/PLAN_ZALOPAY_TEST_P1.txt](docs/PLAN_ZALOPAY_TEST_P1.txt) | Cổng ZaloPay sandbox |
+| [docs/PLAN_AI_CHATBOT_TRO_LY.txt](docs/PLAN_AI_CHATBOT_TRO_LY.txt) | Trợ lý AI plan |
+| [docs/PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt](docs/PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt) | Đối soát NH thông minh |
+| [docs/PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt](docs/PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt) | RFM khách thành viên |
 | [docs/HUONG_DAN_TEST_DON_GIAN_CHO_6_NGUOI.md](docs/HUONG_DAN_TEST_DON_GIAN_CHO_6_NGUOI.md) | Smoke test 6 người |
-| [docs/HUONG_DAN_BAN_GIAO_CHO_THANH_VIEN_TEST.md](docs/HUONG_DAN_BAN_GIAO_CHO_THANH_VIEN_TEST.md) | Bàn giao Git / `.bak` |
-| `../TaiLieu_Du_An/` | UC, CSDL mô tả, ảnh, backup môn học |
-
-`docs/HUONG_DI_VA_THIET_KE_ACTOR_TIEP_THEO.md` mô tả hướng cũ (làm tiếp thủ kho/mua hàng) — **lỗi thời** nếu UC11–UC33 đã chạy; không dùng làm bước tiếp theo.
+| [docs/BAN_GIAO_LAM_TIEP_TOAN_BO_HE_THONG_2026-09-07.txt](docs/BAN_GIAO_LAM_TIEP_TOAN_BO_HE_THONG_2026-09-07.txt) | Bàn giao làm tiếp |
 
 ---
 
 ## Giấy phép
 
-Mã nguồn đồ án học tập (desktop `package.json`: MIT; server ISC). Không phải sản phẩm thương mại.
+Mã nguồn đồ án học tập. Desktop: MIT. Server: ISC. Không phải sản phẩm thương mại.
+
+---
+
+<div align="center">
+
+**Supermarket Fly** · Quản lý nội bộ siêu thị · AIS 2026
+
+*12 nhân viên · 5 vai trò · 43 use case · 37+ bảng · 34 migration · 79 service*
+
+</div>
+]]>
