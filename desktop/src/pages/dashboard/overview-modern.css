@@ -21,7 +21,7 @@
   font-size: 9px;
 }
 .overview-heading h1 {
-  color: #172b22;
+  color: var(--text, #172b22);
   font-size: clamp(34px, 2.55vw, 44px);
   font-weight: 650;
   line-height: 1.22;
@@ -138,8 +138,8 @@
   border: 1px solid #dde5e0;
   border-left-width: 1px;
   border-radius: 18px;
-  background: rgba(255,255,255,.96) !important;
-  color: #263b31 !important;
+  background: var(--surface, #fff);
+  color: var(--text, #263b31);
   box-shadow: 0 9px 26px rgba(25,58,44,.045);
   transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
 }
@@ -186,7 +186,7 @@
   overflow: hidden;
   border: 1px solid #dbe5df;
   border-radius: 22px;
-  background: rgba(255,255,255,.93);
+  background: var(--surface, #fff);
   box-shadow: 0 12px 34px rgba(25,58,44,.05);
 }
 .overview-product-showcase > .section-heading { margin-bottom: 16px; }
@@ -200,7 +200,7 @@
   overflow: hidden;
   border: 1px solid #e0e7e3;
   border-radius: 17px;
-  background: #fff;
+  background: var(--surface, #fff);
   transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
 }
 .overview-product-card:hover {
@@ -294,7 +294,7 @@
   border-radius: 20px;
   box-shadow: 0 10px 30px rgba(25,58,44,.045);
 }
-.overview-panel .panel-title { background: linear-gradient(120deg, #fff, #f7f9f8); }
+.overview-panel .panel-title { background: var(--table-head, linear-gradient(120deg, #fff, #f7f9f8)); }
 
 @media (max-width: 1450px) {
   .overview-product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }

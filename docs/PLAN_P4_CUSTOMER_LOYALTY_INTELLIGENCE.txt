@@ -64,6 +64,10 @@ Không làm
   QL UC10 + requireRole Quản lý
     GET /api/admin/loyalty/overview?month=YYYY-MM
     GET /api/admin/loyalty/summary          (gói đếm cho trợ lý)
+    GET /api/admin/loyalty/policy           (chính sách đang lưu)
+    PUT /api/admin/loyalty/policy           body: vip/win-back/mới + bật-tắt
+                                            lưu server/data/loyalty-policy.json
+                                            KHÔNG ghi KhuyenMai / POS
 
   TN UC23
     GET /api/cashier/customers/:id/loyalty
@@ -78,8 +82,10 @@ Không làm
 ================================================================================
 
   Menu Điều hành: “Khách hàng thân thiết”
-  desktop/src/pages/admin/loyalty-pages.js
-  KPI tháng + bảng segment + cột gợi ý đúng chính sách + panel at-risk.
+  desktop/src/pages/admin/loyalty-pages.js + loyalty.css
+  KPI tháng + bảng segment + cột Gợi ý + panel at-risk
+  + panel “Chính sách ưu đãi cửa hàng” (sửa/lưu) + “Chi tiết gợi ý”
+  Subtitle ngắn + link “Xem chính sách”. Không tự gắn KM lên POS.
 
 
 ================================================================================

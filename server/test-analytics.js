@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { runRevenueDrop, runSafetyStock, runScenario } = require('./src/services/scenarioEngine');
+const { runRevenueDrop, runSafetyStock, runScenario, runPurchasePriceUp, runTenderMix } = require('./src/services/scenarioEngine');
 const { scoreSupplier, scorePurchaseOrder, scoreShift, WEIGHTS } = require('./src/services/riskEngine');
 
 const test = async (name, run) => {
@@ -19,6 +19,27 @@ const run = async () => {
         assert.equal(result.projected.loiNhuanGop, 2700000);
         assert.equal(result.projected.kqkdLoiNhuan, 1700000);
         assert.match(result.assumption, /Không trừ trả NCC/);
+    });
+
+    await test('Scenario giá mua NCC tăng 10%', () => {
+        const result = runPurchasePriceUp({
+            bumpPct: 10,
+            doanhThuThuan: 10000000,
+            giaVonThuan: 7000000,
+            loiNhuanGop: 3000000,
+            kqkdLoiNhuan: 2000000
+        });
+        assert.equal(result.projected.giaVonThuan, 7700000);
+        assert.equal(result.projected.loiNhuanGop, 2300000);
+        assert.equal(result.projected.kqkdLoiNhuan, 1300000);
+        assert.match(result.formula, /GV/);
+    });
+
+    await test('Scenario TM sang MoMo 20%', () => {
+        const result = runTenderMix({ shiftPct: 20, tienMat: 1000000, momo: 400000, nganHang: 400000 });
+        assert.equal(result.projected.tienMat, 800000);
+        assert.equal(result.projected.momo, 600000);
+        assert.equal(result.projected.nganHang112, 600000);
     });
 
     await test('Scenario tăng tồn an toàn', () => {

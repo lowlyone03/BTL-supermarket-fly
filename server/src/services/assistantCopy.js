@@ -102,16 +102,20 @@ const replaceUcCodes = (value) => {
     out = out.replace(/\bUC\s*0*(\d{1,2})\b/gi, (_, n) => UC_SHORT[padUc(n)] || 'chức năng được cấp');
     out = out.replace(/\buse[\s-]*cases?\b/gi, '');
     out = out.replace(/\(\s*\)/g, '');
-    out = out.replace(/\s{2,}/g, ' ');
-    out = out.replace(/\s+([,.;:!?])/g, '$1');
+    out = out.replace(/[^\S\n]{2,}/g, ' ');
+    out = out.replace(/[ \t]+\n/g, '\n');
+    out = out.replace(/\n{3,}/g, '\n\n');
+    out = out.replace(/[ \t]+([,.;:!?])/g, '$1');
     return out.trim();
 };
 
 const hideApiPaths = (value) => String(value ?? '')
     .replace(/\bGET\s+\/api\/[^\s,;)]+/gi, '')
     .replace(/\/api\/[a-z0-9/_\-?=&%.]+/gi, '')
-    .replace(/\s{2,}/g, ' ')
-    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/[^\S\n]{2,}/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]+([,.;:!?])/g, '$1')
     .trim();
 
 const sanitizeAssistantText = (value) => hideApiPaths(replaceUcCodes(value));

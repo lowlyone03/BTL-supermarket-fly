@@ -49,6 +49,7 @@ const telegramRoutes = require('./routes/telegramRoutes');
 const paymentGatewayRoutes = require('./routes/paymentGatewayRoutes');
 const assistantRoutes = require('./routes/assistantRoutes');
 const chatRoutes = require('./routes/chatRoutes');
+const preferenceRoutes = require('./routes/preferenceRoutes');
 
 // Định tuyến API
 app.use('/api/auth', authRoutes);
@@ -66,6 +67,7 @@ app.use('/api/cashier', cashierRoutes);
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/assistant', assistantRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/me', preferenceRoutes);
 // IPN/return MoMo: public, mount TRƯỚC catch-all 404. Không payment.routes / momoController.
 app.use('/api/payments/gateway', paymentGatewayRoutes);
 
@@ -145,6 +147,10 @@ startHttp(HOST, () => {
             const { syncAllMemberships } = require('./services/chatService');
             await ensureChatSchema(pool);
             await syncAllMemberships(pool);
+            const { ensurePreferenceSchema } = require('./services/preferenceSchema');
+            await ensurePreferenceSchema(pool);
+            const { ensureLoyaltyApplySchema } = require('./services/loyaltyApply');
+            await ensureLoyaltyApplySchema(pool);
         } catch (error) {
             console.error('Không thể bổ sung schema thông báo / bàn giao / Telegram:', error.message);
         }

@@ -1,0 +1,789 @@
+================================================================================
+PLAN TỔNG — HỆ THỐNG SUPERMARKET FLY + AI + P3/P4/CHAT/TELEGRAM
+BẢN CHI TIẾT  (11/09/2026)
+LẤY CODE ĐANG CHẠY LÀM SỰ THẬT. PLAN CŨ LỆCH → GHI RÕ “LỆCH / CODE THẮNG”.
+================================================================================
+
+Vị trí     : supermarket-fly/docs/PLAN_TONG_HE_THONG_VA_AI_CHI_TIET.txt
+Repo       : supermarket-fly  (Git chỉ ở thư mục này; thư mục cha BTL/ không phải repo)
+Môn        : Ứng dụng hệ thống thông tin kế toán (AIS) — bài tập lớn
+Ngày chốt  : 11/09/2026  (sau khi làm chức năng gợi ý ưu đãi P4 trên UI)
+Không thay : Không commit server/.env. Không train mô hình. Không OCR / e-receipt / n8n.
+
+Cách dùng file này
+  1. Đây là bản TỔNG để bảo vệ và bàn giao. Chi tiết từng sprint vẫn nằm ở plan con.
+  2. Chỗ mâu thuẫn giữa plan 05–10/09 và CODE: lấy CODE.
+  3. File con vẫn đọc:
+       PLAN_12_TICH_HOP_VA_KE_TOAN.txt
+       PLAN_HE_THONG_KE_TOAN_MINI_CHI_TIET.txt
+       PLAN_MOMO_TEST_P1.txt
+       PLAN_TELEGRAM_BOT_P1.txt
+       PLAN_AI_CHATBOT_TRO_LY.txt
+       PLAN_AI_P2_DU_TELEGRAM_ASK_LICH_SU_TOOL_QL_FAQ.txt
+       PLAN_CHAT_NOI_BO_5_BO_PHAN.txt
+       PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt
+       PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt
+       CAM_NANG_KE_TOAN_MINI.txt
+
+
+================================================================================
+0. HỆ THỐNG LÀ GÌ — STACK
+================================================================================
+
+0.1. Câu một hơi (bảo vệ)
+
+  “Supermarket Fly là phần mềm quản lý nội bộ một cửa hàng siêu thị: chứng từ
+   điện tử, phân quyền theo vai trò, kế toán mini, thanh toán MoMo sandbox,
+   Telegram companion, trợ lý AI chỉ diễn giải số liệu đã tính, chat nội bộ
+   giữa bộ phận, đối soát ngân hàng theo thang điểm, và phân khúc khách RFM
+   với gợi ý ưu đãi nằm trong chính sách cửa hàng.”
+
+0.2. Là gì / không phải gì
+
+  Là
+    AIS vận hành một cửa hàng, một kho logic “Kho cửa hàng”.
+    Chuỗi: đề nghị → mua → nhập → bán (POS) → quỹ ca → công nợ NCC → lương
+    → sổ cái mini / KQKD / LCTT / BCĐKT → cảnh báo → hỗ trợ quyết định.
+    Khách đến quầy trả đủ rồi lấy hàng. NCC giao, cửa hàng nợ 30–45 ngày,
+    trả một lần đủ. Không bán chịu.
+
+  Không phải
+    Website bán hàng / app khách / e-commerce
+    ERP nhiều công ty, nhiều kho, điều chuyển chi nhánh
+    MISA / FAST đầy đủ (sổ cái mini ~18 TK, 1 TKNH map 112)
+    Phần mềm BHXH — không tính BHXH/BHYT
+    ChatGPT chung, không train trên SupermarketFlyDB
+
+0.3. Năm vai trò + UC (permissions.js — sự thật ma trận)
+
+  Vai trò (TenVaiTro)     Login demo (*)     UC
+  ----------------------  -----------------  --------------------------------
+  Quản lý                 admin              UC01–UC10, UC30, UC32, UC38, UC39, UC43
+                                             KHÔNG UC15, KHÔNG UC27–29,
+                                             KHÔNG UC33, KHÔNG UC34–37
+  Nhân viên mua hàng      muahang            UC01, UC11–UC14, UC31
+  Thủ kho                 thukho             UC01, UC15–UC21, UC31
+  Thu ngân                thungan            UC01, UC22–UC26, UC31
+  Kế toán                 ketoan             UC01, UC27–UC29, UC31, UC33, UC34–UC43
+                                             KHÔNG UC05–UC09 duyệt
+
+  (*) Mật khẩu test: xem hướng dẫn local. CẤM ghi mật khẩu / secret vào plan.
+
+  JWT sau login (authController): { MaTK, MaNV, MaVaiTro, TenVaiTro, TenNV }, 8 giờ.
+  Mọi API nghiệp vụ: verifyToken. Không tin body “tôi là Quản lý”.
+
+0.4. Stack đang chạy
+
+  Máy nhân viên                 Máy cửa hàng                    SQL Server
+  ┌──────────────────┐  HTTP    ┌─────────────────────┐  ODBC   ┌──────────────────┐
+  │ Electron (Forge) │  JWT ──► │ Express :3000       │ ──────► │ SupermarketFlyDB │
+  │ HTML/CSS/JS thuần│          │ REST /api/...       │         │ giờ địa phương   │
+  └──────────────────┘          └─────────────────────┘         └──────────────────┘
+
+  Tầng          Công nghệ                         Việc
+  ------------  --------------------------------  --------------------------------
+  UI            Electron + HTML/CSS/JS            Một cửa sổ; sidebar theo vai trò
+                Không React / Vue
+  API           Node.js, Express 5, JWT, bcrypt   Quyền theo mã UC
+  Ảnh / file    Multer, server/uploads            Ảnh SP; chat file JWT
+  DB            SQL Server + mssql/msnodesqlv8    useUTC: false (DATETIME Hà Nội)
+  Chạy          npm start = API + desktop         .bat cài / chạy
+
+  Mount API chính (app.js)
+    /api/auth  /api/notifications  /api/employees  /api/accounts  /api/roles
+    /api/admin  /api/warehouse  /api/purchasing  /api/suppliers
+    /api/accounting  /api/ledger  /api/cashier
+    /api/telegram  /api/assistant  /api/chat  /api/me
+    /api/payments/gateway   (IPN/return MoMo, TRƯỚC 404)
+
+0.5. Ba cột tiền — không trộn (luật bất biến P0)
+
+  (A) Doanh thu / giá vốn: lúc hóa đơn Hoàn thành.
+  (B) Két ca: chỉ tiền mặt (TM thu − hoàn TM). MoMo không vào két, không phiếu thu.
+  (C) Nợ NCC: chỉ sau đối chiếu 3 bên Khớp. Trả NCC = giảm 331, nằm dòng tiền.
+      KHÔNG trừ kqkdLoiNhuan.
+
+  P&L QL dùng kqkdLoiNhuan (lãi gộp − lương đã khóa − cước).
+  Field cũ laiLoSauChiPhi (trừ NCC) deprecated — không gọi là “lỗ kế toán”.
+
+
+================================================================================
+1. VIỆC ĐÃ CÓ — TRẠNG THÁI THẬT TỪ CODE (11/09/2026)
+================================================================================
+
+1.1. P0 — UC01–UC33 (vận hành cửa hàng)
+
+  ĐÃ CHẠY. CRUD chứng từ, phê duyệt QL, POS, ca, khách, đổi trả,
+  3-way HĐ mua, công nợ, phiếu thu/chi, phân ca, chấm công, lương.
+  File quyền: server/src/constants/permissions.js
+  Seed: server/seed-accounts.js
+
+1.2. Kế toán mini — UC34–UC43
+
+  ĐÃ CHẠY (09/09). Migration AccountingCore, journalEngine, ledger-pages,
+  CAM_NANG, BAN_TEST ~74 case.
+  Có: hệ TK, kỳ, số dư, chi phí, chờ ghi sổ, NKC/sổ cái/CĐPS,
+  khóa kỳ / kết chuyển, VAT, TSCĐ, 1 TKNH + sao kê CSV, KQKD/LCTT/BCĐKT.
+  README/bàn giao 07/09 nói “chưa sổ cái” = LẠC HẬU.
+
+  Câu bảo vệ KQKD
+    “Lợi nhuận kế toán mini không trừ tiền trả NCC. Trả NCC là dòng tiền,
+     giảm 331. Số dùng trên màn QL là kqkdLoiNhuan.”
+
+1.3. MoMo sandbox — cổng QR POS (P1)
+
+  ĐÃ CHẠY. PLAN_MOMO_TEST_P1.txt.
+  PAYMENT_PROVIDER=momo. Adapter paymentGatewayService → providers/momo.js
+  VNPay / PayOS = stub “Provider chưa bật”.
+  POS P1 chỉ Tiền mặt | MoMo. Không Thẻ, CK, QR thủ công.
+  UI “MoMo” → DB PhuongThuc='QR', NguonXacNhan='MoMo' → TK 112, không két.
+  Sample key đọc từ server/.env (local). CẤM hardcode. CẤM commit .env.
+  CẤM payment.momo.vn (prod). Sandbox test-payment.momo.vn.
+
+  Bất biến (rút)
+    4.7  INSERT ThanhToan Chờ rồi mới gọi MoMo create
+    4.8  Tối đa 1 QR+MoMo+Chờ / HĐ (409 nếu còn chờ)
+    4.9  Timeout / mất mạng KHÔNG tự fail
+    4.10 Còn MoMo Chờ → mọi addPayment mới (kể cả TM) = 409
+    4.11 IPN/query lặp cùng transId: không UPDATE lần hai; retry complete
+         nếu HĐ còn Nháp và đã đủ tiền
+
+  API
+    Public: POST /api/payments/gateway/ipn   GET .../return
+    JWT UC25: POST /cashier/invoices/:id/payments/qr
+              GET  /cashier/invoices/:id/payments/:maTT
+
+1.4. Telegram companion P1
+
+  ĐÃ CHẠY. OTP bind (CODE: chỉ Quản lý tạo OTP), /fly pull, push việc chờ,
+  Control Center, nút duyệt inline (LỆCH plan gốc 07/09 “không duyệt”).
+  File: telegramBotController.js, telegramApprove.js, telegramMessages.js
+  Lệnh chữ /approve /reject /pay /complete bị FORBIDDEN_TEXT.
+  ChatId → TelegramDangKy (Bat=1) → TaiKhoan → VaiTro → UC.
+  Không nhét JWT Fly vào tin Telegram.
+  Webhook HTTPS hoặc long-poll — không chạy đồng thời.
+
+  Slash menu native (BOT_NATIVE_COMMANDS)
+    /start /help /fly /today /debt /lowstock /shifts /payments /pending
+    /docs /reports /guide /rules /payroll /unlink
+    Khi TELEGRAM_ASK=1: thêm /ask (đặt TRƯỚC /unlink trên menu slash).
+
+1.5. Trợ lý AI — P2-MIN + Intelligence Center + P2-ĐỦ một phần
+
+  ĐÃ CHẠY trên Electron (widget góc phải).
+  Provider mặc định CODE: genspark (ASSISTANT_PROVIDER=genspark).
+  Plan 10/09 còn ghi codecraft — LỆCH, CODE thắng.
+  5 tab: Chat · Hôm nay · Cảnh báo · Phân tích · Kịch bản.
+  QL được xem / in / tải chứng từ + báo cáo (chọn tháng).
+  CẤM hiện mã UC / đường dẫn API trên UI.
+  Training ≠ context (mục 2).
+  Telegram /ask: ĐÃ CÓ, opt-in TELEGRAM_ASK=1.
+
+  FAQ tĩnh: docs/ASSISTANT_FAQ.txt  (~22 câu Q: — chưa đủ 40–60 của P2-ĐỦ).
+  Lịch sử chat SQL: CHƯA (history RAM renderer, mất khi F5).
+
+1.6. Chat nội bộ — P5-MIN (6 phòng, không phải 5 cứng)
+
+  ĐÃ CHẠY. Plan tên “5 bộ phận” nhưng CODE có 6 kênh (thêm #cửa-hàng).
+  PhongChat / TinNhan / SSE / file / widget trái.
+  Ma trận kho ↔ mua hàng. Không 400 mọi 12 số.
+  Không LLM, không đồng bộ Telegram.
+
+1.7. P3 — Đối soát ngân hàng thông minh
+
+  ĐÃ CHẠY. UC42. Engine thang điểm cố định. KT xác nhận.
+  LLM không match. Xác nhận không postJournal.
+  QL chỉ xem summary đếm (UC10), không dump sao kê.
+
+1.8. P4 — Customer Loyalty Intelligence + chính sách sửa được
+
+  RFM MVP ĐÃ CHẠY từ 10/09 (backend + bảng segment + KPI).
+  11/09: panel Chính sách ưu đãi lưu server + cột Gợi ý + Chi tiết gợi ý
+  (subtitle trước đó chỉ là câu chữ — đã thành chức năng, xem mục 6).
+
+1.9. Việc còn dở / đang làm song song
+
+  i18n (vi/en/zh) + theme (light/dark/soft): ĐANG LÀM
+    Đã có: desktop/src/i18n/{vi,en,zh}.js
+           /api/me/preferences  /api/admin/store-appearance
+           preferenceService / preferenceSchema
+    Chưa chắc: gắn hết UI dashboard (không đụng assistant-panel lớn).
+  OCR HĐ NCC, e-receipt public, n8n, Sentry, Ollama thật, train: CHƯA / CẤM
+    (mục 7).
+
+
+================================================================================
+2. AI — KIẾN TRÚC, GENSPARK, 5 TAB, IN/TẢI, QUYỀN QL
+================================================================================
+
+2.1. Câu bảo vệ (giữ nguyên)
+
+  “Trợ lý Fly sử dụng mô hình ngôn ngữ có sẵn để diễn giải dữ liệu nghiệp vụ
+   theo ngữ cảnh. Dữ liệu lấy từ service của Fly đúng quyền người đang đăng
+   nhập. Phép tính nghiệp vụ và kế toán do hệ thống thực hiện; AI không sửa
+   dữ liệu, không duyệt chứng từ, không ghi sổ.
+   Nhóm không huấn luyện mô hình bằng dữ liệu siêu thị. Nhóm dùng mô hình
+   có sẵn và đưa số liệu cần thiết vào context lúc hỏi.”
+
+2.2. TRAINING ≠ CONTEXT
+
+  TRAINING DATA  = dữ liệu đổi trọng số mô hình
+                   → NHÓM KHÔNG LÀM.
+                   Không gọi SupermarketFlyDB là “train data”.
+                   Không fine-tune, không embedding hóa đơn NCC.
+
+  CONTEXT        = FAQ + cẩm nang + số liệu lấy ĐÚNG LÚC người hỏi
+                   → NHÓM CÓ LÀM.
+                   Copilot kế toán, không phải ChatGPT chung.
+
+  Luồng đúng
+    CSDL → service nghiệp vụ đã có → assistantTools lọc UC
+         → context có cấu trúc → LLM → giải thích tiếng Việt + Nguồn
+
+  Luồng cấm
+    Người dùng → AI tự viết SQL → Database
+
+2.3. Tầng (AI không autonomous)
+
+  CSDL
+    → service thuần / load* đã tách (dashboard, KQKD, inbox, RFM, đối soát…)
+    → analyticsEngine (KPI, trend, anomaly, risk) + scenarioEngine
+    → assistantTools lọc UC + PII (che SĐT/email)
+    → context [SO LIEU] [FAQ] [HOI THOAI]
+    → LLM diễn giải + evidence + next action (mở màn, không execute)
+
+  File
+    server/src/routes/assistantRoutes.js
+    server/src/controllers/assistantController.js
+    server/src/services/assistantService.js
+    server/src/services/assistantTools.js
+    server/src/services/assistantFaq.js
+    server/src/services/assistantDocs.js
+    server/src/services/assistantInvoices.js
+    server/src/services/assistantCopy.js
+    server/src/services/analyticsEngine.js
+    server/src/services/providers/genspark.js     ← mặc định CODE
+    server/src/services/providers/codecraft.js
+    server/src/services/providers/openai.js
+    server/src/services/providers/gemini.js
+    server/src/services/providers/ollama.js       (stub / chưa mặc định)
+    desktop/src/pages/dashboard/assistant-panel.js
+    desktop/src/pages/dashboard/assistant.css     widget góc phải
+
+2.4. API (JWT + UC01)
+
+  POST /api/assistant/ask          { question, history[] }
+  GET  /api/assistant/brief        tab Hôm nay
+  GET  /api/assistant/alerts       Cảnh báo + risk
+  GET  /api/assistant/insights     Phân tích
+  POST /api/assistant/scenario     { type, params } — engine tính, không LLM bịa
+  GET  /api/assistant/invoices/purchase|sales     list theo tháng
+  GET  /api/assistant/invoices/purchase|sales/:id
+  GET  /api/assistant/docs/:kind[/:id]            mẫu in / báo cáo
+
+  Auth: verifyToken + requirePermission('UC01')
+  Không JWT → 401.
+
+2.5. Luồng ask (giữ)
+
+  1. Rate in-memory ASSISTANT_DAILY_LIMIT (40 / MaNV / ngày VN)
+  2. isForbiddenQuestion → template CỐ ĐỊNH, KHÔNG gọi LLM
+       duyệt hộ / duyệt giúp / /approve / /reject
+       trả NCC giúp / lập phiếu chi giúp
+       hoàn thành hóa đơn / completeInvoice / tick MoMo
+       ghi sổ giúp / khóa kỳ giúp
+  3. collectContext(pool, user) — snapshot đúng role + UC
+  4. pickFaq(question)
+  5. provider.complete()
+  6. logAudit HanhDong="Trợ lý AI", UC01, 120 ký tự đầu câu hỏi
+     Không nhét full hội thoại vào NhatKy (NoiDung 1000).
+
+  System prompt (rút):
+    Chỉ dùng số trong [SO LIEU]. Không bịa.
+    CẤM viết đường dẫn API, GET, endpoint, mã UC trên câu trả lời.
+    QL được xem/in/tải — không nói “tôi không có dữ liệu”.
+    KQKD dùng kqkdLoiNhuan, không trừ trả NCC.
+    Next action = mở màn, không execute.
+
+2.6. Provider Genspark (CODE mặc định)
+
+  Env (server/.env — KHÔNG commit, KHÔNG chép key vào plan/slide)
+    ASSISTANT_PROVIDER=genspark
+    ASSISTANT_BASE_URL=https://www.genspark.ai/api/llm_proxy/v1
+    ASSISTANT_MODEL=claude-haiku-4-5     (default trong genspark.js)
+    ASSISTANT_API_KEY=...                (KEY1 local — không ghi giá trị)
+    ASSISTANT_TIMEOUT_MS=25000
+    ASSISTANT_MAX_QUESTION=500
+    ASSISTANT_DAILY_LIMIT=40
+
+  complete({ system, user, maxTokens }) → { text, model }
+  Key trống: Brief/Cảnh báo vẫn ra số từ engine; chat báo chưa cấu hình (503).
+  Lỗi 401 khóa; 402 hết hạn mức; 429 rate.
+
+  Có thể đổi cổng bằng env: openai | gemini | codecraft | ollama | mock
+  Không sửa widget khi đổi provider.
+
+2.7. Năm tab widget (góc phải dưới)
+
+  Chat       hỏi tự do, chip câu mẫu theo TenVaiTro
+  Hôm nay    GET /brief — KPI + việc ưu tiên
+  Cảnh báo   GET /alerts — anomaly / risk
+  Phân tích  GET /insights
+  Kịch bản   POST /scenario
+               revenue_drop   doanh thu giảm X% → lãi gộp / KQKD
+               safety_stock   tăng tồn an toàn X%
+               demand_4w      nhu cầu TB 4 tuần
+
+  UI: #assistantDrawer.assistant-widget  right/bottom ~20px
+  CẤM sửa lớn assistant-panel / assistant.css khi làm module khác
+  (chat trái, loyalty, i18n — không đụng khung AI).
+
+2.8. In / tải — chỉ QL (và đúng UC đọc)
+
+  Nút trên khối chứng từ/báo cáo trong widget:
+    Xem · In hệ thống · In giấy trắng · Tải PDF (HTML tải về)
+  Chọn tháng: #assistantMonth (YYYY-MM), format tiền kqkdLoiNhuan.
+  Loại: HĐ mua/bán, đơn mua, phiếu nhập/xuất, đề nghị, đổi trả,
+        phiếu thu/chi, công nợ, báo cáo cửa hàng, KQKD, CĐPS, LCTT,
+        lương gộp tháng (không dump từng NV — UC33 = KT).
+
+  QL không UC15 (tồn đầy đủ), không UC37 (listUnposted).
+  Tồn QL = TOP dashboard. Replenishment module không bị AI ghi đề nghị.
+
+2.9. Tool theo role (assistantTools.collectContext)
+
+  Mọi role   inboxService.listForRole
+  QL         dashboard + hàng chờ + công nợ tóm tắt + KQKD (kqkdLoiNhuan)
+             + đối soát NH đếm + RFM summary + chính sách gợi ý (không bịa %)
+             KHÔNG getInventory UC15, KHÔNG unposted UC37
+  MH         đề nghị / đơn / NCC
+  TK         dashboard kho (UC15)
+  TN         ca đang mở; điểm khách đang phục vụ — KHÔNG dump RFM cửa hàng
+  KT         chờ ghi sổ UC37, công nợ, KQKD/CĐPS, đối soát chi tiết hơn QL
+
+2.10. Demo AI bắt buộc
+
+  QL: “Duyệt PO00012 giúp tôi.”
+      → template: không được phép duyệt. Mở Trung tâm phê duyệt.
+      Không gọi Genspark.
+
+  Thầy: “Có train trên database siêu thị không?”
+      → Không. Context lúc hỏi, không đổi trọng số.
+
+  QL hỏi KQKD tháng: số = kqkdLoiNhuan, có Nguồn, có nút Xem/In/Tải.
+  Không hiện “UC10” / “GET /api/admin/reports/...” trên bóng chat.
+
+
+================================================================================
+3. TELEGRAM /ask
+================================================================================
+
+3.1. Câu bảo vệ
+
+  “Trên Telegram, Quản lý đã OTP có thể gõ /ask để hỏi cùng trợ lý Fly.
+   Số liệu đúng quyền JWT-tương đương (ChatId → tài khoản). AI vẫn không
+   duyệt. /guide là FAQ tĩnh, không gọi LLM. Bật bằng TELEGRAM_ASK=1.”
+
+3.2. File / điều kiện
+
+  server/src/services/telegramAsk.js
+  telegramBotController.parseCommand: /^\/ask(?:\s+(.+))?$/i  — slash TRƯỚC
+    keyboard reply (lệnh gõ /ask, không phụ thuộc nút bàn phím).
+  setMyCommands: khi TELEGRAM_ASK=1 chèn /ask trước /unlink.
+  Env: TELEGRAM_ASK=1  (CODE đang bật trên máy demo; .env.example có dòng này)
+
+  TELEGRAM_ASK≠1 → tin “Chưa bật hỏi trợ lý trên Telegram…”
+  /ask không có nội dung → hướng dẫn: “Gõ: /ask hôm nay cần chú ý gì?”
+
+3.3. Luồng
+
+  1. Bound user (OTP, chỉ QL bind được — CODE)
+  2. Slash /ask <câu>
+  3. Trả “Đang hỏi trợ lý Fly…”
+  4. enqueueAsk → assistantService.ask({ channel: 'telegram', historyTurns: [] })
+  5. Trả lời + khối Nguồn (humanizeSources)
+  Timeout / 429 / 400: tin cố định, không treo bot.
+
+3.4. Cấm
+
+  /ask không gọi telegramApprove.js
+  FORBIDDEN_TEXT vẫn chặn /approve /reject /pay /complete
+  Không tin from.username. Không nhét JWT vào tin.
+
+3.5. Lệnh không LLM (giữ)
+
+  /today  mẫu cố định loadTodayBundle — không copy laiLoSauChiPhi
+  /guide  telegramGuide.js FAQ tĩnh (revenue, gross, pnl, vat, debt, cash, payroll)
+  /pending việc chờ + nút duyệt (nếu có quyền)
+
+
+================================================================================
+4. CHAT NỘI BỘ
+================================================================================
+
+4.1. Câu bảo vệ
+
+  “Chat nội bộ Fly là kênh nhắn tin giữa bộ phận trên desktop đã đăng nhập.
+   Dữ liệu trên SQL Server cửa hàng, realtime SSE. Không dùng mô hình ngôn
+   ngữ, không API key chat đám mây, không app điện thoại. Tin nhắn không
+   phải chứng từ kế toán và không thay Trung tâm phê duyệt / nút Telegram.”
+
+4.2. Sáu phòng (CODE — ma trận S1)
+
+  #kho         QL + Thủ kho + Mua hàng
+  #mua-hàng    QL + Mua hàng + Thủ kho
+  #kế-toán     QL + Kế toán          (TN không vào — không lộ lương)
+  #thu-ngân    QL + Thu ngân
+  #quản-lý     chỉ QL
+  #cửa-hàng    tất cả
+
+  Server enforce: chatPolicy.ROOM_MATRIX + ThanhVienPhongChat.
+  Không tin body client.
+
+4.3. API (JWT + UC01)
+
+  GET  /api/chat/stream
+  GET  /api/chat/unread
+  GET  /api/chat/rooms
+  GET  /api/chat/rooms/:maPhong/messages
+  POST /api/chat/rooms/:maPhong/messages
+  POST /api/chat/rooms/:maPhong/files          multer, ≤8MB, pdf/png/jpg/webp
+  GET  /api/chat/files/:maTin                  JWT + thành viên phòng
+                                               KHÔNG serve public /uploads/chat
+  POST /api/chat/rooms/:maPhong/read
+  GET  /api/chat/vouchers[/:loai/:ma]          đính chứng từ hệ thống
+
+  Migration: server/migrations/SupermarketFly_Migration_20260911_ChatNoiBo.sql
+  Hub: chatHub.js — SSE riêng, không lẫn /notifications/stream.
+  Fallback poll 3–4s nếu SSE rớt.
+
+4.4. CCCD — không 400 mọi 12 số
+
+  400 chỉ khi (CCCD|căn cước|CMND) VÀ một cụm 12 chữ số trong cùng nội dung,
+      hoặc mật khẩu / otp / jwt / bearer / api key.
+  12 số đứng riêng: cảnh báo mềm, vẫn gửi 200.
+
+4.5. Retention
+
+  TinNhanDaDoc.MaTinCuoi = watermark, không FK bắt buộc.
+  Xóa tin >90 ngày (trừ HeThong) không xóa hàng đã đọc.
+
+4.6. UI
+
+  Nút Chat + badge topbar (không lẫn #menuAssistant).
+  Widget trái dưới ~400px. Cột kênh theo ma trận.
+  CẤM sửa assistant-panel.js khi làm chat.
+
+
+================================================================================
+5. P3 ĐỐI SOÁT + P4 RFM (KHUNG)
+================================================================================
+
+5.1. P3 — Đối soát ngân hàng thông minh
+
+  Câu bảo vệ
+    “Khớp sao kê CSV với MoMo, phiếu chi NCC, chi lương CK và bút toán 112
+     theo thang điểm cố định. LLM không quyết định khớp. Kế toán bấm
+     Xác nhận đối soát; hệ thống không tự sửa sổ, không tự ghi thanh toán.”
+
+  Điểm (reconciliationEngine.js)
+    Số tiền khớp (abs)                         +50
+    Ngày ±1 (lịch VN)                          +20
+    Mã PC / MaGiaoDich / MaThamChieu trong ND  +25
+    NCC (tên/mã) trong nội dung                +5
+    Tổng tối đa 100
+    ≥95   Khớp tự động   (vẫn CHỜ KT xác nhận — không auto post)
+    ~70   Gợi ý
+    Tiền lệch + có mã/cùng ngày → Chênh lệch
+    Không ứng viên → Chưa khớp
+    Greedy: một chứng từ không gán hai dòng sao kê.
+
+  API KT UC42  /api/accounting/reconciliation/
+    GET  /template.csv  /summary  /statements
+    POST /statements/import
+    GET  /statements/:id
+    POST /statements/:id/run
+    POST /statements/:id/confirm-auto
+    GET  /lines/:maDong
+    POST /lines/:maDong/confirm
+    POST /lines/:maDong/reject
+
+  API QL UC10
+    GET /api/admin/reconciliation/summary
+    Chỉ: soDongChuaDoiSoat, tongTienChuaDoiSoat, soDongGoiY, soDongChenhLech.
+    CẤM dump dòng sao kê.
+
+  UI: desktop/src/pages/accounting/reconciliation-pages.js
+  Test: npm run test:recon
+  Migration: SupermarketFly_Migration_20260910_SmartBankReconciliation.sql
+
+  Demo KT (rút)
+    1. Menu Đối soát → tải mẫu CSV
+    2. Nhập → engine chạy (MoMo mã GD ≈ 95–100; không mã ≈ 70; lệch = chênh)
+    3. Xác nhận dòng / hàng loạt khớp tự động
+    4. Mở sổ cái: KHÔNG có bút toán mới từ bước 3
+
+5.2. P4 — RFM (rule, không LLM)
+
+  Câu bảo vệ
+    “Phân khúc khách thành viên theo RFM trên hóa đơn hoàn thành. Gợi ý ưu đãi
+     chỉ chọn trong chính sách đã cấu hình (VIP tối đa X%, win-back Y đ,
+     khách mới nhân Z điểm — mặc định 10% / 20.000đ / ×2). AI không bịa
+     phần trăm. Hệ thống không tự gắn khuyến mãi lên POS.”
+
+  Nguồn: KhachHang LEFT JOIN HoaDon TrangThai=N'Hoàn thành'
+  R: ≤7n=5 … >180n=1     (không bịa 999 ngày)
+  F: ≥12 HĐ=5 … 1 HĐ=1
+  M: ≥5tr=5 … <300k=1
+
+  Segment
+    R≥4 F≥4 M≥4     Giá trị cao     → VIP
+    F≥3 M≥3 R≤2     Nguy cơ rời bỏ  → win-back
+    F≥4 R≥3         Thân thiết      → không bịa % mới
+    F≤2 R≥4         Mới             → × điểm
+    R=1             Ngủ đông        → win-back (đã từng mua)
+    còn lại         Tiềm năng
+    0 HĐ hoàn thành Chưa phát sinh  → KHÔNG win-back
+
+  API
+    QL  GET /api/admin/loyalty/overview?month=YYYY-MM
+        GET /api/admin/loyalty/summary
+        GET /api/admin/loyalty/policy
+        PUT /api/admin/loyalty/policy
+    TN  GET /api/cashier/customers/:id/loyalty
+        điểm, hạng, số HĐ, lần mua gần. cuaHangRfm=false
+
+  File: loyaltyAnalytics.js (không fetch, không LLM)
+        loyaltyPolicy.js
+        loyaltyController.js
+        desktop/src/pages/admin/loyalty-pages.js + loyalty.css
+  Test: npm run test:loyalty
+  Chi tiết chức năng chính sách: mục 6.
+
+
+================================================================================
+6. VIỆC SUBTITLE LOYALTY VỪA LÀM (11/09/2026)
+================================================================================
+
+6.1. Vấn đề
+
+  Trang Khách hàng thân thiết có subtitle:
+    “Phân tích theo hóa đơn hoàn thành và điểm thành viên.
+     Gợi ý ưu đãi theo chính sách cửa hàng.”
+  Đó chỉ là câu chữ. QL không thấy / không dùng được chính sách.
+  Cột Gợi ý trên bảng chưa có. Không sửa được VIP / win-back / khách mới.
+
+6.2. Đã làm — QL thấy và dùng được
+
+  (1) Panel “Chính sách ưu đãi cửa hàng” ngay dưới tiêu đề
+        VIP: giảm tối đa X%     mặc định 10    bật/tắt
+        Win-back: voucher Y đ   mặc định 20.000  bật/tắt
+        Khách mới: ×Z điểm      mặc định 2     bật/tắt
+      Nút Lưu chính sách → PUT server.
+      Nút Khôi phục mặc định (điền form, phải Lưu mới ghi).
+      Ghi chú: “Chỉ gợi ý — không tự gắn khuyến mãi lên POS.”
+
+  (2) Lưu server
+        File: supermarket-fly/server/data/loyalty-policy.json
+        API : GET  /api/admin/loyalty/policy     UC10 + role Quản lý
+              PUT  /api/admin/loyalty/policy     cùng quyền
+        Service: loyaltyPolicy.loadLoyaltyPolicy / saveLoyaltyPolicy
+        Kẹp biên: VIP 1–20%, voucher 1.000–500.000đ, nhân 1–5.
+        PUT không cho client sửa ngưỡng R/F/M (ngưỡng nằm trong code).
+        Audit: “Cập nhật chính sách ưu đãi thành viên” (UC10).
+        posGanKhuyenMai=false luôn.
+
+  (3) Cột / card Gợi ý
+        Giá trị cao     → “VIP: tối đa 10%”   (hoặc X% đang lưu)
+        Win-back        → “Voucher 20.000 đ”
+        Mới             → “×2 điểm”
+        Chưa phát sinh  → “Chưa phát sinh” — không win-back
+        Thân thiết / tiềm năng → “Không gợi ý”
+        Nhóm tắt        → “VIP đang tắt” / “Win-back đang tắt” / …
+      Panel at-risk dùng cùng gợi ý.
+      Nút “Chi tiết gợi ý” → dialog: RFM + lý do rule + chính sách đang áp dụng
+        + câu “không tự gắn KM lên POS”.
+
+  (4) Subtitle ngắn, chữ không dính
+        “Phân khúc theo hóa đơn hoàn thành.”
+        “Gợi ý chỉ trong chính sách cửa hàng.”
+        Link “Xem chính sách” → cuộn tới #loyPolicy.
+        Lead tách span + word-spacing; không dính chữ.
+
+  (5) Trợ lý QL
+        loadLoyaltySummary kèm policy.
+        formatLoyaltySummary nhắc đúng % / đ / × đã lưu — AI không bịa %.
+
+  Không làm (đúng plan)
+    Không INSERT KhuyenMai. Không đổi POS. Không email/SMS.
+    Không mở UC mới (vẫn UC10 / UC23).
+    Không sửa assistant-panel.js / file i18n (tránh conflict agent khác).
+
+6.3. Demo chức năng này (2 phút)
+
+  1. Ctrl+F5 dashboard (cache rfm-policy-1).
+  2. Quản lý → Khách hàng thân thiết.
+  3. Thấy panel chính sách. Sửa VIP 8% → Lưu → cột Gợi ý đổi “VIP: tối đa 8%”.
+  4. Tắt Win-back → Lưu → khách ngủ đông hiện “Win-back đang tắt”.
+  5. Mở “Chi tiết gợi ý” trên khách chưa phát sinh: không voucher.
+  6. Thu ngân → Khách hàng: chỉ điểm/hạng, không bảng RFM cửa hàng.
+
+
+================================================================================
+7. VIỆC CHƯA / CỐ Ý KHÔNG LÀM
+================================================================================
+
+  Hạng mục                         Trạng thái     Ghi chú bảo vệ
+  -------------------------------  -------------  -----------------------------
+  OCR hóa đơn NCC                  CHƯA           Form UC27 nhập tay
+  E-receipt token / URL public     CHƯA           In PDF nội bộ có
+  n8n                              CẮT            Không cài
+  Firebase                         CẮT
+  Thời tiết                        CẮT
+  Sentry @sentry/node              CHƯA
+  Ollama module riêng / local LLM  CHƯA           Fallback #2, không mặc định
+  Train / fine-tune / vector DB    CẤM            Training ≠ context
+  AI duyệt / ghi sổ / trả NCC      CẤM            chặn trước LLM
+  AI match đối soát NH             CẤM            P3 rule engine
+  AI bịa % ưu đãi                  CẤM            P4 lấy policy đã lưu
+  Tự gắn KM lên POS khi RFM đổi    CẤM
+  Email / SMS / Zalo / app khách   CẤM            P4
+  Open Banking / OCR sao kê giấy   CẤM            P3 CSV
+  Nhiều TKNH (1121/1122)           CẤM            mini 1 TKNH → 112
+  Chat DM 1-1                      CHƯA           P5-ĐỦ
+  Lịch sử hội thoại AI trên SQL    CHƯA           RAM renderer
+  FAQ 40–60 câu                    CHƯA HẾT       đang ~22 Q:
+  Webcam / ZXing barcode           CHƯA           POS search MaVach / USB HID
+  Replenishment NhuCauNgay*7       CHƯA           mới tồn min + SLĐặtMua
+  Hủy HĐ hỗn hợp đã có dòng OK     CHƯA           vẫn 400 (A1 bước 8)
+
+
+================================================================================
+8. i18n / THEME
+================================================================================
+
+  Trạng thái 11/09/2026: ĐANG LÀM (agent khác). Không đụng trong đợt P4 này.
+
+  Đã thấy trong repo
+    desktop/src/i18n/vi.js  en.js  zh.js     từ điển (có nav.loyalty)
+    GET/PUT /api/me/preferences
+    GET/PUT /api/admin/store-appearance      QL
+    preferenceService: lang vi|en|zh, theme light|dark|soft
+    login đã trả field preferences
+    locale-ui.js = ngày/tháng VN (đã dùng trang RFM), không phải i18n đủ
+
+  Chưa chắc xong
+    Gắn data-i18n hết dashboard, đổi theme runtime, landing EN
+    (“Sắp được hỗ trợ” trên landing.html vẫn còn)
+
+  Quy tắc tránh conflict
+    Không sửa lớn assistant-panel.js / assistant.css
+    Không sửa 3 file i18n khi làm loyalty
+    Loyalty CSS/JS được phép (đã làm)
+
+
+================================================================================
+9. CÁCH DEMO BẢO VỆ
+================================================================================
+
+9.1. Chuẩn bị (5 phút trước)
+
+  npm start (API :3000 + Electron)
+  Ctrl+F5 dashboard nếu vừa kéo code (loyalty.css/js ?v=rfm-policy-1)
+  server/.env có MoMo sample + ASSISTANT_API_KEY + TELEGRAM_ASK=1
+  Không mở .env trên máy chiếu.
+
+9.2. Kịch bản 12–15 phút (gợi ý)
+
+  A. Vận hành + 3 cột tiền (2 phút)
+     POS HĐ hoàn thành → doanh thu.
+     Ca: MoMo không vào két.
+     QL KQKD: kqkdLoiNhuan, nói rõ không trừ trả NCC.
+
+  B. MoMo (1 phút, nếu mạng)
+     Quầy tạo QR sandbox. Nêu 4.7–4.10 nếu thầy hỏi “lỗi giữa chừng”.
+
+  C. Telegram (2 phút)
+     /today (không LLM). Việc chờ + nút duyệt (đúng UC, TTL 15 phút).
+     /ask hôm nay cần chú ý gì?  (TELEGRAM_ASK=1, slash trước keyboard)
+     Gõ “duyệt hộ PO…” → từ chối.
+
+  D. Trợ lý Electron (3 phút)
+     Widget góc phải. 5 tab.
+     Hỏi KQKD tháng — chọn tháng, số kqkdLoiNhuan, Xem / In / Tải.
+     “Duyệt PO giúp tôi” → template, không Genspark.
+     “Có train DB không?” → không, context lúc hỏi.
+     Không thấy chữ UC10 / GET /api trên UI.
+
+  E. Chat nội bộ (1 phút)
+     QL vào #kho (có MH + TK). Gửi 12 số không kèm “CCCD” → vẫn gửi.
+     Đính ảnh/PDF. Không lẫn nút Trợ lý.
+
+  F. P3 (2 phút, KT)
+     Nhập CSV mẫu → điểm → Xác nhận → sổ cái không sinh bút toán mới.
+
+  G. P4 chính sách (2 phút, QL)  ← subtitle đỏ đã thành chức năng
+     Panel chính sách. Đổi % / tắt nhóm / Lưu.
+     Cột Gợi ý đổi theo policy. Chi tiết gợi ý. Khách chưa phát sinh
+     không win-back. Nói: “AI không bịa %. Không gắn KM lên POS.”
+
+9.3. Câu hỏi thầy — trả sẵn
+
+  Q. Train trên database siêu thị?
+  A. Không. Mô hình có sẵn (Genspark). Số liệu = context lúc hỏi, đúng UC.
+
+  Q. AI duyệt được không?
+  A. Không. Chặn trước LLM. Duyệt: Trung tâm phê duyệt hoặc nút Telegram.
+
+  Q. AI tự khớp sao kê?
+  A. Không. Thang điểm cố định. KT xác nhận. Không postJournal.
+
+  Q. VIP 15% được không?
+  A. Chỉ khi QL lưu 15% trên panel chính sách (kẹp ≤20). AI không tự bịa.
+     Mặc định cửa hàng 10%.
+
+  Q. Gợi ý RFM có xuống POS không?
+  A. Không. Chỉ gợi ý nội bộ. Thu ngân vẫn điểm/hạng cũ.
+
+  Q. Chat có phải AI không?
+  A. Không. SSE + SQL. Sáu kênh bộ phận.
+
+  Q. MoMo có phải merchant thật không?
+  A. Sandbox / sample key công khai. Không phải M4B production.
+
+9.4. Test nhanh trước bảo vệ
+
+  cd supermarket-fly/server
+  npm run test:loyalty
+  npm run test:recon
+  npm run test:assistant     (không cần key cho case chặn / mock)
+  npm run test:telegram-ask
+  npm run test:internal-chat
+
+
+================================================================================
+10. BẢNG FILE “MỞ ĐÂU KHI SỬA”
+================================================================================
+
+  Việc                    File chính
+  ----------------------  -------------------------------------------------
+  Quyền UC                server/src/constants/permissions.js
+  AI ask / cấm duyệt      server/src/services/assistantService.js
+  Tool theo role          server/src/services/assistantTools.js
+  Widget AI               desktop/.../dashboard/assistant-panel.js  (cẩn thận)
+  Genspark                server/src/services/providers/genspark.js
+  Telegram /ask           server/src/services/telegramAsk.js
+                          telegramBotController.js
+  Chat ma trận / CCCD     server/src/services/chatPolicy.js
+  P3 điểm khớp            server/src/services/reconciliationEngine.js
+  P4 RFM                  server/src/services/loyaltyAnalytics.js
+  P4 chính sách           server/src/services/loyaltyPolicy.js
+                          server/data/loyalty-policy.json
+                          server/src/controllers/loyaltyController.js
+                          desktop/src/pages/admin/loyalty-pages.js
+                          desktop/src/pages/admin/loyalty.css
+  i18n/theme (đang làm)   desktop/src/i18n/*.js
+                          server/src/services/preferenceService.js
+
+HẾT FILE
+================================================================================

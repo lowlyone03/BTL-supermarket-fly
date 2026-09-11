@@ -74,6 +74,14 @@ const login = async (req, res) => {
                     WHERE MaVaiTro = @MaVaiTro AND DuocPhep = 1
                     ORDER BY MaChucNang`);
 
+        let preferences = { ngonNgu: 'vi', giaoDien: 'light' };
+        try {
+            const { getEffectivePreferences } = require('../services/preferenceService');
+            preferences = await getEffectivePreferences(pool, user.MaTK);
+        } catch (prefError) {
+            console.log('Không tải được tuỳ chọn giao diện lúc đăng nhập:', prefError.message);
+        }
+
         setImmediate(() => {
             Promise.resolve().then(async () => {
                 const { syncMembershipSafe } = require('../services/chatService');
@@ -91,7 +99,8 @@ const login = async (req, res) => {
                 MaVaiTro: user.MaVaiTro,
                 TenVaiTro: user.TenVaiTro,
                 Quyen: permissionResult.recordset.map(item => item.MaChucNang)
-            }
+            },
+            preferences
         });
 
     } catch (error) {

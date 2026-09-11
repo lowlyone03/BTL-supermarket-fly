@@ -1,4 +1,22 @@
 document.addEventListener('DOMContentLoaded', () => {
+  const t = (key, vars) => window.FLY_I18N?.t(key, vars) || key;
+  window.FLY_APPEARANCE?.bootFromStorage('');
+  window.FLY_I18N?.applyDom(document);
+  window.FLY_APPEARANCE?.syncButtons(document);
+  document.querySelector('.login-pref')?.addEventListener('click', (event) => {
+    const langBtn = event.target.closest('[data-lang]');
+    const themeBtn = event.target.closest('[data-theme-set]');
+    if (!langBtn && !themeBtn) return;
+    const prefs = {
+      ngonNgu: langBtn ? langBtn.getAttribute('data-lang') : window.FLY_I18N?.getLang(),
+      giaoDien: themeBtn ? themeBtn.getAttribute('data-theme-set') : window.FLY_I18N?.getTheme()
+    };
+    window.FLY_APPEARANCE?.applyPrefs(prefs, '');
+    window.FLY_I18N?.applyDom(document);
+    window.FLY_APPEARANCE?.syncButtons(document);
+    document.title = t('login.title');
+  });
+  document.title = t('login.title');
   const form = document.getElementById('loginForm');
   const username = document.getElementById('username');
   const password = document.getElementById('password');
@@ -23,8 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const currentOrigin = window.flyApi?.getOrigin() || 'http://localhost:3000';
   serverHost.value = window.flyApi?.displayHost(currentOrigin) || 'localhost:3000';
   serverStatus.textContent = window.flyApi?.isLocalHost(currentOrigin)
-    ? 'Đang dùng máy này (localhost).'
-    : `Đang dùng máy chủ nhóm ${window.flyApi.displayHost(currentOrigin)}.`;
+    ? t('login.local')
+    : t('login.usingHost', { host: window.flyApi.displayHost(currentOrigin) });
 
   const showToast = (message) => {
     window.clearTimeout(toastTimer);
@@ -54,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
   passwordToggle.addEventListener('click', () => {
     const isPassword = password.type === 'password';
     password.type = isPassword ? 'text' : 'password';
-    passwordToggle.setAttribute('aria-label', isPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu');
+    passwordToggle.setAttribute('aria-label', isPassword ? t('login.hidePass') : t('login.showPass'));
     password.focus();
   });
 
@@ -70,12 +88,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   checkServer.addEventListener('click', async () => {
     checkServer.disabled = true;
-    setServerStatus('Đang kiểm tra máy chủ...', '');
+    setServerStatus(t('login.checkingHost'), '');
     const origin = saveServer();
     serverHost.value = window.flyApi.displayHost(origin);
     try {
       await window.flyApi.probe(origin);
-      setServerStatus(`Kết nối được ${window.flyApi.displayHost(origin)}. Có thể đăng nhập.`, 'ok');
+      setServerStatus(t('login.okHost', { host: window.flyApi.displayHost(origin) }), 'ok');
     } catch {
       setServerStatus(window.flyApi.connectionErrorMessage(origin), 'error');
     } finally {
@@ -84,10 +102,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('forgotPasswordBtn').addEventListener('click', () => {
-    showToast('Vui lòng liên hệ Quản lý cửa hàng để được đặt lại mật khẩu.');
+    showToast(t('login.forgotToast'));
   });
   document.getElementById('requestAccessBtn').addEventListener('click', () => {
-    showToast('Quản trị viên sẽ cấp tài khoản và phân quyền phù hợp với vị trí công việc.');
+    showToast(t('login.contactToast'));
   });
 
   form.addEventListener('submit', async (event) => {
@@ -97,12 +115,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     clearError();
     if (!usernameValue) {
-      showError('Vui lòng nhập tên đăng nhập.');
+      showError(t('login.needUser'));
       username.focus();
       return;
     }
     if (!passwordValue) {
-      showError('Vui lòng nhập mật khẩu.');
+      showError(t('login.needPass'));
       password.focus();
       return;
     }
@@ -110,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const origin = saveServer();
     serverHost.value = window.flyApi.displayHost(origin);
     loginButton.disabled = true;
-    loginButton.querySelector('span').textContent = 'Đang xác thực...';
+    loginButton.querySelector('span').textContent = t('login.checking');
 
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 20000);
@@ -129,6 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       localStorage.setItem('fly_token', data.token);
       localStorage.setItem('fly_user', JSON.stringify(data.user));
+      if (data.preferences) window.FLY_APPEARANCE?.writeLocal(data.user.MaNV, data.preferences);
       window.location.href = '../dashboard/dashboard.html';
     } catch (error) {
       const isTimeout = error?.name === 'AbortError';
@@ -141,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally {
       window.clearTimeout(timeoutId);
       loginButton.disabled = false;
-      loginButton.querySelector('span').textContent = 'Đăng nhập';
+      loginButton.querySelector('span').textContent = t('login.submit');
     }
   });
 });

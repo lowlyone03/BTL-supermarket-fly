@@ -1,5 +1,6 @@
 (() => {
   const previous = window.FLY_ROLE_PAGES;
+  const t = (key, vars) => window.FLY_I18N?.t(key, vars) || key;
   const templates = {
     'accounting-invoices': '<section class="warehouse-page"><div class="overview-loading">Đang tải hồ sơ hóa đơn...</div></section>',
     'accounting-payables': '<section class="warehouse-page"><div class="overview-loading">Đang tải công nợ phải trả...</div></section>',
@@ -127,7 +128,8 @@
       clearTimeout(timer);
     }
   };
-  const heading = (kicker, title, subtitle, action = '') => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(kicker)}</p><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div>${action}</header>`;
+  const phrase = (text) => window.FLY_I18N?.phrase?.(text) || text;
+  const heading = (kicker, title, subtitle, action = '') => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(phrase(kicker))}</p><h1>${esc(phrase(title))}</h1><p>${esc(phrase(subtitle))}</p></div>${action}</header>`;
   const matchClass = status => status === 'Đã khớp' ? 'ok' : status === 'Chênh lệch' ? 'cancelled' : 'draft';
   const debtClass = status => status === 'Đã thanh toán' ? 'ok' : status === 'Quá hạn' ? 'cancelled' : 'sent';
   const voucherClass = status => status === 'Thanh toán thành công' ? 'ok'
@@ -1209,7 +1211,7 @@
     let currentPnl = null;
     let activeTab = 'pnl';
     const extraButtons = '<button class="warehouse-secondary" id="printStoreMonth" type="button">In báo cáo tháng</button><button class="warehouse-secondary" id="exportReportCsv" hidden disabled>Xuất CSV</button><button class="warehouse-secondary" id="printFinancialReport" hidden disabled>Xem bản in / PDF</button>';
-    root.innerHTML = `${heading('QUẢN LÝ / BÁO CÁO', 'Báo cáo cửa hàng', 'Xem cửa hàng đang lãi hay lỗ sau chi phí nhà cung cấp và lương đã khóa. Lãi gộp kế toán không bị trừ lương.')}${window.FLY_STORE_PNL?.nativeToolbar(reportDefaults(), extraButtons) || periodFilterCard(extraButtons)}<div id="financialReportBody">${reportIdleHtml}</div>`;
+    root.innerHTML = `${heading(t('report.kicker'), t('report.title'), t('report.lead'))}${window.FLY_STORE_PNL?.nativeToolbar(reportDefaults(), extraButtons) || periodFilterCard(extraButtons)}<div id="financialReportBody">${reportIdleHtml}</div>`;
     const selectedPeriod = bindPeriodUi(root, () => { load(); });
     const syncTabButtons = () => {
       root.querySelectorAll('[data-store-tab]').forEach(button => button.classList.toggle('active', button.dataset.storeTab === activeTab));

@@ -1,7 +1,7 @@
 'use strict';
 
 const { ROLE_PERMISSION_CODES } = require('../constants/permissions');
-const { LOYALTY_POLICY, offerForSegment } = require('./loyaltyPolicy');
+const { LOYALTY_POLICY, offerForSegment, loadLoyaltyPolicy, publicPolicy } = require('./loyaltyPolicy');
 const { vietnamDateKey } = require('./reportingPeriod');
 
 const codesOf = (user) => {
@@ -11,6 +11,14 @@ const codesOf = (user) => {
 const hasUc = (user, code) => codesOf(user).includes(code);
 const isRole = (user, name) => String(user?.TenVaiTro || '').trim().toLocaleLowerCase('vi-VN')
     === String(name || '').trim().toLocaleLowerCase('vi-VN');
+
+const assertLoyaltyManager = (user) => {
+    if (!hasUc(user, 'UC10') || !isRole(user, 'Quản lý')) {
+        const error = new Error('Chỉ Quản lý (UC10) xem phân tích RFM và chính sách ưu đãi.');
+        error.status = 403;
+        throw error;
+    }
+};
 
 const n = (value) => {
     const parsed = Number(value);
@@ -65,13 +73,31 @@ const segmentFromScores = ({ r, f, m }) => {
     return 'Tiềm năng';
 };
 
+/** Ngày lệch quá lớn = overflow/ngày lỗi — không bịa số ngày cho UI. */
+const RECENCY_OVERFLOW_DAYS = 3650;
+
+const isNeverPurchased = (row, last) => {
+    if (!last) return true;
+    return n(row.SoHoaDon) === 0 && n(row.TongChiTieu) === 0;
+};
+
+const sanitizeRecencyDays = (days) => {
+    if (days == null || !Number.isFinite(days)) return null;
+    if (days < 0 || days > RECENCY_OVERFLOW_DAYS) return null;
+    return Math.round(days);
+};
+
+const isWinBackRisk = (row) => !row.chuaTungMua
+    && (row.Segment === 'Nguy cơ rời bỏ' || row.Segment === 'Ngủ đông');
+
 const computeCustomerRfm = (row, asOf, policy = LOYALTY_POLICY) => {
     const last = dateKey(row.LanMuaGanNhat);
-    const recencyDays = last ? daysBetween(last, asOf) : 999;
+    const chuaTungMua = isNeverPurchased(row, last);
+    const recencyDays = chuaTungMua ? null : sanitizeRecencyDays(daysBetween(last, asOf));
     const r = scoreRecency(recencyDays, policy);
     const f = scoreFrequency(row.SoHoaDon, policy);
     const m = scoreMonetary(row.TongChiTieu, policy);
-    const segment = segmentFromScores({ r, f, m });
+    const segment = chuaTungMua ? 'Chưa phát sinh' : segmentFromScores({ r, f, m });
     const offer = offerForSegment(segment, policy);
     return {
         MaKH: row.MaKH,
@@ -82,6 +108,8 @@ const computeCustomerRfm = (row, asOf, policy = LOYALTY_POLICY) => {
         TongChiTieu: n(row.TongChiTieu),
         LanMuaGanNhat: last || null,
         RecencyNgay: recencyDays,
+        soNgayChuaMua: recencyDays,
+        chuaTungMua,
         R: r,
         F: f,
         M: m,
@@ -98,11 +126,13 @@ const computeRfmTable = (rows, asOf, policy = LOYALTY_POLICY) => {
 const summarizeSegments = (table) => {
     const counts = {};
     let atRisk = 0;
+    let chuaPhatSinh = 0;
     let tongChiTieu = 0;
     let tongDiem = 0;
     for (const row of table) {
         counts[row.Segment] = (counts[row.Segment] || 0) + 1;
-        if (row.Segment === 'Nguy cơ rời bỏ' || row.Segment === 'Ngủ đông') atRisk += 1;
+        if (isWinBackRisk(row)) atRisk += 1;
+        if (row.chuaTungMua || row.Segment === 'Chưa phát sinh') chuaPhatSinh += 1;
         tongChiTieu += n(row.TongChiTieu);
         tongDiem += n(row.DiemTichLuy);
     }
@@ -111,6 +141,7 @@ const summarizeSegments = (table) => {
         tongChiTieu,
         tongDiem,
         atRisk,
+        chuaPhatSinh,
         segments: counts
     };
 };
@@ -160,27 +191,26 @@ const loadMonthKpis = async (pool, month) => {
 };
 
 const buildLoyaltyOverview = async (pool, user, opts = {}) => {
-    if (!hasUc(user, 'UC10') || !isRole(user, 'Quản lý')) {
-        const error = new Error('Chỉ Quản lý (UC10) xem phân tích RFM toàn cửa hàng.');
-        error.status = 403;
-        throw error;
-    }
+    assertLoyaltyManager(user);
     const asOf = opts.asOf || new Date().toISOString().slice(0, 10);
+    const policy = opts.policy || await loadLoyaltyPolicy();
     const rows = await loadCompletedMemberInvoices(pool);
-    const table = computeRfmTable(rows, asOf);
+    const table = computeRfmTable(rows, asOf, policy);
     const summary = summarizeSegments(table);
     const kpi = await loadMonthKpis(pool, opts.month);
-    const atRisk = table
-        .filter((row) => row.Segment === 'Nguy cơ rời bỏ' || row.Segment === 'Ngủ đông')
-        .sort((a, b) => b.TongChiTieu - a.TongChiTieu)
-        .slice(0, 30);
+    const ranked = table.slice().sort((a, b) => b.TongChiTieu - a.TongChiTieu);
+    const atRisk = ranked.filter(isWinBackRisk).slice(0, 30);
+    const chuaPhatSinh = ranked.filter((row) => row.chuaTungMua).slice(0, 30);
     return {
         asOf,
-        policy: LOYALTY_POLICY,
+        policy: publicPolicy(policy),
         summary,
         kpi,
-        segments: table.sort((a, b) => b.TongChiTieu - a.TongChiTieu),
-        atRisk
+        segments: ranked,
+        atRisk,
+        chuaPhatSinh,
+        hieuLuc: require('./loyaltyApply').countOffersFromTable(ranked, policy),
+        homNayAp: await require('./loyaltyApply').loadTodayApplyStats(pool)
     };
 };
 
@@ -196,29 +226,25 @@ const loadServingCustomerLoyalty = async (pool, user, maKH) => {
         error.status = 400;
         throw error;
     }
-    const { sql } = require('../config/db');
-    const result = await pool.request().input('MaKH', sql.VarChar, id).query(`
-        SELECT kh.MaKH, kh.TenKH, kh.HangThanhVien, kh.DiemTichLuy,
-               COUNT(hd.MaHD) SoHoaDon,
-               COALESCE(SUM(hd.TongThanhToan),0) TongChiTieu,
-               MAX(hd.NgayLap) LanMuaGanNhat
-        FROM KhachHang kh
-        LEFT JOIN HoaDon hd ON hd.MaKH = kh.MaKH AND hd.TrangThai = N'Hoàn thành'
-        WHERE kh.MaKH = @MaKH
-        GROUP BY kh.MaKH, kh.TenKH, kh.HangThanhVien, kh.DiemTichLuy`);
-    if (!result.recordset.length) {
+    const { loadCustomerOffer } = require('./loyaltyApply');
+    const pack = await loadCustomerOffer(pool, id);
+    if (!pack) {
         const error = new Error('Không tìm thấy khách hàng.');
         error.status = 404;
         throw error;
     }
-    const rfm = computeCustomerRfm(result.recordset[0], new Date().toISOString().slice(0, 10));
     return {
-        MaKH: rfm.MaKH,
-        TenKH: rfm.TenKH,
-        HangThanhVien: rfm.HangThanhVien,
-        DiemTichLuy: rfm.DiemTichLuy,
-        SoHoaDonHoanThanh: rfm.SoHoaDon,
-        LanMuaGanNhat: rfm.LanMuaGanNhat,
+        MaKH: pack.MaKH,
+        TenKH: pack.TenKH,
+        HangThanhVien: pack.HangThanhVien,
+        DiemTichLuy: pack.DiemTichLuy,
+        SoHoaDonHoanThanh: pack.SoHoaDonHoanThanh,
+        LanMuaGanNhat: pack.LanMuaGanNhat,
+        Segment: pack.Segment,
+        GoiY: pack.GoiY,
+        banner: pack.banner,
+        canApply: pack.canApply,
+        autoApply: false,
         cuaHangRfm: false
     };
 };
@@ -233,7 +259,8 @@ const loadLoyaltySummary = async (pool, user) => {
             segments: overview.summary.segments,
             thang: overview.kpi.label,
             soHoaDonThanhVien: overview.kpi.SoHoaDonThanhVien,
-            doanhThuThanhVien: overview.kpi.DoanhThuThanhVien
+            doanhThuThanhVien: overview.kpi.DoanhThuThanhVien,
+            policy: overview.policy
         };
     }
     return { skipped: true, reason: 'RFM cửa hàng chỉ cho QL (UC10). TN dùng điểm khách đang phục vụ, không dump RFM.' };
@@ -247,8 +274,10 @@ module.exports = {
     computeCustomerRfm,
     computeRfmTable,
     summarizeSegments,
+    isWinBackRisk,
     buildLoyaltyOverview,
     loadServingCustomerLoyalty,
     loadLoyaltySummary,
-    monthBounds
+    monthBounds,
+    assertLoyaltyManager
 };

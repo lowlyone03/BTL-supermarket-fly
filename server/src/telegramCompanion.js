@@ -1,3 +1,9 @@
+try {
+    require('node:dns').setDefaultResultOrder('ipv4first');
+} catch {
+    /* Node cũ không có setDefaultResultOrder */
+}
+
 require('./config/loadEnv').loadEnv();
 
 const parentPid = process.ppid;
@@ -33,5 +39,8 @@ startTelegramBot()
     })
     .catch((error) => {
         console.error('Telegram:', error && error.message ? error.message : error);
-        process.exit(1);
+        try {
+            require('./services/telegramNotify').setTelegramStatus('off');
+            if (typeof process.send === 'function') process.send({ telegramStatus: 'off' });
+        } catch { /* POS / API vẫn chạy */ }
     });

@@ -63,8 +63,9 @@
 
   const emptyMessage = (query, noun, idle) => {
     const q = String(query ?? '').trim();
-    if (q) return `Không tìm thấy ${noun} khớp “${q}”.`;
-    return idle || `Chưa có ${noun}.`;
+    const label = window.FLY_I18N?.phrase?.(noun) || noun;
+    if (q) return window.FLY_I18N?.t('empty.search', { noun: label, q }) || `Không tìm thấy ${label} khớp “${q}”.`;
+    return idle || window.FLY_I18N?.t('empty.noun', { noun: label }) || `Chưa có ${label}.`;
   };
 
   const takePendingQuery = target => {

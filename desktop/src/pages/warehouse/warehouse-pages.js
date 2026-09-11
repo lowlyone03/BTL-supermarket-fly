@@ -155,9 +155,10 @@
     openFilledStockIssue(context, { prefill: data.prefill });
     return data;
   };
+  const phrase = (text) => window.FLY_I18N?.phrase?.(text) || text;
   const heading = (kicker, title, subtitle, action = '') => `
     <header class="warehouse-heading">
-      <div><p class="warehouse-kicker">${esc(kicker)}</p><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div>${action}
+      <div><p class="warehouse-kicker">${esc(phrase(kicker))}</p><h1>${esc(phrase(title))}</h1><p>${esc(subtitle && !/·/.test(subtitle) ? phrase(subtitle) : subtitle)}</p></div>${action}
     </header>`;
   const money = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
   const inspectNoteText = text => String(text || '')

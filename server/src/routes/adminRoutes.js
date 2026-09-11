@@ -91,8 +91,13 @@ router.post('/telegram/bindings/:maNV/channel', requirePermission('UC02'), teleg
 
 const recon = require('../controllers/reconciliationController');
 const loyalty = require('../controllers/loyaltyController');
+const preferenceController = require('../controllers/preferenceController');
 router.get('/reconciliation/summary', requirePermission('UC10'), recon.qlSummary);
 router.get('/loyalty/overview', requirePermission('UC10'), loyalty.overview);
 router.get('/loyalty/summary', requirePermission('UC10'), loyalty.summary);
+router.get('/loyalty/policy', requirePermission('UC10'), loyalty.getPolicy);
+router.put('/loyalty/policy', requirePermission('UC10'), loyalty.putPolicy);
+router.get('/store-appearance', preferenceController.getStore);
+router.put('/store-appearance', preferenceController.putStore);
 
 module.exports = router;

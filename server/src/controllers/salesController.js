@@ -207,7 +207,8 @@ const quoteInvoice = async (req, res) => {
             req.body.lines,
             clean(req.body.MaKM, 20) || null,
             req.body.DiemSuDung,
-            clean(req.body.MaKH, 20) || null
+            clean(req.body.MaKH, 20) || null,
+            { loaiCS: clean(req.body.LoaiCS, 20) || null }
         );
         res.json({
             TongTienHang: calc.TongTienHang,
@@ -215,7 +216,8 @@ const quoteInvoice = async (req, res) => {
             DiemSuDung: calc.DiemSuDung,
             TienDiemQuyDoi: calc.TienDiemQuyDoi,
             TongThanhToan: calc.TongThanhToan,
-            lines: calc.lines
+            lines: calc.lines,
+            loyalty: calc.loyalty || null
         });
     } catch (error) {
         res.status(error.status || 400).json({ message: error.message });
@@ -224,7 +226,7 @@ const quoteInvoice = async (req, res) => {
 
 const queryFrom = (source) => (source.request ? source.request() : new sql.Request(source));
 
-const calculateInvoice = async (source, lines, maKM, diemSuDung, maKH) => {
+const calculateInvoice = async (source, lines, maKM, diemSuDung, maKH, opts = {}) => {
     if (!Array.isArray(lines) || !lines.length) throw new Error('Hóa đơn phải có ít nhất một sản phẩm.');
     const normalized = [];
     const seen = new Set();
@@ -252,6 +254,8 @@ const calculateInvoice = async (source, lines, maKM, diemSuDung, maKH) => {
     }
     const tongTienHang = normalized.reduce((sum, item) => sum + item.ThanhTien, 0);
     let tienGiamGia = 0;
+    let kmIsPercent = false;
+    let kmPercent = 0;
     if (maKM) {
         const promotion = await queryFrom(source).input('MaKMCalc', sql.VarChar, maKM).query(`
             SELECT LoaiKM,GiaTri FROM KhuyenMai
@@ -259,9 +263,35 @@ const calculateInvoice = async (source, lines, maKM, diemSuDung, maKH) => {
               AND CONVERT(date,GETDATE()) BETWEEN NgayBatDau AND NgayKetThuc`);
         if (!promotion.recordset.length) throw new Error('Khuyến mãi không còn hiệu lực.');
         const promo = promotion.recordset[0];
-        tienGiamGia = /%|phần trăm/i.test(String(promo.LoaiKM))
-            ? tongTienHang * Math.min(100, Number(promo.GiaTri)) / 100
+        kmIsPercent = /%|phần trăm/i.test(String(promo.LoaiKM));
+        kmPercent = kmIsPercent ? Math.min(100, Number(promo.GiaTri)) : 0;
+        tienGiamGia = kmIsPercent
+            ? tongTienHang * kmPercent / 100
             : Math.min(tongTienHang, Number(promo.GiaTri));
+    }
+    let loyalty = null;
+    const loaiCS = String(opts.loaiCS || '').trim();
+    if (loaiCS) {
+        const apply = require('../services/loyaltyApply');
+        const policy = await require('../services/loyaltyPolicy').loadLoyaltyPolicy();
+        const pack = apply.assertOfferMatches(await apply.loadCustomerOffer(source, maKH), loaiCS);
+        const merged = apply.mergeLoyaltyDiscount({
+            loai: loaiCS,
+            policy,
+            tongTienHang,
+            kmAmount: Math.round(tienGiamGia),
+            kmIsPercent,
+            kmPercent
+        });
+        tienGiamGia = merged.tienGiamGia;
+        loyalty = {
+            loai: merged.loai,
+            tienGiamCS: merged.tienGiamCS,
+            heSoDiem: merged.heSoDiem,
+            giaTri: merged.giaTri,
+            banner: pack.banner,
+            label: pack.GoiY?.shortLabel || null
+        };
     }
     let diem = Number(diemSuDung || 0);
     if (!Number.isFinite(diem) || diem < 0 || !Number.isInteger(diem)) throw new Error('Điểm sử dụng không hợp lệ.');
@@ -282,7 +312,8 @@ const calculateInvoice = async (source, lines, maKM, diemSuDung, maKH) => {
         TienGiamGia: Math.round(tienGiamGia),
         DiemSuDung: diem,
         TienDiemQuyDoi: tienDiem,
-        TongThanhToan: Math.max(0, Math.round(tongTienHang - tienGiamGia - tienDiem))
+        TongThanhToan: Math.max(0, Math.round(tongTienHang - tienGiamGia - tienDiem)),
+        loyalty
     };
 };
 
@@ -293,7 +324,8 @@ const createInvoice = async (req, res) => {
         const shift = await getActiveShift(transaction, req.user.MaNV, true);
         const maKH = clean(req.body.MaKH, 20) || null;
         const maKM = clean(req.body.MaKM, 20) || null;
-        const calc = await calculateInvoice(transaction, req.body.lines, maKM, req.body.DiemSuDung, maKH);
+        const loaiCS = clean(req.body.LoaiCS, 20) || null;
+        const calc = await calculateInvoice(transaction, req.body.lines, maKM, req.body.DiemSuDung, maKH, { loaiCS });
         const now = new Date();
         const prefix = `HD${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
         const maHD = await generateId(transaction, 'HoaDon', 'MaHD', prefix);
@@ -325,9 +357,19 @@ const createInvoice = async (req, res) => {
                     VALUES(@MaHD,@MaSP,@SoLuong,@DonGia,@GiamGia,@ThanhTien,0,0)`);
             }
         }
+        if (calc.loyalty?.loai && maKH) {
+            const { saveInvoiceApply } = require('../services/loyaltyApply');
+            await saveInvoiceApply(transaction, {
+                maHD, maKH, loai: calc.loyalty.loai,
+                tienGiamCS: calc.loyalty.tienGiamCS,
+                heSoDiem: calc.loyalty.heSoDiem,
+                giaTri: calc.loyalty.giaTri,
+                maNV: req.user.MaNV
+            });
+        }
         await logAudit(transaction, {
             user: req.user, req, action: 'Lập hóa đơn nháp', table: 'HoaDon', recordId: maHD, uc: 'UC24',
-            content: `${calc.lines.length} sản phẩm, ${Number(calc.TongThanhToan).toLocaleString('vi-VN')}đ. Chưa thu tiền, chưa trừ tồn.`
+            content: `${calc.lines.length} sản phẩm, ${Number(calc.TongThanhToan).toLocaleString('vi-VN')}đ. Chưa thu tiền, chưa trừ tồn.${calc.loyalty?.loai ? ` Áp chính sách ${calc.loyalty.loai} ${calc.loyalty.giaTri || ''}.` : ''}`
         });
         await transaction.commit();
         res.status(201).json({ message: `Đã lưu hóa đơn nháp ${maHD}.`, MaHD: maHD, ...calc });
@@ -575,7 +617,13 @@ const completeInvoiceInternal = async (transaction, {
                 INSERT GiaoDichKho(MaGD,MaKho,MaSP,MaNV,LoaiGD,SoLuong,DonGiaVon,ThanhTienVon,LoaiChungTu,MaChungTu,NgayGD,GhiChu)
                 VALUES(@MaGD,@MaKho,@MaSP,@MaNV,N'Xuất',@SoLuong,@DonGiaVon,@ThanhTienVon,N'HoaDon',@MaHD,GETDATE(),N'Xuất bán tại quầy')`);
     }
-    const diemCong = invoice.MaKH ? Math.floor(Number(invoice.TongThanhToan) / POINT_EARN_UNIT) : 0;
+    const applyRow = invoice.MaKH
+        ? await require('../services/loyaltyApply').loadInvoiceApply(transaction, invoice.MaHD)
+        : null;
+    const heSoDiem = Math.max(1, Number(applyRow?.HeSoDiem) || 1);
+    const diemCong = invoice.MaKH
+        ? Math.floor(Number(invoice.TongThanhToan) / POINT_EARN_UNIT) * heSoDiem
+        : 0;
     await new sql.Request(transaction).input('MaHD', sql.VarChar, invoice.MaHD).input('DiemCong', sql.Int, diemCong)
         .query(`UPDATE HoaDon SET TrangThai=N'Hoàn thành',DiemCong=@DiemCong WHERE MaHD=@MaHD`);
     if (invoice.MaKH) {

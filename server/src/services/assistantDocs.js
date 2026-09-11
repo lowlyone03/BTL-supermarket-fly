@@ -1105,7 +1105,7 @@ const getDocumentPrint = async (pool, user, kind, id) => {
         throw error;
     }
     if (spec.mode === 'report') {
-        const period = parsePeriod('');
+        const period = parsePeriod(String(id || '').trim());
         const built = await (reportAndPrint[spec.id] || reportAndPrint['store-report'])(pool, user, period, spec);
         return { kind: spec.id, loai: spec.loai, print: built.print };
     }

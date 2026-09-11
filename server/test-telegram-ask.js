@@ -40,13 +40,18 @@ const mockPool = (row) => ({
 const collectSent = (row) => {
     const sent = [];
     notify.setTelegramRuntime({
-        fetchFn: async (_url, opts) => {
+        fetchFn: async (url, opts) => {
             const raw = opts?.body;
             let body = {};
             if (typeof raw === 'string') {
                 try { body = JSON.parse(raw); } catch { body = { raw }; }
+            } else if (raw) {
+                body = { form: true };
             }
-            sent.push(body);
+            sent.push({
+                ...body,
+                url: String(url || '').replace(/bot\d+:[A-Za-z0-9_-]+/g, 'bot<redacted>')
+            });
             return { json: async () => ({ ok: true, result: [] }) };
         },
         getPool: async () => mockPool(row),
@@ -487,14 +492,153 @@ const manager = { MaNV: 'NV001', MaTK: 1, TenVaiTro: 'Quản lý', TenNV: 'Quả
         bot.setAskOverride(null);
     });
 
+    await test('Ask list hóa đơn: HTML từng dòng + nút PDF, không duyệt', async () => {
+        const { assembleJpegPdf, buildPrintSvgs, pdfFileName } = require('./src/services/assistantPrintPdf');
+        const svgs = buildPrintSvgs({
+            title: 'HÓA ĐƠN MUA HÀNG',
+            number: 'HDMH01',
+            fields: [{ label: 'NCC', value: 'NCC A' }],
+            columns: [{ key: 'ten', label: 'Tên' }, { key: 'tien', label: 'Tiền', format: 'money', align: 'right' }],
+            rows: [{ ten: 'Sữa', tien: 2160000 }],
+            totals: [{ label: 'Tổng', value: 2160000, format: 'money' }]
+        }, { skin: 'system' });
+        assert.match(svgs[0], /HÓA ĐƠN MUA HÀNG/);
+        assert.match(svgs[0], /2\.160\.000/);
+        const official = buildPrintSvgs({ title: 'HÓA ĐƠN', number: '1' }, { skin: 'official' });
+        assert.match(official[0], /CỘNG HÒA/);
+        const pdf = assembleJpegPdf([{ jpeg: Buffer.from([0xFF, 0xD8, 0xFF, 0xD9]), w: 10, h: 10 }]);
+        assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
+        assert.match(pdfFileName({ title: 'HÓA ĐƠN', number: 'HDMH01' }), /\.pdf$/);
+
+        const formatted = teleAsk.formatAskAnswer({
+            answer: 'Có 2 hóa đơn mua trong Tháng 8/2026. Chọn một dòng rồi bấm Xem / In hoặc Tải.',
+            items: [
+                { id: 'HDMH01', soHd: 'HDMH01', ncc: 'NCC A', tien: 2160000 },
+                { id: 'HDMH02', soHd: 'HDMH02', ncc: 'NCC B', tien: 1000000 }
+            ],
+            kind: 'purchase',
+            invoiceKind: 'purchase',
+            period: { key: '2026-08', label: 'Tháng 8/2026' },
+            sources: ['Hóa đơn mua hàng']
+        });
+        assert.match(formatted.texts[0], /1\. <b>HDMH01<\/b> — NCC A — 2\.160\.000 đ/);
+        assert.match(formatted.texts[0], /2\. <b>HDMH02<\/b>/);
+        assert.doesNotMatch(formatted.texts[0], /Chọn một dòng rồi bấm Xem/);
+        assert.doesNotMatch(formatted.texts[0], /\/api\/|\bUC\d+/);
+        const keys = formatted.extra.reply_markup.inline_keyboard;
+        assert.equal(keys.length, 2);
+        assert.equal(keys[0][0].text, 'HDMH01');
+        assert.equal(keys[0][1].text, 'Giấy trắng');
+        assert.equal(keys[0][0].callback_data, 'askd:s:hdm:HDMH01');
+        assert.equal(keys[0][1].callback_data, 'askd:w:hdm:HDMH01');
+        assert.ok(keys[0][0].callback_data.length <= 64);
+        assert.equal(teleAsk.parseAskDocCallback(keys[0][0].callback_data).kind, 'purchase');
+        assert.equal(bot.parseDecisionCallback(keys[0][0].callback_data), null);
+
+        const report = teleAsk.formatAskAnswer({
+            answer: 'KQKD · Tháng 8/2026',
+            kind: 'kqkd',
+            report: { kpis: { kqkdLoiNhuan: 1 }, period: { label: 'Tháng 8/2026' } },
+            print: { mau: { title: 'BÁO CÁO KẾT QUẢ KINH DOANH', number: '2026-08' } },
+            period: { key: '2026-08', label: 'Tháng 8/2026' },
+            items: [],
+            sources: ['KQKD']
+        });
+        const reportBtns = report.extra.reply_markup.inline_keyboard[0].map((btn) => btn.text);
+        assert.deepEqual(reportBtns, ['Tải PDF hệ thống', 'Giấy trắng']);
+        assert.equal(report.extra.reply_markup.inline_keyboard[0][0].callback_data, 'askd:s:kq:2026-08');
+
+        const plain = teleAsk.formatAskAnswer({
+            answer: 'Dòng một.\n\nDòng hai.\n- gạch đầu dòng',
+            sources: ['GET /api/admin/dashboard']
+        });
+        assert.match(plain.texts[0], /Dòng một\.\n\nDòng hai/);
+        assert.match(plain.texts[0], /Dashboard quản lý/);
+        assert.doesNotMatch(plain.texts[0], /Dòng một\. Dòng hai/);
+        assert.doesNotMatch(plain.texts[0], /GET \/api/);
+        assert.equal(plain.extra, undefined);
+    });
+
+    await test('/ask hóa đơn tháng 8 gửi list + bàn phím', async () => {
+        await withAskFlag('1', async () => {
+            bot.resetUpdateDedup();
+            bot.setAskOverride(async () => ({
+                answer: 'Có 2 hóa đơn mua trong Tháng 8/2026. Chọn một dòng rồi bấm Xem / In hoặc Tải.',
+                items: [
+                    { id: 'HDMH01', soHd: 'HDMH01', ncc: 'NCC A', tien: 2160000 },
+                    { id: 'HDMH02', soHd: 'HDMH02', ncc: 'NCC B', tien: 1000000 }
+                ],
+                invoices: [
+                    { id: 'HDMH01', soHd: 'HDMH01', ncc: 'NCC A', tien: 2160000 },
+                    { id: 'HDMH02', soHd: 'HDMH02', ncc: 'NCC B', tien: 1000000 }
+                ],
+                kind: 'purchase',
+                invoiceKind: 'purchase',
+                period: { key: '2026-08', label: 'Tháng 8/2026' },
+                sources: ['Hóa đơn mua hàng'],
+                print: { loai: 'HoaDonMuaHang', mau: { title: 'HÓA ĐƠN MUA HÀNG' } }
+            }));
+            const sent = collectSent(qlRow);
+            const result = await bot.handleUpdate({
+                update_id: 81015,
+                message: { chat: { id: 42, type: 'private' }, text: '/ask cho mình hoá đơn mua hàng tháng 8' }
+            });
+            assert.equal(result.queued, true);
+            await waitUntil(() => sent.some((item) => /HDMH01/.test(item.text || '')));
+            const card = sent.find((item) => item.reply_markup?.inline_keyboard);
+            assert.ok(card, 'thiếu inline keyboard');
+            assert.match(card.text, /1\. <b>HDMH01<\/b> — NCC A — 2\.160\.000 đ/);
+            assert.equal(card.reply_markup.inline_keyboard[0][0].callback_data, 'askd:s:hdm:HDMH01');
+            assert.doesNotMatch(sentText(sent), /\/api\/|\bUC\d+|\/approve/);
+        });
+        bot.setAskOverride(null);
+    });
+
+    await test('Callback askd gửi PDF, không gọi approve', async () => {
+        await withAskFlag('1', async () => {
+            bot.resetUpdateDedup();
+            const approveCalls = [];
+            bot.setFlyHandlerOverride(async (ctx) => {
+                approveCalls.push(ctx);
+                return { status: 200, body: { message: 'không được' } };
+            });
+            bot.setAskDocOverride(async ({ kind, id, skin }) => ({
+                buffer: Buffer.from('%PDF-1.4 test'),
+                filename: `${id}.pdf`,
+                caption: `${kind} ${id} ${skin}`,
+                mime: 'application/pdf'
+            }));
+            const sent = collectSent(qlRow);
+            const result = await bot.handleUpdate({
+                update_id: 81016,
+                callback_query: {
+                    id: 'cb-askd',
+                    data: 'askd:s:hdm:HDMH01',
+                    message: { chat: { id: 42, type: 'private' }, message_id: 9, text: 'list' }
+                }
+            });
+            assert.equal(result.command, 'askdoc');
+            assert.equal(result.ok, true);
+            assert.equal(approveCalls.length, 0);
+            assert.ok(sent.some((item) => /sendDocument/.test(item.url || '')));
+            assert.equal(bot.parseDecisionCallback('askd:s:hdm:HDMH01'), null);
+        });
+        bot.setAskDocOverride(null);
+        bot.setFlyHandlerOverride(null);
+    });
+
     await test('Grep nhánh ask: không telegramApprove / completeInvoice', () => {
         const askSrc = fs.readFileSync(path.join(__dirname, 'src/services/telegramAsk.js'), 'utf8');
         const ctrl = fs.readFileSync(path.join(__dirname, 'src/controllers/telegramBotController.js'), 'utf8');
-        assert.doesNotMatch(askSrc, /telegramApprove|approveVoucher|completeInvoice|payVoucher|postUnposted/);
+        assert.doesNotMatch(askSrc, /telegramApprove|approveVoucher|completeInvoice|payVoucher|postUnposted|runFlyDecision/);
         const askBranch = ctrl.match(/const cmdAsk[\s\S]*?handleAskCommand[\s\S]*?queued:\s*true/);
         assert.ok(askBranch, 'không tìm thấy nhánh cmdAsk/handleAskCommand');
         assert.doesNotMatch(askBranch[0], /teleDecision|telegramApprove|runFlyDecision|completeInvoice/);
         assert.match(askBranch[0], /assistantService|teleAsk/);
+        const askDoc = ctrl.match(/const handleAskDocCallback[\s\S]*?command: 'askdoc'/);
+        assert.ok(askDoc, 'không tìm thấy handleAskDocCallback');
+        assert.doesNotMatch(askDoc[0], /runFlyDecision|telegramApprove|completeInvoice|payVoucher/);
+        assert.match(askDoc[0], /sendDocument|deliverAskDocument/);
     });
 
     const token = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
@@ -518,6 +662,7 @@ const manager = { MaNV: 'NV001', MaTK: 1, TenVaiTro: 'Quản lý', TenNV: 'Quả
     if (prevWebhookSecret == null) delete process.env.TELEGRAM_WEBHOOK_SECRET;
     else process.env.TELEGRAM_WEBHOOK_SECRET = prevWebhookSecret;
     bot.setAskOverride(null);
+    bot.setAskDocOverride(null);
     bot.setFlyHandlerOverride(null);
     notify.resetTelegramRuntime();
     console.log('PASS telegram /ask P2-ĐỦ');

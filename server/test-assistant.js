@@ -260,7 +260,9 @@ const run = async () => {
         assert.match(src, /assistantMonth/);
         assert.match(html, /Hỏi số liệu cửa hàng/);
         assert.match(html, /assistantMonth/);
-        assert.match(html, /assist-ui-9/);
+        assert.match(html, /assist-ui-10/);
+        assert.match(src, /friendlyNetError/);
+        assert.match(src, /SCENARIO_META/);
         const controller = fs.readFileSync(path.join(__dirname, 'src/controllers/assistantController.js'), 'utf8');
         assert.match(controller, /const \{ poolPromise \} = require\('\.\.\/config\/db'\)/);
     });

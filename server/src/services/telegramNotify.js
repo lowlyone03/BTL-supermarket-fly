@@ -1,3 +1,9 @@
+try {
+    require('node:dns').setDefaultResultOrder('ipv4first');
+} catch {
+    /* Node cũ không có setDefaultResultOrder */
+}
+
 const { ROLE_PERMISSION_CODES } = require('../constants/permissions');
 const { calculateGrossProfit, RESTOCK_ACCEPTED_SQL } = require('./financialRules');
 const {
@@ -81,8 +87,106 @@ const botToken = () => String(process.env.TELEGRAM_BOT_TOKEN || '')
     .replace(/^["']|["']$/g, '')
     .replace(/^bot/i, '');
 const botUsername = () => String(process.env.TELEGRAM_BOT_USERNAME || 'supermarket_flybot').replace(/^@/, '');
-const webhookUrl = () => String(process.env.TELEGRAM_WEBHOOK_URL || '').trim();
+const webhookUrl = () => {
+    const explicit = String(process.env.TELEGRAM_WEBHOOK_URL || '').trim();
+    if (explicit) return explicit;
+    const base = String(process.env.TELEGRAM_PUBLIC_BASE_URL || '').trim().replace(/\/$/, '');
+    if (base) return `${base}/api/telegram/webhook`;
+    return '';
+};
 const webhookSecret = () => String(process.env.TELEGRAM_WEBHOOK_SECRET || '').trim();
+const TELEGRAM_FETCH_ATTEMPTS = 3;
+const TELEGRAM_FETCH_TIMEOUT_MS = 15000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const redactTelegramSecrets = (text) => String(text || '')
+    .replace(/bot\d+:[A-Za-z0-9_-]+/gi, 'bot<redacted>');
+
+const telegramErrorCode = (error) => String(
+    error?.code || error?.cause?.code || error?.errno || error?.cause?.errno || ''
+);
+
+const describeTelegramFetchError = (error, method = 'request') => {
+    const raw = redactTelegramSecrets(error?.message || error || '');
+    const code = telegramErrorCode(error);
+    const causeMsg = redactTelegramSecrets(error?.cause?.message || '');
+    const timedOut = error?.name === 'AbortError'
+        || code === 'ABORT_ERR'
+        || /aborted|timeout|hết giờ/i.test(`${raw} ${causeMsg}`);
+    if (timedOut) {
+        return `Telegram ${method} hết giờ (timeout${code ? ` ${code}` : ''}) — mạng chậm hoặc api.telegram.org bị chặn.`;
+    }
+    const byCode = {
+        ENOTFOUND: `Telegram ${method} lỗi DNS ENOTFOUND — không phân giải được api.telegram.org.`,
+        EAI_AGAIN: `Telegram ${method} lỗi DNS EAI_AGAIN — DNS tạm thời thất bại.`,
+        ECONNREFUSED: `Telegram ${method} lỗi ECONNREFUSED — bị từ chối kết nối tới api.telegram.org.`,
+        ECONNRESET: `Telegram ${method} lỗi ECONNRESET — kết nối bị cắt (firewall / ISP / proxy).`,
+        ETIMEDOUT: `Telegram ${method} lỗi ETIMEDOUT — hết giờ kết nối tới api.telegram.org.`,
+        ENETUNREACH: `Telegram ${method} lỗi ENETUNREACH — không tới được mạng Telegram.`,
+        EHOSTUNREACH: `Telegram ${method} lỗi EHOSTUNREACH — không tới được máy chủ Telegram.`,
+        CERT_HAS_EXPIRED: `Telegram ${method} lỗi SSL CERT_HAS_EXPIRED.`,
+        UNABLE_TO_VERIFY_LEAF_SIGNATURE: `Telegram ${method} lỗi SSL — không xác thực được chứng chỉ.`,
+        ERR_TLS_CERT_ALTNAME_INVALID: `Telegram ${method} lỗi SSL — tên chứng chỉ không khớp.`,
+        EPROTO: `Telegram ${method} lỗi SSL/TLS EPROTO.`,
+        UND_ERR_CONNECT_TIMEOUT: `Telegram ${method} lỗi UND_ERR_CONNECT_TIMEOUT — hết giờ kết nối.`,
+        UND_ERR_SOCKET: `Telegram ${method} lỗi UND_ERR_SOCKET — socket Telegram bị đóng.`
+    };
+    if (code && byCode[code]) return byCode[code];
+    const detail = [code && `code ${code}`, causeMsg && causeMsg !== raw ? causeMsg : '']
+        .filter(Boolean)
+        .join(', ');
+    if (/fetch failed/i.test(raw)) {
+        return `Telegram ${method} không gọi được api.telegram.org (fetch failed${detail ? ` — ${detail}` : ''}).`;
+    }
+    return detail ? `${raw} (${detail})` : raw;
+};
+
+const isRetryableTelegramNetworkError = (error) => {
+    const msg = String(error?.message || '');
+    if (/không hợp lệ|Unauthorized|401|409|Conflict|process bot khác/i.test(msg)) return false;
+    const code = telegramErrorCode(error);
+    return /ENOTFOUND|EAI_AGAIN|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|UND_ERR|EPROTO|CERT_|ABORT|fetch failed|hết giờ|timeout|socket/i
+        .test(`${code} ${msg}`);
+};
+
+const timeoutForTelegramMethod = (method, payload = {}, options = {}) => {
+    if (options.timeoutMs != null) return Number(options.timeoutMs) || TELEGRAM_FETCH_TIMEOUT_MS;
+    if (method === 'getUpdates') return (Number(payload.timeout) || 0) * 1000 + 10000;
+    return TELEGRAM_FETCH_TIMEOUT_MS;
+};
+
+const wrapTelegramFetchError = (error, method) => {
+    const wrapped = new Error(describeTelegramFetchError(error, method));
+    wrapped.code = telegramErrorCode(error) || error?.name;
+    wrapped.cause = error?.cause || error;
+    return wrapped;
+};
+
+const fetchTelegram = async (url, init, options = {}) => {
+    const method = options.apiMethod || 'request';
+    const attempts = options.retries != null ? Number(options.retries) : TELEGRAM_FETCH_ATTEMPTS;
+    const timeoutMs = timeoutForTelegramMethod(method, options.payload || {}, options);
+    const fetchFn = options.fetchFn || runtime.fetchFn;
+    let lastError;
+    for (let attempt = 1; attempt <= Math.max(1, attempts); attempt += 1) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        if (typeof timer.unref === 'function') timer.unref();
+        try {
+            return await fetchFn(url, { ...init, signal: controller.signal });
+        } catch (error) {
+            lastError = wrapTelegramFetchError(error, method);
+            const canRetry = attempt < attempts && isRetryableTelegramNetworkError(error);
+            if (!canRetry) throw lastError;
+            await sleep(250 * attempt);
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+    throw lastError;
+};
+
 const messageEffectId = (kind) => {
     const key = String(kind || '').trim().toUpperCase();
     if (!key) return '';
@@ -104,12 +208,17 @@ const roleHasUc = (role, codes) => {
 const telegramApi = async (method, payload = {}, options = {}) => {
     const token = options.token || botToken();
     if (!token) throw new Error('TELEGRAM_BOT_TOKEN trống');
-    const fetchFn = options.fetchFn || runtime.fetchFn;
     const url = `https://api.telegram.org/bot${token}/${method}`;
-    const response = await fetchFn(url, {
+    const response = await fetchTelegram(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
+    }, {
+        fetchFn: options.fetchFn,
+        apiMethod: method,
+        payload,
+        retries: options.retries,
+        timeoutMs: options.timeoutMs
     });
     const data = typeof response.json === 'function' ? await response.json() : response;
     if (data && data.ok === false) {
@@ -215,10 +324,14 @@ const sendPhotoMultipart = async (chatId, buffer, filename, extra = {}) => {
     form.append('parse_mode', extra.parse_mode || 'HTML');
     form.append('disable_notification', quiet ? 'true' : 'false');
     const token = extra.token || botToken();
-    const fetchFn = extra.fetchFn || runtime.fetchFn;
-    const response = await fetchFn(`https://api.telegram.org/bot${token}/sendPhoto`, {
+    const response = await fetchTelegram(`https://api.telegram.org/bot${token}/sendPhoto`, {
         method: 'POST',
         body: form
+    }, {
+        fetchFn: extra.fetchFn,
+        apiMethod: 'sendPhoto',
+        retries: extra.retries,
+        timeoutMs: extra.timeoutMs
     });
     const data = typeof response.json === 'function' ? await response.json() : response;
     if (data && data.ok === false) throw new Error(data.description || 'sendPhoto thất bại');
@@ -283,6 +396,51 @@ const sendPhoto = async (chatId, photo, extra = {}) => {
         } catch { /* không crash POS */ }
         return { skipped: true, error: error.message };
     }
+};
+
+const sendDocumentMultipart = async (chatId, buffer, filename, extra = {}) => {
+    const caption = String(extra.caption || '').slice(0, 1000);
+    const quiet = extra.disable_notification === true;
+    const form = new FormData();
+    form.append('chat_id', String(chatId));
+    const mime = extra.mime || 'application/pdf';
+    const file = typeof File === 'function'
+        ? new File([buffer], filename, { type: mime })
+        : new Blob([buffer], { type: mime });
+    form.append('document', file, filename);
+    if (caption) form.append('caption', caption);
+    form.append('parse_mode', extra.parse_mode || 'HTML');
+    form.append('disable_notification', quiet ? 'true' : 'false');
+    const token = extra.token || botToken();
+    const response = await fetchTelegram(`https://api.telegram.org/bot${token}/sendDocument`, {
+        method: 'POST',
+        body: form
+    }, {
+        fetchFn: extra.fetchFn,
+        apiMethod: 'sendDocument',
+        retries: extra.retries,
+        timeoutMs: extra.timeoutMs != null ? extra.timeoutMs : 45000
+    });
+    const data = typeof response.json === 'function' ? await response.json() : response;
+    if (data && data.ok === false) throw new Error(data.description || 'sendDocument thất bại');
+    return data;
+};
+
+const sendDocument = async (chatId, document, extra = {}) => {
+    if (!chatId || !document) return { skipped: true };
+    const buffer = Buffer.isBuffer(document)
+        ? document
+        : (document && Buffer.isBuffer(document.buffer) ? document.buffer : null);
+    if (!buffer || !buffer.length) return { skipped: true, reason: 'empty-document' };
+    const filename = (typeof document === 'object' && document.filename)
+        || extra.filename
+        || 'chung-tu.pdf';
+    const caption = extra.caption != null ? extra.caption : (document.caption || '');
+    return sendDocumentMultipart(chatId, buffer, filename, {
+        ...extra,
+        caption,
+        mime: document.mime || extra.mime || 'application/pdf'
+    });
 };
 
 const request = (pool, sqlMod) => (pool.request ? pool.request() : new sqlMod.Request(pool));
@@ -1106,6 +1264,10 @@ module.exports = {
     botUsername,
     webhookUrl,
     webhookSecret,
+    describeTelegramFetchError,
+    isRetryableTelegramNetworkError,
+    TELEGRAM_FETCH_ATTEMPTS,
+    TELEGRAM_FETCH_TIMEOUT_MS,
     getTelegramStatus,
     setTelegramStatus,
     telegramApi,
@@ -1117,6 +1279,7 @@ module.exports = {
     setMessageReaction,
     messageEffectId,
     sendPhoto,
+    sendDocument,
     shouldSkipPush,
     relatedPushKeys,
     markPushSent,

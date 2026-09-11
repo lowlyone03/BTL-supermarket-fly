@@ -71,14 +71,26 @@ const getAlerts = async (req, res) => {
 
 const getInsights = async (req, res) => {
     try {
-        const pack = await getBrief({ user: req.user });
+        const pack = await getBrief({
+            user: req.user,
+            period: req.query.month || req.query.period || ''
+        });
         res.json({
-            insights: pack.insights || [],
+            insights: (pack.insights || []).slice(0, 6),
             sources: humanizeSources(pack.sources),
             llmConfigured: pack.llmConfigured
         });
     } catch (error) {
-        fail(res, error);
+        res.status(200).json({
+            insights: [{
+                id: 'fallback',
+                title: 'Chưa lấy được đủ số liệu',
+                body: 'Máy chủ không hoàn tất phân tích lần này. Bấm thử lại. Engine không bịa số.',
+                evidence: [{ claim: 'Trạng thái', numbers: ['không lấy được'], source: 'Fly Intelligence Center', confidence: 'low' }]
+            }],
+            sources: [],
+            llmConfigured: false
+        });
     }
 };
 

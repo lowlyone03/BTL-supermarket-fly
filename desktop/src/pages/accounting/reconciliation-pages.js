@@ -1,7 +1,8 @@
 (() => {
   const previous = window.FLY_ROLE_PAGES;
+  const t = (key, vars) => window.FLY_I18N?.t(key, vars) || key;
   const templates = {
-    'ledger-reconciliation': '<section class="warehouse-page ledger-page recon-page" data-keep-native><div class="lg-loading"><strong>Đang tải đối soát ngân hàng</strong>Vui lòng chờ...</div></section>'
+    'ledger-reconciliation': `<section class="warehouse-page ledger-page recon-page" data-keep-native><div class="lg-loading"><strong>${t('recon.loading')}</strong>${t('recon.wait')}</div></section>`
   };
   const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
   const money = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -49,23 +50,23 @@
     root.innerHTML = `
       <header class="lg-header recon-header">
         <div>
-          <p class="lg-kicker">Quản lý · Tóm tắt đối soát</p>
-          <h1>Đối soát ngân hàng thông minh</h1>
-          <p class="lg-lead">Bạn xem số dòng còn chờ và tổng tiền chưa đối soát. Không xem từng dòng sao kê, không nhập CSV và không xác nhận khớp — việc đó thuộc Kế toán (sao kê ngân hàng).</p>
+          <p class="lg-kicker">${t('recon.kickerQl')}</p>
+          <h1>${t('recon.title')}</h1>
+          <p class="lg-lead">${t('recon.leadQl')}</p>
         </div>
-        <button type="button" class="lg-btn lg-btn-ghost" id="reconOpenHb">Mở cẩm nang · mục 19</button>
+        <button type="button" class="lg-btn lg-btn-ghost" id="reconOpenHb">${t('recon.openHb')}</button>
       </header>
       <div class="recon-stats recon-stats-ql" id="reconStats"></div>
       <article class="lg-card recon-ql-note">
-        <h2>Vì sao chỉ có tóm tắt?</h2>
-        <p class="lg-help">Theo plan AIS, Quản lý giám sát tiến độ đối soát (bao nhiêu dòng, bao nhiêu tiền), không đọc nội dung chuyển khoản. Chi tiết ứng viên, điểm khớp và nút xác nhận nằm ở tài khoản Kế toán.</p>
+        <h2>${t('recon.why')}</h2>
+        <p class="lg-help">${t('recon.whyText')}</p>
         <ul class="recon-note-list">
           <li>Sao kê ngân hàng được ghép với MoMo QR, phiếu chi NCC, chi lương chuyển khoản và bút toán TK 112.</li>
           <li>Engine tính điểm cố định — không phải chatbot quyết định khớp.</li>
           <li>Xác nhận đối soát không tự ghi sổ và không tự trả nhà cung cấp.</li>
         </ul>
         <div class="lg-actions" style="margin:16px 0 0;justify-content:flex-start">
-          <button type="button" class="lg-btn lg-btn-primary" id="reconOpenHb2">Đọc cẩm nang đối soát</button>
+          <button type="button" class="lg-btn lg-btn-primary" id="reconOpenHb2">${t('recon.readHb')}</button>
         </div>
       </article>`;
     root.querySelectorAll('#reconOpenHb, #reconOpenHb2').forEach(btn => {
@@ -73,11 +74,11 @@
     });
     const fill = pack => {
       const cards = [
-        ['Chờ đối soát', pack.soDongChuaDoiSoat || 0, money(pack.tongTienChuaDoiSoat), 'Dòng chưa được Kế toán xác nhận'],
-        ['Khớp tự động', pack.soDongAutoChoXacNhan || 0, 'Vẫn chờ Kế toán chốt', 'Điểm cao, chưa ghi sổ'],
-        ['Gợi ý', pack.soDongGoiY || 0, 'Tiền và ngày gần khớp', 'Cần Kế toán xem ứng viên'],
-        ['Chênh lệch', pack.soDongChenhLech || 0, 'Hai số khác nhau', 'Sao kê ≠ chứng từ'],
-        ['Chưa khớp', pack.soDongChuaKhop || 0, 'Chưa có ứng viên', 'Phí NH, CK lạ…']
+        [t('recon.waitStat'), pack.soDongChuaDoiSoat || 0, money(pack.tongTienChuaDoiSoat), t('recon.waitHint')],
+        [t('recon.auto'), pack.soDongAutoChoXacNhan || 0, t('recon.autoMoney'), t('recon.autoHint')],
+        [t('recon.suggest'), pack.soDongGoiY || 0, t('recon.suggestMoney'), t('recon.suggestHint')],
+        [t('recon.diff'), pack.soDongChenhLech || 0, t('recon.diffMoney'), t('recon.diffHint')],
+        [t('recon.unmatch'), pack.soDongChuaKhop || 0, t('recon.unmatchMoney'), t('recon.unmatchHint')]
       ];
       root.querySelector('#reconStats').innerHTML = cards.map(([label, value, moneyHint, hint]) => `
         <article>
@@ -105,47 +106,47 @@
       root.innerHTML = `
         <header class="lg-header recon-header">
           <div>
-            <p class="lg-kicker">Kế toán · Đối soát ngân hàng</p>
-            <h1>Đối soát ngân hàng thông minh</h1>
-            <p class="lg-lead">Ghép từng dòng sao kê với giao dịch MoMo QR, phiếu chi nhà cung cấp, chi lương chuyển khoản và bút toán TK 112. Engine chỉ tính điểm — Kế toán mới được xác nhận. Máy không tự ghi sổ.</p>
+            <p class="lg-kicker">${t('recon.kickerKt')}</p>
+            <h1>${t('recon.title')}</h1>
+            <p class="lg-lead">${t('recon.leadKt')}</p>
           </div>
-          <button type="button" class="lg-btn lg-btn-ghost" id="reconOpenHb">Cẩm nang · mục 19</button>
+          <button type="button" class="lg-btn lg-btn-ghost" id="reconOpenHb">${t('recon.openHbShort')}</button>
         </header>
         <div class="recon-stats" id="reconStats"></div>
         <article class="lg-card recon-import">
           <div class="recon-import-head">
             <div>
-              <h2>Nhập sao kê</h2>
-              <p class="lg-help">Cột mẫu: Ngày, Số tiền, Nội dung, Mã tham chiếu. Dòng dương là tiền vào (MoMo / Nợ 112). Dòng âm là tiền ra (chi NCC hoặc lương).</p>
+              <h2>${t('recon.import')}</h2>
+              <p class="lg-help">${t('recon.importHelp')}</p>
             </div>
           </div>
           <form id="reconCsv" class="recon-import-form" data-keep-native>
             <label class="recon-field">
-              <span>Tài khoản ngân hàng</span>
+              <span>${t('recon.bankAcc')}</span>
               <input id="reconTk" placeholder="NH0001" maxlength="20" autocomplete="off">
             </label>
             <label class="recon-field recon-file-field">
-              <span>Tệp sao kê CSV</span>
+              <span>${t('recon.csvFile')}</span>
               <div class="recon-file-row">
                 <input type="file" id="reconFile" accept=".csv,text/csv" required>
-                <em id="reconFileName">Chưa chọn tệp CSV</em>
+                <em id="reconFileName">${t('recon.noFile')}</em>
               </div>
             </label>
             <div class="recon-import-actions">
-              <button class="lg-btn lg-btn-primary" type="submit">Nhập và chạy đối soát</button>
-              <a class="lg-btn lg-btn-ghost" id="reconTpl" href="#">Tải mẫu CSV</a>
+              <button class="lg-btn lg-btn-primary" type="submit">${t('recon.run')}</button>
+              <a class="lg-btn lg-btn-ghost" id="reconTpl" href="#">${t('recon.tpl')}</a>
             </div>
           </form>
         </article>
         <article class="lg-card recon-work-card">
           <div class="recon-toolbar" data-keep-native>
             <label class="recon-field">
-              <span>Sao kê đã nhập</span>
-              <select id="reconPick"><option value="">Chọn sao kê…</option></select>
+              <span>${t('recon.imported')}</span>
+              <select id="reconPick"><option value="">${t('recon.pickStmt')}</option></select>
             </label>
             <label class="recon-field recon-field-grow">
-              <span>Tìm dòng</span>
-              <input id="reconSearch" placeholder="Nội dung, mã phiếu chi, mã giao dịch…" autocomplete="off">
+              <span>${t('recon.findLine')}</span>
+              <input id="reconSearch" placeholder="${t('recon.findPh')}" autocomplete="off">
             </label>
             <label class="recon-field">
               <span>Trạng thái</span>

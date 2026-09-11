@@ -14,7 +14,8 @@
     if (!response.ok) throw new Error(data.message || 'Không thể xử lý yêu cầu.');
     return data;
   };
-  const heading = (kicker, title, subtitle, action = '') => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(kicker)}</p><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div>${action}</header>`;
+  const phrase = (text) => window.FLY_I18N?.phrase?.(text) || text;
+  const heading = (kicker, title, subtitle, action = '') => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(phrase(kicker))}</p><h1>${esc(phrase(title))}</h1><p>${esc(phrase(subtitle))}</p></div>${action}</header>`;
 
   const printReceipt = data => {
     const receipt = data.receipt;

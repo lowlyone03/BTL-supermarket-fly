@@ -453,6 +453,9 @@ const unauthorizedHint = (error) => {
     if (/unauthorized|401|không hợp lệ/i.test(msg)) {
         return 'Token Telegram không hợp lệ — kiểm tra TELEGRAM_BOT_TOKEN trong server/.env';
     }
+    if (/fetch failed/i.test(msg) && !/^Telegram /i.test(msg)) {
+        return notify.describeTelegramFetchError(error, 'request');
+    }
     return msg;
 };
 
@@ -545,6 +548,7 @@ const cmdAsk = async (user, pool, arg) => {
     if (!teleAsk.isTelegramAskEnabled()) return teleAsk.ASK_DISABLED;
     if (!String(arg || '').trim()) return teleAsk.ASK_USAGE;
     const out = await teleAsk.runTelegramAsk({ user, question: arg, pool, req: null });
+    if (out.extra) return { texts: out.texts, extra: out.extra };
     if (out.texts?.length === 1) return out.texts[0];
     return { texts: out.texts };
 };
@@ -569,8 +573,10 @@ const handleAskCommand = async (bound, chatId, arg, message) => {
     teleAsk.enqueueAsk(async () => {
         try {
             const out = await teleAsk.runTelegramAsk({ user, question, pool, req: null });
-            for (const text of out.texts || []) {
-                await reply(chatId, text);
+            const texts = out.texts || [];
+            for (let index = 0; index < texts.length; index += 1) {
+                const extra = (index === texts.length - 1 && out.extra) ? out.extra : {};
+                await reply(chatId, texts[index], extra);
             }
         } catch (error) {
             console.error('Telegram /ask:', error.message);
@@ -1051,8 +1057,9 @@ const deliverCommandResult = async (chatId, result, extra = {}) => {
         return;
     }
     if (result.texts?.length) {
-        for (const text of result.texts) {
-            await reply(chatId, text, extra);
+        for (let index = 0; index < result.texts.length; index += 1) {
+            const lastExtra = (index === result.texts.length - 1 && result.extra) ? result.extra : {};
+            await reply(chatId, result.texts[index], { ...extra, ...lastExtra });
         }
         return;
     }
@@ -1093,6 +1100,32 @@ const completedDecisionKeyboard = (parsed, lang = 'vi') => ({
         ]
     ]
 });
+
+const handleAskDocCallback = async (chatId, parsed, user, pool) => {
+    await notify.sendChatAction(chatId, 'upload_document').catch(() => {});
+    try {
+        const file = await teleAsk.deliverAskDocument({
+            user,
+            pool,
+            kind: parsed.kind,
+            id: parsed.id,
+            skin: parsed.skin
+        });
+        await notify.sendDocument(chatId, file, {
+            caption: file.caption,
+            filename: file.filename,
+            disable_notification: true
+        });
+        return { ok: true, command: 'askdoc', kind: parsed.kind, id: parsed.id, skin: parsed.skin };
+    } catch (error) {
+        const status = Number(error.status) || 500;
+        const text = status === 403
+            ? 'Tài khoản này không xem chứng từ trên trợ lý.'
+            : (error.message || 'Không tạo được PDF. Thử /ask lại hoặc mở trợ lý trên Fly.');
+        await reply(chatId, text);
+        return { ok: false, command: 'askdoc', status, kind: parsed.kind, id: parsed.id };
+    }
+};
 
 const handleDecisionCallback = async (chatId, parsed, user, pool, lang, query = {}) => {
     if (parsed.action === 'reports') {
@@ -1283,7 +1316,9 @@ const handleCallback = async (query) => {
     const liveUi = Boolean(query.message?.message_id);
     await notify.answerCallbackQuery(query.id, liveUi ? 'Đang cập nhật dữ liệu…' : '').catch(() => {});
     if (liveUi) {
-        const activity = /docs|dkind/.test(data) ? 'upload_photo' : 'typing';
+        const activity = /^askd:/.test(data)
+            ? 'upload_document'
+            : (/docs|dkind/.test(data) ? 'upload_photo' : 'typing');
         await notify.sendChatAction(chatId, activity).catch(() => {});
     }
     const langMatch = data.match(/^lang:(vi|en|zh)$/i);
@@ -1292,6 +1327,7 @@ const handleCallback = async (query) => {
     }
     const lang = langOf(chatId);
     const decision = teleDecision.parseDecisionCallback(data);
+    const askDoc = teleAsk.parseAskDocCallback(data);
     const dkindMatch = data.match(/^dkind:(po|px|kk|dt|pc|cc|hd|pn|hdm|bck)$/i);
     const rptMatch = data.match(/^rpt:(today|debt|pending|shifts|lowstock|pnl|wh)$/i);
     const periodMatch = data.match(/^period:(month|quarter|year):(\d{4}(?:-\d{2}|-Q[1-4])?)$/i);
@@ -1300,7 +1336,7 @@ const handleCallback = async (query) => {
         await reply(chatId, t(lang, 'denyWrite'));
         return { forbidden: true };
     }
-    if (!/^cmd:/.test(data) && !decision && !dkindMatch && !rptMatch && !periodMatch && !guideMatch) {
+    if (!/^cmd:/.test(data) && !decision && !askDoc && !dkindMatch && !rptMatch && !periodMatch && !guideMatch) {
         await reply(chatId, t(lang, 'denyWrite'));
         return { forbidden: true };
     }
@@ -1373,6 +1409,9 @@ const handleCallback = async (query) => {
         const picked = cmdGuide(topic, live);
         await deliverCallbackResult(query, picked, withQuiet('guide'), 'guide', live, `guide:${topic}`);
         return { ok: true, command: 'guide', topic };
+    }
+    if (askDoc) {
+        return handleAskDocCallback(chatId, askDoc, bound.user, bound.pool);
     }
     if (decision) {
         return handleDecisionCallback(chatId, decision, bound.user, bound.pool, live, query);
@@ -1559,6 +1598,9 @@ const startTelegramBot = async (options = {}) => {
     const fetchFn = options.fetchFn;
     if (fetchFn) notify.setTelegramRuntime({ fetchFn });
     const url = options.webhookUrl !== undefined ? options.webhookUrl : notify.webhookUrl();
+    const apiOpts = { fetchFn };
+    if (options.retries != null) apiOpts.retries = options.retries;
+    if (options.timeoutMs != null) apiOpts.timeoutMs = options.timeoutMs;
     try {
         if (options.skipSchema !== true) {
             try {
@@ -1568,66 +1610,80 @@ const startTelegramBot = async (options = {}) => {
                 console.error('Telegram schema:', schemaError.message);
             }
         }
-        await notify.telegramApi('getMe', {}, { fetchFn });
-        if (url) {
-            pollAbort = true;
-            pollState.running = false;
-            await notify.telegramApi('setWebhook', {
-                url,
-                secret_token: notify.webhookSecret() || undefined,
-                allowed_updates: ['message', 'callback_query']
-            }, { fetchFn });
-            await registerMenuSafe(fetchFn);
-            notify.setTelegramStatus('webhook');
-            console.log(`Telegram: webhook ${url} (không polling)`);
-            if (!options.skipCron) notify.startCompanionJobs();
-            return { mode: 'webhook', polling: false };
-        }
-        if (pollState.running && options.startPolling !== false && !options.pollOnce) {
-            console.log(`Telegram: polling đã chạy (PID ${process.pid}) — không start lần 2`);
-            return { mode: 'polling', already: true, deleteWebhookFirst: true };
-        }
-        await notify.telegramApi('deleteWebhook', { drop_pending_updates: false }, { fetchFn });
-        await registerMenuSafe(fetchFn);
-        notify.setTelegramStatus('polling');
-        console.log(`Telegram: polling PID ${process.pid} (đã deleteWebhook trước getUpdates)`);
-        if (!options.skipCron) notify.startCompanionJobs();
-        if (options.pollOnce) {
-            await notify.telegramApi('getUpdates', { offset: pollState.offset, timeout: 0 }, { fetchFn });
-            return { mode: 'polling', deleteWebhookFirst: true };
-        }
-        if (!pollState.running && options.startPolling !== false) {
-            pollState.running = true;
+        await notify.telegramApi('getMe', {}, apiOpts);
+        const startPollingMode = async ({ fallbackFromWebhook = false } = {}) => {
+            if (pollState.running && options.startPolling !== false && !options.pollOnce) {
+                console.log(`Telegram: polling đã chạy (PID ${process.pid}) — không start lần 2`);
+                return { mode: 'polling', already: true, deleteWebhookFirst: true, fallbackFromWebhook };
+            }
             pollAbort = false;
-            (async () => {
-                while (pollState.running && !pollAbort) {
-                    try {
-                        const data = await notify.telegramApi('getUpdates', {
-                            offset: pollState.offset,
-                            timeout: 25
-                        }, { fetchFn });
-                        for (const update of data.result || []) {
-                            pollState.offset = update.update_id + 1;
-                            await handleUpdate(update).catch(err => console.error('Telegram update:', err.message));
+            await notify.telegramApi('deleteWebhook', { drop_pending_updates: false }, apiOpts);
+            await registerMenuSafe(fetchFn);
+            notify.setTelegramStatus('polling');
+            const reason = fallbackFromWebhook
+                ? 'webhook lỗi, fallback polling — bot vẫn chạy local'
+                : 'đã deleteWebhook trước getUpdates';
+            console.log(`Telegram: polling PID ${process.pid} (${reason})`);
+            if (!options.skipCron) notify.startCompanionJobs();
+            if (options.pollOnce) {
+                await notify.telegramApi('getUpdates', { offset: pollState.offset, timeout: 0 }, apiOpts);
+                return { mode: 'polling', deleteWebhookFirst: true, fallbackFromWebhook };
+            }
+            if (!pollState.running && options.startPolling !== false) {
+                pollState.running = true;
+                pollAbort = false;
+                (async () => {
+                    while (pollState.running && !pollAbort) {
+                        try {
+                            const data = await notify.telegramApi('getUpdates', {
+                                offset: pollState.offset,
+                                timeout: 25
+                            }, { fetchFn, retries: 2 });
+                            for (const update of data.result || []) {
+                                pollState.offset = update.update_id + 1;
+                                await handleUpdate(update).catch(err => console.error('Telegram update:', err.message));
+                            }
+                        } catch (error) {
+                            const hint = unauthorizedHint(error);
+                            if (/409|Conflict|process bot khác/i.test(String(error?.message || hint))) {
+                                pollState.running = false;
+                                pollAbort = true;
+                                notify.stopCompanionJobs();
+                                notify.setTelegramStatus('off');
+                                console.error(`Telegram getUpdates 409 (PID ${process.pid}) — dừng polling.`);
+                                if (process.env.TELEGRAM_BOT_CHILD === '1') process.exit(0);
+                                return;
+                            }
+                            console.error('Telegram polling:', hint);
+                            await new Promise(resolve => setTimeout(resolve, 2500));
                         }
-                    } catch (error) {
-                        const hint = unauthorizedHint(error);
-                        if (/409|Conflict|process bot khác/i.test(String(error?.message || hint))) {
-                            pollState.running = false;
-                            pollAbort = true;
-                            notify.stopCompanionJobs();
-                            notify.setTelegramStatus('off');
-                            console.error(`Telegram getUpdates 409 (PID ${process.pid}) — dừng polling.`);
-                            if (process.env.TELEGRAM_BOT_CHILD === '1') process.exit(0);
-                            return;
-                        }
-                        console.error('Telegram polling:', hint);
-                        await new Promise(resolve => setTimeout(resolve, 2500));
                     }
-                }
-            })();
+                })();
+            }
+            return { mode: 'polling', deleteWebhookFirst: true, fallbackFromWebhook };
+        };
+        if (url) {
+            try {
+                pollAbort = true;
+                pollState.running = false;
+                await notify.telegramApi('setWebhook', {
+                    url,
+                    secret_token: notify.webhookSecret() || undefined,
+                    allowed_updates: ['message', 'callback_query']
+                }, apiOpts);
+                await registerMenuSafe(fetchFn);
+                notify.setTelegramStatus('webhook');
+                console.log(`Telegram: webhook ${url} (không polling)`);
+                if (!options.skipCron) notify.startCompanionJobs();
+                return { mode: 'webhook', polling: false };
+            } catch (webhookError) {
+                pollAbort = false;
+                const hint = unauthorizedHint(webhookError);
+                console.error('Telegram webhook lỗi, chuyển polling:', hint);
+                return startPollingMode({ fallbackFromWebhook: true });
+            }
         }
-        return { mode: 'polling', deleteWebhookFirst: true };
+        return startPollingMode();
     } catch (error) {
         notify.setTelegramStatus('off');
         const hint = unauthorizedHint(error);
@@ -1671,6 +1727,8 @@ module.exports = {
         kbBoundByChat.clear();
         seenUpdateIds.clear();
         teleDecision.resetDecisionState();
+        teleAsk.setAskOverride(null);
+        teleAsk.setAskDocOverride(null);
         teleDocs.setDocumentPackOverride(null);
         teleDocs.setRecentDocsOverride(null);
         voucherImage.resetVoucherRenderPeek();
@@ -1701,5 +1759,7 @@ module.exports = {
     setFlyHandlerOverride: teleDecision.setFlyHandlerOverride,
     parseDecisionCallback: teleDecision.parseDecisionCallback,
     setAskOverride: teleAsk.setAskOverride,
+    setAskDocOverride: teleAsk.setAskDocOverride,
+    parseAskDocCallback: teleAsk.parseAskDocCallback,
     isTelegramAskEnabled: teleAsk.isTelegramAskEnabled
 };

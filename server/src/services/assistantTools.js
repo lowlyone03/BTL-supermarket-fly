@@ -125,8 +125,11 @@ const formatLoyaltySummary = (data) => {
     return [
         `Khách thành viên (RFM, không LLM): ${data.soKhach || 0} hồ sơ. At-risk/ngủ đông: ${data.atRisk || 0}.`,
         `${data.thang || ''}: ${data.soHoaDonThanhVien || 0} HĐ hoàn thành · DT thành viên ${money(data.doanhThuThanhVien) || '0đ'}.`,
-        `Segment: cao ${segs['Giá trị cao'] || 0}, thân thiết ${segs['Thân thiết'] || 0}, mới ${segs['Mới'] || 0}, rời bỏ ${segs['Nguy cơ rời bỏ'] || 0}.`
-    ].join('\n');
+        `Segment: cao ${segs['Giá trị cao'] || 0}, thân thiết ${segs['Thân thiết'] || 0}, mới ${segs['Mới'] || 0}, rời bỏ ${segs['Nguy cơ rời bỏ'] || 0}.`,
+        data.policy
+            ? `Chính sách gợi ý (không bịa %): VIP tối đa ${data.policy.vipEnabled === false ? 'tắt' : `${data.policy.vipMaxPercent ?? 10}%`} · win-back ${data.policy.winBackEnabled === false ? 'tắt' : `${Number(data.policy.winBackVoucherVnd || 20000).toLocaleString('vi-VN')}đ`} · mới ${data.policy.newMemberEnabled === false ? 'tắt' : `×${data.policy.newMemberPointMultiplier ?? 2}`}. Không tự gắn KM lên POS.`
+            : ''
+    ].filter(Boolean).join('\n');
 };
 
 const loadReconciliationSummary = async (pool, user) => {

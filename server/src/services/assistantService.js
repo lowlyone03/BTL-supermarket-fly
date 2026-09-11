@@ -250,18 +250,19 @@ const ask = async ({
     };
 };
 
-const getBrief = async ({ user, pool } = {}) => {
+const getBrief = async ({ user, pool, period } = {}) => {
     const { buildBrief } = require('./analyticsEngine');
     const db = pool || await poolPromise;
-    return buildBrief(db, user);
+    return buildBrief(db, user, { period });
 };
 
 const runUserScenario = async ({ user, type, params, pool } = {}) => {
     const { buildBrief } = require('./analyticsEngine');
     const { runScenario } = require('./scenarioEngine');
     const db = pool || await poolPromise;
-    const pack = await buildBrief(db, user);
-    return runScenario({ type, params, snapshot: pack.scenario });
+    const period = params?.period || params?.month || '';
+    const pack = await buildBrief(db, user, { period });
+    return runScenario({ type, params: { ...params, period }, snapshot: pack.scenario });
 };
 
 module.exports = {

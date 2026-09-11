@@ -1,5 +1,6 @@
 (() => {
   const previous = window.FLY_ROLE_PAGES;
+  const tx = (key, vars) => window.FLY_I18N?.t(key, vars) || key;
   const pages = [
     'ledger-handbook', 'ledger-coa', 'ledger-periods', 'ledger-expenses', 'ledger-journals',
     'ledger-nkc', 'ledger-gl', 'ledger-trial', 'ledger-vat', 'ledger-close',
@@ -7,7 +8,7 @@
   ];
   const templates = Object.fromEntries(pages.map(name => [
     name,
-    `<section class="warehouse-page ledger-page" data-ledger="${name}" data-keep-native><div class="lg-loading"><strong>Đang tải kế toán</strong>Vui lòng chờ trong giây lát...</div></section>`
+    `<section class="warehouse-page ledger-page" data-ledger="${name}" data-keep-native><div class="lg-loading"><strong>${tx('ledger.loading')}</strong></div></section>`
   ]));
 
   const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
@@ -507,18 +508,18 @@
   const header = (title, lead, extra = '') => `
     <header class="lg-header">
       <div>
-        <p class="lg-kicker">Kế toán</p>
-        <h1>${esc(title)}</h1>
-        <p class="lg-lead">${esc(lead)}</p>
+        <p class="lg-kicker">${esc(tx('ledger.kicker'))}</p>
+        <h1>${esc(window.FLY_I18N?.phrase?.(title) || title)}</h1>
+        <p class="lg-lead">${esc(window.FLY_I18N?.phrase?.(lead) || lead)}</p>
       </div>
       ${extra}
     </header>`;
 
   const periodChip = (period) => {
     if (!period) {
-      return `<aside class="lg-period-chip"><small>Kỳ hiện tại</small><strong>Chưa có kỳ</strong></aside>`;
+      return `<aside class="lg-period-chip"><small>${tx('ledger.periodNow')}</small><strong>${tx('ledger.noPeriod')}</strong></aside>`;
     }
-    return `<aside class="lg-period-chip"><small>Kỳ hiện tại</small><strong>${esc(monthLabel(period.MaKy))}</strong><div style="margin-top:8px">${badge(period.TrangThai)}</div></aside>`;
+    return `<aside class="lg-period-chip"><small>${tx('ledger.periodNow')}</small><strong>${esc(monthLabel(period.MaKy))}</strong><div style="margin-top:8px">${badge(period.TrangThai)}</div></aside>`;
   };
 
   const loadOpenPeriod = async (context) => {
@@ -1035,8 +1036,8 @@
 
   const initHandbook = async (root, context) => {
     root.classList.add('hb-page');
-    root.innerHTML = `${header('Cẩm nang kế toán', 'Sổ tay nghiệp vụ ngay trong hệ thống — mục lục dính trái, ô tìm luôn trên cùng. Không phải MISA / tờ khai thuế.')}
-      <div class="lg-loading"><strong>Đang tải cẩm nang</strong>Vui lòng chờ trong giây lát...</div>`;
+    root.innerHTML = `${header(tx('handbook.title'), tx('handbook.lead'))}
+      <div class="lg-loading"><strong>${tx('handbook.loading')}</strong>${tx('handbook.wait')}</div>`;
     const raw = await loadHandbookText(context);
     const parsed = parseHandbook(raw);
     const introRender = renderHandbookLines(parsed.intro.split('\n'), 'hb-intro');
@@ -1045,12 +1046,12 @@
       html: renderHandbookLines(section.body, section.id)
     }));
     const tocHtml = [
-      `<a href="#hb-intro" data-hb-jump="hb-intro"><span>0</span>Giới thiệu</a>`,
+      `<a href="#hb-intro" data-hb-jump="hb-intro"><span>0</span>${tx('handbook.intro')}</a>`,
       ...rendered.map(section => `<a href="#${section.id}" data-hb-jump="${section.id}" class="${section.featured ? 'is-featured' : ''}"><span>${esc(section.num)}</span>${esc(section.title)}</a>`)
     ].join('');
     const mainHtml = `
       <article class="hb-section hb-intro" id="hb-intro">
-        <div class="hb-section-head"><span class="hb-num">0</span><div><p class="lg-kicker">Cẩm nang mini</p><h2>Giới thiệu &amp; cách đọc</h2></div></div>
+        <div class="hb-section-head"><span class="hb-num">0</span><div><p class="lg-kicker">${tx('handbook.mini')}</p><h2>${tx('handbook.how')}</h2></div></div>
         <div class="hb-body">${introRender}</div>
       </article>
       ${rendered.map(section => `
@@ -1058,12 +1059,12 @@
           <div class="hb-section-head"><span class="hb-num">${esc(section.num)}</span><div><p class="lg-kicker">Mục ${esc(section.num)}</p><h2>${esc(section.title)}</h2></div></div>
           <div class="hb-body">${section.html}</div>
         </article>`).join('')}`;
-    root.innerHTML = `${header('Cẩm nang kế toán', 'Sổ tay nghiệp vụ khớp plan mini 1.5 — ngay trong menu Kế toán. Hạch toán / định khoản: mục 3A. Ngày đầu làm mục 1 → 5; lỗi thường gặp ở mục 17.')}
-      <ul class="hb-legend" aria-label="Chú thích màu trên cẩm nang">
-        <li class="is-rule"><span></span>Ý chính / quy tắc chốt</li>
-        <li class="is-alert"><span></span>Cảnh báo · BLOCK · cấm</li>
-        <li class="is-ex"><span></span>Ví dụ số / định khoản</li>
-        <li class="is-step"><span></span>Bước bấm trên app</li>
+    root.innerHTML = `${header(tx('handbook.title'), tx('handbook.leadLong'))}
+      <ul class="hb-legend" aria-label="${tx('handbook.legend')}">
+        <li class="is-rule"><span></span>${tx('handbook.rule')}</li>
+        <li class="is-alert"><span></span>${tx('handbook.alert')}</li>
+        <li class="is-ex"><span></span>${tx('handbook.ex')}</li>
+        <li class="is-step"><span></span>${tx('handbook.step')}</li>
       </ul>
       <div class="hb-shell">
         <aside class="hb-toc" id="hbToc">
@@ -1190,7 +1191,7 @@
       <div class="lg-toolbar">
         <label class="lg-field"><span>Tháng kỳ</span><input type="month" id="kyMonth" data-keep-native value="${monthNow()}"></label>
         <div class="lg-actions">
-          <button type="button" class="lg-btn lg-btn-ghost" id="kyReload">Tải lại</button>
+          <button type="button" class="lg-btn lg-btn-ghost" id="kyReload">${tx('ledger.reload')}</button>
           ${printLib()?.buttonHtml('kyPrint') || ''}
         </div>
       </div>
@@ -1439,7 +1440,7 @@
     const defaultNgay = dateInOpenPeriod(current);
     root.innerHTML = `${header('Bút toán & chờ ghi sổ', 'Hàng chờ: chứng từ hợp lệ thiếu bút toán, hoặc phát sinh khi kỳ đã khóa. Bút toán thủ công do máy chủ sinh mã TC + yyMM + 5 số — không dùng để thanh lý TSCĐ.', periodChip(current))}
       <div class="lg-toolbar">
-        <div class="lg-actions" style="margin:0"><button type="button" class="lg-btn lg-btn-ghost" id="btReload">Tải lại</button></div>
+        <div class="lg-actions" style="margin:0"><button type="button" class="lg-btn lg-btn-ghost" id="btReload">${tx('ledger.reload')}</button></div>
       </div>
       <article class="lg-card">
         <h2>Chờ ghi sổ</h2>
@@ -1699,7 +1700,7 @@
         <label class="lg-field"><span>Mã tài khoản</span><input id="glTK" value="111" maxlength="8" placeholder="111"></label>
         <label class="lg-field"><span>Kỳ</span><input type="month" id="rpMonth" data-keep-native value="${monthNow()}"></label>
         <div class="lg-actions">
-          <button type="button" class="lg-btn lg-btn-primary" id="rpLoad">Xem sổ cái</button>
+          <button type="button" class="lg-btn lg-btn-primary" id="rpLoad">${tx('common.view')}</button>
           ${printLib()?.buttonHtml('rpPrint') || ''}
         </div>
       </div>

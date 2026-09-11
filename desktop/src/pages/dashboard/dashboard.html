@@ -1,27 +1,42 @@
 <!doctype html>
-<html lang="vi">
+<html lang="vi" data-theme="light" data-lang="vi">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Điều hành - Supermarket Fly</title>
+  <script>
+    (function () {
+      try {
+        var user = JSON.parse(localStorage.getItem('fly_user') || '{}');
+        var key = user && user.MaNV ? 'fly_pref_' + user.MaNV : 'fly_pref_guest';
+        var prefs = JSON.parse(localStorage.getItem(key) || localStorage.getItem('fly_pref_last') || '{}');
+        if (prefs.giaoDien) document.documentElement.setAttribute('data-theme', prefs.giaoDien);
+        if (prefs.ngonNgu) {
+          document.documentElement.setAttribute('data-lang', prefs.ngonNgu);
+          document.documentElement.lang = prefs.ngonNgu === 'zh' ? 'zh-CN' : prefs.ngonNgu;
+        }
+      } catch (e) {}
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="dashboard.css?v=recon-nav-4">
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="dashboard.css?v=theme-dark-2">
   <link rel="stylesheet" href="../admin/admin.css?v=tax-ui-2">
-  <link rel="stylesheet" href="../warehouse/warehouse.css?v=typo-heading-1">
+  <link rel="stylesheet" href="../warehouse/warehouse.css?v=i18n-approve-1">
   <link rel="stylesheet" href="../workforce/workforce.css?v=approve-fix-2">
-  <link rel="stylesheet" href="../cashier/cashier.css?v=qty-step-1">
+  <link rel="stylesheet" href="../cashier/cashier.css?v=loy-apply-1">
   <link rel="stylesheet" href="../shared/locale-ui.css?v=vi-date-3">
   <link rel="stylesheet" href="../shared/ui-polish.css?v=count-click-1">
   <link rel="stylesheet" href="../shared/report-charts.css?v=wh-report-6">
   <link rel="stylesheet" href="../shared/product-images.css?v=products-1">
-  <link rel="stylesheet" href="overview-modern.css?v=typo-widget-3">
+  <link rel="stylesheet" href="overview-modern.css?v=theme-dark-2">
   <link rel="stylesheet" href="../accounting/ledger.css?v=recon-ui-3">
   <link rel="stylesheet" href="../accounting/ledger-print.css?v=ledger-print-1">
-  <link rel="stylesheet" href="../admin/loyalty.css?v=rfm-ui-2">
-  <link rel="stylesheet" href="assistant.css?v=assist-ui-9">
+  <link rel="stylesheet" href="../admin/loyalty.css?v=loy-apply-1">
+  <link rel="stylesheet" href="assistant.css?v=assist-ui-10">
   <link rel="stylesheet" href="chat.css?v=chat-p5-6">
+  <link rel="stylesheet" href="../shared/theme.css?v=i18n-approve-1">
 </head>
 <body>
   <svg class="svg-library" aria-hidden="true">
@@ -72,144 +87,157 @@
     <aside class="sidebar">
       <div class="brand-block">
         <svg class="brand-mark"><use href="#i-leaf"/></svg>
-        <div><strong>Supermarket</strong><small>FLY · QUẢN LÝ</small></div>
+        <div><strong>Supermarket</strong><small data-i18n="brand.tag">FLY · QUẢN LÝ</small></div>
       </div>
 
       <div class="store-selector">
         <span class="store-icon"><svg><use href="#i-store"/></svg></span>
-        <span><small>CỬA HÀNG ĐANG XEM</small><strong>Supermarket Fly · Hà Nội</strong></span>
+        <span><small data-i18n="store.watching">CỬA HÀNG ĐANG XEM</small><strong data-i18n="store.name">Supermarket Fly · Hà Nội</strong></span>
         <svg class="store-chevron"><use href="#i-chevron"/></svg>
       </div>
 
       <nav class="sidebar-nav" id="sidebarNav">
-        <div class="nav-group-title">ĐIỀU HÀNH</div>
-        <a href="#" class="nav-item active" id="managerHomeNav" data-target="home"><svg><use href="#i-grid"/></svg><span>Tổng quan</span></a>
-        <a href="#" class="nav-item" id="managerApprovalNav" data-target="manager-purchase-approvals"><svg><use href="#i-approve"/></svg><span>Trung tâm phê duyệt</span><b class="nav-badge" id="approvalNavBadge">0</b></a>
-        <a href="#" class="nav-item" id="managerPayablesNav" data-target="manager-payables"><svg><use href="#i-report"/></svg><span>Theo dõi công nợ</span></a>
-        <a href="#" class="nav-item" id="managerWorkforceNav" data-target="manager-workforce"><svg><use href="#i-calendar"/></svg><span>Phân ca</span></a>
-        <a href="#" class="nav-item" id="managerWorkforceApproveNav" data-target="manager-workforce-approve"><svg><use href="#i-approve"/></svg><span>Duyệt công</span></a>
-        <a href="#" class="nav-item" id="managerHolidaysNav" data-target="manager-holidays"><svg><use href="#i-calendar"/></svg><span>Ngày lễ năm</span></a>
-        <a href="#" class="nav-item" id="managerReportNav" data-target="manager-reports"><svg><use href="#i-report"/></svg><span>Báo cáo cửa hàng</span></a>
-        <a href="#" class="nav-item" id="managerLoyaltyNav" data-target="manager-loyalty"><svg><use href="#i-users"/></svg><span>Khách hàng thân thiết</span></a>
-        <a href="#" class="nav-item" id="managerWarehouseReportNav" data-target="admin-warehouse-reports"><svg><use href="#i-inventory"/></svg><span>Báo cáo Thủ kho</span></a>
-        <a href="#" class="nav-item" id="managerLedgerKqkdNav" data-target="ledger-kqkd"><svg><use href="#i-report"/></svg><span>Kết quả kinh doanh</span></a>
-        <a href="#" class="nav-item" id="managerLedgerCfNav" data-target="ledger-cf"><svg><use href="#i-report"/></svg><span>Lưu chuyển tiền tệ</span></a>
-        <a href="#" class="nav-item" id="managerLedgerBsNav" data-target="ledger-bs"><svg><use href="#i-report"/></svg><span>Bảng cân đối kế toán</span></a>
-        <a href="#" class="nav-item" id="managerLedgerHandbookNav" data-target="ledger-handbook"><svg><use href="#i-book"/></svg><span>Cẩm nang kế toán</span></a>
-        <a href="#" class="nav-item" id="managerReconNav" data-target="ledger-reconciliation"><svg><use href="#i-approve"/></svg><span>Đối soát ngân hàng thông minh</span></a>
+        <div class="nav-group-title" data-i18n="nav.ops">ĐIỀU HÀNH</div>
+        <a href="#" class="nav-item active" id="managerHomeNav" data-target="home"><svg><use href="#i-grid"/></svg><span data-i18n="nav.overview">Tổng quan</span></a>
+        <a href="#" class="nav-item" id="managerApprovalNav" data-target="manager-purchase-approvals"><svg><use href="#i-approve"/></svg><span data-i18n="nav.approvals">Trung tâm phê duyệt</span><b class="nav-badge" id="approvalNavBadge">0</b></a>
+        <a href="#" class="nav-item" id="managerPayablesNav" data-target="manager-payables"><svg><use href="#i-report"/></svg><span data-i18n="nav.payables">Theo dõi công nợ</span></a>
+        <a href="#" class="nav-item" id="managerWorkforceNav" data-target="manager-workforce"><svg><use href="#i-calendar"/></svg><span data-i18n="nav.schedule">Phân ca</span></a>
+        <a href="#" class="nav-item" id="managerWorkforceApproveNav" data-target="manager-workforce-approve"><svg><use href="#i-approve"/></svg><span data-i18n="nav.approveWork">Duyệt công</span></a>
+        <a href="#" class="nav-item" id="managerHolidaysNav" data-target="manager-holidays"><svg><use href="#i-calendar"/></svg><span data-i18n="nav.holidays">Ngày lễ năm</span></a>
+        <a href="#" class="nav-item" id="managerReportNav" data-target="manager-reports"><svg><use href="#i-report"/></svg><span data-i18n="nav.storeReport">Báo cáo cửa hàng</span></a>
+        <a href="#" class="nav-item" id="managerLoyaltyNav" data-target="manager-loyalty"><svg><use href="#i-users"/></svg><span data-i18n="nav.loyalty">Khách hàng thân thiết</span></a>
+        <a href="#" class="nav-item" id="managerWarehouseReportNav" data-target="admin-warehouse-reports"><svg><use href="#i-inventory"/></svg><span data-i18n="nav.whReport">Báo cáo Thủ kho</span></a>
+        <a href="#" class="nav-item" id="managerLedgerKqkdNav" data-target="ledger-kqkd"><svg><use href="#i-report"/></svg><span data-i18n="nav.kqkd">Kết quả kinh doanh</span></a>
+        <a href="#" class="nav-item" id="managerLedgerCfNav" data-target="ledger-cf"><svg><use href="#i-report"/></svg><span data-i18n="nav.cf">Lưu chuyển tiền tệ</span></a>
+        <a href="#" class="nav-item" id="managerLedgerBsNav" data-target="ledger-bs"><svg><use href="#i-report"/></svg><span data-i18n="nav.bs">Bảng cân đối kế toán</span></a>
+        <a href="#" class="nav-item" id="managerLedgerHandbookNav" data-target="ledger-handbook"><svg><use href="#i-book"/></svg><span data-i18n="nav.handbook">Cẩm nang kế toán</span></a>
+        <a href="#" class="nav-item" id="managerReconNav" data-target="ledger-reconciliation"><svg><use href="#i-approve"/></svg><span data-i18n="nav.recon">Đối soát ngân hàng thông minh</span></a>
 
         <div class="nav-group" id="navGroupWarehouse" style="display:none">
-          <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span>Lịch làm việc</span></a>
-          <a href="#" class="nav-item" data-target="warehouse-home"><svg><use href="#i-grid"/></svg><span>Tổng quan kho</span></a>
-          <a href="#" class="nav-item" data-target="warehouse-history"><svg><use href="#i-log"/></svg><span>Lịch sử kho</span></a>
-          <div class="nav-group-title">QUẢN LÝ KHO</div>
-          <a href="#" class="nav-item" data-target="warehouse-inventory"><svg><use href="#i-inventory"/></svg><span>Tồn kho &amp; cảnh báo</span></a>
-          <a href="#" class="nav-item" data-target="warehouse-inventory-counts"><svg><use href="#i-approve"/></svg><span>Kiểm kê kho</span></a>
-          <a href="#" class="nav-item" data-target="warehouse-stock-issues"><svg><use href="#i-request"/></svg><span>Phiếu xuất kho</span></a>
-          <a href="#" class="nav-item" data-target="warehouse-requests"><svg><use href="#i-request"/></svg><span>Đề nghị mua hàng</span></a>
-          <div class="nav-group-title">NHẬN HÀNG</div>
-          <a href="#" class="nav-item" data-target="warehouse-receiving"><svg><use href="#i-truck"/></svg><span>Nhận &amp; kiểm tra hàng</span></a>
-          <a href="#" class="nav-item" data-target="warehouse-receipts"><svg><use href="#i-request"/></svg><span>Phiếu nhập kho</span></a>
-          <a href="#" class="nav-item" data-target="warehouse-returns"><svg><use href="#i-refresh"/></svg><span>Kiểm tra đổi trả</span></a>
-          <a href="#" class="nav-item" data-target="warehouse-reports"><svg><use href="#i-report"/></svg><span>Báo cáo kho</span></a>
+          <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span data-i18n="nav.mySchedule">Lịch làm việc</span></a>
+          <a href="#" class="nav-item" data-target="warehouse-home"><svg><use href="#i-grid"/></svg><span data-i18n="nav.whHome">Tổng quan kho</span></a>
+          <a href="#" class="nav-item" data-target="warehouse-history"><svg><use href="#i-log"/></svg><span data-i18n="nav.whHistory">Lịch sử kho</span></a>
+          <div class="nav-group-title" data-i18n="nav.whManage">QUẢN LÝ KHO</div>
+          <a href="#" class="nav-item" data-target="warehouse-inventory"><svg><use href="#i-inventory"/></svg><span data-i18n="nav.inventory">Tồn kho &amp; cảnh báo</span></a>
+          <a href="#" class="nav-item" data-target="warehouse-inventory-counts"><svg><use href="#i-approve"/></svg><span data-i18n="nav.counts">Kiểm kê kho</span></a>
+          <a href="#" class="nav-item" data-target="warehouse-stock-issues"><svg><use href="#i-request"/></svg><span data-i18n="nav.issues">Phiếu xuất kho</span></a>
+          <a href="#" class="nav-item" data-target="warehouse-requests"><svg><use href="#i-request"/></svg><span data-i18n="nav.requests">Đề nghị mua hàng</span></a>
+          <div class="nav-group-title" data-i18n="nav.receiveGroup">NHẬN HÀNG</div>
+          <a href="#" class="nav-item" data-target="warehouse-receiving"><svg><use href="#i-truck"/></svg><span data-i18n="nav.receiving">Nhận &amp; kiểm tra hàng</span></a>
+          <a href="#" class="nav-item" data-target="warehouse-receipts"><svg><use href="#i-request"/></svg><span data-i18n="nav.receipts">Phiếu nhập kho</span></a>
+          <a href="#" class="nav-item" data-target="warehouse-returns"><svg><use href="#i-refresh"/></svg><span data-i18n="nav.returns">Kiểm tra đổi trả</span></a>
+          <a href="#" class="nav-item" data-target="warehouse-reports"><svg><use href="#i-report"/></svg><span data-i18n="nav.whReports">Báo cáo kho</span></a>
         </div>
 
         <div class="nav-group" id="navGroupPurchasing" style="display:none">
-          <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span>Lịch làm việc</span></a>
-          <a href="#" class="nav-item" data-target="purchasing-inbox"><svg><use href="#i-request"/></svg><span>Đề nghị từ kho</span><b class="nav-badge" id="purchasingNavBadge">0</b></a>
-          <div class="nav-group-title">MUA HÀNG</div>
-          <a href="#" class="nav-item" data-target="purchasing-suppliers"><svg><use href="#i-store"/></svg><span>Nhà cung cấp</span></a>
-          <a href="#" class="nav-item" data-target="purchasing-orders"><svg><use href="#i-approve"/></svg><span>Đơn mua hàng</span></a>
-          <a href="#" class="nav-item" data-target="purchasing-reports"><svg><use href="#i-report"/></svg><span>Báo cáo mua hàng</span></a>
+          <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span data-i18n="nav.mySchedule">Lịch làm việc</span></a>
+          <a href="#" class="nav-item" data-target="purchasing-inbox"><svg><use href="#i-request"/></svg><span data-i18n="nav.fromWarehouse">Đề nghị từ kho</span><b class="nav-badge" id="purchasingNavBadge">0</b></a>
+          <div class="nav-group-title" data-i18n="nav.purchasing">MUA HÀNG</div>
+          <a href="#" class="nav-item" data-target="purchasing-suppliers"><svg><use href="#i-store"/></svg><span data-i18n="nav.suppliers">Nhà cung cấp</span></a>
+          <a href="#" class="nav-item" data-target="purchasing-orders"><svg><use href="#i-approve"/></svg><span data-i18n="nav.orders">Đơn mua hàng</span></a>
+          <a href="#" class="nav-item" data-target="purchasing-reports"><svg><use href="#i-report"/></svg><span data-i18n="nav.poReports">Báo cáo mua hàng</span></a>
         </div>
 
         <div class="nav-group" id="navGroupAccounting" style="display:none">
-          <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span>Lịch làm việc</span></a>
-          <a href="#" class="nav-item" data-target="accounting-invoices"><svg><use href="#i-approve"/></svg><span>Đối chiếu hóa đơn</span></a>
-          <div class="nav-group-title">KẾ TOÁN MUA HÀNG</div>
-          <a href="#" class="nav-item" data-target="accounting-payables"><svg><use href="#i-report"/></svg><span>Công nợ Nhà cung cấp</span></a>
-          <div class="nav-group-title">ĐỐI SOÁT BÁN HÀNG</div>
-          <a href="#" class="nav-item" data-target="accounting-settlements"><svg><use href="#i-clock"/></svg><span>Ca &amp; Phiếu thu</span></a>
-          <a href="#" class="nav-item" data-target="accounting-reports"><svg><use href="#i-report"/></svg><span>Báo cáo nội bộ</span></a>
-          <div class="nav-group-title">NHÂN SỰ MỞ RỘNG</div>
-          <a href="#" class="nav-item" data-target="accounting-payroll"><svg><use href="#i-team"/></svg><span>Bảng lương tháng</span></a>
-          <a href="#" class="nav-item" data-target="accounting-history"><svg><use href="#i-log"/></svg><span>Lịch sử hoạt động</span></a>
-          <div class="nav-group-title">KẾ TOÁN TỔNG HỢP</div>
-          <a href="#" class="nav-item" data-target="ledger-handbook"><svg><use href="#i-book"/></svg><span>Cẩm nang kế toán</span></a>
-          <a href="#" class="nav-item" data-target="ledger-coa"><svg><use href="#i-report"/></svg><span>Hệ thống tài khoản</span></a>
-          <a href="#" class="nav-item" data-target="ledger-periods"><svg><use href="#i-calendar"/></svg><span>Kỳ kế toán</span></a>
-          <a href="#" class="nav-item" data-target="ledger-expenses"><svg><use href="#i-approve"/></svg><span>Chi phí vận hành</span></a>
-          <a href="#" class="nav-item" data-target="ledger-journals"><svg><use href="#i-log"/></svg><span>Bút toán &amp; chờ ghi sổ</span></a>
-          <a href="#" class="nav-item" data-target="ledger-nkc"><svg><use href="#i-report"/></svg><span>Nhật ký chung</span></a>
-          <a href="#" class="nav-item" data-target="ledger-gl"><svg><use href="#i-report"/></svg><span>Sổ cái</span></a>
-          <a href="#" class="nav-item" data-target="ledger-trial"><svg><use href="#i-report"/></svg><span>Cân đối phát sinh</span></a>
-          <a href="#" class="nav-item" data-target="ledger-vat"><svg><use href="#i-report"/></svg><span>Bảng kê VAT</span></a>
-          <a href="#" class="nav-item" data-target="ledger-close"><svg><use href="#i-lock"/></svg><span>Khóa kỳ / kết chuyển</span></a>
-          <a href="#" class="nav-item" data-target="ledger-kqkd"><svg><use href="#i-report"/></svg><span>Kết quả kinh doanh</span></a>
-          <a href="#" class="nav-item" data-target="ledger-cf"><svg><use href="#i-report"/></svg><span>Lưu chuyển tiền tệ</span></a>
-          <a href="#" class="nav-item" data-target="ledger-bs"><svg><use href="#i-report"/></svg><span>Bảng cân đối kế toán</span></a>
-          <div class="nav-group-title">KẾ TOÁN MỞ RỘNG</div>
-          <a href="#" class="nav-item" data-target="ledger-assets"><svg><use href="#i-box"/></svg><span>Tài sản cố định</span></a>
-          <a href="#" class="nav-item" data-target="ledger-bank"><svg><use href="#i-store"/></svg><span>Ngân hàng &amp; sao kê CSV</span></a>
-          <a href="#" class="nav-item" data-target="ledger-reconciliation"><svg><use href="#i-approve"/></svg><span>Đối soát ngân hàng thông minh</span></a>
+          <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span data-i18n="nav.mySchedule">Lịch làm việc</span></a>
+          <a href="#" class="nav-item" data-target="accounting-invoices"><svg><use href="#i-approve"/></svg><span data-i18n="nav.acctInvoices">Đối chiếu hóa đơn</span></a>
+          <div class="nav-group-title" data-i18n="nav.acctBuy">KẾ TOÁN MUA HÀNG</div>
+          <a href="#" class="nav-item" data-target="accounting-payables"><svg><use href="#i-report"/></svg><span data-i18n="nav.acctPayables">Công nợ Nhà cung cấp</span></a>
+          <div class="nav-group-title" data-i18n="nav.acctSales">ĐỐI SOÁT BÁN HÀNG</div>
+          <a href="#" class="nav-item" data-target="accounting-settlements"><svg><use href="#i-clock"/></svg><span data-i18n="nav.settlements">Ca &amp; Phiếu thu</span></a>
+          <a href="#" class="nav-item" data-target="accounting-reports"><svg><use href="#i-report"/></svg><span data-i18n="nav.acctReports">Báo cáo nội bộ</span></a>
+          <div class="nav-group-title" data-i18n="nav.acctHr">NHÂN SỰ MỞ RỘNG</div>
+          <a href="#" class="nav-item" data-target="accounting-payroll"><svg><use href="#i-team"/></svg><span data-i18n="nav.payroll">Bảng lương tháng</span></a>
+          <a href="#" class="nav-item" data-target="accounting-history"><svg><use href="#i-log"/></svg><span data-i18n="nav.acctHistory">Lịch sử hoạt động</span></a>
+          <div class="nav-group-title" data-i18n="nav.acctCore">KẾ TOÁN TỔNG HỢP</div>
+          <a href="#" class="nav-item" data-target="ledger-handbook"><svg><use href="#i-book"/></svg><span data-i18n="nav.handbook">Cẩm nang kế toán</span></a>
+          <a href="#" class="nav-item" data-target="ledger-coa"><svg><use href="#i-report"/></svg><span data-i18n="nav.coa">Hệ thống tài khoản</span></a>
+          <a href="#" class="nav-item" data-target="ledger-periods"><svg><use href="#i-calendar"/></svg><span data-i18n="nav.periods">Kỳ kế toán</span></a>
+          <a href="#" class="nav-item" data-target="ledger-expenses"><svg><use href="#i-approve"/></svg><span data-i18n="nav.expenses">Chi phí vận hành</span></a>
+          <a href="#" class="nav-item" data-target="ledger-journals"><svg><use href="#i-log"/></svg><span data-i18n="nav.journals">Bút toán &amp; chờ ghi sổ</span></a>
+          <a href="#" class="nav-item" data-target="ledger-nkc"><svg><use href="#i-report"/></svg><span data-i18n="nav.nkc">Nhật ký chung</span></a>
+          <a href="#" class="nav-item" data-target="ledger-gl"><svg><use href="#i-report"/></svg><span data-i18n="nav.gl">Sổ cái</span></a>
+          <a href="#" class="nav-item" data-target="ledger-trial"><svg><use href="#i-report"/></svg><span data-i18n="nav.trial">Cân đối phát sinh</span></a>
+          <a href="#" class="nav-item" data-target="ledger-vat"><svg><use href="#i-report"/></svg><span data-i18n="nav.vat">Bảng kê VAT</span></a>
+          <a href="#" class="nav-item" data-target="ledger-close"><svg><use href="#i-lock"/></svg><span data-i18n="nav.close">Khóa kỳ / kết chuyển</span></a>
+          <a href="#" class="nav-item" data-target="ledger-kqkd"><svg><use href="#i-report"/></svg><span data-i18n="nav.kqkd">Kết quả kinh doanh</span></a>
+          <a href="#" class="nav-item" data-target="ledger-cf"><svg><use href="#i-report"/></svg><span data-i18n="nav.cf">Lưu chuyển tiền tệ</span></a>
+          <a href="#" class="nav-item" data-target="ledger-bs"><svg><use href="#i-report"/></svg><span data-i18n="nav.bs">Bảng cân đối kế toán</span></a>
+          <div class="nav-group-title" data-i18n="nav.acctExtra">KẾ TOÁN MỞ RỘNG</div>
+          <a href="#" class="nav-item" data-target="ledger-assets"><svg><use href="#i-box"/></svg><span data-i18n="nav.assets">Tài sản cố định</span></a>
+          <a href="#" class="nav-item" data-target="ledger-bank"><svg><use href="#i-store"/></svg><span data-i18n="nav.bank">Ngân hàng &amp; sao kê CSV</span></a>
+          <a href="#" class="nav-item" data-target="ledger-reconciliation"><svg><use href="#i-approve"/></svg><span data-i18n="nav.recon">Đối soát ngân hàng thông minh</span></a>
         </div>
 
         <div class="nav-group" id="navGroupCashier" style="display:none">
-          <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span>Lịch làm việc</span></a>
-          <a href="#" class="nav-item" data-target="cashier-shifts"><svg><use href="#i-clock"/></svg><span>Ca bán hàng</span></a>
-          <div class="nav-group-title">BÁN HÀNG TẠI QUẦY</div>
-          <a href="#" class="nav-item" data-target="cashier-pos"><svg><use href="#i-report"/></svg><span>Bán hàng</span></a>
-          <a href="#" class="nav-item" data-target="cashier-customers"><svg><use href="#i-users"/></svg><span>Khách hàng</span></a>
-          <a href="#" class="nav-item" data-target="cashier-invoices"><svg><use href="#i-approve"/></svg><span>Hóa đơn</span></a>
-          <a href="#" class="nav-item" data-target="cashier-returns"><svg><use href="#i-refresh"/></svg><span>Đổi trả</span></a>
-          <a href="#" class="nav-item" data-target="cashier-reports"><svg><use href="#i-report"/></svg><span>Báo cáo bán hàng</span></a>
+          <a href="#" class="nav-item" data-target="cashier-schedule"><svg><use href="#i-calendar"/></svg><span data-i18n="nav.mySchedule">Lịch làm việc</span></a>
+          <a href="#" class="nav-item" data-target="cashier-shifts"><svg><use href="#i-clock"/></svg><span data-i18n="nav.shifts">Ca bán hàng</span></a>
+          <div class="nav-group-title" data-i18n="nav.posGroup">BÁN HÀNG TẠI QUẦY</div>
+          <a href="#" class="nav-item" data-target="cashier-pos"><svg><use href="#i-report"/></svg><span data-i18n="nav.pos">Bán hàng</span></a>
+          <a href="#" class="nav-item" data-target="cashier-customers"><svg><use href="#i-users"/></svg><span data-i18n="nav.customers">Khách hàng</span></a>
+          <a href="#" class="nav-item" data-target="cashier-invoices"><svg><use href="#i-approve"/></svg><span data-i18n="nav.invoices">Hóa đơn</span></a>
+          <a href="#" class="nav-item" data-target="cashier-returns"><svg><use href="#i-refresh"/></svg><span data-i18n="nav.posReturns">Đổi trả</span></a>
+          <a href="#" class="nav-item" data-target="cashier-reports"><svg><use href="#i-report"/></svg><span data-i18n="nav.salesReports">Báo cáo bán hàng</span></a>
         </div>
 
         <div class="nav-group" id="navGroupSystem" style="display:none">
-          <div class="nav-group-title">VẬN HÀNH CỬA HÀNG</div>
-          <a href="#" class="nav-item" data-target="../admin/products.html"><svg><use href="#i-box"/></svg><span>Sản phẩm &amp; giá</span></a>
-          <a href="#" class="nav-item" data-target="../admin/employees.html"><svg><use href="#i-users"/></svg><span>Quản lý nhân viên</span></a>
-          <a href="#" class="nav-item" data-target="../admin/accounts.html"><svg><use href="#i-key"/></svg><span>Quản lý tài khoản</span></a>
-          <a href="#" class="nav-item" data-target="../admin/promotions.html"><svg><use href="#i-promo"/></svg><span>Khuyến mãi</span></a>
+          <div class="nav-group-title" data-i18n="nav.opsStore">VẬN HÀNH CỬA HÀNG</div>
+          <a href="#" class="nav-item" data-target="../admin/products.html"><svg><use href="#i-box"/></svg><span data-i18n="nav.products">Sản phẩm &amp; giá</span></a>
+          <a href="#" class="nav-item" data-target="../admin/employees.html"><svg><use href="#i-users"/></svg><span data-i18n="nav.employees">Quản lý nhân viên</span></a>
+          <a href="#" class="nav-item" data-target="../admin/accounts.html"><svg><use href="#i-key"/></svg><span data-i18n="nav.accounts">Quản lý tài khoản</span></a>
+          <a href="#" class="nav-item" data-target="../admin/promotions.html"><svg><use href="#i-promo"/></svg><span data-i18n="nav.promos">Khuyến mãi</span></a>
 
-          <div class="nav-group-title">KIỂM SOÁT</div>
-          <a href="#" class="nav-item" data-target="../admin/permissions.html"><svg><use href="#i-shield"/></svg><span>Phân quyền chức năng</span></a>
-          <a href="#" class="nav-item" data-target="../admin/audit-log.html"><svg><use href="#i-log"/></svg><span>Nhật ký hệ thống</span></a>
-          <a href="#" class="nav-item" data-target="../admin/backup.html"><svg><use href="#i-shield"/></svg><span>Sao lưu &amp; bảo mật</span></a>
-          <a href="#" class="nav-item" id="btnChangePassword"><svg><use href="#i-settings"/></svg><span>Đổi mật khẩu</span></a>
+          <div class="nav-group-title" data-i18n="nav.control">KIỂM SOÁT</div>
+          <a href="#" class="nav-item" data-target="../admin/permissions.html"><svg><use href="#i-shield"/></svg><span data-i18n="nav.permissions">Phân quyền chức năng</span></a>
+          <a href="#" class="nav-item" data-target="../admin/audit-log.html"><svg><use href="#i-log"/></svg><span data-i18n="nav.audit">Nhật ký hệ thống</span></a>
+          <a href="#" class="nav-item" data-target="../admin/backup.html"><svg><use href="#i-shield"/></svg><span data-i18n="nav.backup">Sao lưu &amp; bảo mật</span></a>
+          <a href="#" class="nav-item" id="managerAppearanceNav" data-target="manager-appearance"><svg><use href="#i-settings"/></svg><span data-i18n="nav.appearance">Giao diện hệ thống</span></a>
+          <a href="#" class="nav-item" id="btnChangePassword"><svg><use href="#i-settings"/></svg><span data-i18n="nav.password">Đổi mật khẩu</span></a>
         </div>
       </nav>
 
       <div class="sidebar-footer">
-        <div class="role-caption"><svg><use href="#i-shield"/></svg><span>Vai trò: <strong id="sidebarRole">Quản lý cửa hàng</strong></span></div>
+        <div class="role-caption"><svg><use href="#i-shield"/></svg><span><span data-i18n="role.caption">Vai trò:</span> <strong id="sidebarRole">Quản lý cửa hàng</strong></span></div>
         <p class="sidebar-server" id="sidebarServer">Dữ liệu: máy này</p>
-        <button id="btnLogout" class="logout-button"><svg><use href="#i-logout"/></svg>Đổi tài khoản</button>
+        <button id="btnLogout" class="logout-button"><svg><use href="#i-logout"/></svg><span data-i18n="nav.switchAccount">Đổi tài khoản</span></button>
       </div>
     </aside>
 
     <div class="main-column">
       <header class="topbar">
         <form class="global-search" id="globalSearchForm">
-          <button type="submit" class="global-search-submit" aria-label="Tìm kiếm" title="Tìm kiếm">
+          <button type="submit" class="global-search-submit" data-i18n-aria="top.search" data-i18n-title="top.search" aria-label="Tìm kiếm" title="Tìm kiếm">
             <svg><use href="#i-search"/></svg>
           </button>
-          <input id="globalSearch" type="search" placeholder="Tìm nhân viên, tài khoản, chức năng..." autocomplete="off">
+          <input id="globalSearch" type="search" data-i18n-placeholder="top.searchPh" placeholder="Tìm nhân viên, tài khoản, chức năng..." autocomplete="off">
         </form>
         <div class="topbar-actions">
-          <button class="ui-reload-button" id="uiReloadButton" type="button" title="Tải lại giao diện (không cần npm start). Sửa API/Telegram thì vẫn restart npm start." aria-label="Tải lại giao diện (không cần npm start)">RS</button>
+          <div class="pref-cluster" id="prefCluster">
+            <div class="pref-group" role="group" aria-label="Language">
+              <button type="button" data-lang="vi">VI</button>
+              <button type="button" data-lang="en">EN</button>
+              <button type="button" data-lang="zh">中文</button>
+            </div>
+            <div class="pref-group" role="group" aria-label="Theme">
+              <button type="button" data-theme-set="light" data-i18n="pref.light">Sáng</button>
+              <button type="button" data-theme-set="dark" data-i18n="pref.dark">Tối</button>
+              <button type="button" data-theme-set="soft" data-i18n="pref.soft">Dịu</button>
+            </div>
+          </div>
+          <button class="ui-reload-button" id="uiReloadButton" type="button" data-i18n-title="top.rsTitle" data-i18n-aria="top.rsTitle" title="Tải lại giao diện (không cần npm start). Sửa API/Telegram thì vẫn restart npm start." aria-label="Tải lại giao diện (không cần npm start)">RS</button>
           <div class="notification-cluster">
-            <button class="notification-sound" id="notificationSoundToggle" type="button" title="Tắt tiếng thông báo" aria-pressed="false" aria-label="Tắt tiếng thông báo"><svg><use href="#i-sound-on"/></svg></button>
-            <button class="notification-button" id="notificationButton" type="button" title="Thông báo" aria-haspopup="true" aria-expanded="false"><svg><use href="#i-bell"/></svg><b id="notificationCount">0</b><i id="notificationDot"></i></button>
+            <button class="notification-sound" id="notificationSoundToggle" type="button" data-i18n-title="top.soundOff" data-i18n-aria="top.soundOff" title="Tắt tiếng thông báo" aria-pressed="false" aria-label="Tắt tiếng thông báo"><svg><use href="#i-sound-on"/></svg></button>
+            <button class="notification-button" id="notificationButton" type="button" data-i18n-title="top.notify" title="Thông báo" aria-haspopup="true" aria-expanded="false"><svg><use href="#i-bell"/></svg><b id="notificationCount">0</b><i id="notificationDot"></i></button>
           </div>
           <span class="topbar-divider"></span>
-          <button type="button" class="chat-launch" id="menuInternalChat" aria-haspopup="dialog" aria-expanded="false" aria-controls="chatWidget" title="Chat nội bộ">
+          <button type="button" class="chat-launch" id="menuInternalChat" aria-haspopup="dialog" aria-expanded="false" aria-controls="chatWidget" data-i18n-title="top.chatTitle" title="Chat nội bộ">
             <svg aria-hidden="true"><use href="#i-chat"/></svg>
-            <span>Chat</span>
+            <span data-i18n="top.chat">Chat</span>
             <b id="chatUnreadCount">0</b>
           </button>
-          <button type="button" class="assistant-launch" id="menuAssistant" aria-haspopup="dialog" aria-expanded="false" aria-controls="assistantDrawer" title="Trợ lý Fly">
+          <button type="button" class="assistant-launch" id="menuAssistant" aria-haspopup="dialog" aria-expanded="false" aria-controls="assistantDrawer" data-i18n-title="top.assistantTitle" title="Trợ lý Fly">
             <svg aria-hidden="true"><use href="#i-sparkle"/></svg>
-            <span>Trợ lý</span>
+            <span data-i18n="top.assistant">Trợ lý</span>
           </button>
           <button class="profile-button" id="profileButton">
             <span class="avatar" id="userInitials">QL</span>
@@ -217,42 +245,42 @@
             <svg class="profile-chevron"><use href="#i-chevron"/></svg>
           </button>
           <div class="profile-menu" id="profileMenu" hidden>
-            <button type="button" id="menuTelegramLink">Liên kết Telegram</button>
-            <button type="button" id="menuChangePassword">Đổi mật khẩu</button>
-            <button type="button" id="menuLogout">Đăng xuất</button>
+            <button type="button" id="menuTelegramLink" data-i18n="menu.telegram">Liên kết Telegram</button>
+            <button type="button" id="menuChangePassword" data-i18n="menu.password">Đổi mật khẩu</button>
+            <button type="button" id="menuLogout" data-i18n="menu.logout">Đăng xuất</button>
           </div>
         </div>
       </header>
 
-      <span id="pageTitle" hidden>Tổng quan</span>
-      <main class="content-area" id="contentArea"><div class="overview-loading">Đang tải dữ liệu điều hành...</div></main>
+      <span id="pageTitle" hidden data-i18n="overview.title">Tổng quan</span>
+      <main class="content-area" id="contentArea"><div class="overview-loading" data-i18n="empty.loading">Đang tải dữ liệu điều hành...</div></main>
     </div>
   </div>
 
   <div class="inbox-backdrop" id="inboxBackdrop" hidden data-escape-overlay="true"></div>
   <div class="notification-panel" id="notificationPanel" hidden role="dialog" aria-labelledby="notificationHeading">
     <header>
-      <div><p>THÔNG BÁO CỦA BẠN</p><h2 id="notificationHeading">Việc cần xử lý</h2></div>
-      <button class="warehouse-icon-button" id="notificationClose" type="button" aria-label="Đóng">×</button>
+      <div><p data-i18n="notify.kicker">THÔNG BÁO CỦA BẠN</p><h2 id="notificationHeading" data-i18n="notify.heading">Việc cần xử lý</h2></div>
+      <button class="warehouse-icon-button" id="notificationClose" type="button" data-i18n-aria="notify.close" aria-label="Đóng">×</button>
     </header>
     <p class="notification-hint" id="notificationHint"></p>
     <ul id="notificationList"></ul>
   </div>
   <div class="toast" id="appToast" role="status" aria-live="polite"></div>
   <button type="button" class="inbox-toast" id="inboxToast" hidden>
-    <span class="inbox-toast-kicker">VIỆC MỚI</span>
+    <span class="inbox-toast-kicker" data-i18n="inbox.new">VIỆC MỚI</span>
     <strong id="inboxToastTitle"></strong>
     <span id="inboxToastDetail"></span>
   </button>
 
   <div class="modal-backdrop" id="pwdModal" style="display:none">
     <div class="modal">
-      <div class="modal-header"><div><p class="module-kicker">BẢO MẬT TÀI KHOẢN</p><h3>Đổi mật khẩu</h3></div><button type="button" class="close-btn" id="closePwdModal">×</button></div>
+      <div class="modal-header"><div><p class="module-kicker" data-i18n="pwd.kicker">BẢO MẬT TÀI KHOẢN</p><h3 data-i18n="pwd.title">Đổi mật khẩu</h3></div><button type="button" class="close-btn" id="closePwdModal">×</button></div>
       <div class="modal-body"><form id="pwdForm" novalidate>
-        <div class="form-group"><label>Mật khẩu hiện tại</label><input type="password" id="oldPwd" required><small class="field-error" id="oldPwdError"></small></div>
-        <div class="form-group"><label>Mật khẩu mới</label><input type="password" id="newPwd" required><small class="field-help">Tối thiểu 3 ký tự, khớp mật khẩu khởi tạo hiện có.</small><small class="field-error" id="newPwdError"></small></div>
-        <div class="form-group"><label>Xác nhận mật khẩu mới</label><input type="password" id="confirmPwd" required><small class="field-error" id="confirmPwdError"></small></div>
-        <div class="modal-footer"><button type="button" class="btn btn-secondary" id="cancelPwdModal">Hủy</button><button type="submit" class="btn btn-primary">Cập nhật mật khẩu</button></div>
+        <div class="form-group"><label data-i18n="pwd.old">Mật khẩu hiện tại</label><input type="password" id="oldPwd" required><small class="field-error" id="oldPwdError"></small></div>
+        <div class="form-group"><label data-i18n="pwd.new">Mật khẩu mới</label><input type="password" id="newPwd" required><small class="field-help" data-i18n="pwd.help">Tối thiểu 3 ký tự, khớp mật khẩu khởi tạo hiện có.</small><small class="field-error" id="newPwdError"></small></div>
+        <div class="form-group"><label data-i18n="pwd.confirm">Xác nhận mật khẩu mới</label><input type="password" id="confirmPwd" required><small class="field-error" id="confirmPwdError"></small></div>
+        <div class="modal-footer"><button type="button" class="btn btn-secondary" id="cancelPwdModal" data-i18n="common.cancel">Hủy</button><button type="submit" class="btn btn-primary" data-i18n="pwd.submit">Cập nhật mật khẩu</button></div>
       </form></div>
     </div>
   </div>
@@ -260,25 +288,25 @@
   <div class="modal-backdrop" id="telegramModal" style="display:none">
     <div class="modal">
       <div class="modal-header">
-        <div><p class="module-kicker">KÊNH ĐIỆN THOẠI</p><h3>Liên kết Telegram</h3></div>
+        <div><p class="module-kicker" data-i18n="tg.kicker">KÊNH ĐIỆN THOẠI</p><h3 data-i18n="tg.title">Liên kết Telegram</h3></div>
         <button type="button" class="close-btn" id="closeTelegramModal">×</button>
       </div>
       <div class="modal-body">
-        <p class="telegram-lead" id="telegramLead">Tạo mã 6 số, rồi gửi trong chat riêng với bot. Bot xem số liệu theo quyền; có thể duyệt chứng từ chờ (nút inline + nhật ký). Không hoàn thành hóa đơn, không trả NCC.</p>
+        <p class="telegram-lead" id="telegramLead" data-i18n="tg.lead">Tạo mã 6 số, rồi gửi trong chat riêng với bot. Bot xem số liệu theo quyền; có thể duyệt chứng từ chờ (nút inline + nhật ký). Không hoàn thành hóa đơn, không trả NCC.</p>
         <p class="telegram-bot" id="telegramBotName">Bot: @supermarket_flybot</p>
-        <div class="telegram-status" id="telegramStatusBox">Đang tải trạng thái...</div>
+        <div class="telegram-status" id="telegramStatusBox" data-i18n="tg.loading">Đang tải trạng thái...</div>
         <div class="telegram-otp-block" id="telegramOtpBlock" hidden>
-          <label>Mã liên kết</label>
+          <label data-i18n="tg.code">Mã liên kết</label>
           <div class="telegram-otp-row">
             <strong id="telegramOtpValue">------</strong>
-            <button type="button" class="btn btn-secondary" id="telegramCopyOtp">Sao chép</button>
+            <button type="button" class="btn btn-secondary" id="telegramCopyOtp" data-i18n="tg.copy">Sao chép</button>
           </div>
           <small id="telegramOtpHint">Mã hết hạn sau 5 phút. Gửi <code>/start 000000</code> trên Telegram.</small>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" id="cancelTelegramModal">Đóng</button>
-          <button type="button" class="btn btn-outline" id="telegramUnlinkBtn" hidden>Hủy liên kết</button>
-          <button type="button" class="btn btn-primary" id="telegramCreateOtp">Tạo mã</button>
+          <button type="button" class="btn btn-secondary" id="cancelTelegramModal" data-i18n="tg.close">Đóng</button>
+          <button type="button" class="btn btn-outline" id="telegramUnlinkBtn" hidden data-i18n="tg.unlink">Hủy liên kết</button>
+          <button type="button" class="btn btn-primary" id="telegramCreateOtp" data-i18n="tg.create">Tạo mã</button>
         </div>
       </div>
     </div>
@@ -292,13 +320,13 @@
   <aside class="chat-shell" id="chatWidget" role="dialog" aria-labelledby="chatTitle">
     <header class="chat-head">
       <div>
-        <h2 id="chatTitle">Chat nội bộ</h2>
-        <p class="chat-sub" id="chatRoomLabel">Tin giữa các bộ phận</p>
+        <h2 id="chatTitle" data-i18n="chat.title">Chat nội bộ</h2>
+        <p class="chat-sub" id="chatRoomLabel" data-i18n="chat.sub">Tin giữa các bộ phận</p>
       </div>
       <button type="button" class="chat-close" id="chatClose" aria-label="Đóng">×</button>
     </header>
     <div class="chat-body">
-      <nav class="chat-rooms" id="chatRooms" aria-label="Phòng chat"></nav>
+      <nav class="chat-rooms" id="chatRooms" data-i18n-aria="chat.rooms" aria-label="Phòng chat"></nav>
       <section class="chat-main">
         <div class="chat-thread" id="chatThread"></div>
         <p class="chat-warn" id="chatWarn" hidden></p>
@@ -307,33 +335,33 @@
         <div class="chat-attach-pop" id="chatVoucherPop" hidden>
           <div class="chat-attach-row">
             <select id="chatVoucherType" data-keep-native="true">
-              <option value="">Mọi loại</option>
-              <option value="DeNghiMuaHang">Đề nghị mua</option>
-              <option value="DonMuaHang">Đơn mua hàng</option>
-              <option value="PhieuNhap">Phiếu nhập</option>
-              <option value="PhieuXuat">Phiếu xuất</option>
-              <option value="HoaDon">Hóa đơn bán</option>
-              <option value="HoaDonMuaHang">Hóa đơn mua</option>
+              <option value="" data-i18n="chat.allTypes">Mọi loại</option>
+              <option value="DeNghiMuaHang" data-i18n="chat.voucherReq">Đề nghị mua</option>
+              <option value="DonMuaHang" data-i18n="chat.voucherPo">Đơn mua hàng</option>
+              <option value="PhieuNhap" data-i18n="chat.voucherIn">Phiếu nhập</option>
+              <option value="PhieuXuat" data-i18n="chat.voucherOut">Phiếu xuất</option>
+              <option value="HoaDon" data-i18n="chat.voucherSale">Hóa đơn bán</option>
+              <option value="HoaDonMuaHang" data-i18n="chat.voucherBuy">Hóa đơn mua</option>
             </select>
-            <input id="chatVoucherQ" type="search" placeholder="Mã chứng từ…" autocomplete="off">
+            <input id="chatVoucherQ" type="search" data-i18n-placeholder="chat.voucherPh" placeholder="Mã chứng từ…" autocomplete="off">
           </div>
           <ul id="chatVoucherList"></ul>
         </div>
         <div class="chat-composer">
           <input id="chatFileInput" type="file" accept=".pdf,image/png,image/jpeg,image/webp,application/pdf" hidden>
           <div class="chat-composer-box">
-            <textarea id="chatInput" rows="1" maxlength="1000" placeholder="Nhắn trong Cửa hàng…"></textarea>
+            <textarea id="chatInput" rows="1" maxlength="1000" data-i18n-placeholder="chat.inputPh" placeholder="Nhắn trong Cửa hàng…"></textarea>
             <div class="chat-composer-actions">
-              <button type="button" class="chat-icon-btn" id="chatAttachVoucher" title="Đính chứng từ hệ thống">
+              <button type="button" class="chat-icon-btn" id="chatAttachVoucher" data-i18n-title="chat.attachVoucher" title="Đính chứng từ hệ thống">
                 <svg aria-hidden="true"><use href="#i-doc"></use></svg>
               </button>
-              <button type="button" class="chat-icon-btn" id="chatAttachFile" title="Gửi tệp hoặc bản in (PDF, ảnh)">
+              <button type="button" class="chat-icon-btn" id="chatAttachFile" data-i18n-title="chat.attachFile" title="Gửi tệp hoặc bản in (PDF, ảnh)">
                 <svg aria-hidden="true"><use href="#i-clip"></use></svg>
               </button>
-              <button type="button" class="chat-send" id="chatSend">Gửi</button>
+              <button type="button" class="chat-send" id="chatSend" data-i18n="chat.send">Gửi</button>
             </div>
           </div>
-          <p class="chat-hint">Enter gửi · Shift+Enter xuống dòng</p>
+          <p class="chat-hint" data-i18n="chat.hint">Enter gửi · Shift+Enter xuống dòng</p>
         </div>
       </section>
     </div>
@@ -345,7 +373,7 @@
     </div>
   </div>
   <button type="button" class="chat-toast" id="chatToast" hidden>
-    <span class="chat-toast-kicker">Tin mới</span>
+    <span class="chat-toast-kicker" data-i18n="chat.new">Tin mới</span>
     <strong id="chatToastTitle"></strong>
     <span id="chatToastDetail"></span>
   </button>
@@ -357,17 +385,17 @@
   <aside class="assistant-widget" id="assistantDrawer" role="dialog" aria-labelledby="assistantTitle">
     <header class="assistant-head">
       <div>
-        <h2 id="assistantTitle">Trợ lý Fly</h2>
-        <p>Hỏi số liệu cửa hàng</p>
+        <h2 id="assistantTitle" data-i18n="assist.title">Trợ lý Fly</h2>
+        <p data-i18n="assist.sub">Hỏi số liệu cửa hàng</p>
       </div>
       <button type="button" class="assistant-close" id="assistantClose" aria-label="Đóng">×</button>
     </header>
     <nav class="assistant-tabs" id="assistantTabs" role="tablist">
-      <button type="button" class="is-active" data-tab="chat" role="tab" aria-selected="true">Chat</button>
-      <button type="button" data-tab="today" role="tab" aria-selected="false">Hôm nay</button>
-      <button type="button" data-tab="alerts" role="tab" aria-selected="false">Cảnh báo</button>
-      <button type="button" data-tab="insights" role="tab" aria-selected="false">Phân tích</button>
-      <button type="button" data-tab="scenario" role="tab" aria-selected="false">Kịch bản</button>
+      <button type="button" class="is-active" data-tab="chat" role="tab" aria-selected="true" data-i18n="assist.chat">Chat</button>
+      <button type="button" data-tab="today" role="tab" aria-selected="false" data-i18n="assist.today">Hôm nay</button>
+      <button type="button" data-tab="alerts" role="tab" aria-selected="false" data-i18n="assist.alerts">Cảnh báo</button>
+      <button type="button" data-tab="insights" role="tab" aria-selected="false" data-i18n="assist.insights">Phân tích</button>
+      <button type="button" data-tab="scenario" role="tab" aria-selected="false" data-i18n="assist.scenario">Kịch bản</button>
     </nav>
     <div class="assistant-panes">
       <section class="assistant-pane is-active" data-pane="chat">
@@ -375,15 +403,15 @@
         <p class="assistant-error" id="assistantError" hidden></p>
         <div class="assistant-chips" id="assistantChips"></div>
         <div class="assistant-month-bar">
-          <label for="assistantMonth">Tháng</label>
-          <select id="assistantMonth" aria-label="Chọn tháng"></select>
+          <label for="assistantMonth" data-i18n="assist.month">Tháng</label>
+          <select id="assistantMonth" data-i18n-aria="assist.monthAria" aria-label="Chọn tháng"></select>
         </div>
         <div class="assistant-composer">
           <div class="assistant-composer-box">
-            <textarea id="assistantInput" rows="1" placeholder="Hỏi số liệu cửa hàng…" maxlength="500"></textarea>
-            <button type="button" class="assistant-send" id="assistantSend">Gửi</button>
+            <textarea id="assistantInput" rows="1" data-i18n-placeholder="assist.ph" placeholder="Hỏi số liệu cửa hàng…" maxlength="500"></textarea>
+            <button type="button" class="assistant-send" id="assistantSend" data-i18n="chat.send">Gửi</button>
           </div>
-          <p class="assistant-hint">Enter gửi · Shift+Enter xuống dòng · 3–6 lượt gần nhất được gửi kèm để hiểu “trong số đó…”.</p>
+          <p class="assistant-hint" data-i18n="assist.hint">Enter gửi · Shift+Enter xuống dòng · 3–6 lượt gần nhất được gửi kèm để hiểu “trong số đó…”.</p>
         </div>
       </section>
       <section class="assistant-pane" data-pane="today" id="assistantToday"></section>
@@ -393,23 +421,29 @@
     </div>
   </aside>
 
+  <script src="../../i18n/vi.js?v=i18n-assist-10"></script>
+  <script src="../../i18n/en.js?v=i18n-assist-10"></script>
+  <script src="../../i18n/zh.js?v=i18n-assist-10"></script>
+  <script src="../../i18n/ops.js?v=i18n-approve-1"></script>
+  <script src="../../i18n/i18n.js?v=i18n-assist-10"></script>
+  <script src="../../i18n/appearance.js"></script>
   <script src="../shared/escape-key.js"></script>
   <script src="../shared/api-config.js"></script>
   <script src="../shared/field-validators.js?v=close-confirm-1"></script>
   <script src="../shared/employee-profile.js?v=emp-syll-1"></script>
   <script src="../shared/locale-ui.js?v=date-vn-1"></script>
-  <script src="../shared/search-tools.js?v=search-2"></script>
+  <script src="../shared/search-tools.js?v=i18n-full-1"></script>
   <script src="../shared/product-images.js?v=products-1"></script>
   <script src="../shared/report-charts.js?v=charts-9-widebars"></script>
   <script src="../shared/report-layout.js?v=wh-report-3"></script>
-  <script src="../shared/print-documents.js?v=date-vn-1"></script>
+  <script src="../shared/print-documents.js?v=i18n-full-1"></script>
   <script src="../shared/warehouse-export.js?v=wh-report-5"></script>
   <script src="../shared/warehouse-xlsx.js?v=wh-report-5"></script>
   <script src="../shared/warehouse-report-ui.js?v=wh-report-5"></script>
   <script src="../admin/admin-page-templates.js?v=tax-ui-1"></script>
   <script src="../warehouse/warehouse-pages.js?v=scrap-qty-1"></script>
   <script src="../warehouse/supplier-pages.js?v=search-2"></script>
-  <script src="../warehouse/purchase-order-pages.js?v=scrap-qty-1"></script>
+  <script src="../warehouse/purchase-order-pages.js?v=i18n-approve-1"></script>
   <script src="../warehouse/receipt-pages.js?v=search-2"></script>
   <script src="../warehouse/stock-issue-pages.js?v=scrap-qty-1"></script>
   <script src="../accounting/store-pnl.js?v=store-pnl-2"></script>
@@ -417,13 +451,14 @@
   <script src="../accounting/ledger-print.js?v=ledger-print-1"></script>
   <script src="../accounting/ledger-pages.js?v=hb-recon-20"></script>
   <script src="../accounting/reconciliation-pages.js?v=recon-3"></script>
-  <script src="../admin/loyalty-pages.js?v=rfm-ui-3"></script>
+  <script src="../admin/loyalty-pages.js?v=loy-apply-1"></script>
   <script src="../workforce/workforce-pages.js?v=close-confirm-1"></script>
-  <script src="../cashier/cashier-pages.js?v=date-vn-2"></script>
+  <script src="../cashier/cashier-pages.js?v=loy-apply-1"></script>
   <script src="../shared/role-reports.js?v=wh-report-5"></script>
   <script src="../shared/warehouse-keeper-reports.js?v=wh-report-5"></script>
-  <script src="dashboard.js?v=handbook-2"></script>
+  <script src="../admin/appearance-pages.js?v=theme-i18n-1"></script>
+  <script src="dashboard.js?v=i18n-approve-1"></script>
   <script src="chat-panel.js?v=chat-p5-6"></script>
-  <script src="assistant-panel.js?v=assist-ui-9"></script>
+  <script src="assistant-panel.js?v=assist-ui-10"></script>
 </body>
 </html>

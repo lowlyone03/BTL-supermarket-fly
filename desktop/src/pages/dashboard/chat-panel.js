@@ -10,14 +10,15 @@
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
 
-  const ROOM_META = {
-    'cua-hang': { title: 'Cửa hàng' },
-    'kho': { title: 'Kho' },
-    'mua-hang': { title: 'Mua hàng' },
-    'ke-toan': { title: 'Kế toán' },
-    'thu-ngan': { title: 'Thu ngân' },
-    'quan-ly': { title: 'Quản lý' }
-  };
+  const t = (key, vars) => window.FLY_I18N?.t(key, vars) || key;
+  const ROOM_META = () => ({
+    'cua-hang': { title: t('chat.room.store') },
+    'kho': { title: t('chat.room.wh') },
+    'mua-hang': { title: t('chat.room.buy') },
+    'ke-toan': { title: t('chat.room.acct') },
+    'thu-ngan': { title: t('chat.room.cash') },
+    'quan-ly': { title: t('chat.room.mgr') }
+  });
   const ROOM_ORDER = ['cua-hang', 'kho', 'mua-hang', 'ke-toan', 'thu-ngan', 'quan-ly'];
   const VOUCHER_LABEL = {
     HoaDon: 'Hóa đơn bán hàng',
@@ -28,8 +29,8 @@
     PhieuXuat: 'Phiếu xuất kho'
   };
 
-  const roomMeta = (room) => ROOM_META[room?.khoa] || {
-    title: String(room?.tenPhong || 'Phòng').replace(/^#/, '')
+  const roomMeta = (room) => ROOM_META()[room?.khoa] || {
+    title: String(room?.tenPhong || t('chat.rooms')).replace(/^#/, '')
   };
 
   const inferVoucherLoai = (loai, ma) => {
@@ -59,7 +60,7 @@
     const meta = roomMeta(room);
     if (input) {
       input.disabled = !enabled;
-      input.placeholder = enabled ? `Nhắn trong ${meta.title}` : 'Chọn phòng bên trái để nhắn';
+      input.placeholder = enabled ? t('chat.inputRoom', { room: meta.title }) : t('chat.pickRoom');
     }
     [send, attachFile, attachVoucher].forEach((el) => {
       if (el) el.disabled = !enabled;

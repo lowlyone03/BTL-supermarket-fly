@@ -1,11 +1,13 @@
 (() => {
   const previous = window.FLY_ROLE_PAGES;
+  const t = (key, vars) => window.FLY_I18N?.t(key, vars) || '';
+  const phrase = (text) => window.FLY_I18N?.phrase?.(text) || text;
   const templates = {
-    'cashier-shifts': '<section class="warehouse-page cashier-page"><div class="overview-loading">Đang tải ca bán hàng...</div></section>',
-    'cashier-pos': '<section class="warehouse-page cashier-page cashier-pos-page"><div class="overview-loading">Đang mở quầy bán hàng...</div></section>',
-    'cashier-customers': '<section class="warehouse-page cashier-page"><div class="overview-loading">Đang tải khách hàng...</div></section>',
-    'cashier-invoices': '<section class="warehouse-page cashier-page"><div class="overview-loading">Đang tải hóa đơn...</div></section>',
-    'cashier-returns': '<section class="warehouse-page cashier-page"><div class="overview-loading">Đang tải đổi trả...</div></section>'
+    'cashier-shifts': `<section class="warehouse-page cashier-page"><div class="overview-loading">${t('pos.loadingShift')}</div></section>`,
+    'cashier-pos': `<section class="warehouse-page cashier-page cashier-pos-page"><div class="overview-loading">${t('pos.loadingPos')}</div></section>`,
+    'cashier-customers': `<section class="warehouse-page cashier-page"><div class="overview-loading">${t('pos.loadingCust')}</div></section>`,
+    'cashier-invoices': `<section class="warehouse-page cashier-page"><div class="overview-loading">${t('pos.loadingInv')}</div></section>`,
+    'cashier-returns': `<section class="warehouse-page cashier-page"><div class="overview-loading">${t('pos.loadingRet')}</div></section>`
   };
   const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
   const money = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -43,7 +45,7 @@
     if (timePart === '00:00' && /^\d{4}-\d{2}-\d{2}/.test(text)) return datePart;
     return `${datePart} ${timePart}`;
   };
-  const heading = (kicker, title, subtitle, action = '') => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(kicker)}</p><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div>${action}</header>`;
+  const heading = (kicker, title, subtitle, action = '') => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(phrase(kicker))}</p><h1>${esc(phrase(title))}</h1><p>${esc(phrase(subtitle))}</p></div>${action}</header>`;
   const avatar = text => window.FLY_UI?.avatar(text) || '';
   const productPhoto = (item, className = '') => window.FLY_PRODUCT_IMAGES?.markup(item, { className }) || avatar(item?.TenSP || item?.MaSP || 'SP');
   const person = (name, sub = '') => window.FLY_UI?.person(name, sub) || `<strong>${esc(name)}</strong>${sub ? `<small>${esc(sub)}</small>` : ''}`;
@@ -419,6 +421,7 @@
 
   const initPos = async (root, context) => {
     let catalog; let currentShift = null; let customer = null; let cart = new Map(); let maKM = ''; let diemSuDung = 0; let quote = null; let draftId = null; let searchQuery = ''; let categoryFilter = '';
+    let loaiCS = null; let loyaltyOffer = null;
     try {
       const [catalogData, shiftData] = await Promise.all([api(context, '/cashier/pos/catalog'), api(context, '/cashier/shifts')]);
       const duty = shiftData.duty || {};
@@ -435,14 +438,51 @@
     const linesPayload = () => [...cart.values()].map(item => ({ MaSP: item.MaSP, SoLuong: Number(item.SoLuong) }));
     const cartTotal = () => [...cart.values()].reduce((sum, line) => sum + Number(line.GiaBan) * Number(line.SoLuong), 0);
     const payableAmount = () => Math.round(Number(quote?.TongThanhToan ?? cartTotal()));
+    const quoteBody = () => ({
+      MaKH: customer?.MaKH || null,
+      MaKM: maKM || null,
+      DiemSuDung: Number(diemSuDung) || 0,
+      lines: linesPayload(),
+      LoaiCS: loaiCS || null
+    });
+    const loadLoyaltyForCustomer = async (cust) => {
+      loyaltyOffer = null;
+      loaiCS = null;
+      if (!cust?.MaKH) return;
+      try {
+        loyaltyOffer = await api(context, `/cashier/customers/${encodeURIComponent(cust.MaKH)}/loyalty`);
+      } catch {
+        loyaltyOffer = null;
+      }
+    };
     const refreshQuote = async (showError = false) => {
       if (!cart.size) { quote = null; return; }
       try {
-        quote = await api(context, '/cashier/invoices/quote', { method: 'POST', body: JSON.stringify({ MaKH: customer?.MaKH || null, MaKM: maKM || null, DiemSuDung: Number(diemSuDung) || 0, lines: linesPayload() }) });
+        quote = await api(context, '/cashier/invoices/quote', { method: 'POST', body: JSON.stringify(quoteBody()) });
       } catch (error) {
         quote = null;
+        loaiCS = null;
         if (showError) context.showToast(error.message, 'error');
       }
+    };
+    const loyaltyPanel = () => {
+      if (!customer || !loyaltyOffer) return '';
+      const offer = loyaltyOffer.GoiY || {};
+      if (!loyaltyOffer.canApply) {
+        return offer.shortLabel
+          ? `<div class="cashier-loyalty-banner is-off"><span>${esc(offer.shortLabel)}</span></div>`
+          : '';
+      }
+      const applied = Boolean(loaiCS);
+      const hint = applied
+        ? (loaiCS === 'mới' ? 'Sẽ nhân điểm khi hoàn thành hóa đơn. Chưa trừ tiền.' : 'Đã trừ trên tạm tính. Không cộng thêm phần trăm KM.')
+        : 'Chưa trừ tiền. Bấm Áp dụng theo chính sách.';
+      return `<div class="cashier-loyalty-banner${applied ? ' is-on' : ''}">
+        <div><strong>${esc(loyaltyOffer.banner || offer.shortLabel)}</strong><small>${esc(hint)}</small></div>
+        ${applied
+          ? '<button type="button" class="warehouse-secondary" id="clearLoyalty">Bỏ áp dụng</button>'
+          : '<button type="button" class="warehouse-primary" id="applyLoyalty">Áp dụng theo chính sách</button>'}
+      </div>`;
     };
     const pickCustomer = () => {
       const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
@@ -472,14 +512,18 @@
         const hit = event.target.closest('[data-id]');
         if (!hit) return;
         const result = await api(context, `/cashier/customers?search=${encodeURIComponent(hit.dataset.id)}`);
-        customer = result.items[0] || null; diemSuDung = 0; close(); await refreshQuote(); render();
+        customer = result.items[0] || null; diemSuDung = 0; close();
+        await loadLoyaltyForCustomer(customer); await refreshQuote(); render();
       });
-      overlay.querySelector('.walk-in').addEventListener('click', async () => { customer = null; diemSuDung = 0; close(); await refreshQuote(); render(); });
+      overlay.querySelector('.walk-in').addEventListener('click', async () => {
+        customer = null; diemSuDung = 0; loyaltyOffer = null; loaiCS = null; close(); await refreshQuote(); render();
+      });
       overlay.querySelector('.create-member').addEventListener('click', () => {
         close();
         customerEditor(context, null, async created => {
           const refreshed = await api(context, `/cashier/customers?search=${encodeURIComponent(created.MaKH)}`);
-          customer = refreshed.items[0] || null; diemSuDung = 0; await refreshQuote(); render();
+          customer = refreshed.items[0] || null; diemSuDung = 0;
+          await loadLoyaltyForCustomer(customer); await refreshQuote(); render();
         });
       });
     };
@@ -500,11 +544,12 @@
           <article class="warehouse-table-card cashier-cart-panel">
             <div class="warehouse-panel-title"><div><p>${draftId ? `NHÁP ${esc(draftId)}` : 'HÓA ĐƠN NHÁP'}</p><h2>Giỏ hàng</h2></div><span class="status-pill draft">${cart.size} mặt hàng</span></div>
             <div class="cashier-customer-row"><div class="cashier-customer-who">${avatar(customer?.TenKH || 'K')}<div><strong>${customer ? esc(customer.TenKH) : 'Khách vãng lai'}</strong><small>${customer ? `${esc(customer.SDT || '')} · ${esc(customer.HangThanhVien)} · ${customer.DiemTichLuy} điểm` : 'Không tích điểm'}</small></div></div><button class="warehouse-secondary" id="selectCustomer">Chọn khách</button></div>
+            ${loyaltyPanel()}
             <div class="cashier-pos-extras"><label>Khuyến mãi<select id="promoSelect"><option value="">Không áp dụng</option>${(catalog.promotions || []).map(item => `<option value="${esc(item.MaKM)}" ${maKM === item.MaKM ? 'selected' : ''}>${esc(item.TenKM)}</option>`).join('')}</select></label>${customer ? `<label>Dùng điểm<input id="pointInput" type="number" min="0" max="${customer.DiemTichLuy}" value="${diemSuDung}"></label>` : ''}</div>
             ${(catalog.promotions || []).length ? '' : '<small class="cashier-quote-break">Chưa có KM hiệu lực. Quản lý tạo/ngừng chương trình ở menu Khuyến mãi.</small>'}
             <div class="cashier-cart-lines">${cart.size ? [...cart.values()].map(line => `<div class="cashier-cart-line">${productPhoto(line, 'cart-product-photo')}<div><strong>${esc(line.TenSP)}</strong><small>${money(line.GiaBan)} × ${line.SoLuong}</small></div>${window.FLY_QTY.stepperMarkup({ id: line.MaSP, value: line.SoLuong, min: 1, inputClass: 'cashier-cart-qty-input', wrapClass: 'cashier-cart-qty', ariaLabel: `Số lượng ${line.TenSP}` })}<strong>${money(Number(line.GiaBan) * line.SoLuong)}</strong></div>`).join('') : '<div class="warehouse-empty">Quét hoặc chọn sản phẩm để bắt đầu.</div>'}</div>
             <div class="cashier-cart-total"><span>PHẢI THANH TOÁN</span><strong>${money(payable)}</strong></div>
-            ${quote ? `<small class="cashier-quote-break">Tiền hàng ${money(quote.TongTienHang)} · Giảm ${money(quote.TienGiamGia)} · Điểm ${money(quote.TienDiemQuyDoi)}</small>` : ''}
+            ${quote ? `<small class="cashier-quote-break">Tiền hàng ${money(quote.TongTienHang)} · Giảm ${money(quote.TienGiamGia)} · Điểm ${money(quote.TienDiemQuyDoi)}${quote.loyalty?.loai ? ` · Chính sách ${esc(quote.loyalty.label || quote.loyalty.loai)}` : ''}</small>` : ''}
             <div class="cashier-pos-actions"><button type="button" class="warehouse-secondary" id="saveDraft" ${cart.size ? '' : 'disabled'}>Lưu nháp</button>${draftId ? '<button type="button" class="warehouse-danger" id="cancelDraft">Hủy nháp</button>' : ''}<button type="button" class="warehouse-primary cashier-checkout" id="checkout" ${cart.size ? '' : 'disabled'}><svg><use href="#i-cash"/></svg>Thanh toán</button></div>
           </article>
         </section>`;
@@ -587,6 +632,18 @@
       };
       root.querySelectorAll('.cashier-cart-qty').forEach(wrap => window.FLY_QTY.bind(wrap, { commit: applyCartQuantity }));
       root.querySelector('#selectCustomer').addEventListener('click', pickCustomer);
+      root.querySelector('#applyLoyalty')?.addEventListener('click', async () => {
+        if (!loyaltyOffer?.canApply || !loyaltyOffer.GoiY?.category) return;
+        loaiCS = loyaltyOffer.GoiY.category;
+        await refreshQuote(true);
+        render();
+        context.showToast('Đã áp theo chính sách cửa hàng.', 'success');
+      });
+      root.querySelector('#clearLoyalty')?.addEventListener('click', async () => {
+        loaiCS = null;
+        await refreshQuote();
+        render();
+      });
       root.querySelector('#promoSelect')?.addEventListener('change', async event => { maKM = event.target.value; await refreshQuote(); render(); });
       root.querySelector('#pointInput')?.addEventListener('change', async event => {
         diemSuDung = Math.max(0, Number(event.target.value) || 0);
@@ -597,7 +654,7 @@
         if (overStock) return context.showToast(window.FLY_QTY.stockExceededMessage(overStock), 'error');
         try {
           if (draftId) return context.showToast(`Hóa đơn nháp ${draftId} đã được lưu.`, 'success');
-          const invoice = await api(context, '/cashier/invoices', { method: 'POST', body: JSON.stringify({ MaKH: customer?.MaKH || null, MaKM: maKM || null, DiemSuDung: Number(diemSuDung) || 0, lines: linesPayload() }) });
+          const invoice = await api(context, '/cashier/invoices', { method: 'POST', body: JSON.stringify(quoteBody()) });
           draftId = invoice.MaHD; context.showToast(invoice.message, 'success'); render();
         } catch (error) { context.showToast(error.message, 'error'); }
       });
@@ -655,13 +712,13 @@
       const finishSale = async (detail) => {
         clearInterval(pollTimer);
         printInvoice(detail);
-        cart = new Map(); customer = null; maKM = ''; diemSuDung = 0; quote = null; draftId = null;
+        cart = new Map(); customer = null; maKM = ''; diemSuDung = 0; quote = null; draftId = null; loaiCS = null; loyaltyOffer = null;
         overlay.remove(); render();
         context.showToast(`Đã hoàn thành hóa đơn ${detail.invoice.MaHD}.`, 'success');
       };
       const ensureInvoice = async () => {
         if (invoiceId) return invoiceId;
-        const invoice = await api(context, '/cashier/invoices', { method: 'POST', body: JSON.stringify({ MaKH: customer?.MaKH || null, MaKM: maKM || null, DiemSuDung: Number(diemSuDung) || 0, lines: linesPayload() }) });
+        const invoice = await api(context, '/cashier/invoices', { method: 'POST', body: JSON.stringify(quoteBody()) });
         invoiceId = invoice.MaHD;
         draftId = invoiceId;
         return invoiceId;
@@ -892,6 +949,7 @@
         if (detail.invoice.MaKH) {
           const found = await api(context, `/cashier/customers?search=${encodeURIComponent(detail.invoice.MaKH)}`);
           customer = (found.items || []).find(item => item.MaKH === detail.invoice.MaKH) || null;
+          await loadLoyaltyForCustomer(customer);
         }
         for (const line of detail.lines || []) {
           const product = catalog.products.find(item => item.MaSP === line.MaSP);

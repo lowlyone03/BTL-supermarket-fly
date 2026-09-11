@@ -1,4 +1,4 @@
-﻿# Tunnel truoc -> ghi PAYMENT_* vao server/.env -> moi npm start.
+﻿# Tunnel truoc -> ghi PAYMENT_* + TELEGRAM webhook (tunnel hien tai) vao server/.env -> moi npm start.
 # Node chi nap .env luc process start (loadEnv), khong doc lai moi request.
 # Restart: tu tat node Fly dang LISTEN 3000 (khong cho 2 phut, khong dung cloudflared).
 $ErrorActionPreference = 'Stop'
@@ -343,10 +343,13 @@ Set-Content -LiteralPath $urlStamp -Value $origin -Encoding ascii
 
 $ipnUrl = $origin + '/api/payments/gateway/ipn'
 $returnUrl = $origin + '/api/payments/gateway/return'
+$telegramWebhook = $origin + '/api/telegram/webhook'
 $envPath = Join-Path $RepoRoot 'server\.env'
 
 Update-DotEnvKey -Path $envPath -Key 'PAYMENT_IPN_URL' -Value $ipnUrl
 Update-DotEnvKey -Path $envPath -Key 'PAYMENT_RETURN_URL' -Value $returnUrl
+Update-DotEnvKey -Path $envPath -Key 'TELEGRAM_WEBHOOK_URL' -Value $telegramWebhook
+Update-DotEnvKey -Path $envPath -Key 'TELEGRAM_PUBLIC_BASE_URL' -Value $origin
 
 Write-Host ''
 Write-Host '=============================================='
@@ -356,6 +359,8 @@ Write-Host ''
 Write-Host 'Da ghi server/.env (khong query string):'
 Write-Host ('  PAYMENT_IPN_URL=' + $ipnUrl)
 Write-Host ('  PAYMENT_RETURN_URL=' + $returnUrl)
+Write-Host ('  TELEGRAM_WEBHOOK_URL=' + $telegramWebhook)
+Write-Host ('  TELEGRAM_PUBLIC_BASE_URL=' + $origin)
 Write-Host '=============================================='
 Write-Host ''
 

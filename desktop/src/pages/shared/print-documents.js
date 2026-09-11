@@ -72,11 +72,11 @@
     const orientation = config.orientation === 'landscape' ? 'landscape' : 'portrait';
     const columns = config.columns || [];
     const sourceRows = config.rows || [];
-    const fields = (config.fields || []).map(item => ({ label: item.label, text: formatted(item) }));
+    const fields = (config.fields || []).map(item => ({ label: window.FLY_I18N?.phrase?.(item.label) || item.label, text: formatted(item) }));
     const rows = sourceRows.map((row, index) => `<tr><td class="center row-index">${index + 1}</td>${columns.map(column => `<td class="${column.align || ''}">${esc(valueOf(row, column))}</td>`).join('')}</tr>`).join('');
     const totalsConfig = config.totals || [];
     const summaryItems = (config.summary || totalsConfig).slice(0, 4);
-    const signatures = config.signatures || ['Người lập', 'Bộ phận liên quan'];
+    const signatures = (config.signatures || ['Người lập', 'Bộ phận liên quan']).map(item => window.FLY_I18N?.phrase?.(item) || item);
     return { isReport, orientation, columns, sourceRows, fields, rows, totalsConfig, summaryItems, signatures };
   };
 
@@ -196,12 +196,24 @@
     </main>`;
   };
 
+  const localizePrint = config => ({
+    ...config,
+    title: window.FLY_I18N?.phrase?.(config.title) || config.title,
+    status: config.status ? (window.FLY_I18N?.status?.(config.status) || config.status) : config.status,
+    columns: (config.columns || []).map(column => ({
+      ...column,
+      label: window.FLY_I18N?.phrase?.(column.label || column.header) || column.label || column.header
+    }))
+  });
+
   const build = config => {
-    const parts = prepare(config);
-    const official = isOfficial(config);
+    const localized = localizePrint(config);
+    const parts = prepare(localized);
+    const official = isOfficial(localized);
     const css = fillCss(official ? officialCss : systemCss, parts.orientation);
-    const body = official ? officialMarkup(config, parts) : systemMarkup(config, parts);
-    return `<!doctype html><html lang="vi"><head><meta charset="UTF-8"><title>${esc(config.title)} ${esc(config.number || '')}</title><style>${css}</style></head><body>${body}</body></html>`;
+    const body = official ? officialMarkup(localized, parts) : systemMarkup(localized, parts);
+    const lang = window.FLY_I18N?.getLang?.() === 'zh' ? 'zh-CN' : (window.FLY_I18N?.getLang?.() || 'vi');
+    return `<!doctype html><html lang="${lang}"><head><meta charset="UTF-8"><title>${esc(localized.title)} ${esc(localized.number || '')}</title><style>${css}</style></head><body>${body}</body></html>`;
   };
 
   const pdfFileName = config => {
@@ -320,7 +332,7 @@
         return;
       }
     }
-    openPreview(resolved);
+    openPreview(localizePrint(resolved));
   };
 
   window.FLY_PRINT = { show, build, money, date, pdfFileName };

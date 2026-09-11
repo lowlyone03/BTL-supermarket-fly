@@ -98,7 +98,7 @@
 .warehouse-stock-number { text-align: right; color: #9a5322; }
 .warehouse-stock-number b { display: block; font-size: 18px; }
 
-.warehouse-table-card { overflow: hidden; border: 1px solid #d7e0da; border-radius: 20px; background: rgba(255,255,255,.97); box-shadow: 0 12px 30px rgba(35,63,48,.05); }
+.warehouse-table-card { overflow: hidden; border: 1px solid var(--line, #d7e0da); border-radius: 20px; background: var(--surface, #fff); box-shadow: 0 12px 30px rgba(35,63,48,.05); }
 .warehouse-toolbar { padding: 16px 18px; border-bottom: 1px solid #e1e7e3; }
 .warehouse-search { position: relative; width: min(560px, 45vw); }
 .warehouse-search svg { position: absolute; left: 15px; top: 50%; width: 17px; height: 17px; transform: translateY(-50%); color: #6e8277; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; cursor: pointer; }
@@ -125,9 +125,9 @@
 .warehouse-check input { accent-color: #2c8565; width: 17px; height: 17px; }
 .warehouse-table-wrap { overflow: auto; }
 .warehouse-table { width: 100%; min-width: 940px; border-collapse: collapse; }
-.warehouse-table th { padding: 13px 17px; background: #f7f9f7; color: #6e7f76; text-align: left; font-size: 10px; letter-spacing: .1em; }
-.warehouse-table td { padding: 15px 17px; border-top: 1px solid #e4e9e6; color: #33483d; font-size: 13px; vertical-align: middle; }
-.warehouse-table td strong { display: block; color: #20342a; margin-bottom: 3px; }
+.warehouse-table th { padding: 13px 17px; background: var(--table-head, #f7f9f7); color: var(--muted, #6e7f76); text-align: left; font-size: 10px; letter-spacing: .1em; }
+.warehouse-table td { padding: 15px 17px; border-top: 1px solid var(--line, #e4e9e6); color: var(--text, #33483d); font-size: 13px; vertical-align: middle; }
+.warehouse-table td strong { display: block; color: var(--text, #20342a); margin-bottom: 3px; }
 .warehouse-table td small { color: #8a968f; }
 .warehouse-table .num { font-variant-numeric: tabular-nums; font-weight: 750; }
 .warehouse-table input[type="checkbox"] { width: 18px; height: 18px; accent-color: #2c8565; }
@@ -532,9 +532,18 @@
 .manager-debt-amounts span { color:#75857d; font-size:9px; font-weight:850; letter-spacing:.08em; }
 .manager-debt-amounts strong { margin-top:7px; color:#21372c; font-size:16px; }
 .approval-center-summary { grid-template-columns:repeat(4,minmax(0,1fr)); }
-.approval-center-note { display:flex; align-items:flex-start; gap:12px; margin-bottom:16px; padding:14px 16px; border:1px solid #d3e5dc; border-radius:15px; color:#285e4b; background:#eef7f2; }
-.approval-center-note strong { white-space:nowrap; }
-.approval-center-note span { color:#65796e; line-height:1.5; }
+.approval-center-note { display:flex; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:16px; padding:14px 16px; border:1px solid #d3e5dc; border-radius:15px; color:#285e4b; background:#eef7f2; }
+.approval-center-note strong { white-space:normal; flex:0 1 auto; }
+.approval-center-note span { color:#65796e; line-height:1.5; flex:1 1 220px; }
+html[data-lang="zh"] .warehouse-stat span,
+html[data-lang="zh"] .warehouse-stats > article span,
+html[data-lang="zh"] .warehouse-panel-title p,
+html[data-lang="zh"] .warehouse-table th,
+html[data-lang="zh"] .warehouse-kicker,
+html[data-lang="zh"] .payroll-ky-card header p {
+  letter-spacing: 0;
+  word-spacing: 0;
+}
 .approval-queue { margin-top:18px; }
 .payment-voucher-modal { width:min(1040px,96vw); }
 .payment-result-modal { width:min(820px,96vw); }

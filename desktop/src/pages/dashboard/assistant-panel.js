@@ -120,7 +120,24 @@
     return Number.isFinite(parsed) ? Math.round(parsed) : 0;
   };
 
+  const tx = (key, fallback) => window.FLY_I18N?.t(key) || fallback || key;
+
   const prettyMoney = (value) => `${vndInt(value).toLocaleString('vi-VN')} đ`;
+
+  const friendlyNetError = (error) => {
+    const raw = String(error?.message || error || '');
+    if (/failed to fetch|networkerror|load failed|err_connection|abort/i.test(raw)) {
+      return tx('assist.failFetch', window.flyApi?.connectionErrorMessage?.(window.flyApi?.getOrigin?.())
+        || 'Không kết nối được máy chủ. Chạy npm start, giữ cửa sổ đó mở, rồi thử lại.');
+    }
+    return raw || tx('assist.failGeneric', 'Không tải được số liệu trợ lý.');
+  };
+
+  const confidenceLabel = (value) => ({
+    high: tx('assist.confHigh', 'Cao'),
+    medium: tx('assist.confMid', 'Trung bình'),
+    low: tx('assist.confLow', 'Thấp')
+  }[String(value || '').toLowerCase()] || '');
 
   const moneyText = (value) => {
     const raw = String(value ?? '');
@@ -363,6 +380,7 @@
           <small>${escapeHtml(cleanText(row.claim || 'Nhận định'))}</small>
           ${nums.map((num) => `<strong class="assistant-money">${escapeHtml(moneyText(num))}</strong>`).join('')}
           ${src ? `<span class="assistant-source-chip">${escapeHtml(src)}</span>` : ''}
+          ${row.confidence ? `<span class="assistant-source-chip">${escapeHtml(tx('assist.confidence', 'Tin cậy'))}: ${escapeHtml(confidenceLabel(row.confidence) || row.confidence)}</span>` : ''}
         </article>`;
       }).join('')
     }</div></div>`;
@@ -475,8 +493,8 @@
   };
 
   const bindDocsOnce = () => {
-    const root = thread();
-    if (!root || root.dataset.docBound === '1') return;
+    [thread(), document.getElementById('assistantScenario')].filter(Boolean).forEach((root) => {
+    if (root.dataset.docBound === '1') return;
     root.dataset.docBound = '1';
     root.addEventListener('click', async (event) => {
       const row = event.target.closest('.assistant-doc-card[data-doc-id]');
@@ -489,7 +507,7 @@
       }
       const button = event.target.closest('[data-doc-action]');
       if (!button) return;
-      const box = button.closest('.assistant-invoice-box');
+      const box = button.closest('.assistant-invoice-box, .assistant-scenario-result');
       if (!box) return;
       try {
         const config = await loadDocPrintConfig(box);
@@ -505,6 +523,7 @@
       } catch (error) {
         window.showToast?.(friendlyPrintError(error), 'error');
       }
+    });
     });
   };
 
@@ -594,60 +613,131 @@
   const renderInsights = (pack) => {
     const root = document.getElementById('assistantInsights');
     if (!root) return;
-    const cards = pack.insights || [];
-    root.innerHTML = `<div class="assistant-workspace">${cards.map((card) =>
-      `<div class="assistant-card"><h3>${escapeHtml(cleanText(card.title))}</h3>${renderBotText(card.body)}${evidenceHtml(card.evidence)}${pillsHtml(card.nextAction ? [card.nextAction] : [])}</div>`
-    ).join('') || '<p class="assistant-muted">Chưa có thẻ phân tích cho vai trò này.</p>'}</div>`;
+    const cards = (pack?.insights || []).slice(0, 6);
+    if (!cards.length) {
+      root.innerHTML = `<div class="assistant-workspace"><div class="assistant-card"><p class="assistant-muted">${escapeHtml(tx('assist.insightsEmpty', 'Chưa có thẻ phân tích cho vai trò này hoặc chưa đủ số liệu.'))}</p></div></div>`;
+      return;
+    }
+    root.innerHTML = `<div class="assistant-workspace">${cards.map((card) => {
+      const conf = card.evidence?.find((row) => row.confidence)?.confidence || 'medium';
+      return `<div class="assistant-card">
+        <div class="assistant-card-top"><h3>${escapeHtml(cleanText(card.title))}</h3><span class="assistant-badge ${escapeHtml(conf)}">${escapeHtml(confidenceLabel(conf) || conf)}</span></div>
+        ${renderBotText(card.body)}
+        ${evidenceHtml(card.evidence)}
+        ${pillsHtml(card.nextAction ? [card.nextAction] : [])}
+      </div>`;
+    }).join('')}</div>`;
     root.querySelectorAll('[data-nav]').forEach((button) => button.addEventListener('click', () => goScreen(button.dataset.nav)));
   };
 
   const apiGet = async (path) => {
-    const response = await fetch(`${API_BASE}${path}`, { headers: authHeaders() });
-    const data = await response.json().catch(() => ({}));
-    if (handleAuth(response, data)) return null;
-    if (!response.ok) throw new Error(data.message || 'Không tải được số liệu trợ lý.');
-    return data;
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), 25000);
+    try {
+      const response = await fetch(`${API_BASE}${path}`, { headers: authHeaders(), signal: ctrl.signal });
+      const data = await response.json().catch(() => ({}));
+      if (handleAuth(response, data)) return null;
+      if (!response.ok) throw new Error(data.message || tx('assist.failGeneric', 'Không tải được số liệu trợ lý.'));
+      return data;
+    } catch (error) {
+      if (error.name === 'AbortError') throw new Error(tx('assist.failSlow', 'Máy chủ trả lời chậm. Thử lại.'));
+      throw new Error(friendlyNetError(error));
+    } finally {
+      window.clearTimeout(timer);
+    }
   };
 
   const ensureTab = async (tab) => {
-    if (tab === 'chat') return;
+    if (tab === 'chat' || tab === 'scenario') return;
     const map = {
       today: { path: '/assistant/brief', render: renderToday, key: 'today' },
       alerts: { path: '/assistant/alerts', render: renderAlerts, key: 'alerts' },
-      insights: { path: '/assistant/insights', render: renderInsights, key: 'insights' }
+      insights: { path: `/assistant/insights?month=${encodeURIComponent(selectedMonthKey())}`, render: renderInsights, key: 'insights' }
     };
     const spec = map[tab];
     if (!spec || loaded[spec.key]) return;
     const root = document.getElementById(tab === 'today' ? 'assistantToday' : tab === 'alerts' ? 'assistantAlerts' : 'assistantInsights');
     if (root) root.innerHTML = skeleton();
     try {
-      spec.render(await apiGet(spec.path));
+      const pack = await apiGet(spec.path);
+      if (!pack) return;
+      spec.render(pack);
       loaded[spec.key] = true;
     } catch (error) {
-      if (root) root.innerHTML = `<div class="assistant-workspace"><div class="assistant-card"><p>${escapeHtml(cleanText(error.message))}</p></div></div>`;
+      if (root) {
+        root.innerHTML = `<div class="assistant-workspace"><div class="assistant-card">
+          <p>${escapeHtml(friendlyNetError(error))}</p>
+          <button type="button" class="assistant-pill" data-retry-tab="${escapeHtml(tab)}">${escapeHtml(tx('common.retry', 'Thử lại'))}</button>
+        </div></div>`;
+        root.querySelector('[data-retry-tab]')?.addEventListener('click', () => {
+          loaded[spec.key] = false;
+          ensureTab(tab);
+        });
+      }
     }
+  };
+
+  const SCENARIO_META = {
+    revenue_drop: { label: 'Doanh thu giảm X%', hint: 'Giảm khối lượng bán, GV tỷ lệ theo DT. Lương/cước giữ nguyên. Không trừ trả NCC.', max: 80, value: 10, param: 'X (%)' },
+    revenue_up: { label: 'Doanh thu tăng X%', hint: 'Tăng khối lượng bán, GV tỷ lệ theo DT. Lương/cước giữ nguyên. Không trừ trả NCC.', max: 80, value: 10, param: 'X (%)' },
+    purchase_price: { label: 'Giá mua NCC tăng X%', hint: 'GV thuần tăng theo %. DT giữ nguyên. Lãi gộp và KQKD giảm đúng phần vốn tăng.', max: 80, value: 5, param: 'X (%)' },
+    safety_stock: { label: 'Tăng tồn an toàn X%', hint: 'Định mức mới = ceil(định mức × hệ số). Chỉ hàng trong quyền tồn. Không lập PO.', max: 200, value: 20, param: 'X (%)' },
+    demand_4w: { label: 'Nhu cầu = TB 4 tuần', hint: 'Nhu cầu = bán 28 ngày / 4 tuần. Nguy cơ khi ngày tồn còn lại < 7. Không ghi đề nghị.', max: 0, value: 0, param: '' },
+    tender_mix: { label: 'Tỷ trọng TM → MoMo X%', hint: 'Chuyển X% tiền mặt phiếu thu sang MoMo/QR. Két giảm, 112 tăng cùng số. DT không đổi.', max: 80, value: 20, param: 'X (%) TM→MoMo' }
+  };
+
+  const scenarioParamsOf = (type, pct) => {
+    if (type === 'revenue_drop') return { dropPct: pct, changePct: -Math.abs(pct) };
+    if (type === 'revenue_up') return { changePct: Math.abs(pct) };
+    if (type === 'purchase_price' || type === 'safety_stock') return { bumpPct: pct };
+    if (type === 'tender_mix') return { shiftPct: pct };
+    return {};
+  };
+
+  const moneyOrText = (value) => (typeof value === 'number' ? prettyMoney(value) : moneyText(value));
+
+  const compareRowsHtml = (data) => {
+    const current = data.current || {};
+    const projected = data.projected || {};
+    const delta = data.delta || {};
+    const percent = data.percent || {};
+    const labels = {
+      doanhThuThuan: 'Doanh thu thuần', loiNhuanGop: 'Lãi gộp', kqkdLoiNhuan: 'KQKD',
+      giaVonThuan: 'Giá vốn thuần', bienLaiGop: 'Biên lãi gộp (%)',
+      tienMat: 'Két (TM)', momo: 'MoMo / QR', nganHang112: '112 ước',
+      tongCanNhap: 'SL cần nhập thêm', tongTienUoc: 'Tiền ước nhập thêm', soMatHangThieu: 'Số MH thiếu',
+      soNguyCo: 'Số MH nguy cơ'
+    };
+    const keys = Object.keys(projected);
+    if (!keys.length) return '';
+    return `<div class="assistant-compare">${keys.map((key) => `<div class="assistant-compare-row">
+        <span>${escapeHtml(labels[key] || cleanText(key))}</span>
+        <strong class="assistant-money">${escapeHtml(key === 'bienLaiGop' ? `${current[key] ?? '—'}%` : moneyOrText(current[key] ?? '—'))}</strong>
+        <strong class="assistant-money">${escapeHtml(key === 'bienLaiGop' ? `${projected[key] ?? '—'}%` : moneyOrText(projected[key]))}</strong>
+        <em>${escapeHtml(delta[key] == null ? '—' : (key === 'bienLaiGop' ? `${delta[key]}` : prettyMoney(delta[key])))}${percent[key] != null ? ` (${percent[key]}%)` : ''}</em>
+      </div>`).join('')}</div>`;
   };
 
   const renderScenarioForm = () => {
     const root = document.getElementById('assistantScenario');
-    if (!root || root.dataset.ready === '1') return;
+    if (!root) return;
+    if (root.dataset.ready === '1') return;
     root.dataset.ready = '1';
     root.innerHTML = `<div class="assistant-workspace">
       <div class="assistant-card">
-        <h3>What-if có kiểm soát</h3>
-        <p class="assistant-muted">Engine tính. AI không bịa công thức. Không lập PO, không ghi sổ.</p>
+        <h3>${escapeHtml(tx('assist.scenarioTitle', 'Kịch bản có kiểm soát'))}</h3>
+        <p class="assistant-muted">${escapeHtml(tx('assist.scenarioLead', 'Engine tính. AI không bịa công thức. Không lập PO, không ghi sổ. Tháng lấy từ ô Tháng trên widget.'))}</p>
         <form class="assistant-form" id="assistantScenarioForm">
-          <label>Loại kịch bản
-            <select id="scenarioType">
-              <option value="revenue_drop">Doanh thu giảm X% → lãi gộp / KQKD</option>
-              <option value="safety_stock">Tăng tồn an toàn X% → cần nhập thêm</option>
-              <option value="demand_4w">Nhu cầu TB 4 tuần → nguy cơ thiếu</option>
-            </select>
+          <label>${escapeHtml(tx('assist.scenarioType', 'Loại'))}
+            <select id="scenarioType">${Object.entries(SCENARIO_META).map(([id, meta]) =>
+              `<option value="${id}">${escapeHtml(tx(`assist.sc.${id}`, meta.label))}</option>`
+            ).join('')}</select>
           </label>
-          <label id="scenarioParamLabel">Tham số (%)
+          <p class="assistant-scenario-hint" id="scenarioHint"></p>
+          <label id="scenarioParamLabel">${escapeHtml(tx('assist.scenarioPct', 'Tham số'))}
             <input id="scenarioParam" type="number" min="0" max="80" value="10">
           </label>
-          <button type="submit" class="assistant-send">Phân tích</button>
+          <button type="submit" class="assistant-send">${escapeHtml(tx('assist.scenarioRun', 'Phân tích'))}</button>
         </form>
       </div>
       <div id="scenarioResult"></div>
@@ -655,21 +745,29 @@
     const typeSel = document.getElementById('scenarioType');
     const param = document.getElementById('scenarioParam');
     const label = document.getElementById('scenarioParamLabel');
-    typeSel.addEventListener('change', () => {
+    const hint = document.getElementById('scenarioHint');
+    const syncType = () => {
+      const meta = SCENARIO_META[typeSel.value] || SCENARIO_META.revenue_drop;
+      hint.textContent = tx(`assist.scHint.${typeSel.value}`, meta.hint);
       const hide = typeSel.value === 'demand_4w';
       label.hidden = hide;
       param.disabled = hide;
-      if (typeSel.value === 'safety_stock') { param.max = 200; param.value = 20; }
-      else { param.max = 80; param.value = 10; }
-    });
+      if (!hide) {
+        param.max = meta.max;
+        param.value = meta.value;
+        label.firstChild.textContent = `${meta.param} `;
+      }
+    };
+    typeSel.addEventListener('change', syncType);
+    syncType();
     document.getElementById('assistantScenarioForm').addEventListener('submit', async (event) => {
       event.preventDefault();
       const box = document.getElementById('scenarioResult');
       box.innerHTML = skeleton();
       try {
         const type = typeSel.value;
-        const params = type === 'revenue_drop' ? { dropPct: Number(param.value) }
-          : type === 'safety_stock' ? { bumpPct: Number(param.value) } : {};
+        const pct = Number(param.value);
+        const params = { ...scenarioParamsOf(type, pct), period: selectedMonthKey(), month: selectedMonthKey() };
         const response = await fetch(`${API_BASE}/assistant/scenario`, {
           method: 'POST',
           headers: authHeaders(),
@@ -677,26 +775,26 @@
         });
         const data = await response.json().catch(() => ({}));
         if (handleAuth(response, data)) return;
-        if (!response.ok) throw new Error(data.message || 'Không chạy được kịch bản.');
-        const projected = data.projected || {};
-        const projHtml = Object.keys(projected).length
-          ? `<div class="assistant-metric-row">${Object.entries(projected).map(([key, value]) =>
-            `<article class="assistant-metric"><small>${escapeHtml(cleanText(key))}</small><strong class="assistant-money">${escapeHtml(typeof value === 'number' ? prettyMoney(value) : moneyText(value))}</strong></article>`
-          ).join('')}</div>`
-          : '';
+        if (!response.ok) throw new Error(data.message || tx('assist.scenarioFail', 'Không chạy được kịch bản.'));
         const lines = (data.lines || []).slice(0, 8).map((row) =>
-          `<li>${escapeHtml(row.MaSP || '')} ${escapeHtml(row.TenSP || '')} — ${escapeHtml(row.canNhapThem ?? row.daysLeft ?? '')}</li>`
+          `<li>${escapeHtml(row.MaSP || '')} ${escapeHtml(row.TenSP || '')} — ${escapeHtml(String(row.canNhapThem ?? row.daysLeft ?? ''))}${row.tienUoc ? ` · ${prettyMoney(row.tienUoc)}` : ''}</li>`
         ).join('');
-        box.innerHTML = `<div class="assistant-card">
-          <h3>${escapeHtml(cleanText(data.title || 'Kết quả'))}</h3>
-          <p>${escapeHtml(cleanText(data.assumption || ''))}</p>
+        const printAttr = data.print ? encodeURIComponent(JSON.stringify(data.print)) : '';
+        box.innerHTML = `<div class="assistant-card assistant-scenario-result" data-kind="store-report" data-print="${printAttr}">
+          <h3>${escapeHtml(cleanText(data.title || tx('assist.scenarioResult', 'Kết quả')))}</h3>
+          <p class="assistant-scenario-block"><strong>${escapeHtml(tx('assist.scenarioAssume', 'Giả định'))}</strong> ${escapeHtml(cleanText(data.assumption || ''))}</p>
+          ${data.formula ? `<p class="assistant-scenario-block"><strong>${escapeHtml(tx('assist.scenarioFormula', 'Công thức'))}</strong> ${escapeHtml(data.formula)}</p>` : ''}
           ${data.fallback ? `<p class="assistant-muted">${escapeHtml(cleanText(data.fallback))}</p>` : ''}
-          ${projHtml}
+          <div class="assistant-compare-head"><span></span><span>${escapeHtml(tx('assist.now', 'Hiện tại'))}</span><span>${escapeHtml(tx('assist.whatif', 'Kịch bản'))}</span><span>${escapeHtml(tx('assist.delta', 'Chênh'))}</span></div>
+          ${compareRowsHtml(data)}
           ${lines ? `<ul class="assistant-md-list">${lines}</ul>` : ''}
           ${evidenceHtml(data.evidence)}
+          ${pillsHtml(data.nextActions || [])}
+          ${data.print ? actionButtons() : ''}
         </div>`;
+        box.querySelectorAll('[data-nav]').forEach((button) => button.addEventListener('click', () => goScreen(button.dataset.nav)));
       } catch (error) {
-        box.innerHTML = `<div class="assistant-card"><p>${escapeHtml(cleanText(error.message))}</p></div>`;
+        box.innerHTML = `<div class="assistant-card"><p>${escapeHtml(friendlyNetError(error))}</p></div>`;
       }
     });
   };
@@ -809,6 +907,8 @@
     bindDocsOnce();
     renderThread();
     monthSelect()?.addEventListener('change', () => {
+      loaded.insights = false;
+      if (activeTab === 'insights') ensureTab('insights');
       if (syncingMonth || sending || !lastKind) return;
       sendQuestion(`${KIND_ASK[lastKind] || 'danh sách'} ${monthPhrase()}`);
     });

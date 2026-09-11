@@ -223,6 +223,56 @@
   font-size: 12px;
 }
 
+.cashier-loyalty-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 16px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--launch-border, #cfe0d6);
+  border-radius: 12px;
+  background: var(--green-50, #f1f6f2);
+}
+
+.cashier-loyalty-banner strong,
+.cashier-loyalty-banner span,
+.cashier-loyalty-banner small {
+  display: block;
+  letter-spacing: 0.02em;
+  word-spacing: 0.12em;
+}
+
+.cashier-loyalty-banner strong {
+  color: var(--green-900, #1c4a3d);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cashier-loyalty-banner small,
+.cashier-loyalty-banner span {
+  margin-top: 4px;
+  color: var(--muted, #78847e);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cashier-loyalty-banner.is-on {
+  background: var(--pill-ok-bg, #d8f3e4);
+  border-color: #b6e2c9;
+}
+
+.cashier-loyalty-banner.is-off {
+  background: var(--pill-idle-bg, #eef1ef);
+  border-color: var(--line, #dfe4df);
+}
+
+.cashier-loyalty-banner .warehouse-primary,
+.cashier-loyalty-banner .warehouse-secondary {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .cashier-pos-extras {
   display: grid;
   grid-template-columns: 1fr 1fr;

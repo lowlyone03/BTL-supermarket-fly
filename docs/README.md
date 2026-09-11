@@ -18,7 +18,8 @@ Chạy app vẫn từ thư mục gốc repo: `1_CAI_DAT_LAN_DAU.bat` rồi `2_CH
 | [PLAN_AI_CHATBOT_TRO_LY.txt](PLAN_AI_CHATBOT_TRO_LY.txt) | Plan trợ lý AI — **P2-MIN đã code** |
 | [PLAN_AI_P2_DU_TELEGRAM_ASK_LICH_SU_TOOL_QL_FAQ.txt](PLAN_AI_P2_DU_TELEGRAM_ASK_LICH_SU_TOOL_QL_FAQ.txt) | Sprint P2-ĐỦ (Telegram /ask, FAQ…) — **chưa làm hết**; P3/P4 không thuộc sprint này |
 | [PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt](PLAN_P3_DOI_SOAT_NGAN_HANG_THONG_MINH.txt) | P3 Đối soát ngân hàng thông minh (UC42, rule engine, **đã code demo**) |
-| [PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt](PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt) | P4 RFM khách thành viên (UC10/UC23, **MVP đã code**) |
+| [PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt](PLAN_P4_CUSTOMER_LOYALTY_INTELLIGENCE.txt) | P4 RFM khách thành viên (UC10/UC23, **MVP đã code** + chính sách sửa được) |
+| [PLAN_TONG_HE_THONG_VA_AI_CHI_TIET.txt](PLAN_TONG_HE_THONG_VA_AI_CHI_TIET.txt) | **Plan tổng** hệ thống + AI + P3/P4/chat/Telegram — lấy CODE làm sự thật |
 | [PLAN_CHAT_NOI_BO_5_BO_PHAN.txt](PLAN_CHAT_NOI_BO_5_BO_PHAN.txt) | P5 Chat nội bộ 5 bộ phận — **P5-MIN đã code** (SSE + file, ma trận kho↔mua hàng) |
 | [PLAN_TELEGRAM_BOT_P1.txt](PLAN_TELEGRAM_BOT_P1.txt) | Telegram đã triển khai; code **có nút duyệt** inline (lệch plan gốc “không duyệt”) |
 | [CAM_NANG_KE_TOAN_MINI.txt](CAM_NANG_KE_TOAN_MINI.txt) | Sổ cái mini UC34–UC43 **đã chạy** |

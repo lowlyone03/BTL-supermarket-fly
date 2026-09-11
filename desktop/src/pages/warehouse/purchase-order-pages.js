@@ -1,8 +1,9 @@
 (() => {
   const previous = window.FLY_ROLE_PAGES;
+  const t = (key, vars) => window.FLY_I18N?.t(key, vars) || key;
   const templates = {
     'purchasing-orders': '<section class="warehouse-page" id="purchasingOrders"><div class="overview-loading">Đang tải Đơn mua hàng...</div></section>',
-    'manager-purchase-approvals': '<section class="warehouse-page" id="managerPurchaseApprovals"><div class="overview-loading">Đang tải hồ sơ chờ duyệt...</div></section>'
+    'manager-purchase-approvals': `<section class="warehouse-page" id="managerPurchaseApprovals"><div class="overview-loading">${t('approve.loading')}</div></section>`
   };
   const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
   const money = value => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -10,9 +11,11 @@
   const fmtDateTime = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
   const accountantLabel = fundSnap => {
     const person = fundSnap?.accountant;
-    if (!person?.TenNV) return 'Kế toán';
-    return `${person.TenNV} · ${person.VaiTro || 'Kế toán'}`;
+    const role = window.FLY_I18N?.roleLabel?.(person?.VaiTro) || t('role.accounting');
+    if (!person?.TenNV) return role;
+    return `${person.TenNV} · ${role}`;
   };
+  const st = value => window.FLY_I18N?.status?.(value) || value;
   const statusClass = status => ({ 'Nháp': 'draft', 'Chờ duyệt': 'sent', 'Đã duyệt': 'ok', 'Yêu cầu chỉnh sửa': 'returned', 'Từ chối': 'cancelled', 'Đã gửi Nhà cung cấp': 'processing', 'Nhà cung cấp xác nhận': 'ok', 'Đang giao': 'processing', 'Giao một phần': 'returned', 'Hoàn thành': 'ok' }[status] || 'draft');
   const api = async (context, path, options = {}) => {
     const response = await fetch(`${context.apiBase}${path}`, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.token}`, ...(options.headers || {}) } });
@@ -20,7 +23,8 @@
     if (!response.ok) throw new Error(data.message || 'Không thể xử lý yêu cầu.');
     return data;
   };
-  const heading = (kicker, title, subtitle, action = '') => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(kicker)}</p><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div>${action}</header>`;
+  const phrase = (text) => window.FLY_I18N?.phrase?.(text) || text;
+  const heading = (kicker, title, subtitle, action = '') => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(phrase(kicker))}</p><h1>${esc(phrase(title))}</h1><p>${esc(phrase(subtitle))}</p></div>${action}</header>`;
   const printOrder = data => {
     const order = data.order;
     window.FLY_PRINT.show({
@@ -512,38 +516,38 @@
         const badge = document.getElementById('approvalNavBadge');
         if (badge) badge.textContent = String(total).padStart(2, '0');
         root.querySelector('#approvalSummary').innerHTML = `
-          <article class="warehouse-stat"><span>ĐƠN MUA HÀNG</span><strong>${orders.items.length}</strong><small>Kiểm tra nguồn đề nghị và điều khoản mua</small></article>
-          <article class="warehouse-stat warn"><span>CHỨNG TỪ KHO</span><strong>${queues.warehouse.length}</strong><small>Phiếu xuất và điều chỉnh sau kiểm kê</small></article>
-          <article class="warehouse-stat"><span>TÀI CHÍNH &amp; ĐỔI TRẢ</span><strong>${queues.finance.length}</strong><small>Phiếu chi NCC và hồ sơ đổi trả đã kiểm tra</small></article>
-          <article class="warehouse-stat"><span>CHI LƯƠNG</span><strong>${(queues.payroll || []).length}</strong><small>Phiếu chờ duyệt — rồi giao quỹ cho kế toán</small></article>`;
-        root.querySelector('#purchaseApprovalBody').innerHTML = orders.items.length ? orders.items.map(item => `<tr><td><strong>${esc(item.MaPO)}</strong><small>Nguồn ${esc(item.MaDN)}</small></td><td><strong>${esc(item.TenNCC)}</strong><small>Người lập: ${esc(item.NguoiLap)}</small></td><td>${item.SoMatHang} mặt hàng</td><td>${fmtDate(item.NgayGiaoDuKien)}</td><td>${item.SoNgayThanhToan} ngày</td><td class="num"><strong>${money(item.TongTien)}</strong></td><td><button class="warehouse-primary" data-review-order="${esc(item.MaPO)}">Xem và quyết định</button></td></tr>`).join('') : empty(7, 'Không có Đơn mua hàng chờ phê duyệt.');
-        root.querySelector('#warehouseApprovalBody').innerHTML = queues.warehouse.length ? queues.warehouse.map(item => `<tr><td><strong>${esc(item.MaHoSo)}</strong><small>${esc(item.LoaiHoSo)}</small></td><td>${esc(item.NguoiLap)}</td><td>${fmtDate(item.NgayLap)}</td><td>${esc(item.NoiDung || '—')}</td><td class="num"><strong>${money(item.SoTien)}</strong></td><td><span class="status-pill sent">${esc(item.TrangThai)}</span></td><td>${item.LoaiHoSo === 'Điều chỉnh kiểm kê' ? `<button class="warehouse-primary" data-review-inventory-count="${esc(item.MaHoSo)}">Xem và quyết định</button>` : item.LoaiHoSo === 'Phiếu xuất kho' ? `<button class="warehouse-primary" data-review-stock-issue="${esc(item.MaHoSo)}">Xem và quyết định</button>` : '—'}</td></tr>`).join('') : empty(7, 'Chưa có chứng từ kho do Thủ kho gửi duyệt.');
-        root.querySelector('#financeApprovalBody').innerHTML = queues.finance.length ? queues.finance.map(item => `<tr><td><strong>${esc(item.MaHoSo)}</strong><small>${esc(item.LoaiHoSo)}</small></td><td>${esc(item.NguoiLap)}</td><td>${fmtDate(item.NgayLap)}</td><td>${esc(item.NoiDung || '—')}</td><td class="num">${money(item.SoTien)}</td><td><span class="status-pill sent">${esc(item.TrangThai)}</span></td><td>${item.LoaiHoSo === 'Phiếu chi Nhà cung cấp' ? `<button class="warehouse-primary" data-review-payment-voucher="${esc(item.MaHoSo)}">Duyệt và giao tiền</button>` : item.LoaiHoSo === 'Đổi trả khách hàng' ? `<button class="warehouse-primary" data-approve-return="${esc(item.MaHoSo)}">Duyệt</button><button class="warehouse-danger" data-reject-return="${esc(item.MaHoSo)}">Từ chối</button>` : '—'}</td></tr>`).join('') : empty(7, 'Chưa có Phiếu chi hoặc hồ sơ đổi trả được gửi duyệt. Hóa đơn chờ đối chiếu và công nợ không nằm trong hàng phê duyệt này.');
+          <article class="warehouse-stat"><span>${esc(t('approve.kpiPo'))}</span><strong>${orders.items.length}</strong><small>${esc(t('approve.kpiPoHint'))}</small></article>
+          <article class="warehouse-stat warn"><span>${esc(t('approve.kpiWh'))}</span><strong>${queues.warehouse.length}</strong><small>${esc(t('approve.kpiWhHint'))}</small></article>
+          <article class="warehouse-stat"><span>${esc(t('approve.kpiFin'))}</span><strong>${queues.finance.length}</strong><small>${esc(t('approve.kpiFinHint'))}</small></article>
+          <article class="warehouse-stat"><span>${esc(t('approve.kpiPay'))}</span><strong>${(queues.payroll || []).length}</strong><small>${esc(t('approve.kpiPayHint'))}</small></article>`;
+        root.querySelector('#purchaseApprovalBody').innerHTML = orders.items.length ? orders.items.map(item => `<tr><td><strong>${esc(item.MaPO)}</strong><small>${esc(t('approve.source', { id: item.MaDN }))}</small></td><td><strong>${esc(item.TenNCC)}</strong><small>${esc(t('approve.authorOf', { name: item.NguoiLap }))}</small></td><td>${esc(t('approve.itemsN', { n: item.SoMatHang }))}</td><td>${fmtDate(item.NgayGiaoDuKien)}</td><td>${esc(t('approve.daysN', { n: item.SoNgayThanhToan }))}</td><td class="num"><strong>${money(item.TongTien)}</strong></td><td><button class="warehouse-primary" data-review-order="${esc(item.MaPO)}">${esc(t('approve.review'))}</button></td></tr>`).join('') : empty(7, t('approve.emptyPo'));
+        root.querySelector('#warehouseApprovalBody').innerHTML = queues.warehouse.length ? queues.warehouse.map(item => `<tr><td><strong>${esc(item.MaHoSo)}</strong><small>${esc(item.LoaiHoSo)}</small></td><td>${esc(item.NguoiLap)}</td><td>${fmtDate(item.NgayLap)}</td><td>${esc(item.NoiDung || '—')}</td><td class="num"><strong>${money(item.SoTien)}</strong></td><td><span class="status-pill sent">${esc(st(item.TrangThai))}</span></td><td>${item.LoaiHoSo === 'Điều chỉnh kiểm kê' ? `<button class="warehouse-primary" data-review-inventory-count="${esc(item.MaHoSo)}">${esc(t('approve.review'))}</button>` : item.LoaiHoSo === 'Phiếu xuất kho' ? `<button class="warehouse-primary" data-review-stock-issue="${esc(item.MaHoSo)}">${esc(t('approve.review'))}</button>` : '—'}</td></tr>`).join('') : empty(7, t('approve.emptyWh'));
+        root.querySelector('#financeApprovalBody').innerHTML = queues.finance.length ? queues.finance.map(item => `<tr><td><strong>${esc(item.MaHoSo)}</strong><small>${esc(item.LoaiHoSo)}</small></td><td>${esc(item.NguoiLap)}</td><td>${fmtDate(item.NgayLap)}</td><td>${esc(item.NoiDung || '—')}</td><td class="num">${money(item.SoTien)}</td><td><span class="status-pill sent">${esc(st(item.TrangThai))}</span></td><td>${item.LoaiHoSo === 'Phiếu chi Nhà cung cấp' ? `<button class="warehouse-primary" data-review-payment-voucher="${esc(item.MaHoSo)}">${esc(t('approve.payHand'))}</button>` : item.LoaiHoSo === 'Đổi trả khách hàng' ? `<button class="warehouse-primary" data-approve-return="${esc(item.MaHoSo)}">${esc(t('approve.ok'))}</button><button class="warehouse-danger" data-reject-return="${esc(item.MaHoSo)}">${esc(t('common.reject'))}</button>` : '—'}</td></tr>`).join('') : empty(7, t('approve.emptyFin'));
         const payrollItems = queues.payroll || [];
         let board = { periods: [] };
         try { board = await api(context, '/admin/approvals/payroll-board'); } catch { board = { periods: [] }; }
         const periods = board.periods || [];
         const payrollBoard = root.querySelector('#payrollApprovalBoard');
         if (payrollBoard && !periods.length && !payrollItems.length) {
-          payrollBoard.innerHTML = '<p class="warehouse-empty">Chưa có Phiếu chi lương chờ duyệt hoặc chờ giao quỹ cho kế toán.</p>';
+          payrollBoard.innerHTML = `<p class="warehouse-empty">${esc(t('approve.emptyPayroll'))}</p>`;
         } else if (payrollBoard) {
           payrollBoard.innerHTML = periods.map(period => {
-            const pendingRows = (period.pending || []).map(item => `<tr><td><strong>${esc(item.MaPhieu)}</strong></td><td><strong>${esc(item.TenNV)}</strong><small>${esc(item.NguoiLap)}</small></td><td>${esc(item.PhuongThuc)}</td><td>${fmtDate(item.NgayLap)}</td><td class="num"><strong>${money(item.SoTien)}</strong></td><td><button class="warehouse-primary" data-approve-payroll="${esc(item.MaPhieu)}" type="button">Duyệt</button> <button class="warehouse-secondary" data-review-payroll-voucher="${esc(item.MaPhieu)}" type="button">Chi tiết</button></td></tr>`).join('');
-            const approvedRows = (period.approved || []).map(item => `<tr><td><strong>${esc(item.MaPhieu)}</strong></td><td>${esc(item.TenNV)}</td><td>${esc(item.PhuongThuc)}</td><td class="num">${money(item.SoTien)}</td><td><span class="status-pill sent">${esc(item.TrangThai)}</span></td></tr>`).join('');
+            const pendingRows = (period.pending || []).map(item => `<tr><td><strong>${esc(item.MaPhieu)}</strong></td><td><strong>${esc(item.TenNV)}</strong><small>${esc(item.NguoiLap)}</small></td><td>${esc(item.PhuongThuc)}</td><td>${fmtDate(item.NgayLap)}</td><td class="num"><strong>${money(item.SoTien)}</strong></td><td><button class="warehouse-primary" data-approve-payroll="${esc(item.MaPhieu)}" type="button">${esc(t('approve.ok'))}</button> <button class="warehouse-secondary" data-review-payroll-voucher="${esc(item.MaPhieu)}" type="button">${esc(t('approve.detail'))}</button></td></tr>`).join('');
+            const approvedRows = (period.approved || []).map(item => `<tr><td><strong>${esc(item.MaPhieu)}</strong></td><td>${esc(item.TenNV)}</td><td>${esc(item.PhuongThuc)}</td><td class="num">${money(item.SoTien)}</td><td><span class="status-pill sent">${esc(st(item.TrangThai))}</span></td></tr>`).join('');
             const canHandover = !(period.pending || []).length && ((period.fund?.tmTopUp || 0) > 0 || (period.fund?.ckTopUp || 0) > 0);
             const snap = period.fund || {};
             const fund = snap.fund;
             const handed = Boolean(snap.handed);
             const receiver = accountantLabel(snap);
             const handoverBtn = canHandover
-              ? `<button class="warehouse-primary" data-handover-payroll="${esc(period.MaKy)}" type="button">Giao quỹ cho kế toán</button>`
+              ? `<button class="warehouse-primary" data-handover-payroll="${esc(period.MaKy)}" type="button">${esc(t('approve.handover'))}</button>`
               : handed
-                ? `<button class="warehouse-secondary" data-handover-history="${esc(period.MaKy)}" type="button">Đã giao quỹ cho kế toán ${esc(snap.accountant?.TenNV || 'Kế toán')}${fund?.NgayGiao ? ` · ${fmtDateTime(fund.NgayGiao)}` : ''}</button>`
-                : `<button class="warehouse-secondary" data-handover-payroll="${esc(period.MaKy)}" type="button" disabled>Giao quỹ cho kế toán</button>`;
+                ? `<button class="warehouse-secondary" data-handover-history="${esc(period.MaKy)}" type="button">${esc(t('approve.handedTo', { name: snap.accountant?.TenNV || t('role.accounting') }))}${fund?.NgayGiao ? ` · ${fmtDateTime(fund.NgayGiao)}` : ''}</button>`
+                : `<button class="warehouse-secondary" data-handover-payroll="${esc(period.MaKy)}" type="button" disabled>${esc(t('approve.handover'))}</button>`;
             const fundLine = handed
-              ? `<p class="payroll-ky-fund">Đã giao cho <strong>${esc(receiver)}</strong>: TM ${money(fund.SoTienMatGiao)} (còn ${money(fund.SoTienMatCon)}) · CK ${money(fund.SoTienCKGiao)} (còn ${money(fund.SoTienCKCon)})</p>`
-              : `<p class="payroll-ky-fund">Chưa giao quỹ cho kế toán ${esc(snap.accountant?.TenNV || '')}. Sau khi duyệt xong kỳ, bấm Giao quỹ cho kế toán.</p>`;
-            return `<section class="payroll-ky-card" data-ky="${esc(period.MaKy)}"><header><div><p>KỲ LƯƠNG</p><h3>${esc(period.MaKy)}</h3><small>${(period.pending || []).length} chờ duyệt · ${(period.approved || []).length} đã duyệt chưa chi</small></div><div class="payroll-ky-actions">${(period.pending || []).length ? `<button class="warehouse-primary" data-approve-all-payroll="${esc(period.MaKy)}" type="button">Duyệt tất cả</button>` : ''}${handoverBtn}</div></header><p class="payroll-ky-recipient">Người nhận quỹ: <strong>${esc(receiver)}</strong></p>${fundLine}${canHandover ? `<p class="payroll-ky-need">Cần giao thêm cho kế toán: TM ${money(snap.tmTopUp || 0)} · CK ${money(snap.ckTopUp || 0)}</p>` : handed ? `<p class="payroll-ky-need">Quỹ đã đủ cho các phiếu đã duyệt. Kế toán chi từng nhân viên từ quỹ này.</p>` : `<p class="payroll-ky-need">Cần giao cho kế toán: TM ${money(snap.tmTopUp || 0)} · CK ${money(snap.ckTopUp || 0)}</p>`}${(period.pending || []).length ? `<div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU</th><th>NHÂN VIÊN</th><th>KÊNH</th><th>NGÀY LẬP</th><th>SỐ TIỀN</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody>${pendingRows}</tbody></table></div>` : ''}${(period.approved || []).length ? `<div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU ĐÃ DUYỆT</th><th>NHÂN VIÊN</th><th>KÊNH</th><th>SỐ TIỀN</th><th>TRẠNG THÁI</th></tr></thead><tbody>${approvedRows}</tbody></table></div>` : ''}</section>`;
+              ? `<p class="payroll-ky-fund">${esc(t('approve.handedFund', { name: receiver, tm: money(fund.SoTienMatGiao), tmLeft: money(fund.SoTienMatCon), ck: money(fund.SoTienCKGiao), ckLeft: money(fund.SoTienCKCon) }))}</p>`
+              : `<p class="payroll-ky-fund">${esc(t('approve.notHanded', { name: snap.accountant?.TenNV || '' }))}</p>`;
+            return `<section class="payroll-ky-card" data-ky="${esc(period.MaKy)}"><header><div><p>${esc(t('approve.period'))}</p><h3>${esc(period.MaKy)}</h3><small>${esc(t('approve.pendingMix', { n: (period.pending || []).length, m: (period.approved || []).length }))}</small></div><div class="payroll-ky-actions">${(period.pending || []).length ? `<button class="warehouse-primary" data-approve-all-payroll="${esc(period.MaKy)}" type="button">${esc(t('approve.approveAll'))}</button>` : ''}${handoverBtn}</div></header><p class="payroll-ky-recipient">${esc(t('approve.receiver'))} <strong>${esc(receiver)}</strong></p>${fundLine}${canHandover ? `<p class="payroll-ky-need">${esc(t('approve.needMore', { tm: money(snap.tmTopUp || 0), ck: money(snap.ckTopUp || 0) }))}</p>` : handed ? `<p class="payroll-ky-need">${esc(t('approve.fundOk'))}</p>` : `<p class="payroll-ky-need">${esc(t('approve.needHand', { tm: money(snap.tmTopUp || 0), ck: money(snap.ckTopUp || 0) }))}</p>`}${(period.pending || []).length ? `<div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>${esc(t('approve.colVoucher'))}</th><th>${esc(t('approve.colStaff'))}</th><th>${esc(t('approve.colChannel'))}</th><th>${esc(t('approve.colDate'))}</th><th>${esc(t('approve.colAmount'))}</th><th>${esc(t('approve.colDecide'))}</th></tr></thead><tbody>${pendingRows}</tbody></table></div>` : ''}${(period.approved || []).length ? `<div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>${esc(t('approve.colApproved'))}</th><th>${esc(t('approve.colStaff'))}</th><th>${esc(t('approve.colChannel'))}</th><th>${esc(t('approve.colAmount'))}</th><th>${esc(t('approve.colStatus'))}</th></tr></thead><tbody>${approvedRows}</tbody></table></div>` : ''}</section>`;
           }).join('');
         }
 
@@ -551,21 +555,25 @@
         const panel = root.querySelector('#payrollSupplierDebtPanel');
         if (panel) {
           const list = (payables?.items || []).filter(i => Number(i.SoTienConLai || 0) > 0);
-          const bucket = {
-            'Còn 0–15 ngày': 0,
-            'Còn 16–30 ngày': 0,
-            'Còn trên 30 ngày': 0,
-            'Quá hạn 1–30 ngày': 0,
-            'Quá hạn trên 30 ngày': 0
+          const bucket = [
+            { key: 'bucket0', overdue: false, amount: 0 },
+            { key: 'bucket15', overdue: false, amount: 0 },
+            { key: 'bucket30', overdue: false, amount: 0 },
+            { key: 'over30', overdue: true, amount: 0 },
+            { key: 'overMore', overdue: true, amount: 0 }
+          ];
+          const addBucket = (key, amount) => {
+            const row = bucket.find(item => item.key === key);
+            if (row) row.amount += amount;
           };
           for (const item of list) {
             const days = Number(item.SoNgayConLai || 0); // >=0: còn hạn, <0: quá hạn
             const amount = Number(item.SoTienConLai || 0);
-            if (days > 30) bucket['Còn trên 30 ngày'] += amount;
-            else if (days > 15) bucket['Còn 16–30 ngày'] += amount;
-            else if (days >= 0) bucket['Còn 0–15 ngày'] += amount;
-            else if (Math.abs(days) <= 30) bucket['Quá hạn 1–30 ngày'] += amount;
-            else bucket['Quá hạn trên 30 ngày'] += amount;
+            if (days > 30) addBucket('bucket30', amount);
+            else if (days > 15) addBucket('bucket15', amount);
+            else if (days >= 0) addBucket('bucket0', amount);
+            else if (Math.abs(days) <= 30) addBucket('over30', amount);
+            else addBucket('overMore', amount);
           }
 
           const sortByDue = (a, b) => new Date(a.HanThanhToan || 0).valueOf() - new Date(b.HanThanhToan || 0).valueOf();
@@ -583,44 +591,44 @@
           panel.innerHTML = `
             <article class="warehouse-table-card payroll-supplier-debt">
               <div class="warehouse-panel-title">
-                <div><p>CÔNG NỢ NCC</p><h2>Công nợ đang treo</h2></div>
+                <div><p>${esc(t('approve.debtKicker'))}</p><h2>${esc(t('approve.debtTitle'))}</h2></div>
                 <span class="report-card-count">${list.length}</span>
               </div>
               <div class="payroll-supplier-debt-buckets">
-                ${Object.entries(bucket).map(([k, v]) => `<div class="payroll-supplier-debt-row${k.startsWith('Quá hạn') ? ' is-overdue' : ''}"><span>${esc(k)}</span><strong>${money(v)}</strong></div>`).join('')}
+                ${bucket.map(row => `<div class="payroll-supplier-debt-row${row.overdue ? ' is-overdue' : ''}"><span>${esc(t(`approve.${row.key}`))}</span><strong>${money(row.amount)}</strong></div>`).join('')}
               </div>
               <div class="warehouse-table-wrap">
                 <table class="warehouse-table">
                   <thead>
-                    <tr><th>NHÀ CUNG CẤP</th><th>HẠN</th><th>CÒN LẠI</th><th>TRẠNG THÁI</th></tr>
+                    <tr><th>${esc(t('approve.colNcc'))}</th><th>${esc(t('approve.colDue'))}</th><th>${esc(t('approve.colRemain'))}</th><th>${esc(t('approve.colStatus'))}</th></tr>
                   </thead>
                   <tbody>
                     ${top.length
                       ? top.map(row => {
                         const step = row.BuocTatToan || row.TrangThaiHienTai || '';
                         return `<tr>
-                          <td><strong>${esc(row.TenNCC)}</strong><small>${esc(row.MaCNPTra)} · HĐ ${esc(row.SoHoaDon)} · PO ${esc(row.MaPO)}</small></td>
+                          <td><strong>${esc(row.TenNCC)}</strong><small>${esc(row.MaCNPTra)} · ${esc(row.SoHoaDon)} · ${esc(row.MaPO)}</small></td>
                           <td>${fmtDate(row.HanThanhToan)}</td>
                           <td class="num"><strong>${money(row.SoTienConLai)}</strong></td>
-                          <td><span class="status-pill ${toneFromStep(step)}">${esc(step)}</span></td>
+                          <td><span class="status-pill ${toneFromStep(step)}">${esc(st(step) || step)}</span></td>
                         </tr>`;
                       }).join('')
-                      : '<tr><td colspan="4" class="warehouse-empty">Chưa có công nợ NCC đang treo.</td></tr>'}
+                      : `<tr><td colspan="4" class="warehouse-empty">${esc(t('approve.emptyDebt'))}</td></tr>`}
                   </tbody>
                 </table>
               </div>
-              <p class="warehouse-note">Công nợ chỉ giảm khi “Thanh toán phiếu chi” thành công (không giảm khi mới duyệt).</p>
+              <p class="warehouse-note">${esc(t('approve.debtNote'))}</p>
             </article>`;
         }
       } catch (error) { context.showToast(error.message, 'error'); }
     };
-    root.innerHTML = `${heading('ĐIỀU HÀNH / PHÊ DUYỆT', 'Trung tâm phê duyệt', 'Hồ sơ chỉ xuất hiện sau khi bộ phận phụ trách gửi đúng bước. Riêng duyệt kiểm kê có chênh lệch sẽ cập nhật tồn và ghi Giao dịch kho Điều chỉnh.', '<button class="warehouse-secondary" id="refreshApprovalCenter"><svg><use href="#i-refresh"/></svg>Làm mới</button>')}<div class="warehouse-stats approval-center-summary" id="approvalSummary"></div><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>MUA HÀNG</p><h2>Đơn mua hàng chờ quyết định</h2></div><span class="warehouse-chip">Nhân viên mua hàng gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>ĐƠN MUA</th><th>NHÀ CUNG CẤP</th><th>QUY MÔ</th><th>NGÀY GIAO</th><th>THANH TOÁN</th><th>TỔNG TIỀN</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="purchaseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>KHO</p><h2>Chứng từ kho chờ phê duyệt</h2></div><span class="warehouse-chip">Thủ kho gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>SỐ TIỀN</th><th>TRẠNG THÁI</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="warehouseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>TÀI CHÍNH</p><h2>Đề nghị thanh toán NCC và đổi trả</h2></div><span class="warehouse-chip">Kế toán/Thu ngân gửi</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HỒ SƠ</th><th>NGƯỜI LẬP</th><th>NGÀY LẬP</th><th>NỘI DUNG</th><th>SỐ TIỀN</th><th>TRẠNG THÁI</th><th>QUYẾT ĐỊNH</th></tr></thead><tbody id="financeApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue payroll-fund-queue"><div class="warehouse-panel-title"><div><p>LƯƠNG</p><h2>Duyệt phiếu, rồi giao quỹ cho kế toán</h2></div></div><p class="payroll-fund-note">Không giao từng nhân viên — một lần giao cả quỹ cho kế toán.</p><p class="approval-center-note" style="margin:0 16px 12px"><strong>Ba bước.</strong><span> 1. Duyệt từng người hoặc Duyệt tất cả. 2. Giao quỹ cho kế toán. 3. Kế toán chi từng nhân viên từ quỹ đó. Phiếu chi Nhà cung cấp vẫn duyệt và giao theo từng phiếu.</span></p><div id="payrollApprovalBoard"></div></article><div id="payrollSupplierDebtPanel"></div>`;
+    root.innerHTML = `${heading(t('approve.kicker'), t('approve.title'), t('approve.lead'), `<button class="warehouse-secondary" id="refreshApprovalCenter"><svg><use href="#i-refresh"/></svg>${t('common.refresh')}</button>`)}<div class="warehouse-stats approval-center-summary" id="approvalSummary"></div><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>${t('approve.buy')}</p><h2>${t('approve.poWait')}</h2></div><span class="warehouse-chip">${t('approve.fromBuyer')}</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>${t('approve.colPo')}</th><th>${t('approve.colNcc')}</th><th>${t('approve.colSize')}</th><th>${t('approve.colDelivery')}</th><th>${t('approve.colPay')}</th><th>${t('approve.colTotal')}</th><th>${t('approve.colDecide')}</th></tr></thead><tbody id="purchaseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>${t('approve.wh')}</p><h2>${t('approve.whWait')}</h2></div><span class="warehouse-chip">${t('approve.fromWh')}</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>${t('approve.colFile')}</th><th>${t('approve.colAuthor')}</th><th>${t('approve.colDate')}</th><th>${t('approve.colContent')}</th><th>${t('approve.colAmount')}</th><th>${t('approve.colStatus')}</th><th>${t('approve.colDecide')}</th></tr></thead><tbody id="warehouseApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue"><div class="warehouse-panel-title"><div><p>${t('approve.fin')}</p><h2>${t('approve.finWait')}</h2></div><span class="warehouse-chip">${t('approve.fromAcct')}</span></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>${t('approve.colFile')}</th><th>${t('approve.colAuthor')}</th><th>${t('approve.colDate')}</th><th>${t('approve.colContent')}</th><th>${t('approve.colAmount')}</th><th>${t('approve.colStatus')}</th><th>${t('approve.colDecide')}</th></tr></thead><tbody id="financeApprovalBody"></tbody></table></div></article><article class="warehouse-table-card approval-queue payroll-fund-queue"><div class="warehouse-panel-title"><div><p>${t('approve.payKicker')}</p><h2>${t('approve.payHead')}</h2></div></div><p class="payroll-fund-note">${t('approve.payOnce')}</p><p class="approval-center-note" style="margin:0 16px 12px"><strong>${t('approve.stepsTitle')}</strong><span>${t('approve.stepsText')}</span></p><div id="payrollApprovalBoard"></div></article><div id="payrollSupplierDebtPanel"></div>`;
     root.innerHTML = root.innerHTML
       .replace('actor nghiệp vụ', 'bộ phận phụ trách')
       .replace('UC05 · ', '')
       .replace('UC06–UC07 · ', '')
       .replace('UC08–UC09 · ', '');
-    root.querySelector('#approvalSummary').insertAdjacentHTML('beforebegin', '<div class="approval-center-note"><strong>Chưa có bộ phận gửi hồ sơ thì danh sách sẽ trống.</strong><span>Kế toán lưu hoặc đối chiếu hóa đơn không cần Quản lý duyệt. Chỉ Phiếu chi thanh toán hoặc hồ sơ đổi trả đã được lập và gửi mới xuất hiện ở nhóm Tài chính.</span></div>');
+    root.querySelector('#approvalSummary').insertAdjacentHTML('beforebegin', `<div class="approval-center-note"><strong>${esc(t('approve.noteTitle'))}</strong><span>${esc(t('approve.noteText'))}</span></div>`);
     root.querySelector('#refreshApprovalCenter').addEventListener('click', load);
     root.addEventListener('click', async event => {
       const review = event.target.closest('[data-review-order]');
@@ -635,7 +643,7 @@
       if (reviewPayrollVoucher) return payrollVoucherApprovalModal(context, reviewPayrollVoucher.dataset.reviewPayrollVoucher, load);
       const approvePayroll = event.target.closest('[data-approve-payroll]');
       if (approvePayroll) {
-        if (!window.confirm(`Duyệt phiếu ${approvePayroll.dataset.approvePayroll}? Chưa giao quỹ.`)) return;
+        if (!window.confirm(t('approve.confirmOne', { id: approvePayroll.dataset.approvePayroll }))) return;
         try {
           const result = await api(context, `/admin/approvals/payroll-vouchers/${approvePayroll.dataset.approvePayroll}/approve`, { method: 'POST', body: JSON.stringify({}) });
           context.showToast(result.message, 'success'); await load();
@@ -644,7 +652,7 @@
       }
       const approveAllPayroll = event.target.closest('[data-approve-all-payroll]');
       if (approveAllPayroll) {
-        if (!window.confirm(`Duyệt tất cả phiếu chờ kỳ ${approveAllPayroll.dataset.approveAllPayroll}? Chưa giao quỹ.`)) return;
+        if (!window.confirm(t('approve.confirmAll', { id: approveAllPayroll.dataset.approveAllPayroll }))) return;
         try {
           const result = await api(context, '/admin/approvals/payroll-vouchers/approve-all', { method: 'POST', body: JSON.stringify({ MaKy: approveAllPayroll.dataset.approveAllPayroll }) });
           context.showToast(result.message, 'success'); await load();
@@ -681,12 +689,12 @@
       const rejectReturn = event.target.closest('[data-reject-return]');
       if (rejectReturn) {
         const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
-        overlay.innerHTML = `<div class="warehouse-modal" style="width:min(620px,95vw)"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">TỪ CHỐI ĐỔI TRẢ</p><h2>${esc(rejectReturn.dataset.rejectReturn)}</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="warehouse-field"><label>Lý do *</label><textarea id="returnRejectReason" maxlength="500"></textarea></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-primary submit-decision">Xác nhận</button></div></div>`;
+        overlay.innerHTML = `<div class="warehouse-modal" style="width:min(620px,95vw)"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">${esc(t('approve.rejectTitle'))}</p><h2>${esc(rejectReturn.dataset.rejectReturn)}</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="warehouse-field"><label>${esc(t('approve.reason'))}</label><textarea id="returnRejectReason" maxlength="500"></textarea></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">${esc(t('common.cancel'))}</button><button class="warehouse-primary submit-decision">${esc(t('common.confirm'))}</button></div></div>`;
         document.body.appendChild(overlay);
         const close = () => overlay.remove(); overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
         overlay.querySelector('.submit-decision').addEventListener('click', async () => {
           const LyDo = overlay.querySelector('#returnRejectReason').value.trim();
-          if (!LyDo) return context.showToast('Vui lòng nhập lý do.', 'error');
+          if (!LyDo) return context.showToast(t('approve.needReason'), 'error');
           try {
             const result = await api(context, `/admin/approvals/returns/${rejectReturn.dataset.rejectReturn}/reject`, { method: 'POST', body: JSON.stringify({ LyDo }) });
             context.showToast(result.message, 'success'); close(); await load();

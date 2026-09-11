@@ -532,6 +532,74 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         assert.doesNotMatch(result.error, /889737|AAFL|:AA/);
     });
 
+    await test('telegramApi: ENOTFOUND → tiếng Việt có mã, không chỉ fetch failed', async () => {
+        await assert.rejects(
+            () => notify.telegramApi('getMe', {}, {
+                retries: 1,
+                fetchFn: async () => {
+                    const err = new TypeError('fetch failed');
+                    err.cause = { code: 'ENOTFOUND', message: 'getaddrinfo ENOTFOUND api.telegram.org' };
+                    throw err;
+                }
+            }),
+            (error) => {
+                assert.match(error.message, /ENOTFOUND/);
+                assert.match(error.message, /DNS|api\.telegram\.org/);
+                assert.doesNotMatch(error.message, /^fetch failed$/);
+                assert.doesNotMatch(error.message, /bot\d+:[A-Za-z0-9_-]{10,}/);
+                return true;
+            }
+        );
+    });
+
+    await test('telegramApi: fetch failed mạng thì retry rồi thành công', async () => {
+        let n = 0;
+        const data = await notify.telegramApi('getMe', {}, {
+            fetchFn: async () => {
+                n += 1;
+                if (n < 3) {
+                    const err = new TypeError('fetch failed');
+                    err.cause = { code: 'ECONNRESET', message: 'read ECONNRESET' };
+                    throw err;
+                }
+                return { json: async () => ({ ok: true, result: { username: 'supermarket_flybot' } }) };
+            }
+        });
+        assert.equal(n, 3);
+        assert.equal(data.result.username, 'supermarket_flybot');
+    });
+
+    await test('telegramApi: 401 không retry', async () => {
+        let n = 0;
+        await assert.rejects(
+            () => notify.telegramApi('getMe', {}, {
+                fetchFn: async () => {
+                    n += 1;
+                    return {
+                        status: 401,
+                        json: async () => ({ ok: false, error_code: 401, description: 'Unauthorized' })
+                    };
+                }
+            }),
+            /Token Telegram không hợp lệ/
+        );
+        assert.equal(n, 1);
+    });
+
+    await test('webhookUrl: TELEGRAM_PUBLIC_BASE_URL khi WEBHOOK_URL trống', () => {
+        const prevW = process.env.TELEGRAM_WEBHOOK_URL;
+        const prevB = process.env.TELEGRAM_PUBLIC_BASE_URL;
+        process.env.TELEGRAM_WEBHOOK_URL = '';
+        process.env.TELEGRAM_PUBLIC_BASE_URL = 'https://abc.trycloudflare.com';
+        assert.equal(notify.webhookUrl(), 'https://abc.trycloudflare.com/api/telegram/webhook');
+        process.env.TELEGRAM_WEBHOOK_URL = 'https://explicit.example/hook';
+        assert.equal(notify.webhookUrl(), 'https://explicit.example/hook');
+        if (prevW == null) delete process.env.TELEGRAM_WEBHOOK_URL;
+        else process.env.TELEGRAM_WEBHOOK_URL = prevW;
+        if (prevB == null) delete process.env.TELEGRAM_PUBLIC_BASE_URL;
+        else process.env.TELEGRAM_PUBLIC_BASE_URL = prevB;
+    });
+
     await test('Token trống → off, không crash', async () => {
         const prev = process.env.TELEGRAM_BOT_TOKEN;
         process.env.TELEGRAM_BOT_TOKEN = '';
@@ -1039,6 +1107,53 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         const methods = calls.map(url => String(url).split('/').pop());
         assert.ok(methods.includes('setWebhook'));
         assert.ok(!methods.includes('getUpdates'));
+    });
+
+    await test('Webhook setWebhook fail + getMe OK → fallback polling', async () => {
+        const calls = [];
+        const fetchFn = async (url) => {
+            const method = String(url).split('/').pop();
+            calls.push(method);
+            if (method === 'setWebhook') {
+                const err = new TypeError('fetch failed');
+                err.cause = { code: 'ECONNRESET', message: 'read ECONNRESET' };
+                throw err;
+            }
+            return { json: async () => ({ ok: true, result: [] }) };
+        };
+        const result = await bot.startTelegramBot({
+            fetchFn,
+            pollOnce: true,
+            skipCron: true,
+            startPolling: false,
+            webhookUrl: 'https://dead.trycloudflare.com/api/telegram/webhook',
+            skipSchema: true,
+            retries: 1
+        });
+        bot.stopTelegramBot();
+        assert.equal(result.mode, 'polling');
+        assert.equal(result.fallbackFromWebhook, true);
+        assert.ok(calls.includes('getMe'));
+        assert.ok(calls.includes('setWebhook'));
+        assert.ok(calls.includes('deleteWebhook'));
+        assert.ok(calls.includes('getUpdates'));
+        assert.ok(!calls.includes('889737'));
+    });
+
+    await test('getMe fetch failed → off, không crash, log có mã lỗi', async () => {
+        const fetchFn = async () => {
+            const err = new TypeError('fetch failed');
+            err.cause = { code: 'ENOTFOUND', message: 'getaddrinfo ENOTFOUND api.telegram.org' };
+            throw err;
+        };
+        const result = await bot.startTelegramBot({
+            fetchFn, skipCron: true, startPolling: false, webhookUrl: '', skipSchema: true, retries: 1
+        });
+        bot.stopTelegramBot();
+        assert.equal(result.mode, 'off');
+        assert.match(result.error, /ENOTFOUND/);
+        assert.doesNotMatch(result.error, /^fetch failed$/);
+        assert.doesNotMatch(result.error, /bot\d+:[A-Za-z0-9_-]{10,}/);
     });
 
     await test('Thẻ chờ duyệt đủ dòng hàng + nút Duyệt/Từ chối', () => {

@@ -1,10 +1,26 @@
 <!doctype html>
-<html lang="vi">
+<html lang="vi" data-theme="light" data-lang="vi">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Đăng nhập - Supermarket Fly</title>
+    <script>
+      (function () {
+        try {
+          var prefs = JSON.parse(localStorage.getItem('fly_pref_last') || localStorage.getItem('fly_pref_guest') || '{}');
+          if (prefs.giaoDien) document.documentElement.setAttribute('data-theme', prefs.giaoDien);
+          if (prefs.ngonNgu) {
+            document.documentElement.setAttribute('data-lang', prefs.ngonNgu);
+            document.documentElement.lang = prefs.ngonNgu === 'zh' ? 'zh-CN' : prefs.ngonNgu;
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="login.css" />
+    <link rel="stylesheet" href="../shared/theme.css?v=theme-i18n-1" />
   </head>
   <body>
     <svg class="svg-library" aria-hidden="true">
@@ -20,14 +36,26 @@
       <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><path d="m4 7 5-4 6 5 6-6"/></symbol>
     </svg>
 
+    <div class="login-pref pref-cluster">
+      <div class="pref-group">
+        <button type="button" data-lang="vi">VI</button>
+        <button type="button" data-lang="en">EN</button>
+        <button type="button" data-lang="zh">中文</button>
+      </div>
+      <div class="pref-group">
+        <button type="button" data-theme-set="light" data-i18n="pref.light">Sáng</button>
+        <button type="button" data-theme-set="dark" data-i18n="pref.dark">Tối</button>
+        <button type="button" data-theme-set="soft" data-i18n="pref.soft">Dịu</button>
+      </div>
+    </div>
     <main class="auth-shell">
       <section class="auth-showcase">
         <a class="showcase-brand" href="../landing/landing.html"><svg><use href="#i-cart" /></svg><span>Supermarket Fly</span></a>
         <div class="showcase-copy">
-          <p class="showcase-kicker">Hệ thống quản lý nội bộ</p>
+          <p class="showcase-kicker" data-i18n="login.kicker">Hệ thống quản lý nội bộ</p>
           <h1>Supermarket Fly</h1>
           <span class="showcase-rule" aria-hidden="true"></span>
-          <p class="showcase-description">Hệ thống quản lý nội bộ giúp vận hành siêu thị<br />hiệu quả, minh bạch và chính xác.</p>
+          <p class="showcase-description" data-i18n="login.desc">Hệ thống quản lý nội bộ giúp vận hành siêu thị hiệu quả, minh bạch và chính xác.</p>
           <svg class="showcase-illustration" viewBox="0 0 520 270" role="img" aria-label="Minh họa hệ thống quản lý kho, bán hàng tại quầy và báo cáo">
             <g class="illustration-soft">
               <rect x="300" y="18" width="198" height="128" rx="8" />
@@ -52,56 +80,62 @@
             </g>
           </svg>
           <ul class="showcase-modules" aria-label="Các nghiệp vụ chính">
-            <li><svg><use href="#i-cart" /></svg><span>Mua hàng</span></li>
-            <li><svg><use href="#i-box" /></svg><span>Quản lý kho</span></li>
-            <li><svg><use href="#i-pos" /></svg><span>Bán hàng<br />tại quầy</span></li>
-            <li><svg><use href="#i-chart" /></svg><span>Kế toán &amp;<br />báo cáo</span></li>
+            <li><svg><use href="#i-cart" /></svg><span data-i18n="login.modBuy">Mua hàng</span></li>
+            <li><svg><use href="#i-box" /></svg><span data-i18n="login.modWh">Quản lý kho</span></li>
+            <li><svg><use href="#i-pos" /></svg><span data-i18n="login.modPos">Bán hàng tại quầy</span></li>
+            <li><svg><use href="#i-chart" /></svg><span data-i18n="login.modAcct">Kế toán &amp; báo cáo</span></li>
           </ul>
         </div>
-        <div class="showcase-footer">© 2026 Supermarket_Fly · Phiên bản 1.0</div>
+        <div class="showcase-footer" data-i18n="login.footer">© 2026 Supermarket_Fly · Phiên bản 1.0</div>
       </section>
 
       <section class="auth-panel">
-        <a class="back-link" href="../landing/landing.html"><svg><use href="#i-arrow" /></svg>Quay lại trang giới thiệu</a>
+        <a class="back-link" href="../landing/landing.html"><svg><use href="#i-arrow" /></svg><span data-i18n="login.back">Quay lại trang giới thiệu</span></a>
         <div class="login-card">
           <div class="mobile-brand"><svg><use href="#i-cart" /></svg><strong>Supermarket Fly</strong></div>
-          <div class="login-heading"><h2>Đăng nhập</h2><p>Sử dụng tài khoản nội bộ đã được cấp.</p></div>
+          <div class="login-heading"><h2 data-i18n="login.h2">Đăng nhập</h2><p data-i18n="login.sub">Sử dụng tài khoản nội bộ đã được cấp.</p></div>
 
           <form id="loginForm" class="login-form" novalidate>
             <div id="errorMessage" class="error-message" role="alert" hidden></div>
-            <label class="form-field" for="username"><span>Tên đăng nhập</span><div class="input-wrap"><svg><use href="#i-user" /></svg><input type="text" id="username" name="username" placeholder="Ví dụ: admin" autocomplete="username" required /></div></label>
-            <label class="form-field" for="password"><span>Mật khẩu</span><div class="input-wrap"><svg><use href="#i-lock" /></svg><input type="password" id="password" name="password" placeholder="Nhập mật khẩu của bạn" autocomplete="current-password" required /><button class="password-toggle" id="passwordToggle" type="button" aria-label="Hiện mật khẩu"><svg><use href="#i-eye" /></svg></button></div></label>
-            <div class="form-options"><label class="remember-option"><input type="checkbox" id="rememberUsername" /><span>Ghi nhớ tên đăng nhập</span></label><button class="forgot-button" id="forgotPasswordBtn" type="button">Quên mật khẩu?</button></div>
+            <label class="form-field" for="username"><span data-i18n="login.user">Tên đăng nhập</span><div class="input-wrap"><svg><use href="#i-user" /></svg><input type="text" id="username" name="username" data-i18n-placeholder="login.userPh" placeholder="Ví dụ: admin" autocomplete="username" required /></div></label>
+            <label class="form-field" for="password"><span data-i18n="login.pass">Mật khẩu</span><div class="input-wrap"><svg><use href="#i-lock" /></svg><input type="password" id="password" name="password" data-i18n-placeholder="login.passPh" placeholder="Nhập mật khẩu của bạn" autocomplete="current-password" required /><button class="password-toggle" id="passwordToggle" type="button" data-i18n-aria="login.showPass" aria-label="Hiện mật khẩu"><svg><use href="#i-eye" /></svg></button></div></label>
+            <div class="form-options"><label class="remember-option"><input type="checkbox" id="rememberUsername" /><span data-i18n="login.remember">Ghi nhớ tên đăng nhập</span></label><button class="forgot-button" id="forgotPasswordBtn" type="button" data-i18n="login.forgot">Quên mật khẩu?</button></div>
             <div class="role-chips" id="roleChips">
-              <p>Chọn nhanh tài khoản test — mật khẩu 123</p>
+              <p data-i18n="login.testHint">Chọn nhanh tài khoản test — mật khẩu 123</p>
               <div>
-                <button type="button" data-user="admin">Quản lý</button>
-                <button type="button" data-user="muahang">Mua hàng</button>
-                <button type="button" data-user="thukho">Thủ kho</button>
-                <button type="button" data-user="thungan">Thu ngân</button>
-                <button type="button" data-user="ketoan">Kế toán</button>
+                <button type="button" data-user="admin" data-i18n="role.manager">Quản lý</button>
+                <button type="button" data-user="muahang" data-i18n="role.purchasing">Mua hàng</button>
+                <button type="button" data-user="thukho" data-i18n="role.warehouse">Thủ kho</button>
+                <button type="button" data-user="thungan" data-i18n="role.cashier">Thu ngân</button>
+                <button type="button" data-user="ketoan" data-i18n="role.accounting">Kế toán</button>
               </div>
             </div>
-            <button type="submit" class="btn-login" id="btnLogin"><span>Đăng nhập</span></button>
+            <button type="submit" class="btn-login" id="btnLogin"><span data-i18n="login.submit">Đăng nhập</span></button>
           </form>
 
           <div class="login-note server-box">
-            <p><strong>Máy chủ nhóm (database chung)</strong><span>Cùng Wi-Fi: dán IP máy chủ, ví dụ 192.168.1.10. Khác Wi-Fi: dán IP Tailscale (100.x.x.x) hoặc link Cloudflare/ngrok TV1 gửi. Máy này: localhost.</span></p>
+            <p><strong data-i18n="login.serverTitle">Máy chủ nhóm (database chung)</strong><span data-i18n="login.serverHelp">Cùng Wi-Fi: dán IP máy chủ, ví dụ 192.168.1.10. Khác Wi-Fi: dán IP Tailscale (100.x.x.x) hoặc link Cloudflare/ngrok TV1 gửi. Máy này: localhost.</span></p>
             <div class="server-row">
               <div class="input-wrap">
                 <svg><use href="#i-database" /></svg>
                 <input type="text" id="serverHost" name="serverHost" placeholder="localhost, 192.168.1.10, 100.x.x.x hoặc link https" autocomplete="off" />
               </div>
-              <button type="button" class="btn-check-server" id="btnCheckServer">Kiểm tra</button>
+              <button type="button" class="btn-check-server" id="btnCheckServer" data-i18n="login.check">Kiểm tra</button>
             </div>
             <small class="server-status" id="serverStatus">Đang dùng máy này (localhost).</small>
           </div>
         </div>
-        <p class="support-note">Bạn chưa có tài khoản? <button id="requestAccessBtn" type="button">Liên hệ quản trị viên</button></p>
+        <p class="support-note"><span data-i18n="login.noAccount">Bạn chưa có tài khoản?</span> <button id="requestAccessBtn" type="button" data-i18n="login.contact">Liên hệ quản trị viên</button></p>
       </section>
     </main>
 
     <div class="auth-toast" id="authToast" role="status" aria-live="polite"></div>
+    <script src="../../i18n/vi.js"></script>
+    <script src="../../i18n/en.js"></script>
+    <script src="../../i18n/zh.js"></script>
+    <script src="../../i18n/ops.js"></script>
+    <script src="../../i18n/i18n.js"></script>
+    <script src="../../i18n/appearance.js"></script>
     <script src="../shared/escape-key.js"></script>
     <script src="../shared/api-config.js"></script>
     <script src="login.js"></script>

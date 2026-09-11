@@ -1,8 +1,9 @@
 (() => {
   const previous = window.FLY_ROLE_PAGES;
+  const t = (key, vars) => window.FLY_I18N?.t(key, vars) || key;
   const templates = {
-    'manager-workforce': '<section class="warehouse-page workforce-page"><div class="overview-loading">Đang tải kế hoạch nhân sự...</div></section>',
-    'manager-workforce-approve': '<section class="warehouse-page workforce-page workforce-approve-page"><div class="overview-loading">Đang tải duyệt công...</div></section>',
+    'manager-workforce': `<section class="warehouse-page workforce-page"><div class="overview-loading">${t('wf.loadingPlan')}</div></section>`,
+    'manager-workforce-approve': `<section class="warehouse-page workforce-page workforce-approve-page"><div class="overview-loading">${t('wf.loadingApprove')}</div></section>`,
     'manager-holidays': '<section class="warehouse-page workforce-page manager-holidays"><div class="overview-loading">Đang tải lịch ngày lễ...</div></section>',
     'cashier-schedule': '<section class="warehouse-page workforce-page"><div class="overview-loading">Đang tải lịch làm việc cá nhân...</div></section>'
   };
@@ -314,8 +315,8 @@
         const officeShifts = setup.shifts.filter(isOfficeShift);
         const coverageCard = item => `<article class="${isOfficeShift(item) ? 'office' : ''}"><span>${esc(item.TenCa)}</span><strong>${data.items.filter(row => row.MaLoaiCa === item.MaLoaiCa).length}/${expectedCoverage(item, days)}</strong><small>${esc(item.GioBatDau)}–${esc(item.GioKetThuc)}${item.GioNghiBatDau ? ` · nghỉ ${esc(item.GioNghiBatDau)}–${esc(item.GioNghiKetThuc)}` : ''} · ${shiftRoleLabel(item)}</small></article>`;
         const legend = `<span class="workforce-legend"><i class="draft"></i>Bản nháp / chờ công bố lại <i class="published"></i>Đã công bố</span>`;
-        root.innerHTML = `<header class="warehouse-heading workforce-heading"><div><p class="warehouse-kicker">NHÂN SỰ / PHÂN CA</p><h1>Kế hoạch làm việc cửa hàng</h1><p>Thu ngân: 1 ca/ngày, nghỉ 12 giờ, ≤48 giờ/tuần (T2–CN), không đêm thứ 3 liên tiếp; xoay đều loại ca trong tháng. Mua hàng, Thủ kho và Kế toán làm cố định 7h30–17h30, nghỉ trưa 11h30–13h30, Thứ 2–Thứ 7. Lịch đã công bố không khóa cứng: Quản lý sửa ngoại lệ rồi Công bố lịch lại. Duyệt chấm công ở menu <strong>Duyệt công</strong>.</p></div><div class="workforce-heading-actions"><button class="warehouse-secondary" id="autoSchedule"><svg><use href="#i-refresh"/></svg>Phân ca tự động</button><button class="warehouse-primary" id="publishSchedule"><svg><use href="#i-approve"/></svg>${needsRepublish ? 'Công bố lại' : 'Công bố lịch'}</button></div></header>
-          <section class="workforce-weekbar"><button class="warehouse-icon-button" id="prevWeek"><svg><use href="#i-chevron"/></svg></button><div><span>TUẦN LÀM VIỆC</span><strong>${shortDate(from)} – ${shortDate(to)}</strong><small>Quản lý có thể điều chỉnh ngoại lệ trên lịch đã công bố, rồi Công bố lịch lại. Ô đã chấm công hoặc đã mở POS thì khóa. Ca hành chính trừ 2 giờ nghỉ trưa khi tính lương.</small></div><button class="warehouse-icon-button next" id="nextWeek"><svg><use href="#i-chevron"/></svg></button></section>
+        root.innerHTML = `<header class="warehouse-heading workforce-heading"><div><p class="warehouse-kicker">${t('wf.kicker')}</p><h1>${t('wf.title')}</h1><p>${t('wf.lead')}</p></div><div class="workforce-heading-actions"><button class="warehouse-secondary" id="autoSchedule"><svg><use href="#i-refresh"/></svg>${t('wf.auto')}</button><button class="warehouse-primary" id="publishSchedule"><svg><use href="#i-approve"/></svg>${needsRepublish ? t('wf.republish') : t('wf.publish')}</button></div></header>
+          <section class="workforce-weekbar"><button class="warehouse-icon-button" id="prevWeek"><svg><use href="#i-chevron"/></svg></button><div><span>${t('wf.week')}</span><strong>${shortDate(from)} – ${shortDate(to)}</strong><small>Quản lý có thể điều chỉnh ngoại lệ trên lịch đã công bố, rồi Công bố lịch lại. Ô đã chấm công hoặc đã mở POS thì khóa. Ca hành chính trừ 2 giờ nghỉ trưa khi tính lương.</small></div><button class="warehouse-icon-button next" id="nextWeek"><svg><use href="#i-chevron"/></svg></button></section>
           ${needsRepublish ? `<div class="workforce-rule workforce-republish-banner"><svg><use href="#i-warning"/></svg><p>Có ${pendingRepublish} lượt chờ công bố lại sau điều chỉnh ngoại lệ. Chấm công và POS chỉ dùng lịch đã công bố — hãy bấm Công bố lại.</p></div>` : ''}
           <div class="workforce-coverage">${cashierShifts.map(coverageCard).join('')}</div>
           ${officeShifts.length ? `<div class="workforce-coverage office-line">${officeShifts.map(coverageCard).join('')}</div>` : ''}
@@ -391,19 +392,19 @@
     };
 
     const renderShell = () => {
-      root.innerHTML = `<header class="warehouse-heading workforce-heading workforce-approve-heading"><div><p class="warehouse-kicker">NHÂN SỰ / DUYỆT CÔNG</p><h1>Duyệt chấm công</h1><p>Mặc định hiện toàn bộ ca <strong>Chờ duyệt</strong> — cùng nguồn chuông / Telegram, gồm ngày cũ và ca hành chính. Lọc ngày chỉ khi cần. Không duyệt trên Telegram.</p></div></header>
+      root.innerHTML = `<header class="warehouse-heading workforce-heading workforce-approve-heading"><div><p class="warehouse-kicker">${t('wf.approveKicker')}</p><h1>${t('wf.approveTitle')}</h1><p>${t('wf.approveLead')}</p></div></header>
         <article id="workforceApprove" class="warehouse-table-card workforce-attendance workforce-approve">
-          <div class="warehouse-panel-title"><div><p>KHỐI 1 · DUYỆT CÔNG</p><h2>Chấm công chờ duyệt và đã duyệt</h2></div><span class="status-pill pending" id="approvePendingCount">Đang tải</span></div>
+          <div class="warehouse-panel-title"><div><p>${t('wf.block1')}</p><h2>${t('wf.approveList')}</h2></div><span class="status-pill pending" id="approvePendingCount">${t('common.loading')}</span></div>
           <div class="workforce-approve-filters" data-keep-native>
-            <label class="warehouse-field"><span>Trạng thái</span>
+            <label class="warehouse-field"><span>${t('wf.status')}</span>
               <select id="approveStatusFilter" data-keep-native>
-                <option value="Chờ duyệt" ${statusFilter === 'Chờ duyệt' ? 'selected' : ''}>Chờ duyệt</option>
-                <option value="Đã duyệt" ${statusFilter === 'Đã duyệt' ? 'selected' : ''}>Đã duyệt</option>
-                <option value="" ${statusFilter === '' ? 'selected' : ''}>Tất cả</option>
+                <option value="Chờ duyệt" ${statusFilter === 'Chờ duyệt' ? 'selected' : ''}>${t('wf.pending')}</option>
+                <option value="Đã duyệt" ${statusFilter === 'Đã duyệt' ? 'selected' : ''}>${t('wf.done')}</option>
+                <option value="" ${statusFilter === '' ? 'selected' : ''}>${t('wf.all')}</option>
               </select>
             </label>
-            <label class="warehouse-field"><span>Từ ngày (tuỳ chọn)</span><input type="date" id="approveFrom" data-keep-native value="${esc(fromDate)}"></label>
-            <label class="warehouse-field"><span>Đến ngày (tuỳ chọn)</span><input type="date" id="approveTo" data-keep-native value="${esc(toDate)}"></label>
+            <label class="warehouse-field"><span>${t('wf.from')}</span><input type="date" id="approveFrom" data-keep-native value="${esc(fromDate)}"></label>
+            <label class="warehouse-field"><span>${t('wf.to')}</span><input type="date" id="approveTo" data-keep-native value="${esc(toDate)}"></label>
             <div class="workforce-approve-filter-actions">
               <button class="warehouse-primary workforce-approve-btn" id="applyApproveFilter" type="button">Lọc</button>
               <button class="warehouse-secondary workforce-approve-btn" id="clearApproveFilter" type="button">Xóa lọc</button>

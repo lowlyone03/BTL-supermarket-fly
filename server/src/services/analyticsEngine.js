@@ -170,7 +170,7 @@ const stripPiiPayables = (pack) => {
     };
 };
 
-const collectFacts = async (pool, user) => {
+const collectFacts = async (pool, user, periodKey = '') => {
     const facts = { role: user?.TenVaiTro, permissions: codesOf(user), sources: [] };
     facts.inbox = await safe('inbox', () => listForRole(pool, user));
     if (!facts.inbox?.failed) facts.sources.push('Hộp thư');
@@ -239,7 +239,8 @@ const collectFacts = async (pool, user) => {
 
     if ((hasUc(user, 'UC10') && isRole(user, 'Quản lý')) || (hasUc(user, 'UC38') || hasUc(user, 'UC43'))) {
         try {
-            const resolved = { period: resolveReportingPeriod({ periodType: 'month' }) };
+            const month = /^\d{4}-\d{2}$/.test(String(periodKey || '')) ? String(periodKey) : undefined;
+            const resolved = { period: resolveReportingPeriod({ periodType: 'month', period: month }) };
             if (hasUc(user, 'UC10') || hasUc(user, 'UC43')) {
                 facts.pnl = await safe('KQKD cửa hàng', () => storeProfitLoss.buildReport(pool, resolved));
                 if (!facts.pnl?.failed) facts.sources.push('KQKD');
@@ -604,8 +605,26 @@ const insightsFromFacts = (facts, user) => {
     const cf = facts.cashflow && !facts.cashflow.failed ? facts.cashflow : null;
     if (pnl?.kqkd) {
         const profit = n(pnl.kqkd.loiNhuan);
+        const dt = n(pnl.kqkd.doanhThuThuan);
+        const gp = n(pnl.kqkd.loiNhuanGop);
+        const gv = n(pnl.hoatDong?.giaVon?.giaVonThuan);
         const chiNcc = n(pnl.dongTien?.chiNcc);
         const tm = n(pnl.tienMat?.tienMatPhieuThu);
+        const momo = n(pnl.tienMat?.qr ?? facts.momo?.TongMoMo);
+        if (dt || gv) {
+            const margin = dt ? Math.round((gp / dt) * 1000) / 10 : 0;
+            cards.push({
+                id: 'dt-vs-gv',
+                title: 'Doanh thu thuần so với giá vốn',
+                body: `DT thuần ${money(dt)} − GV thuần ${money(gv)} = lãi gộp ${money(gp)} (biên ${margin}%). KQKD ${money(profit)} không trừ trả NCC.`,
+                evidence: [
+                    { claim: 'Doanh thu thuần', numbers: [money(dt)], source: 'P&L cửa hàng', confidence: 'high' },
+                    { claim: 'Giá vốn thuần', numbers: [money(gv)], source: 'P&L cửa hàng', confidence: 'high' },
+                    { claim: 'Lãi gộp', numbers: [money(gp)], source: 'DT − GV', confidence: 'high' }
+                ],
+                nextAction: action('kqkd')
+            });
+        }
         cards.push({
             id: 'profit-vs-cash',
             title: 'Vì sao có lãi nhưng tiền mặt có thể giảm?',
@@ -614,19 +633,31 @@ const insightsFromFacts = (facts, user) => {
                 : `KQKD kỳ này ${money(profit)} — ${pnl.kqkd.trangThai}. Trả NCC nằm dòng tiền, không trừ kqkdLoiNhuan lần nữa.`,
             evidence: [
                 { claim: 'kqkdLoiNhuan', numbers: [money(profit)], source: pnl.congThuc?.laiLo || 'P&L cửa hàng', confidence: 'high' },
-                { claim: 'Chi NCC (dòng tiền)', numbers: [money(chiNcc)], source: 'Phiếu chi thành công trong kỳ', confidence: 'high' }
+                { claim: 'Chi NCC (dòng tiền / 331)', numbers: [money(chiNcc)], source: 'Phiếu chi thành công trong kỳ', confidence: 'high' }
             ],
             nextAction: action('kqkd')
         });
         cards.push({
             id: 'pay-ncc-not-pnl',
-            title: 'Tại sao trả NCC không làm giảm LN lần nữa?',
-            body: 'Giá vốn đã ghi lúc bán / khi mua đã khớp. Trả NCC giảm 331, nằm LCTT. Không trừ KQKD.',
+            title: '331 và KQKD: trả NCC không trừ lãi lần nữa',
+            body: `Giá vốn đã ghi lúc bán / khi mua đã khớp. Trả NCC giảm 331 (${money(chiNcc)}), nằm LCTT. Không trừ KQKD ${money(profit)}.`,
             evidence: [
                 { claim: 'Luật Fly', numbers: ['không trừ kqkdLoiNhuan'], source: 'FAQ / cẩm nang kế toán mini', confidence: 'high' }
             ],
             nextAction: action('cashflow')
         });
+        if (tm || momo) {
+            cards.push({
+                id: 'ket-vs-momo',
+                title: 'Két tiền mặt và MoMo (112)',
+                body: `Két (phiếu thu TM) ${money(tm)}. MoMo/QR ${money(momo)} vào 112, không vào két. DT đã ghi lúc HĐ hoàn thành.`,
+                evidence: [
+                    { claim: 'Tiền mặt phiếu thu', numbers: [money(tm)], source: 'P&L / phiếu thu ca', confidence: 'high' },
+                    { claim: 'MoMo / QR', numbers: [money(momo)], source: 'Thanh toán QR', confidence: facts.momo && !facts.momo.failed ? 'high' : 'medium' }
+                ],
+                nextAction: action(isRole(user, 'Thu ngân') ? 'cashierShifts' : 'cashflow')
+            });
+        }
     }
     cards.push({
         id: 'momo-not-drawer',
@@ -672,15 +703,31 @@ const insightsFromFacts = (facts, user) => {
             });
         }
     }
-    return cards.slice(0, 8);
+    return cards.slice(0, 6);
 };
 
 const scenarioSnapshot = (facts, user) => {
-    const kqkd = facts.pnl && !facts.pnl.failed && facts.pnl.kqkd
-        ? facts.pnl.kqkd
+    const pnl = facts.pnl && !facts.pnl.failed ? facts.pnl : null;
+    const kqkd = pnl?.kqkd
+        ? {
+            doanhThuThuan: n(pnl.kqkd.doanhThuThuan),
+            loiNhuanGop: n(pnl.kqkd.loiNhuanGop),
+            loiNhuan: n(pnl.kqkd.loiNhuan),
+            giaVonThuan: n(pnl.hoatDong?.giaVon?.giaVonThuan),
+            period: pnl.period
+        }
         : (facts.income && !facts.income.failed
-            ? { doanhThuThuan: facts.income.lines?.find((l) => l.id === 3)?.amount, loiNhuanGop: facts.income.lines?.find((l) => l.id === 5)?.amount, loiNhuan: facts.income.loiNhuanKeToan }
+            ? { doanhThuThuan: n(facts.income.lines?.find((l) => l.id === 3)?.amount), loiNhuanGop: n(facts.income.lines?.find((l) => l.id === 5)?.amount), loiNhuan: n(facts.income.loiNhuanKeToan), giaVonThuan: 0 }
             : { unavailable: true, reason: 'Tài khoản không xem KQKD/P&L.' });
+    const cash = pnl?.tienMat
+        ? {
+            tienMat: n(pnl.tienMat.tienMatPhieuThu),
+            momo: n(pnl.tienMat.qr || facts.momo?.TongMoMo),
+            nganHang: n(pnl.tienMat.chuyenKhoan) + n(pnl.tienMat.the) + n(pnl.tienMat.qr)
+        }
+        : (facts.momo && !facts.momo.failed
+            ? { tienMat: 0, momo: n(facts.momo.TongMoMo), nganHang: n(facts.momo.TongMoMo) }
+            : { unavailable: true, reason: 'Chưa có tiền mặt / MoMo trong phạm vi quyền.' });
     const stockItems = facts.inventory && !facts.inventory.failed
         ? { items: facts.inventory.items || [] }
         : (facts.admin?.lowStock
@@ -696,11 +743,11 @@ const scenarioSnapshot = (facts, user) => {
                 sold4w: n(velMap.get(row.MaSP)?.Sold28)
             }))
         };
-    return { kqkd, stockItems, demandItems, role: user?.TenVaiTro };
+    return { kqkd, cash, stockItems, demandItems, role: user?.TenVaiTro, period: pnl?.period || kqkd.period || null };
 };
 
-const buildPack = async (pool, user) => {
-    const facts = await collectFacts(pool, user);
+const buildPack = async (pool, user, options = {}) => {
+    const facts = await collectFacts(pool, user, options.period || options.month || '');
     const kpis = kpisFromFacts(facts, user);
     const anomalies = anomaliesFromFacts(facts, user);
     const risks = risksFromFacts(facts, user);
@@ -740,7 +787,7 @@ const filterPayablesLeak = (pack, user) => {
     };
 };
 
-const buildBrief = async (pool, user) => filterPayablesLeak(await buildPack(pool, user), user);
+const buildBrief = async (pool, user, options = {}) => filterPayablesLeak(await buildPack(pool, user, options), user);
 
 module.exports = {
     buildPack,

@@ -1,0 +1,10 @@
+{
+  "vipMaxPercent": 10,
+  "winBackVoucherVnd": 20000,
+  "newMemberPointMultiplier": 2,
+  "vipEnabled": true,
+  "winBackEnabled": true,
+  "newMemberEnabled": true,
+  "updatedAt": "2026-09-11T04:41:22.930Z",
+  "updatedBy": "Nguyễn Minh Anh"
+}
