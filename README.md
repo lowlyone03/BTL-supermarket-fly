@@ -1,4 +1,4 @@
-<![CDATA[<div align="center">
+<div align="center">
 
 # 🛒 Supermarket Fly
 
@@ -931,4 +931,4 @@ Mã nguồn đồ án học tập. Desktop: MIT. Server: ISC. Không phải sả
 *12 nhân viên · 5 vai trò · 43 use case · 37+ bảng · 34 migration · 79 service*
 
 </div>
-]]>
+
