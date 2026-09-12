@@ -62,13 +62,21 @@ const REFUND_METHODS = ['Tiền mặt', 'QR', 'Thẻ', 'Chuyển khoản'];
 const RETURN_DONE_STATUSES = ['Hoàn thành'];
 const RETURN_MONEY_PENDING = 'Đang hoàn tiền';
 const RETURN_MONEY_FAILED = 'Hoàn tiền thất bại';
+const RETURN_MONEY_WAITING = 'Chờ xử lý hoàn tiền';
+const HOAN_CHO_GUI = 'CHO_GUI';
+const HOAN_DANG = 'DANG_XU_LY';
+const HOAN_OK = 'THANH_CONG';
+const HOAN_FAIL = 'THAT_BAI';
+const HOAN_CHO_XU_LY = 'CHO_XU_LY';
 const RETURN_CLOSED_STATUSES = ['Hoàn thành', 'Từ chối', 'Đã hủy'];
 const RETURN_DONE_SQL = `dt.TrangThai=N'Hoàn thành'`;
 const RETURN_OPEN_SQL = `dt.TrangThai NOT IN (N'Hoàn thành', N'Từ chối', N'Đã hủy')`;
+const COLLECT_EXTRA_NOTE_PREFIX = 'Thu chênh đổi hàng';
 
 const isSettledReturn = status => RETURN_DONE_STATUSES.includes(String(status || ''));
 const isReturnMoneyPending = status => String(status || '') === RETURN_MONEY_PENDING;
 const isReturnMoneyFailed = status => String(status || '') === RETURN_MONEY_FAILED;
+const isReturnMoneyWaiting = status => String(status || '') === RETURN_MONEY_WAITING;
 
 const canonicalRefundMethod = method => {
     const value = String(method || '').trim();
@@ -88,9 +96,122 @@ const originalInvoicePayMethod = (payments = []) => {
 const defaultRefundMethod = (originalMethod, payments = []) =>
     canonicalRefundMethod(originalMethod) || originalInvoicePayMethod(payments) || 'Tiền mặt';
 
-// HĐ gốc QR → bắt buộc hoàn QR/ZaloPay. Thu ngân không được đổi sang tiền mặt.
-const cashierMayRefundCash = (originalMethod, payments = []) =>
-    defaultRefundMethod(originalMethod, payments) === 'Tiền mặt';
+// Không còn lock “HĐ QR không được hoàn TM”. Allocator (ưu tiên QR) quyết định kênh.
+const cashierMayRefundCash = () => true;
+
+const isQrMethod = method => canonicalRefundMethod(method) === 'QR';
+const isCashMethod = method => canonicalRefundMethod(method) === 'Tiền mặt';
+
+const paidByMethod = (payments = []) => {
+    const successful = (Array.isArray(payments) ? payments : []).filter(row =>
+        !row.TrangThai || row.TrangThai === 'Thành công'
+    );
+    const sumOf = method => roundMoney(successful
+        .filter(row => canonicalRefundMethod(row.PhuongThuc) === method)
+        .reduce((sum, row) => sum + number(row.SoTien), 0));
+    return { TM: sumOf('Tiền mặt'), QR: sumOf('QR') };
+};
+
+const refundedByMethod = (refundLines = [], legacyTickets = []) => {
+    const ok = (Array.isArray(refundLines) ? refundLines : []).filter(row =>
+        String(row.TrangThaiHoan || '').toUpperCase() === HOAN_OK
+    );
+    const ticketsWithOkLine = new Set(ok.map(row => row.MaPhieuTra || row.MaDT).filter(Boolean));
+    const sumLines = method => roundMoney(ok
+        .filter(row => canonicalRefundMethod(row.PhuongThuc) === method)
+        .reduce((sum, row) => sum + number(row.SoTienHoan ?? row.SoTien), 0));
+    let TM = sumLines('Tiền mặt');
+    let QR = sumLines('QR');
+    for (const ticket of (Array.isArray(legacyTickets) ? legacyTickets : [])) {
+        if (String(ticket.TrangThai || '') !== 'Hoàn thành') continue;
+        if (ticketsWithOkLine.has(ticket.MaDT)) continue;
+        const method = canonicalRefundMethod(ticket.PhuongThucHoan);
+        const amount = roundMoney(ticket.SoTienHoan);
+        if (method === 'QR') QR = roundMoney(QR + amount);
+        if (method === 'Tiền mặt') TM = roundMoney(TM + amount);
+    }
+    return { TM, QR };
+};
+
+const remainingByMethod = (paid = {}, refunded = {}) => ({
+    TM: roundMoney(Math.max(0, number(paid.TM) - number(refunded.TM))),
+    QR: roundMoney(Math.max(0, number(paid.QR) - number(refunded.QR)))
+});
+
+/**
+ * Phân bổ số tiền cần hoàn: ưu tiên QR trước, phần vượt sang tiền mặt.
+ *
+ * Đây là CHÍNH SÁCH NGHIỆP VỤ Supermarket Fly (bảo vệ quỹ tiền mặt của ca,
+ * giảm thiếu TM khi hoàn), KHÔNG phải quy tắc kế toán bắt buộc. Sổ cái vẫn
+ * ghi đúng nguồn: Có 112 cho phần hoàn QR, Có 111 cho phần hoàn TM.
+ *
+ * Công thức:
+ *   QR_con / TM_con = đã thu − đã hoàn (từng PT)
+ *   Hoan_QR = min(need, QR_con)
+ *   Hoan_TM = min(need − Hoan_QR, TM_con)
+ * Không hoàn quá số đã thu từng phương thức. Không gán PT theo món hàng.
+ *
+ * PhieuDoiTra.TrangThai chỉ là trạng thái TỔNG HỢP; mỗi dòng GiaoDichHoan
+ * có trạng thái RIÊNG — UI/sổ/ca phải theo DÒNG.
+ */
+const allocateRefund = (need, remaining = {}) => {
+    const want = roundMoney(need);
+    const qrCon = roundMoney(Math.max(0, remaining.QR ?? remaining.qrRemaining ?? 0));
+    const tmCon = roundMoney(Math.max(0, remaining.TM ?? remaining.cashRemaining ?? 0));
+    const cap = roundMoney(qrCon + tmCon);
+    if (want <= 0) {
+        return {
+            ok: true, need: 0, hoanQr: 0, hoanTm: 0, exceedsCap: false,
+            qrRemainingAfter: qrCon, cashRemainingAfter: tmCon, cap
+        };
+    }
+    if (want > cap + MONEY_TOLERANCE) {
+        return {
+            ok: false, need: want, hoanQr: 0, hoanTm: 0, exceedsCap: true,
+            reason: 'exceeds_cap', qrRemainingAfter: qrCon, cashRemainingAfter: tmCon, cap
+        };
+    }
+    const hoanQr = roundMoney(Math.min(want, qrCon));
+    const hoanTm = roundMoney(Math.min(roundMoney(want - hoanQr), tmCon));
+    return {
+        ok: true,
+        need: want,
+        hoanQr,
+        hoanTm,
+        exceedsCap: false,
+        qrRemainingAfter: roundMoney(qrCon - hoanQr),
+        cashRemainingAfter: roundMoney(tmCon - hoanTm),
+        cap
+    };
+};
+
+const previewRefundAllocation = ({
+    need, payments = [], refundLines = [], legacyTickets = []
+} = {}) => {
+    const paid = paidByMethod(payments);
+    const refunded = refundedByMethod(refundLines, legacyTickets);
+    const remaining = remainingByMethod(paid, refunded);
+    return { paid, refunded, remaining, allocation: allocateRefund(need, remaining) };
+};
+
+/**
+ * PhieuDoiTra.TrangThai = tổng hợp. Mỗi dòng GiaoDichHoan có trạng thái riêng
+ * (vd. QR DANG_XU_LY + TM THANH_CONG). UI/sổ/ca theo DÒNG, không giả định 1 status tiền.
+ */
+const summarizeRefundTicketStatus = (lines = []) => {
+    const statuses = (Array.isArray(lines) ? lines : []).map(row =>
+        String(row.TrangThaiHoan || '').toUpperCase()
+    );
+    if (!statuses.length) return null;
+    if (statuses.some(status => status === HOAN_DANG || status === HOAN_CHO_GUI)) return RETURN_MONEY_PENDING;
+    if (statuses.some(status => status === HOAN_CHO_XU_LY)) return RETURN_MONEY_WAITING;
+    if (statuses.some(status => status === HOAN_FAIL)) return RETURN_MONEY_FAILED;
+    if (statuses.every(status => status === HOAN_OK)) return 'Hoàn thành';
+    return RETURN_MONEY_PENDING;
+};
+
+const collectExtraNote = maDT => `${COLLECT_EXTRA_NOTE_PREFIX} ${String(maDT || '').trim()}`;
+const isCollectExtraPayment = row => String(row?.GhiChu || '').startsWith(COLLECT_EXTRA_NOTE_PREFIX);
 
 const cashRefundExceedsDrawer = (soTienHoan, tienMatTrongKet) =>
     roundMoney(soTienHoan) > 0 && roundMoney(soTienHoan) > roundMoney(tienMatTrongKet);
@@ -101,9 +222,17 @@ const cashRefundBlockedByDrawer = (soTienHoan, tienMatTrongKet) =>
 
 const formatVndPlain = value => `${roundMoney(value).toLocaleString('vi-VN')} đ`;
 
+const cashRefundDrawerShort = ({ soTienHoan, tienMatTrongKet } = {}) => {
+    const need = roundMoney(soTienHoan);
+    const avail = roundMoney(tienMatTrongKet);
+    const short = roundMoney(Math.max(0, need - Math.max(0, avail)));
+    return { need, avail, short, blocked: cashRefundBlockedByDrawer(need, avail) };
+};
+
 const cashRefundDrawerBlock = ({ soTienHoan, tienMatTrongKet } = {}) => {
-    if (!cashRefundBlockedByDrawer(soTienHoan, tienMatTrongKet)) return '';
-    return `Số dư két không đủ để hoàn tiền. Số dư khả dụng: ${formatVndPlain(tienMatTrongKet)}. Số tiền cần hoàn: ${formatVndPlain(soTienHoan)}. Vui lòng hoàn về phương thức thanh toán ban đầu.`;
+    const { need, avail, short, blocked } = cashRefundDrawerShort({ soTienHoan, tienMatTrongKet });
+    if (!blocked) return '';
+    return `Không đủ tiền mặt để hoàn. Cần ${formatVndPlain(need)} / khả dụng ${formatVndPlain(avail)} / thiếu ${formatVndPlain(short)}.`;
 };
 
 const cashRefundDrawerWarning = cashRefundDrawerBlock;
@@ -131,6 +260,93 @@ const nextRefundSendAction = ({ currentTxStatus, queryClassification } = {}) => 
     if (status === 'THAT_BAI' || klass === 'failure') return 'resend_after_fail';
     if (status === 'CHO_GUI' || !status) return 'create';
     return 'query_only';
+};
+
+// ── Hủy thanh toán (mục 2 + 14) — KHÔNG phải trả hàng ──────────────────────
+// Tình huống: HĐ nháp đã thu một phần (vd. TM 300k Thành công + QR 700k Chờ),
+// khách thôi mua. Khác trả hàng sau Hoàn thành: không PhieuDoiTra, không GiaoDichHoan.
+//
+// Bắt buộc query QR lần cuối rồi mới quyết định (caller làm query, hàm này chỉ đọc state sau query).
+//
+// Nhánh A — QR chưa thành công: hủy HĐ, void TM đã thu, fail QR pending.
+//   Ca/két: getShiftSummary chỉ cộng ThanhToan TM Thành công trên HĐ Hoàn thành.
+//   Hủy HĐ → 300k không vào TongTienMat. Void dòng TM → Đã hủy để không ai
+//   cộng nhầm nếu sau này bỏ lọc TrangThai HĐ. Không phiếu chi / không hoàn trả hàng.
+//   Vật lý: thu ngân đưa lại khách số TM đã nhận (két vật lý −300, đối với +300 lúc thu).
+// Nhánh B — query thấy đã đủ tiền: không hủy; complete HĐ; hướng Trả hàng – Hoàn tiền.
+const ABORT_CHECKOUT_VOID_NOTE = 'Hủy thanh toán — đã trả lại khách (không phải phiếu trả / GiaoDichHoan)';
+
+const cashToReturnFromPayments = (payments = []) => roundMoney(
+    (Array.isArray(payments) ? payments : [])
+        .filter(row => isCashMethod(row.PhuongThuc) && String(row.TrangThai || '') === 'Thành công')
+        .reduce((sum, row) => sum + number(row.SoTien), 0)
+);
+
+const decideAbortCheckout = ({
+    invoiceStatus,
+    tongThanhToan = 0,
+    paidSuccess = 0,
+    pendingCount = 0,
+    paidQrSuccess = 0
+} = {}) => {
+    const status = String(invoiceStatus || '');
+    const total = roundMoney(tongThanhToan);
+    const paid = roundMoney(paidSuccess);
+    const pending = Number(pendingCount || 0);
+    const paidQr = roundMoney(paidQrSuccess);
+
+    if (status === 'Hoàn thành') {
+        return {
+            branch: 'B',
+            cancelled: false,
+            completeInvoice: false,
+            alreadyCompleted: true,
+            mustReturn: true,
+            voidSuccessfulPayments: false,
+            failPendingQr: false,
+            cancelInvoice: false
+        };
+    }
+    if (status === 'Đã hủy') {
+        return {
+            branch: 'A',
+            cancelled: true,
+            alreadyCancelled: true,
+            completeInvoice: false,
+            mustReturn: false,
+            voidSuccessfulPayments: false,
+            failPendingQr: false,
+            cancelInvoice: false
+        };
+    }
+    if (status !== 'Nháp') {
+        return { branch: null, error: 'not_draft', cancelled: false };
+    }
+    if (pending === 0 && total > 0 && paid + MONEY_TOLERANCE >= total) {
+        return {
+            branch: 'B',
+            cancelled: false,
+            completeInvoice: true,
+            alreadyCompleted: false,
+            mustReturn: true,
+            voidSuccessfulPayments: false,
+            failPendingQr: false,
+            cancelInvoice: false
+        };
+    }
+    if (paidQr > MONEY_TOLERANCE) {
+        return { branch: null, error: 'successful_qr_blocks_abort', cancelled: false };
+    }
+    return {
+        branch: 'A',
+        cancelled: true,
+        completeInvoice: false,
+        alreadyCompleted: false,
+        mustReturn: false,
+        voidSuccessfulPayments: true,
+        failPendingQr: true,
+        cancelInvoice: true
+    };
 };
 
 const cashHandoverExcludingOpening = (tienCuoiCa, tienDauCa) =>
@@ -301,24 +517,46 @@ module.exports = {
     RETURN_DONE_STATUSES,
     RETURN_MONEY_PENDING,
     RETURN_MONEY_FAILED,
+    RETURN_MONEY_WAITING,
+    HOAN_CHO_GUI,
+    HOAN_DANG,
+    HOAN_OK,
+    HOAN_FAIL,
+    HOAN_CHO_XU_LY,
     RETURN_CLOSED_STATUSES,
     RETURN_DONE_SQL,
     RETURN_OPEN_SQL,
+    COLLECT_EXTRA_NOTE_PREFIX,
     isSettledReturn,
     isReturnMoneyPending,
     isReturnMoneyFailed,
+    isReturnMoneyWaiting,
     canonicalRefundMethod,
     originalInvoicePayMethod,
     defaultRefundMethod,
     cashierMayRefundCash,
+    isQrMethod,
+    isCashMethod,
+    paidByMethod,
+    refundedByMethod,
+    remainingByMethod,
+    allocateRefund,
+    previewRefundAllocation,
+    summarizeRefundTicketStatus,
+    collectExtraNote,
+    isCollectExtraPayment,
     cashRefundExceedsDrawer,
     cashRefundBlockedByDrawer,
+    cashRefundDrawerShort,
     cashRefundDrawerBlock,
     cashRefundDrawerWarning,
     refundableQrRemaining,
     qrRefundWouldExceedCap,
     zpTransIdOf,
     nextRefundSendAction,
+    ABORT_CHECKOUT_VOID_NOTE,
+    cashToReturnFromPayments,
+    decideAbortCheckout,
     cashHandoverExcludingOpening,
     calculateGrossProfit,
     evaluateThreeWayMatch

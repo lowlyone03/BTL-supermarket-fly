@@ -36,6 +36,7 @@ let runtime = {
 
 let status = 'off';
 let cronTimer = null;
+const cardMemory = new Map();
 
 const notifySafely = (work) => {
     try {
@@ -61,6 +62,7 @@ const resetTelegramRuntime = () => {
     runtime.now = () => new Date();
     runtime.log = (...args) => console.error(...args);
     inflightPushes.clear();
+    cardMemory.clear();
 };
 
 const db = () => {
@@ -474,6 +476,94 @@ const shouldSkipPush = async (pool, loai, ma, { once = false, now = runtime.now(
     return false;
 };
 
+const cardKey = (loai, ma, chatId) => `${loai}|${String(ma).slice(0, 50)}|${chatId}`;
+
+const rememberCard = async (pool, loai, ma, chatId, messageId) => {
+    const id = String(ma || '').slice(0, 50);
+    const chat = String(chatId || '').trim();
+    const mid = Number(messageId);
+    if (!loai || !id || !chat || !Number.isFinite(mid) || mid <= 0) return { skipped: true };
+    cardMemory.set(cardKey(loai, id, chat), { loai, ma: id, chatId: chat, messageId: mid, at: Date.now() });
+    if (!pool) return { ok: true, memory: true };
+    const { sql } = db();
+    try {
+        await request(pool, sql)
+            .input('Loai', sql.NVarChar, loai)
+            .input('Ma', sql.VarChar, id)
+            .input('Chat', sql.VarChar, chat)
+            .input('Mid', sql.BigInt, mid)
+            .query(`
+                MERGE dbo.TelegramCardMsg AS t
+                USING (SELECT @Loai AS LoaiSuKien, @Ma AS MaChungTu, @Chat AS ChatId) AS s
+                ON t.LoaiSuKien=s.LoaiSuKien AND t.MaChungTu=s.MaChungTu AND t.ChatId=s.ChatId
+                WHEN MATCHED THEN UPDATE SET MessageId=@Mid, NgayCapNhat=GETDATE()
+                WHEN NOT MATCHED THEN INSERT (LoaiSuKien, MaChungTu, ChatId, MessageId, NgayCapNhat)
+                    VALUES (@Loai, @Ma, @Chat, @Mid, GETDATE());`);
+        return { ok: true };
+    } catch (error) {
+        runtime.log('Telegram CardMsg ghi:', error.message);
+        return { ok: true, memory: true };
+    }
+};
+
+const forgetCard = (loai, ma, chatId) => {
+    cardMemory.delete(cardKey(loai, ma, chatId));
+};
+
+const listReturnCards = async (pool, maDT) => {
+    const id = String(maDT || '').slice(0, 50);
+    const wanted = new Set(['DT_CHO_DUYET', 'DT_CHO_HOAN']);
+    const inboxIds = new Set([`dt:${id}`, `dt-cash:${id}`]);
+    const fromMem = [...cardMemory.values()].filter(row =>
+        (wanted.has(row.loai) && row.ma === id)
+        || (row.loai === 'INBOX' && inboxIds.has(row.ma))
+    );
+    const map = new Map(fromMem.map(row => [`${row.loai}|${row.chatId}`, row]));
+    if (!pool) return [...map.values()];
+    const { sql } = db();
+    try {
+        const result = await request(pool, sql)
+            .input('Ma', sql.VarChar, id)
+            .input('InboxDt', sql.VarChar, `dt:${id}`)
+            .input('InboxCash', sql.VarChar, `dt-cash:${id}`)
+            .query(`
+                SELECT LoaiSuKien, MaChungTu, ChatId, MessageId
+                FROM dbo.TelegramCardMsg
+                WHERE (MaChungTu=@Ma AND LoaiSuKien IN (N'DT_CHO_DUYET', N'DT_CHO_HOAN'))
+                   OR (LoaiSuKien=N'INBOX' AND MaChungTu IN (@InboxDt, @InboxCash))`);
+        for (const row of result.recordset || []) {
+            map.set(`${row.LoaiSuKien}|${row.ChatId}`, {
+                loai: row.LoaiSuKien,
+                ma: row.MaChungTu,
+                chatId: String(row.ChatId),
+                messageId: Number(row.MessageId)
+            });
+        }
+    } catch (error) {
+        runtime.log('Telegram CardMsg đọc:', error.message);
+    }
+    return [...map.values()];
+};
+
+const editTrackedCards = async (pool, maDT, text, extra = {}) => {
+    const cards = await listReturnCards(pool, maDT);
+    let edited = 0;
+    for (const card of cards) {
+        try {
+            const result = await editMessageText(card.chatId, card.messageId, text, extra);
+            if (!result?.skipped) edited += 1;
+        } catch (error) {
+            const msg = String(error.message || '');
+            if (/not found|can't be edited|message to edit not found|MESSAGE_ID_INVALID/i.test(msg)) {
+                forgetCard(card.loai, card.ma, card.chatId);
+            } else if (!/message is not modified/i.test(msg)) {
+                runtime.log('Telegram sửa thẻ:', msg);
+            }
+        }
+    }
+    return edited;
+};
+
 const markPushSent = async (pool, loai, ma) => {
     const { sql } = db();
     try {
@@ -534,6 +624,7 @@ const INBOX_ID_BY_EVENT = {
     PX_CHO_DUYET: ma => `px:${ma}`,
     KK_CHO_DUYET: ma => `kk:${ma}`,
     DT_CHO_DUYET: ma => `dt:${ma}`,
+    DT_CHO_HOAN: ma => `dt-cash:${ma}`,
     CHAM_CONG: ma => `cc:${ma}`,
     PCL_CHO_DUYET: ma => `pcl:${ma}`
 };
@@ -559,9 +650,14 @@ const relatedPushKeys = (loai, ma) => {
     const inboxId = deriveInboxId(loai, id);
     if (inboxId) keys.push({ loai: 'INBOX', ma: String(inboxId).slice(0, 50) });
     if (loai === 'INBOX') {
-        const match = id.match(/^([a-z]+):(.+)$/i);
-        if (match && EVENT_BY_INBOX_PREFIX[match[1]]) {
-            keys.push({ loai: EVENT_BY_INBOX_PREFIX[match[1]], ma: match[2].slice(0, 50) });
+        const waiting = id.match(/^dt-cash:(.+)$/i);
+        if (waiting) {
+            keys.push({ loai: 'DT_CHO_HOAN', ma: waiting[1].slice(0, 50) });
+        } else {
+            const match = id.match(/^([a-z]+):(.+)$/i);
+            if (match && EVENT_BY_INBOX_PREFIX[match[1]]) {
+                keys.push({ loai: EVENT_BY_INBOX_PREFIX[match[1]], ma: match[2].slice(0, 50) });
+            }
         }
     }
     return keys;
@@ -591,7 +687,15 @@ const pushTo = async (pool, recipients, loai, ma, text, { once = false, extra = 
                 const body = typeof text === 'function' ? text(person) : text;
                 if (!body) continue;
                 const extraOf = typeof extra === 'function' ? extra(person) : extra;
-                await sendMessage(person.ChatId, body, { disable_notification: false, ...extraOf });
+                const delivered = await sendMessage(person.ChatId, body, { disable_notification: false, ...extraOf });
+                const mid = Number(delivered?.result?.message_id || delivered?.message_id || 0);
+                if (mid) {
+                    await rememberCard(pool, loai, ma, person.ChatId, mid);
+                    for (const key of keys) {
+                        if (key.loai === loai && key.ma === String(ma)) continue;
+                        await rememberCard(pool, key.loai, key.ma, person.ChatId, mid);
+                    }
+                }
                 sent += 1;
             } catch (error) {
                 runtime.log('Telegram send:', error.message);
@@ -847,15 +951,58 @@ handlers['Gửi duyệt điều chỉnh tồn'] = async (ctx) => {
     }));
 };
 
-handlers['Kiểm tra hàng đổi trả'] = async (ctx) => {
-    const { sql } = db();
-    const row = await one(ctx.pool, `SELECT MaDT, HinhThucXuLy FROM PhieuDoiTra WHERE MaDT=@Id`,
-        { Id: { type: sql.VarChar, value: ctx.recordId } });
-    if (!row) return;
-    const ql = await boundRecipients(ctx.pool, { roles: ['Quản lý'], ucAny: ['UC08'] });
-    await pushPendingCard(ctx.pool, ql, 'DT_CHO_DUYET', row.MaDT, 'dt', eventCard('ĐỔI TRẢ CHỜ DUYỆT', {
-        Mã: row.MaDT, 'Hình thức': row.HinhThucXuLy || '—'
-    }));
+const notifyReturnMoneyEvent = async (pool, { maDT, phase, content } = {}) => {
+    const live = pool || await getPool();
+    const id = String(maDT || '').trim();
+    if (!id || !live) return { skipped: true };
+    const { composePendingPush, viewDocumentKeyboard } = require('./telegramApprove');
+    const card = await composePendingPush(live, 'dt', id, 'vi').catch(() => null);
+    const fallback = eventCard('PHIẾU ĐỔI TRẢ', { Mã: id, 'Ghi chú': content || phase || '—' });
+    const text = card?.text || fallback;
+    const canAct = Boolean(card?.dossier?.pending || card?.dossier?.waitingCash);
+    const extra = canAct
+        ? (card?.extra || {})
+        : { reply_markup: viewDocumentKeyboard({ kind: 'dt', id }), disable_notification: false };
+
+    if (phase === 'pending') {
+        const edited = await editTrackedCards(live, id, text, extra);
+        if (edited) return { sent: 0, edited };
+        const ql = await boundRecipients(live, { roles: ['Quản lý'], ucAny: ['UC08'] });
+        return pushTo(live, ql, 'DT_CHO_DUYET', id, text, { extra });
+    }
+    if (phase === 'waiting_cash') {
+        const edited = await editTrackedCards(live, id, text, extra);
+        if (edited) {
+            await markPushSent(live, 'DT_CHO_HOAN', id);
+            return { sent: 0, edited };
+        }
+        const ql = await boundRecipients(live, { roles: ['Quản lý'], ucAny: ['UC08'] });
+        return pushTo(live, ql, 'DT_CHO_HOAN', id, text, { extra });
+    }
+    const edited = await editTrackedCards(live, id, text, extra);
+    if (phase === 'approved' || phase === 'rejected') {
+        const { sql } = db();
+        const row = await one(live, `
+            SELECT MaDT, MaNV_Lap, MaNV_XuLy, HinhThucXuLy FROM PhieuDoiTra WHERE MaDT=@Id`,
+            { Id: { type: sql.VarChar, value: id } }).catch(() => null);
+        const rec = row
+            ? await boundRecipients(live, { maNV: [row.MaNV_XuLy, row.MaNV_Lap].filter(Boolean) })
+            : [];
+        const loai = phase === 'approved' ? 'DT_DA_DUYET' : 'DT_TU_CHOI';
+        const title = phase === 'approved' ? 'ĐỔI TRẢ ĐÃ DUYỆT' : 'ĐỔI TRẢ BỊ TỪ CHỐI';
+        await pushTo(live, rec, loai, id, eventCard(title, {
+            Mã: id,
+            'Hình thức': row?.HinhThucXuLy || '—',
+            'Ghi chú': phase === 'approved'
+                ? 'Xác nhận đổi/hoàn trên ca đang mở. Tiền chưa chi ở bước duyệt.'
+                : (content || 'Không hoàn tiền, không đổi hàng.')
+        }), { once: true });
+    }
+    return { sent: 0, edited };
+};
+
+handlers['Kiểm tra hàng đổi trả'] = handlers['Sửa kết quả kiểm đổi trả'] = async (ctx) => {
+    await notifyReturnMoneyEvent(ctx.pool, { maDT: ctx.recordId, phase: 'pending', content: ctx.content });
 };
 
 handlers['Gửi đề nghị mua hàng'] = async (ctx) => {
@@ -1042,15 +1189,23 @@ handlers['Duyệt Phiếu chi lương'] = handlers['Duyệt hàng loạt Phiếu
 };
 
 handlers['Phê duyệt đổi trả'] = async (ctx) => {
-    const { sql } = db();
-    const row = await one(ctx.pool, `
-        SELECT MaDT, MaNV_Lap, MaNV_XuLy, HinhThucXuLy FROM PhieuDoiTra WHERE MaDT=@Id`,
-        { Id: { type: sql.VarChar, value: ctx.recordId } });
-    if (!row) return;
-    const rec = await boundRecipients(ctx.pool, { maNV: [row.MaNV_XuLy, row.MaNV_Lap].filter(Boolean) });
-    await pushTo(ctx.pool, rec, 'DT_DA_DUYET', row.MaDT, eventCard('ĐỔI TRẢ ĐÃ DUYỆT', {
-        Mã: row.MaDT, 'Ghi chú': 'Xác nhận đổi/hoàn trên ca đang mở.'
-    }));
+    await notifyReturnMoneyEvent(ctx.pool, { maDT: ctx.recordId, phase: 'approved', content: ctx.content });
+};
+
+handlers['Từ chối đổi trả'] = async (ctx) => {
+    await notifyReturnMoneyEvent(ctx.pool, { maDT: ctx.recordId, phase: 'rejected', content: ctx.content });
+};
+
+handlers['Chờ xử lý hoàn tiền'] = async (ctx) => {
+    await notifyReturnMoneyEvent(ctx.pool, { maDT: ctx.recordId, phase: 'waiting_cash', content: ctx.content });
+};
+
+handlers['Chi hoàn tiền mặt'] = handlers['Hoàn thành đổi trả'] = async (ctx) => {
+    await notifyReturnMoneyEvent(ctx.pool, { maDT: ctx.recordId, phase: 'paid', content: ctx.content });
+};
+
+handlers['Hoàn tiền thất bại'] = async (ctx) => {
+    await notifyReturnMoneyEvent(ctx.pool, { maDT: ctx.recordId, phase: 'failed', content: ctx.content });
 };
 
 const notifyWarehouseReportSubmitted = async (pool, maBC) => {
@@ -1132,6 +1287,7 @@ const pickInboxToPush = (items, { recordId, now }) => {
     return (items || []).filter(item => {
         if (!item?.id) return false;
         const blob = `${item.id} ${item.title || ''} ${item.detail || ''}`;
+        if (/^(dt|dt-cash):/i.test(item.id)) return false;
         if (/hóa đơn bán|hoàn thành hóa đơn|^hd:|^hoadon:/i.test(blob)) return false;
         if (/báo cáo thủ kho|gửi báo cáo kho|BCK\d{8}/i.test(blob)) return false;
         if (/báo cáo bộ phận|gửi báo cáo bộ phận|BCM\d{8}|BCKT\d{8}|BCTN\d{8}/i.test(blob)) return false;
@@ -1315,6 +1471,10 @@ module.exports = {
     boundRecipients,
     loadOperatingSummary,
     loadOperatingDetails,
+    rememberCard,
+    listReturnCards,
+    editTrackedCards,
+    notifyReturnMoneyEvent,
     onInboxChanged,
     pickInboxToPush,
     notifyShiftClosed,

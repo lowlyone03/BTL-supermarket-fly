@@ -317,13 +317,17 @@ const getShiftSummary = async (source, maCa, lock = false) => {
         WHERE ca.MaCa=@MaCa`);
     if (!shift.recordset.length) throw new Error('Không tìm thấy ca bán hàng.');
     const totals = await next().input('MaCa', sql.VarChar, maCa).query(`
+        -- Doanh thu TM ca = dòng Thành công trên HĐ Hoàn thành (đã trừ dòng Thu chênh đổi hàng).
+        -- Hủy thanh toán (nhánh A): HĐ → Đã hủy + đảo TM → Đã hủy → 300k không vào TongTienMat / két dự kiến.
+        -- Không dùng GiaoDichHoan cho hủy phiên — đó là trả hàng sau Hoàn thành.
         SELECT
           COALESCE(SUM(CASE WHEN tt.PhuongThuc=N'Tiền mặt' AND tt.TrangThai=N'Thành công' THEN tt.SoTien ELSE 0 END),0) TongTienMat,
           COALESCE(SUM(CASE WHEN tt.PhuongThuc=N'QR' AND tt.TrangThai=N'Thành công' THEN tt.SoTien ELSE 0 END),0) TongTienQR,
           COALESCE(SUM(CASE WHEN tt.PhuongThuc=N'Thẻ' AND tt.TrangThai=N'Thành công' THEN tt.SoTien ELSE 0 END),0) TongTienThe,
           COALESCE(SUM(CASE WHEN tt.PhuongThuc=N'Chuyển khoản' AND tt.TrangThai=N'Thành công' THEN tt.SoTien ELSE 0 END),0) TongTienChuyenKhoan
         FROM ThanhToan tt JOIN HoaDon hd ON hd.MaHD=tt.MaHD
-        WHERE hd.MaCa=@MaCa AND hd.TrangThai=N'Hoàn thành'`);
+        WHERE hd.MaCa=@MaCa AND hd.TrangThai=N'Hoàn thành'
+          AND (tt.GhiChu IS NULL OR tt.GhiChu NOT LIKE N'Thu chênh đổi hàng%')`);
     const refunds = await next().input('MaCa', sql.VarChar, maCa).query(`
         WITH ChiTietDoiTraTheoPhieu AS (
             SELECT ct.MaDT,
@@ -331,20 +335,86 @@ const getShiftSummary = async (source, maCa, lock = false) => {
                    SUM(CASE WHEN ct.LoaiDong=N'Hàng giao đổi' THEN ct.ThanhTienVon ELSE 0 END) GiaVonHangGiaoDoi
             FROM ChiTietDoiTra ct GROUP BY ct.MaDT
         )
-        SELECT COALESCE(SUM(CASE WHEN dt.PhuongThucHoan=N'Tiền mặt' THEN dt.SoTienHoan ELSE 0 END),0) TongTienHoanMat,
-               COALESCE(SUM(CASE WHEN dt.PhuongThucHoan=N'QR' THEN dt.SoTienHoan ELSE 0 END),0) TongTienHoanQR,
-               COALESCE(SUM(CASE WHEN dt.PhuongThucThuThem=N'Tiền mặt' THEN dt.SoTienThuThem ELSE 0 END),0) TongTienThuThemMat,
-               COALESCE(SUM(CASE WHEN dt.PhuongThucThuThem=N'QR' THEN dt.SoTienThuThem ELSE 0 END),0) TongTienThuThemQR,
-               COALESCE(SUM(dt.SoTienHoan),0) TienHoan,
-               COALESCE(SUM(CASE WHEN ${RESTOCK_ACCEPTED_SQL}
-                                 THEN ct.GiaVonHangTra ELSE 0 END),0) GiaVonHangTraNhapLai,
-               COALESCE(SUM(ct.GiaVonHangGiaoDoi),0) GiaVonHangGiaoDoi
-        FROM PhieuDoiTra dt
-        LEFT JOIN ChiTietDoiTraTheoPhieu ct ON ct.MaDT=dt.MaDT
-        WHERE dt.TrangThai=N'Hoàn thành'
-          AND (dt.MaCaHoan=@MaCa OR (dt.MaCaHoan IS NULL AND dt.NgayHoan BETWEEN
-              (SELECT ThoiGianBatDau FROM CaLamViec WHERE MaCa=@MaCa)
-              AND COALESCE((SELECT ThoiGianKetThuc FROM CaLamViec WHERE MaCa=@MaCa),GETDATE())))`);
+        SELECT COALESCE((
+                    SELECT SUM(gd.SoTienHoan) FROM GiaoDichHoan gd
+                    JOIN PhieuDoiTra p ON p.MaDT=gd.MaPhieuTra
+                    WHERE gd.TrangThaiHoan=N'THANH_CONG'
+                      AND (gd.PhuongThuc=N'Tiền mặt' OR (gd.PhuongThuc IS NULL AND p.PhuongThucHoan=N'Tiền mặt'))
+                      AND (p.MaCaHoan=@MaCa OR (p.MaCaHoan IS NULL AND COALESCE(gd.NgayHoanThanh,p.NgayHoan) BETWEEN
+                          (SELECT ThoiGianBatDau FROM CaLamViec WHERE MaCa=@MaCa)
+                          AND COALESCE((SELECT ThoiGianKetThuc FROM CaLamViec WHERE MaCa=@MaCa),GETDATE())))
+               ),0) + COALESCE((
+                    SELECT SUM(p.SoTienHoan) FROM PhieuDoiTra p
+                    WHERE p.TrangThai=N'Hoàn thành' AND p.PhuongThucHoan=N'Tiền mặt'
+                      AND NOT EXISTS (SELECT 1 FROM GiaoDichHoan gd WHERE gd.MaPhieuTra=p.MaDT)
+                      AND (p.MaCaHoan=@MaCa OR (p.MaCaHoan IS NULL AND p.NgayHoan BETWEEN
+                          (SELECT ThoiGianBatDau FROM CaLamViec WHERE MaCa=@MaCa)
+                          AND COALESCE((SELECT ThoiGianKetThuc FROM CaLamViec WHERE MaCa=@MaCa),GETDATE())))
+               ),0) TongTienHoanMat,
+               COALESCE((
+                    SELECT SUM(gd.SoTienHoan) FROM GiaoDichHoan gd
+                    JOIN PhieuDoiTra p ON p.MaDT=gd.MaPhieuTra
+                    WHERE gd.TrangThaiHoan=N'THANH_CONG'
+                      AND (gd.PhuongThuc=N'QR' OR (gd.PhuongThuc IS NULL AND p.PhuongThucHoan=N'QR'))
+                      AND (p.MaCaHoan=@MaCa OR (p.MaCaHoan IS NULL AND COALESCE(gd.NgayHoanThanh,p.NgayHoan) BETWEEN
+                          (SELECT ThoiGianBatDau FROM CaLamViec WHERE MaCa=@MaCa)
+                          AND COALESCE((SELECT ThoiGianKetThuc FROM CaLamViec WHERE MaCa=@MaCa),GETDATE())))
+               ),0) + COALESCE((
+                    SELECT SUM(p.SoTienHoan) FROM PhieuDoiTra p
+                    WHERE p.TrangThai=N'Hoàn thành' AND p.PhuongThucHoan=N'QR'
+                      AND NOT EXISTS (SELECT 1 FROM GiaoDichHoan gd WHERE gd.MaPhieuTra=p.MaDT)
+                      AND (p.MaCaHoan=@MaCa OR (p.MaCaHoan IS NULL AND p.NgayHoan BETWEEN
+                          (SELECT ThoiGianBatDau FROM CaLamViec WHERE MaCa=@MaCa)
+                          AND COALESCE((SELECT ThoiGianKetThuc FROM CaLamViec WHERE MaCa=@MaCa),GETDATE())))
+               ),0) TongTienHoanQR,
+               COALESCE((
+                    SELECT SUM(dt.SoTienThuThem) FROM PhieuDoiTra dt
+                    WHERE dt.PhuongThucThuThem=N'Tiền mặt' AND dt.SoTienThuThem>0
+                      AND (dt.MaCaHoan=@MaCa OR (dt.MaCaHoan IS NULL AND dt.NgayHoan BETWEEN
+                          (SELECT ThoiGianBatDau FROM CaLamViec WHERE MaCa=@MaCa)
+                          AND COALESCE((SELECT ThoiGianKetThuc FROM CaLamViec WHERE MaCa=@MaCa),GETDATE())))
+               ),0) TongTienThuThemMat,
+               COALESCE((
+                    SELECT SUM(dt.SoTienThuThem) FROM PhieuDoiTra dt
+                    WHERE dt.PhuongThucThuThem=N'QR' AND dt.SoTienThuThem>0
+                      AND (dt.MaCaHoan=@MaCa OR (dt.MaCaHoan IS NULL AND dt.NgayHoan BETWEEN
+                          (SELECT ThoiGianBatDau FROM CaLamViec WHERE MaCa=@MaCa)
+                          AND COALESCE((SELECT ThoiGianKetThuc FROM CaLamViec WHERE MaCa=@MaCa),GETDATE())))
+               ),0) TongTienThuThemQR,
+               COALESCE((
+                    SELECT SUM(gd.SoTienHoan) FROM GiaoDichHoan gd
+                    JOIN PhieuDoiTra p ON p.MaDT=gd.MaPhieuTra
+                    WHERE gd.TrangThaiHoan=N'THANH_CONG'
+                      AND (p.MaCaHoan=@MaCa OR (p.MaCaHoan IS NULL AND COALESCE(gd.NgayHoanThanh,p.NgayHoan) BETWEEN
+                          (SELECT ThoiGianBatDau FROM CaLamViec WHERE MaCa=@MaCa)
+                          AND COALESCE((SELECT ThoiGianKetThuc FROM CaLamViec WHERE MaCa=@MaCa),GETDATE())))
+               ),0) + COALESCE((
+                    SELECT SUM(p.SoTienHoan) FROM PhieuDoiTra p
+                    WHERE p.TrangThai=N'Hoàn thành'
+                      AND NOT EXISTS (SELECT 1 FROM GiaoDichHoan gd WHERE gd.MaPhieuTra=p.MaDT)
+                      AND (p.MaCaHoan=@MaCa OR (p.MaCaHoan IS NULL AND p.NgayHoan BETWEEN
+                          (SELECT ThoiGianBatDau FROM CaLamViec WHERE MaCa=@MaCa)
+                          AND COALESCE((SELECT ThoiGianKetThuc FROM CaLamViec WHERE MaCa=@MaCa),GETDATE())))
+               ),0) TienHoan,
+               COALESCE((
+                    SELECT SUM(CASE WHEN ${RESTOCK_ACCEPTED_SQL} THEN ct.GiaVonHangTra ELSE 0 END)
+                    FROM PhieuDoiTra dt
+                    LEFT JOIN ChiTietDoiTraTheoPhieu ct ON ct.MaDT=dt.MaDT
+                    WHERE dt.TrangThai=N'Hoàn thành'
+                      AND (dt.MaCaHoan=@MaCa OR (dt.MaCaHoan IS NULL AND dt.NgayHoan BETWEEN
+                          (SELECT ThoiGianBatDau FROM CaLamViec WHERE MaCa=@MaCa)
+                          AND COALESCE((SELECT ThoiGianKetThuc FROM CaLamViec WHERE MaCa=@MaCa),GETDATE())))
+               ),0) GiaVonHangTraNhapLai,
+               COALESCE((
+                    SELECT SUM(ct.GiaVonHangGiaoDoi)
+                    FROM PhieuDoiTra dt
+                    LEFT JOIN ChiTietDoiTraTheoPhieu ct ON ct.MaDT=dt.MaDT
+                    WHERE dt.TrangThai=N'Hoàn thành'
+                      AND (dt.MaCaHoan=@MaCa OR (dt.MaCaHoan IS NULL AND dt.NgayHoan BETWEEN
+                          (SELECT ThoiGianBatDau FROM CaLamViec WHERE MaCa=@MaCa)
+                          AND COALESCE((SELECT ThoiGianKetThuc FROM CaLamViec WHERE MaCa=@MaCa),GETDATE())))
+               ),0) GiaVonHangGiaoDoi
+        FROM (SELECT 1 n) dummy`);
     const invoices = await next().input('MaCa', sql.VarChar, maCa).query(`
         SELECT COUNT(*) SoHoaDon,
                COALESCE(SUM(CASE WHEN TrangThai=N'Hoàn thành' THEN TongThanhToan ELSE 0 END),0) DoanhThu,
@@ -394,7 +464,7 @@ const getShiftSummary = async (source, maCa, lock = false) => {
         const pendingReturns = await next().input('MaNV', sql.VarChar, summary.MaNV).query(`
             SELECT dt.MaDT, dt.MaHD, dt.HinhThucXuLy, dt.SoTienHoan, dt.NgayBanGiao, dt.TrangThai
             FROM PhieuDoiTra dt
-            WHERE dt.TrangThai IN (N'Nháp', N'Chờ kiểm tra', N'Chờ duyệt', N'Đã duyệt', N'Đang hoàn tiền', N'Hoàn tiền thất bại')
+            WHERE dt.TrangThai IN (N'Nháp', N'Chờ kiểm tra', N'Chờ duyệt', N'Đã duyệt', N'Đang hoàn tiền', N'Hoàn tiền thất bại', N'Chờ xử lý hoàn tiền')
               AND dt.NgayHoan IS NULL
               AND COALESCE(dt.MaNV_XuLy, dt.MaNV_Lap)=@MaNV
             ORDER BY CASE dt.TrangThai

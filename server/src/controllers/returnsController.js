@@ -2,15 +2,18 @@ const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
 const {
     isRestockAccepted, looksUnsellable, roundMoney,
-    defaultRefundMethod, originalInvoicePayMethod,
-    exchangeMoneyDelta, RETURN_MONEY_PENDING, RETURN_MONEY_FAILED
+    originalInvoicePayMethod,
+    exchangeMoneyDelta, RETURN_MONEY_PENDING, RETURN_MONEY_FAILED, RETURN_MONEY_WAITING,
+    previewRefundAllocation
 } = require('../services/financialRules');
 const { postReturnJournals } = require('../services/accountingHooks');
 const { ensureReturnRefundSchema } = require('../services/returnRefundSchema');
 const {
-    remainingQrRefundable, loadLatestRefundTx, loadOpenShiftDrawer, assertCashDrawerEnough,
-    resolveRefundMethod, sendZaloPayRefund, queryZaloPayRefund, retryZaloPayRefund,
-    startExchangeCollect, queryExchangeCollect, markTicketDone, zpTransIdOf
+    remainingQrRefundable, loadLatestRefundTx,
+    queryZaloPayRefund, retryZaloPayRefund,
+    startExchangeCollect, queryExchangeCollect, markTicketDone, zpTransIdOf,
+    loadInvoiceRefundState, loadRefundLines, settleAllocatedRefund, payWaitingCashRefund,
+    insertCollectThanhToan, hasCollectPayment
 } = require('../services/returnRefundService');
 const { calendarizeRow } = require('../services/reportingPeriod');
 const { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS } = require('../services/invoiceReturnSql');
@@ -123,10 +126,19 @@ const loadDetail = async (pool, maDT) => {
     await ensureReturnRefundSchema(pool).catch(() => {});
     const cap = await remainingQrRefundable(pool, ticket.MaHD).catch(() => null);
     const refundTx = await loadLatestRefundTx(pool, maDT).catch(() => null);
+    const refundLines = await loadRefundLines(pool, maDT).catch(() => []);
+    const state = await loadInvoiceRefundState(pool, ticket.MaHD).catch(() => null);
     const originalPay = originalInvoicePayMethod(payments.recordset) || ticket.PhuongThucGoc || null;
     const qrPay = cap?.originalQr || (payments.recordset || []).find(row =>
         String(row.PhuongThuc || '') === 'QR' || /zalo|momo|^qr$/i.test(String(row.PhuongThuc || ''))
     );
+    const need = Number(ticket.SoTienHoan || 0);
+    const preview = state ? previewRefundAllocation({
+        need,
+        payments: state.payments,
+        refundLines: state.refundLines,
+        legacyTickets: state.legacyTickets
+    }) : null;
     return {
         ticket: {
             ...ticket,
@@ -141,10 +153,20 @@ const loadDetail = async (pool, maDT) => {
         audit: audit.recordset,
         stockMoves: stockMoves.recordset,
         refundTx,
+        refundLines,
         refundCap: cap ? {
             paid: cap.paid,
             already: cap.already,
-            remaining: cap.remaining
+            remaining: cap.remaining,
+            paidByMethod: cap.paidByMethod || state?.paid,
+            refundedByMethod: cap.refundedByMethod || state?.refunded,
+            remainingByMethod: cap.remainingByMethod || state?.remaining
+        } : null,
+        moneyBreakdown: state ? {
+            paid: state.paid,
+            refunded: state.refunded,
+            remaining: state.remaining,
+            preview: preview?.allocation || null
         } : null
     };
 };
@@ -195,7 +217,17 @@ const getInvoiceForReturn = async (req, res) => {
                    ),0) AS SLConDoiTra
             FROM ChiTietHoaDon ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
             WHERE ct.MaHD=@MaHD`);
-        res.json({ invoice: calendarizeRow(header.recordset[0]), lines: lines.recordset });
+        const state = await loadInvoiceRefundState(pool, req.params.id).catch(() => null);
+        res.json({
+            invoice: calendarizeRow(header.recordset[0]),
+            lines: lines.recordset,
+            payments: state?.payments || [],
+            moneyBreakdown: state ? {
+                paid: state.paid,
+                refunded: state.refunded,
+                remaining: state.remaining
+            } : null
+        });
     } catch (error) {
         res.status(500).json({ message: 'Không thể tải hóa đơn đổi trả.' });
     }
@@ -696,7 +728,7 @@ const decideReturn = (approved) => async (req, res) => {
     }
 };
 
-const COMPLETE_MONEY_STATUSES = ['Đã duyệt', RETURN_MONEY_PENDING, RETURN_MONEY_FAILED];
+const COMPLETE_MONEY_STATUSES = ['Đã duyệt', RETURN_MONEY_PENDING, RETURN_MONEY_FAILED, RETURN_MONEY_WAITING];
 
 const stockMovesExist = async (connection, maDT) => {
     const result = await new sql.Request(connection).input('MaDT', sql.VarChar, maDT).query(`
@@ -784,7 +816,7 @@ const completeReturn = async (req, res) => {
         if (!header.recordset.length) throw new Error('Không tìm thấy phiếu đổi trả.');
         const ticket = header.recordset[0];
         if (!COMPLETE_MONEY_STATUSES.includes(ticket.TrangThai)) {
-            throw new Error('Chỉ phiếu đã duyệt, đang hoàn tiền hoặc hoàn tiền thất bại mới xử lý được.');
+            throw new Error('Chỉ phiếu đã duyệt, đang hoàn tiền, chờ xử lý hoàn tiền hoặc hoàn tiền thất bại mới xử lý được.');
         }
         let dutyResult;
         try {
@@ -924,6 +956,13 @@ const completeReturn = async (req, res) => {
             })
             : ticket.HinhThucXuLy;
 
+        if (ticket.TrangThai === RETURN_MONEY_WAITING) {
+            await transaction.commit();
+            const paid = await payWaitingCashRefund({
+                connection: await poolPromise, ticket, maCa: maCaHoan, user: req.user, req
+            });
+            return res.json({ MaDT: maDT, MaCaHoan: maCaHoan, history: historyNote, ...paid });
+        }
         if (ticket.TrangThai === RETURN_MONEY_PENDING) {
             await transaction.commit();
             const queried = await queryZaloPayRefund({
@@ -945,22 +984,30 @@ const completeReturn = async (req, res) => {
         }
 
         if (moneyPlan.kind === 'collect') {
-            const collectMethod = clean(req.body.PhuongThucThuThem, 30)
-                || (defaultRefundMethod(null, pays.recordset) === 'QR' ? 'QR' : 'Tiền mặt');
+            const collectMethod = clean(req.body.PhuongThucThuThem, 30) === 'QR' ? 'QR' : 'Tiền mặt';
             if (collectMethod === 'Tiền mặt') {
+                const existingPay = await hasCollectPayment(transaction, ticket.MaHD, maDT);
+                const maTT = existingPay?.MaTT || await insertCollectThanhToan(transaction, {
+                    maHD: ticket.MaHD, maDT, amount: moneyPlan.soTienThuThem, method: 'Tiền mặt'
+                });
                 await markTicketDone(transaction, {
-                    maDT, maCa: maCaHoan, method: 'Tiền mặt', amount: 0,
+                    maDT, maCa: maCaHoan, method: null, amount: 0, maGD: maTT,
                     soTienThuThem: moneyPlan.soTienThuThem, phuongThucThuThem: 'Tiền mặt'
                 });
+                await new sql.Request(transaction)
+                    .input('MaDT', sql.VarChar, maDT)
+                    .input('Ref', sql.VarChar, maTT)
+                    .query('UPDATE PhieuDoiTra SET MaThamChieuThuThem=@Ref WHERE MaDT=@MaDT');
                 await writeAudit(new sql.Request(transaction), req.user, 'Hoàn thành đổi trả', maDT,
-                    `${historyNote}. Thu thêm TM ${moneyPlan.soTienThuThem} — không hoàn rồi bán lại.`);
+                    `${historyNote}. Thu thêm TM ${moneyPlan.soTienThuThem} — 1 dòng ThanhToan ${maTT} trên HĐ gốc ${ticket.MaHD}.`);
                 await postReturnJournals(transaction, {
-                    maDT, maNV: req.user.MaNV, user: req.user, includeMoney: false, includeStock: true
+                    maDT, maNV: req.user.MaNV, user: req.user, includeMoney: true, includeStock: true
                 });
                 await transaction.commit();
                 return res.json({
                     message: `Đã thu thêm tiền mặt và hoàn tất ${maDT}. Hóa đơn gốc không đổi.`,
-                    MaDT: maDT, MaCaHoan: maCaHoan, TrangThai: 'Hoàn thành', completed: true
+                    MaDT: maDT, MaCaHoan: maCaHoan, TrangThai: 'Hoàn thành', completed: true,
+                    MaThamChieuThuThem: maTT
                 });
             }
             await transaction.commit();
@@ -978,7 +1025,7 @@ const completeReturn = async (req, res) => {
 
         if (moneyPlan.kind === 'equal' || !(moneyPlan.soTienHoan > 0)) {
             await markTicketDone(transaction, {
-                maDT, maCa: maCaHoan, method: defaultRefundMethod(null, pays.recordset) || 'Tiền mặt', amount: 0
+                maDT, maCa: maCaHoan, method: null, amount: 0
             });
             await writeAudit(new sql.Request(transaction), req.user, 'Hoàn thành đổi trả', maDT,
                 `${historyNote}. Đổi ngang — không hoàn tiền.`);
@@ -990,44 +1037,15 @@ const completeReturn = async (req, res) => {
             });
         }
 
-        const method = resolveRefundMethod({
-            originalMethod: defaultRefundMethod(null, pays.recordset),
-            payments: pays.recordset,
-            requested: req.body.PhuongThucHoan
-        });
-
-        if (method === 'Tiền mặt') {
-            const drawer = await loadOpenShiftDrawer(transaction, maCaHoan);
-            assertCashDrawerEnough(moneyPlan.soTienHoan, drawer.TienMatTrongKet);
-            await markTicketDone(transaction, {
-                maDT, maCa: maCaHoan, method: 'Tiền mặt', amount: moneyPlan.soTienHoan
-            });
-            await writeAudit(new sql.Request(transaction), req.user, 'Hoàn thành đổi trả', maDT,
-                `${historyNote}. Hoàn tiền mặt từ két ca đang mở.`);
-            await postReturnJournals(transaction, { maDT, maNV: req.user.MaNV, user: req.user });
-            await transaction.commit();
-            return res.json({
-                message: `Đã hoàn tiền mặt ${maDT}.`,
-                MaDT: maDT, MaCaHoan: maCaHoan, TrangThai: 'Hoàn thành', completed: true,
-                TienMatTrongKet: drawer.TienMatTrongKet
-            });
-        }
-
         await transaction.commit();
-        const sent = await sendZaloPayRefund({
+        const settled = await settleAllocatedRefund({
             connection: await poolPromise,
             ticket: { ...ticket, SoTienHoan: moneyPlan.soTienHoan },
-            amount: moneyPlan.soTienHoan,
+            need: moneyPlan.soTienHoan,
             maCa: maCaHoan,
             user: req.user,
             req
         });
-        if (sent.queryOnly || sent.alreadyDone) {
-            const queried = await queryZaloPayRefund({
-                connection: await poolPromise, ticket, maCa: maCaHoan, user: req.user, req
-            });
-            return res.json({ MaDT: maDT, MaCaHoan: maCaHoan, history: historyNote, ...queried });
-        }
         const journalTxn = new sql.Transaction(await poolPromise);
         await journalTxn.begin();
         try {
@@ -1043,11 +1061,16 @@ const completeReturn = async (req, res) => {
             MaDT: maDT,
             MaCaHoan: maCaHoan,
             history: historyNote,
-            TrangThai: sent.failed ? RETURN_MONEY_FAILED : RETURN_MONEY_PENDING,
-            pending: sent.pending,
-            failed: sent.failed,
-            mRefundId: sent.mRefundId,
-            message: sent.message
+            TrangThai: settled.TrangThai,
+            pending: settled.pending,
+            failed: settled.failed,
+            waitingCash: settled.waitingCash,
+            completed: settled.completed,
+            allocation: settled.allocation,
+            refundLines: settled.refundLines,
+            drawerShort: settled.drawerShort,
+            mRefundId: settled.qrResult?.mRefundId,
+            message: settled.message
         });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
@@ -1110,6 +1133,32 @@ const retryReturnRefund = async (req, res) => {
     }
 };
 
+const payReturnCashRefund = async (req, res) => {
+    try {
+        const maDT = clean(req.params.id, 20);
+        await ensureReturnRefundSchema(await poolPromise);
+        const duty = await assertCashierDuty(await poolPromise, req.user.MaNV, 'complete-return');
+        const header = await (await poolPromise).request().input('MaDT', sql.VarChar, maDT).query(`
+            SELECT dt.* FROM PhieuDoiTra dt WHERE dt.MaDT=@MaDT`);
+        if (!header.recordset.length) return res.status(404).json({ message: 'Không tìm thấy phiếu đổi trả.' });
+        const ticket = header.recordset[0];
+        const paid = await payWaitingCashRefund({
+            connection: await poolPromise,
+            ticket,
+            maCa: duty.shift?.MaCa || ticket.MaCaHoan,
+            user: req.user,
+            req
+        });
+        res.json({ MaDT: maDT, ...paid });
+    } catch (error) {
+        res.status(error.status || 400).json({
+            message: error.message,
+            drawerShort: error.drawerShort,
+            waitingCash: error.waitingCash
+        });
+    }
+};
+
 const claimReturn = async (req, res) => {
     const transaction = new sql.Transaction(await poolPromise);
     try {
@@ -1165,5 +1214,5 @@ const claimReturn = async (req, res) => {
 module.exports = {
     searchInvoices, listRecentInvoices, getInvoiceForReturn, listReturns, getReturn,
     createReturn, submitReturn, inspectReturn, flagInspectMistake, decideReturn,
-    claimReturn, completeReturn, queryReturnRefund, retryReturnRefund
+    claimReturn, completeReturn, queryReturnRefund, retryReturnRefund, payReturnCashRefund
 };

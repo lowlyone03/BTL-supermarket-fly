@@ -116,6 +116,8 @@
 }
 
 .cashier-cart-lines {
+  display: flex;
+  flex-direction: column;
   max-height: 390px;
   overflow: auto;
 }
@@ -847,6 +849,19 @@
   border-radius: 999px;
   background: #fff;
   font-size: 12px;
+}
+
+.cashier-mix-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: end;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .cashier-mix-panel {
+    grid-template-columns: 1fr;
+  }
 }
 
 .cashier-cash-panel {

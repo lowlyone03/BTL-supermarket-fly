@@ -11,9 +11,9 @@ const { calendarizeRow } = require('../services/reportingPeriod');
 const {
     assertAddPaymentAllowed,
     findPendingQr,
-    findPendingMomoQr,
-    failPendingPaymentsForInvoice
+    findPendingMomoQr
 } = require('../services/paymentGatewayService');
+const { abortCheckoutPayment } = require('../services/abortCheckoutService');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
 const POINT_EARN_UNIT = Math.max(1, Number(process.env.POINT_EARN_UNIT || 10000));
@@ -432,68 +432,18 @@ const getInvoice = async (req, res) => {
     }
 };
 
+/** Hủy nháp / Hủy thanh toán (mục 2+14): query QR lần cuối rồi nhánh A hoặc B. */
 const cancelInvoice = async (req, res) => {
-    const transaction = new sql.Transaction(await poolPromise);
     try {
-        const maHD = clean(req.params.id, 20);
-        const lyDo = clean(req.body.LyDo, 300) || null;
-        await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
-        const header = await new sql.Request(transaction)
-            .input('MaHD', sql.VarChar, maHD)
-            .input('MaNV', sql.VarChar, req.user.MaNV)
-            .query(`
-                SELECT hd.MaHD, hd.TrangThai
-                FROM HoaDon hd WITH (UPDLOCK, HOLDLOCK)
-                WHERE hd.MaHD=@MaHD AND hd.MaNV=@MaNV`);
-        if (!header.recordset.length) {
-            await transaction.rollback();
-            return res.status(404).json({ message: 'Không tìm thấy hóa đơn.' });
-        }
-        const invoice = header.recordset[0];
-        if (invoice.TrangThai !== 'Nháp') {
-            await transaction.rollback();
-            return res.status(400).json({ message: 'Không thể hủy hóa đơn đã thanh toán hoặc không còn ở trạng thái Nháp.' });
-        }
-        const paid = await new sql.Request(transaction)
-            .input('MaHD', sql.VarChar, maHD)
-            .query(`
-                SELECT SUM(CASE WHEN TrangThai=N'Thành công' THEN 1 ELSE 0 END) DaThanhCong
-                FROM ThanhToan WITH (UPDLOCK, HOLDLOCK)
-                WHERE MaHD=@MaHD`);
-        if (Number(paid.recordset[0].DaThanhCong || 0) > 0) {
-            await transaction.rollback();
-            return res.status(400).json({ message: 'Không thể hủy hóa đơn đã thanh toán hoặc không còn ở trạng thái Nháp.' });
-        }
-        const clearedPending = await failPendingPaymentsForInvoice(
-            transaction,
-            maHD,
-            'Hủy nháp hóa đơn — không ghi sổ'
-        );
-        const updated = await new sql.Request(transaction)
-            .input('MaHD', sql.VarChar, maHD)
-            .input('MaNV', sql.VarChar, req.user.MaNV)
-            .input('LyDo', sql.NVarChar, lyDo)
-            .query(`
-                UPDATE HoaDon SET TrangThai=N'Đã hủy', GhiChu=@LyDo
-                WHERE MaHD=@MaHD AND MaNV=@MaNV AND TrangThai=N'Nháp';
-                SELECT @@ROWCOUNT affected;`);
-        if (!updated.recordset[0].affected) {
-            await transaction.rollback();
-            return res.status(400).json({ message: 'Không thể hủy hóa đơn đã thanh toán hoặc không còn ở trạng thái Nháp.' });
-        }
-        await logAudit(transaction, {
-            user: req.user, req, action: 'Hủy hóa đơn nháp', table: 'HoaDon', recordId: maHD, uc: 'UC24',
-            severity: 'Cảnh báo',
-            content: `${lyDo ? `Lý do: ${lyDo}. ` : ''}Hủy nháp, tiền và tồn không đổi.${clearedPending ? ` Đã hủy ${clearedPending} thanh toán chờ.` : ''}`
+        const result = await abortCheckoutPayment({
+            maHD: clean(req.params.id, 20),
+            lyDo: clean(req.body?.LyDo, 300) || null,
+            user: req.user,
+            req
         });
-        await transaction.commit();
-        const message = clearedPending
-            ? `Đã hủy hóa đơn nháp và ${clearedPending} thanh toán đang chờ. Không ghi sổ / không trừ kho. Có thể đóng ca.`
-            : 'Đã hủy hóa đơn nháp.';
-        res.json({ message, MaHD: maHD, clearedPending });
+        res.status(result.httpStatus || 200).json(result.body);
     } catch (error) {
-        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
-        res.status(400).json({ message: error.message });
+        res.status(error.status || 400).json({ message: error.message });
     }
 };
 
@@ -678,7 +628,8 @@ const completeInvoice = async (req, res) => {
 
 module.exports = {
     getCatalog, listCustomers, saveCustomer, updateCustomer, listInvoices, quoteInvoice,
-    createInvoice, getInvoice, cancelInvoice, addPayment, completeInvoice, completeInvoiceInternal,
+    createInvoice, getInvoice, cancelInvoice, cancelPayment: cancelInvoice,
+    addPayment, completeInvoice, completeInvoiceInternal,
     generateId, getActiveShift, findPendingQr, findPendingMomoQr, assertAddPaymentAllowed,
     invoiceListMatchSql, resolveInvoiceListScope
 };

@@ -24,6 +24,9 @@ const listLanIPv4 = () => {
 // Middleware
 app.use(cors());
 app.use(express.json());
+const { ensureSeedProductImages } = require('./services/productImageSeed');
+ensureSeedProductImages();
+
 app.use('/uploads/chat', (req, res) => {
     res.status(403).json({ message: 'Tệp chat chỉ tải qua /api/chat/files với JWT.' });
 });

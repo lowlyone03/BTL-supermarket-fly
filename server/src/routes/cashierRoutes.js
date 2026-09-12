@@ -31,6 +31,7 @@ router.get('/invoices', requirePermission('UC24'), sales.listInvoices);
 router.post('/invoices', requirePermission('UC24'), sales.createInvoice);
 router.get('/invoices/:id', requirePermission('UC24'), sales.getInvoice);
 router.post('/invoices/:id/cancel', requirePermission('UC24'), sales.cancelInvoice);
+router.post('/invoices/:id/cancel-payment', requirePermission('UC24'), sales.cancelPayment);
 router.post('/invoices/:id/payments/qr', requirePermission('UC25'), gateway.createQr);
 router.get('/invoices/:id/payments/:maTT', requirePermission('UC25'), gateway.paymentStatus);
 router.post('/invoices/:id/payments/:maTT/query', requirePermission('UC25'), gateway.queryPayment);
@@ -49,5 +50,6 @@ router.post('/returns/:id/claim', requirePermission('UC26'), returns.claimReturn
 router.post('/returns/:id/complete', requirePermission('UC26'), returns.completeReturn);
 router.post('/returns/:id/refund/query', requirePermission('UC26'), returns.queryReturnRefund);
 router.post('/returns/:id/refund/retry', requirePermission('UC26'), returns.retryReturnRefund);
+router.post('/returns/:id/refund/pay-cash', requirePermission('UC26'), returns.payReturnCashRefund);
 
 module.exports = router;

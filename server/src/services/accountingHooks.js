@@ -113,6 +113,75 @@ const postSaleJournals = async (transaction, { maHD, maNV, user, late = false })
     return { sale, cogs };
 });
 
+const splitReturnVat = (returnedLines = [], hoanAmount) => {
+    let vat = 0;
+    let net = 0;
+    const amount = n(hoanAmount);
+    const totalReturn = roundMoney(returnedLines.reduce((sum, line) => sum + n(line.ThanhTien), 0)) || amount;
+    const allocated = returnedLines.map(line => ({
+        line,
+        share: totalReturn > 0 ? roundMoney(amount * n(line.ThanhTien) / totalReturn) : 0
+    }));
+    let used = 0;
+    allocated.forEach((item, index) => {
+        const last = index === allocated.length - 1;
+        const gross = last ? roundMoney(amount - used) : item.share;
+        if (!last) used = roundMoney(used + gross);
+        const split = reverseSaleVat({
+            hoanGomVat: gross,
+            thueSuatDongGoc: item.line.ThueSuatHD,
+            soLuongTra: item.line.SoLuong,
+            soLuongBan: item.line.SoLuongBan,
+            thanhTienSauGiamGoc: item.line.ThanhTienSauGiam
+        });
+        vat = roundMoney(vat + n(split.vat));
+        net = roundMoney(net + n(split.net));
+    });
+    if (!returnedLines.length) {
+        net = amount;
+        vat = 0;
+    }
+    return { vat, net };
+};
+
+// Mỗi dòng GiaoDichHoan ghi sổ riêng (QR Có 112 / TM Có 111). Không gộp 1 status tiền trên phiếu.
+const postRefundLineJournal = async (transaction, {
+    ticket, line, returnedLines, maNV, user, late = false
+} = {}) => safePost(transaction, user, async () => {
+    if (!line?.MaGiaoDichHoan || String(line.TrangThaiHoan || 'THANH_CONG').toUpperCase() === 'CHO_XU_LY') {
+        if (line && String(line.TrangThaiHoan || '').toUpperCase() !== 'THANH_CONG' && line.TrangThaiHoan) {
+            return { skipped: true };
+        }
+    }
+    if (String(line.TrangThaiHoan || 'THANH_CONG').toUpperCase() !== 'THANH_CONG' && line.TrangThaiHoan) {
+        return { skipped: true };
+    }
+    const amount = n(line.SoTienHoan);
+    if (amount <= 0 || !line.MaGiaoDichHoan) return { skipped: true };
+    let rows = returnedLines;
+    if (!rows) {
+        const returned = await new sql.Request(transaction).input('MaDT', sql.VarChar, ticket.MaDT).query(`
+            SELECT ct.*, hd.SoLuong SoLuongBan, hd.ThanhTien ThanhTienBan,
+                   hd.ThanhTienSauGiam, hd.ThueSuat ThueSuatHD, hd.TienThue TienThueHD, hd.ThanhTienVon ThanhTienVonBan
+            FROM ChiTietDoiTra ct
+            JOIN PhieuDoiTra dt ON dt.MaDT=ct.MaDT
+            JOIN ChiTietHoaDon hd ON hd.MaHD=dt.MaHD AND hd.MaSP=ct.MaSP
+            WHERE ct.MaDT=@MaDT AND ct.LoaiDong=N'Hàng khách trả'`);
+        rows = returned.recordset;
+    }
+    const vatSplit = splitReturnVat(rows, amount);
+    const tk = moneyAccount(line.PhuongThuc);
+    return postJournal(transaction, {
+        loaiChungTu: 'GiaoDichHoan',
+        maChungTu: line.MaGiaoDichHoan,
+        loaiButToan: 'DOI_TRA_HOAN',
+        ngayChungTu: ticket.NgayCT || ticket.NgayHoan || ticket.NgayLap,
+        dienGiai: `Hoàn ${line.PhuongThuc || ''} ${ticket.MaDT}`,
+        lines: linesOf(debit('5212', vatSplit.net), debit('33311', vatSplit.vat), credit(tk, amount)),
+        maNV, user, late
+    });
+});
+
 const postReturnJournals = async (transaction, {
     maDT, maNV, user, late = false, includeMoney, includeStock
 } = {}) => safePost(transaction, user, async () => {
@@ -123,7 +192,8 @@ const postReturnJournals = async (transaction, {
     if (!ticket) return { skipped: true };
     const status = String(ticket.TrangThai || '');
     const moneyReady = status === 'Hoàn thành';
-    const stockReady = moneyReady || status === 'Đang hoàn tiền' || status === 'Hoàn tiền thất bại';
+    const stockReady = moneyReady || status === 'Đang hoàn tiền' || status === 'Hoàn tiền thất bại'
+        || status === 'Chờ xử lý hoàn tiền';
     const doMoney = includeMoney !== false && moneyReady;
     const doStock = includeStock !== false && stockReady;
     if (!doMoney && !doStock) return { skipped: true };
@@ -139,37 +209,37 @@ const postReturnJournals = async (transaction, {
 
     const results = {};
     if (doMoney && n(ticket.SoTienHoan) > 0) {
-        let vat = 0;
-        let net = 0;
-        const allocated = [];
-        const totalReturn = roundMoney(returned.recordset.reduce((sum, line) => sum + n(line.ThanhTien), 0)) || n(ticket.SoTienHoan);
-        for (const line of returned.recordset) {
-            const share = totalReturn > 0
-                ? roundMoney(n(ticket.SoTienHoan) * n(line.ThanhTien) / totalReturn)
-                : 0;
-            allocated.push({ line, share });
-        }
-        let used = 0;
-        allocated.forEach((item, index) => {
-            const last = index === allocated.length - 1;
-            const gross = last ? roundMoney(n(ticket.SoTienHoan) - used) : item.share;
-            if (!last) used = roundMoney(used + gross);
-            const split = reverseSaleVat({
-                hoanGomVat: gross,
-                thueSuatDongGoc: item.line.ThueSuatHD,
-                soLuongTra: item.line.SoLuong,
-                soLuongBan: item.line.SoLuongBan,
-                thanhTienSauGiamGoc: item.line.ThanhTienSauGiam
+        let refundLines = [];
+        try {
+            refundLines = (await new sql.Request(transaction).input('MaDT', sql.VarChar, maDT).query(`
+                SELECT * FROM GiaoDichHoan WHERE MaPhieuTra=@MaDT AND TrangThaiHoan=N'THANH_CONG'`)).recordset;
+        } catch { refundLines = []; }
+        if (refundLines.length) {
+            results.hoanLines = [];
+            for (const line of refundLines) {
+                results.hoanLines.push(await postRefundLineJournal(transaction, {
+                    ticket, line, returnedLines: returned.recordset, maNV, user, late
+                }));
+            }
+        } else {
+            const vatSplit = splitReturnVat(returned.recordset, n(ticket.SoTienHoan));
+            const tk = moneyAccount(ticket.PhuongThucHoan);
+            results.hoan = await postJournal(transaction, {
+                loaiChungTu: 'PhieuDoiTra', maChungTu: maDT, loaiButToan: 'DOI_TRA_HOAN',
+                ngayChungTu: ticket.NgayCT,
+                dienGiai: `Hoàn tiền ${maDT}`,
+                lines: linesOf(debit('5212', vatSplit.net), debit('33311', vatSplit.vat), credit(tk, n(ticket.SoTienHoan))),
+                maNV, user, late
             });
-            vat = roundMoney(vat + n(split.vat));
-            net = roundMoney(net + n(split.net));
-        });
-        const tk = moneyAccount(ticket.PhuongThucHoan);
-        results.hoan = await postJournal(transaction, {
-            loaiChungTu: 'PhieuDoiTra', maChungTu: maDT, loaiButToan: 'DOI_TRA_HOAN',
+        }
+    }
+    if (doMoney && n(ticket.SoTienThuThem) > 0) {
+        const tk = moneyAccount(ticket.PhuongThucThuThem);
+        results.thuThem = await postJournal(transaction, {
+            loaiChungTu: 'PhieuDoiTra', maChungTu: maDT, loaiButToan: 'DOI_TRA_THU_THEM',
             ngayChungTu: ticket.NgayCT,
-            dienGiai: `Hoàn tiền ${maDT}`,
-            lines: linesOf(debit('5212', net), debit('33311', vat), credit(tk, n(ticket.SoTienHoan))),
+            dienGiai: `Thu chênh đổi hàng ${maDT}`,
+            lines: linesOf(debit(tk, n(ticket.SoTienThuThem)), credit('511', n(ticket.SoTienThuThem))),
             maNV, user, late
         });
     }
@@ -537,6 +607,7 @@ const rebuildFromDocument = async (transaction, { loaiChungTu, maChungTu, maNV, 
 module.exports = {
     postSaleJournals,
     postReturnJournals,
+    postRefundLineJournal,
     postPurchaseMatch,
     postSupplierPayment,
     postStockIssueJournals,

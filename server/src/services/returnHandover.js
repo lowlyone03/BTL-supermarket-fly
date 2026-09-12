@@ -19,7 +19,7 @@ const safeHandover = async (fn, fallback) => {
 
 const isClosedReturn = (ticket) => {
     if (!ticket) return true;
-    if (['Đang hoàn tiền', 'Hoàn tiền thất bại'].includes(ticket.TrangThai)) return false;
+    if (['Đang hoàn tiền', 'Hoàn tiền thất bại', 'Chờ xử lý hoàn tiền'].includes(ticket.TrangThai)) return false;
     if (TERMINAL_RETURN_STATUSES.includes(ticket.TrangThai)) return true;
     return Boolean(ticket.NgayHoan);
 };
@@ -74,7 +74,7 @@ const canActOnAssignedReturn = (ticket, maNV, maQuay) => {
     return true;
 };
 
-const MONEY_ACTION_STATUSES = ['Đã duyệt', 'Đang hoàn tiền', 'Hoàn tiền thất bại'];
+const MONEY_ACTION_STATUSES = ['Đã duyệt', 'Đang hoàn tiền', 'Hoàn tiền thất bại', 'Chờ xử lý hoàn tiền'];
 
 const canCompleteAssignedReturn = (ticket, maNV, maQuay) => (
     Boolean(ticket && MONEY_ACTION_STATUSES.includes(ticket.TrangThai) && canActOnAssignedReturn(ticket, maNV, maQuay))

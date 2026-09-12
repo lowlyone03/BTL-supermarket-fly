@@ -44,6 +44,29 @@ const delay = milliseconds => new Promise(resolve => setTimeout(resolve, millise
     assert.equal(search.resolveDestination('DT0001', { role: 'cashier' }), 'cashier-returns');
     assert.equal(search.resolveDestination('SP001', { role: 'warehouse' }), 'warehouse-inventory');
     assert.equal(search.resolveDestination('anything', { role: 'cashier', currentTarget: 'cashier-invoices' }), 'cashier-invoices');
+    assert.equal(search.looksLikeProductQuery('bánh trung thu'), true);
+    assert.equal(search.looksLikeProductQuery('BK007'), true);
+    assert.equal(search.resolveDestination('bánh trung thu', { role: 'cashier' }), 'cashier-pos');
+    assert.equal(search.resolveDestination('Bánh Trung Thu Super', { role: 'cashier', currentTarget: 'cashier-invoices' }), 'cashier-pos');
+    assert.equal(search.resolveDestination('bánh trung thu', { role: 'manager' }), '../admin/products.html');
+    assert.match(cashierPages, /promoteCartLine/);
+    assert.match(cashierPages, /cart = promoteCartLine\(cart, product\.MaSP, \{ \.\.\.product, SoLuong: next \}\)/);
+    assert.match(cashierPages, /if \(lines\) lines\.scrollTop = 0/);
+    assert.match(cashierPages, /cart\.set\(line\.MaSP, \{ \.\.\.line, SoLuong: parsed\.value \}\)/);
+    const promoteCartLine = (map, key, value) => {
+        const next = new Map([[key, value]]);
+        for (const [k, v] of map) {
+            if (k !== key) next.set(k, v);
+        }
+        return next;
+    };
+    let cart = new Map([['BK001', { SoLuong: 1 }], ['BK002', { SoLuong: 1 }]]);
+    cart = promoteCartLine(cart, 'BK007', { SoLuong: 1 });
+    assert.deepEqual([...cart.keys()], ['BK007', 'BK001', 'BK002']);
+    cart = promoteCartLine(cart, 'BK001', { SoLuong: 2 });
+    assert.deepEqual([...cart.keys()], ['BK001', 'BK007', 'BK002']);
+    assert.equal(cart.get('BK001').SoLuong, 2);
+    assert.match(cashierPages, /takePendingQuery\?\.\('cashier-pos'\)/);
     assert.equal(search.PAGE_SEARCH_IDS['cashier-invoices'], 'invoiceQuery');
     assert.equal(search.PAGE_SEARCH_IDS['../admin/accounts.html'], 'accSearch');
 

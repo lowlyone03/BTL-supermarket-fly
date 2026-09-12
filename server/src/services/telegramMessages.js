@@ -276,6 +276,7 @@ const I18N = {
         flyDebt: '🧾 Công nợ',
         flyLowstock: '📦 Tồn thấp',
         flyPending: '⏳ Việc chờ',
+        flyReturns: '💵 Trả hàng',
         flyReports: '📊 Báo cáo',
         flyShifts: '🕐 Ca',
         flyPayments: '💳 Thanh toán',
@@ -466,6 +467,10 @@ const I18N = {
         helpShifts: '/shifts — Ca làm (QL·KT: cửa hàng; TN: ca mình)',
         helpPayments: '/payments — Thanh toán TM/QR/thẻ/CK',
         helpPending: '/pending — Việc chờ duyệt (nút Duyệt / Từ chối trên tin chờ)',
+        helpReturns: '/returns — Duyệt tiền trả hàng (chờ duyệt + chờ xử lý hoàn TM). Chỉ Quản lý (UC08)',
+        returnsTitle: 'DUYỆT TIỀN TRẢ HÀNG',
+        returnsEmpty: 'Không có phiếu trả chờ duyệt tiền hoặc chờ chi hoàn TM.',
+        returnsHint: 'Bước 1: duyệt phiếu. Bước 2: nếu két thiếu — bổ quỹ rồi Chi hoàn TM. Không két âm, không chi dở.',
         helpDocs: '/docs — Chứng từ / giấy tờ (đơn mua, phiếu nhập, HĐ, xuất, KK, đổi trả, phiếu chi, công, BCK)',
         helpReports: '/reports — Báo cáo cửa hàng + Thủ kho (BCK) + bộ phận (BCM/BCKT/BCTN). Không duyệt báo cáo — QL',
         helpGuide: '/guide — Tài liệu / quy tắc (DT, lãi gộp, VAT, công nợ, két, lương) — alias /rules',
@@ -647,6 +652,7 @@ const I18N = {
         flyDebt: '🧾 Payables',
         flyLowstock: '📦 Low stock',
         flyPending: '⏳ Pending',
+        flyReturns: '💵 Returns',
         flyReports: '📊 Reports',
         flyShifts: '🕐 Shifts',
         flyPayments: '💳 Payments',
@@ -837,6 +843,10 @@ const I18N = {
         helpShifts: '/shifts — Shifts (Manager·Accountant: store; Cashier: own)',
         helpPayments: '/payments — Cash/QR/card/transfer',
         helpPending: '/pending — Pending approvals (Approve / Reject buttons on the card)',
+        helpReturns: '/returns — Approve return refunds (pending + waiting cash). Manager only (UC08)',
+        returnsTitle: 'RETURN REFUND APPROVAL',
+        returnsEmpty: 'No return tickets waiting for money approval or cash payout.',
+        returnsHint: 'Step 1: approve the ticket. Step 2: if the drawer is short — top up, then pay cash. No negative drawer, no partial payout.',
         helpDocs: '/docs — Papers / documents (PO, receipt, invoice, issue, count, return, payout, attendance, BCK)',
         helpReports: '/reports — Store + warehouse (BCK) + department (BCM/BCKT/BCTN). No report approval — Manager',
         helpGuide: '/guide — Rules (revenue, gross profit, VAT, AP, cash, payroll) — alias /rules',
@@ -1018,6 +1028,7 @@ const I18N = {
         flyDebt: '🧾 应付',
         flyLowstock: '📦 低库存',
         flyPending: '⏳ 待办',
+        flyReturns: '💵 退货退款',
         flyReports: '📊 报表',
         flyShifts: '🕐 班次',
         flyPayments: '💳 支付',
@@ -1125,6 +1136,10 @@ const I18N = {
         helpShifts: '/shifts — 班次（店长·会计：全店；收银：本人）',
         helpPayments: '/payments — 现金/QR/卡/转账',
         helpPending: '/pending — 待审批（在待办卡片上点审批 / 拒绝）',
+        helpReturns: '/returns — 审批退货退款（待审 + 待付现金）。仅店长（UC08）',
+        returnsTitle: '退货退款审批',
+        returnsEmpty: '没有待审批退款或待付现金的退货单。',
+        returnsHint: '第一步：审批单据。第二步：钱箱不足则先补款再付现金。钱箱不为负，不部分支付。',
         helpDocs: '/docs — 单据 / 证件（采购、入库、发票、出库、盘点、退换、付款、考勤、BCK）',
         helpReports: '/reports — 门店 + 仓管(BCK) + 部门(BCM/BCKT/BCTN)。不能审批报表 — 店长',
         helpGuide: '/guide — 规则（销售、毛利、VAT、应付、钱箱、工资）— 别名 /rules',
@@ -1363,6 +1378,7 @@ const HELP_LINE_KEYS = [
     { key: 'helpShifts', uc: ['UC10', 'UC22', 'UC29'] },
     { key: 'helpPayments', uc: ['UC10', 'UC25', 'UC29'] },
     { key: 'helpPending' },
+    { key: 'helpReturns', uc: ['UC08'] },
     { key: 'helpDocs' },
     { key: 'helpReports', uc: ['UC10'] },
     { key: 'helpGuide' },
@@ -1700,6 +1716,26 @@ const buildPendingMessage = (items, lang = DEFAULT_LANG) => {
     ]);
 };
 
+const buildReturnsMessage = (items, lang = DEFAULT_LANG) => {
+    if (!items?.length) {
+        return tidyLines([
+            headerBlock(`💵 <b>${escapeHtml(t(lang, 'returnsTitle'))}</b>`),
+            t(lang, 'returnsEmpty'),
+            '',
+            `<i>${escapeHtml(t(lang, 'returnsHint'))}</i>`
+        ]);
+    }
+    const rows = items.slice(0, 8);
+    return tidyLines([
+        headerBlock(`💵 <b>${escapeHtml(t(lang, 'returnsTitle'))}</b>`),
+        `<blockquote>📌 <b>${rows.length}</b> phiếu · duyệt trước, chi TM sau khi két đủ</blockquote>`,
+        ...rows.map((item, index) => `${item.tone === 'urgent' ? '🔴' : '🟡'} <b>${String(index + 1).padStart(2, '0')}</b>  ${inboxLine(item, lang).replace(/^•\s*/, '')}`),
+        '',
+        `<i>${escapeHtml(t(lang, 'returnsHint'))}</i>`,
+        hintLine(lang)
+    ]);
+};
+
 const buildReportsMessages = ({ summary = {}, debt = {}, inbox = [], pnl = null, shifts = [], restock = [] } = {}, lang = DEFAULT_LANG) => {
     const none = t(lang, 'todayNone');
     const lech = (summary.caLech || []).slice(0, 6).join(', ') || none;
@@ -1915,6 +1951,7 @@ const FLY_LABEL_KEYS = [
     { key: 'flyReports', name: 'reports' },
     { key: 'btnReports', name: 'reports' },
     { key: 'flyPending', name: 'pending' },
+    { key: 'flyReturns', name: 'returns' },
     { key: 'flyDebt', name: 'debt' },
     { key: 'flyToday', name: 'today' },
     { key: 'flyRevenue', name: 'revenue' },
@@ -1936,6 +1973,7 @@ const REPLY_NEEDLES = [
     { name: 'docs', needles: ['chứng từ', 'giấy tờ', 'documents', 'papers', '单据', '证件'] },
     { name: 'reports', needles: ['báo cáo', 'store report', '门店报表', 'reports'] },
     { name: 'pending', needles: ['cần duyệt', 'việc chờ duyệt', 'việc chờ', 'pending approval', '待审批', '待办'] },
+    { name: 'returns', needles: ['duyệt tiền trả hàng', 'trả hàng chờ duyệt', 'chi hoàn tm', 'chờ xử lý hoàn', 'return refund', '退货退款'] },
     { name: 'debt', needles: ['công nợ ncc', 'công nợ', 'supplier ap', '供应商应付'] },
     { name: 'lowstock', needles: ['tồn thấp', 'low stock', 'sản phẩm / tồn', '商品 / 低库存', '低库存'] },
     { name: 'shifts', needles: ['ca & quỹ', 'ca làm', 'shifts & cash', '班次与钱箱'] },
@@ -1956,6 +1994,7 @@ const REPLY_FALLBACK = [
     { name: 'docs', re: /chứng từ|giấy tờ|documents|单据/i },
     { name: 'lowstock', re: /sản phẩm\s*\/\s*tồn|low stock|商品\s*\/\s*低库存|tồn thấp/i },
     { name: 'pending', re: /cần duyệt|việc chờ|pending approval|待审批/i },
+    { name: 'returns', re: /duyệt tiền|trả hàng chờ|chi hoàn|\/returns|return refund|退货退款/i },
     { name: 'reports', re: /báo cáo|门店报表|\breports\b/i },
     { name: 'revenue', re: /doanh thu|today revenue|今日销售/i },
     { name: 'debt', re: /công nợ|supplier ap|供应商应付/i },
@@ -2368,6 +2407,7 @@ module.exports = {
     looksLikeTopicFollowUp,
     summarizePaymentShifts,
     buildPendingMessage,
+    buildReturnsMessage,
     buildReportsMessage,
     buildReportsMessages,
     buildAlertsMessage,

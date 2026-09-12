@@ -34,6 +34,8 @@ assert.equal(canViewSaleInvoice('NV001', { MaNV: 'NV002', TrangThai: 'Đã hủy
 assert.equal(canViewSaleInvoice('NV001', { MaNV: 'NV002', TrangThai: 'Nháp' }), false);
 
 assert.match(invoiceReturnSql, /ttgoc\.PhuongThucGoc/);
+assert.match(invoiceReturnSql, /TienMatDaThu/);
+assert.match(invoiceReturnSql, /TienQrDaThu/);
 assert.match(invoiceReturnSql, /TrangThai = N'Thành công'/);
 
 console.log('INVOICE SEARCH PASS: ca hiện tại khi không gõ; tìm mã nhìn ngoài ca; không xem nháp của thu ngân khác.');

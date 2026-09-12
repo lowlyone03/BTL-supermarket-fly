@@ -76,8 +76,7 @@ trở lại và cũng không cần khôi phục lại, trừ khi người phát 
 
 ## 6. Ảnh sản phẩm
 
-Không cần chép thêm file ảnh nào. Ảnh sản phẩm mẫu đã có sẵn trong dự án. Khi tester thêm sản phẩm
-và chọn ảnh mới, hệ thống sẽ tự tạo `server\uploads\products` trên máy đó.
+Không cần chép thêm file ảnh nào. Ảnh sản phẩm mẫu (kể cả 4 bánh trung thu BK007–BK010) đã có sẵn trong dự án. File `.bak` không chứa ảnh; API copy seed vào `server\uploads\products` khi chạy. Khi tester thêm sản phẩm và chọn ảnh mới, hệ thống cũng tự tạo thư mục đó trên máy người đó.
 
 ## 7. Cài và chạy bằng cách nhấp đúp
 

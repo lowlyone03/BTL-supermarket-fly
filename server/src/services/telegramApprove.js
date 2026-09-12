@@ -13,12 +13,16 @@ const ALREADY_DONE = /không còn|đã được duyệt|đã duyệt trước|kh
 const DENY_403 = 'Tài khoản chưa được cấp quyền sử dụng chức năng này.';
 const OK_APPROVE = 'Đã duyệt trên Telegram — đã ghi nhật ký. Mở Fly nếu cần.';
 const OK_REJECT = 'Đã từ chối trên Telegram — đã ghi nhật ký. Mở Fly nếu cần.';
+const OK_PAY_CASH = 'Đã chi hoàn tiền mặt trên Telegram — đã ghi nhật ký. Không chi dở.';
 const ALREADY_TEXT = 'Đã xử lý trước đó. Không duyệt lần hai.';
 const ASK_REASON = 'Nhập lý do từ chối (bắt buộc như trên Fly). Gửi tin trả lời tin này.';
+const NOT_WAITING_CASH = 'Phiếu không còn chờ xử lý hoàn tiền. Làm mới thẻ hoặc mở Fly.';
+const NO_OPEN_SHIFT_CASH = 'Chưa có ca đang mở tại quầy để chi hoàn TM. Bổ quỹ trên ca thu ngân đang mở rồi thử lại. Không ghi két âm.';
 
 const pendingRejectByChat = new Map();
 const inFlight = new Set();
 let flyHandlerOverride = null;
+let cashRefundOverride = null;
 
 const roleKey = name => String(name || '').trim().toLocaleLowerCase('vi-VN');
 const codesForRole = role => ROLE_PERMISSION_CODES[roleKey(role)] || [];
@@ -88,25 +92,40 @@ const setFlyHandlerOverride = (fn) => {
     flyHandlerOverride = typeof fn === 'function' ? fn : null;
 };
 
+const setCashRefundOverride = (fn) => {
+    cashRefundOverride = typeof fn === 'function' ? fn : null;
+};
+
 const resetDecisionState = () => {
     pendingRejectByChat.clear();
     inFlight.clear();
     flyHandlerOverride = null;
+    cashRefundOverride = null;
 };
 
 const parseDecisionCallback = (data) => {
     const raw = String(data || '').trim();
     if (raw === 'rp' || raw === 'cmd:reports') return { action: 'reports' };
-    const match = raw.match(/^(ok|no|dt|docs):(po|px|kk|dt|pc|cc|hd|pn|hdm|gh|bck):(.{1,40})$/i);
+    const match = raw.match(/^(ok|no|dt|docs|cf|cq|tm):(po|px|kk|dt|pc|cc|hd|pn|hdm|gh|bck):(.{1,40})$/i);
     if (!match) return null;
     return { action: match[1].toLowerCase(), kind: match[2].toLowerCase(), id: match[3] };
 };
 
 const parseInboxKind = (itemId) => {
+    const waiting = String(itemId || '').match(/^dt-cash:(.{1,40})$/i);
+    if (waiting) return { kind: 'dt', id: waiting[1], waitingCash: true };
     const match = String(itemId || '').match(/^(po|px|kk|dt|pc|cc):(.{1,40})$/i);
     if (!match) return null;
     return { kind: match[1].toLowerCase(), id: match[2] };
 };
+
+const isReturnMoneyInbox = (item = {}) => {
+    const id = String(item.id || '');
+    if (/^(dt|dt-cash):/i.test(id)) return true;
+    return /đổi trả|hoàn tiền|chi hoàn/i.test(String(item.title || ''));
+};
+
+const filterReturnMoneyInbox = (inbox = []) => (inbox || []).filter(isReturnMoneyInbox);
 
 const decisionCallbackData = (action, kind, id) => String(`${action}:${kind}:${id}`).slice(0, 64);
 
@@ -291,6 +310,149 @@ const runFlyDecision = async ({ user, kind, action, id, reason, pool, chatId } =
     }
 };
 
+const resolveOpenShiftForReturn = async (pool, ticket = {}) => {
+    const sql = sqlTypes();
+    const quay = String(ticket.MaQuayXuLy || ticket.MaQuay || '').trim();
+    if (quay) {
+        const open = await oneRow(pool, `
+            SELECT TOP 1 MaCa, MaQuay, MaNV, TrangThai
+            FROM CaLamViec
+            WHERE MaQuay=@Quay AND TrangThai=N'Đang mở' AND ThoiGianKetThuc IS NULL
+            ORDER BY ThoiGianBatDau DESC`, {
+            Quay: { type: sql?.VarChar, value: quay }
+        });
+        if (open) return open;
+    }
+    const maCa = String(ticket.MaCaHoan || ticket.MaCaGoc || '').trim();
+    if (!maCa) return null;
+    const shift = await oneRow(pool, `
+        SELECT MaCa, MaQuay, MaNV, TrangThai
+        FROM CaLamViec WHERE MaCa=@Id`, {
+        Id: { type: sql?.VarChar, value: maCa }
+    });
+    if (shift && String(shift.TrangThai || '') === 'Đang mở') return shift;
+    if (shift?.MaQuay && String(shift.MaQuay) !== quay) {
+        return oneRow(pool, `
+            SELECT TOP 1 MaCa, MaQuay, MaNV, TrangThai
+            FROM CaLamViec
+            WHERE MaQuay=@Quay AND TrangThai=N'Đang mở' AND ThoiGianKetThuc IS NULL
+            ORDER BY ThoiGianBatDau DESC`, {
+            Quay: { type: sql?.VarChar, value: shift.MaQuay }
+        });
+    }
+    return null;
+};
+
+const mapCashRefundResult = (result) => {
+    const status = Number(result?.status || 200);
+    const body = result?.body || {};
+    const message = String(body.message || '');
+    const drawerShort = body.drawerShort || null;
+    if (status === 403) return { ok: false, status: 403, text: DENY_403 };
+    if (status >= 400 && /không có dòng tiền mặt đang chờ|không còn chờ xử lý/i.test(message)) {
+        return { ok: false, status, already: true, text: ALREADY_TEXT, fly: message };
+    }
+    if (status >= 400) {
+        return {
+            ok: false,
+            status,
+            text: message || 'Không chi hoàn TM được trên Telegram. Mở Fly.',
+            drawerShort,
+            waitingCash: Boolean(body.waitingCash)
+        };
+    }
+    return {
+        ok: true,
+        status,
+        text: OK_PAY_CASH,
+        fly: message,
+        drawerShort
+    };
+};
+
+const runFlyCashRefund = async ({ user, id, pool } = {}) => {
+    if (!user || !isManagerRole(user.TenVaiTro) || Number(user.TrangThaiTK) === 0) {
+        return { ok: false, status: 403, text: DENY_403 };
+    }
+    if (!roleHasUc(user.TenVaiTro, ['UC08'])) {
+        return { ok: false, status: 403, text: DENY_403 };
+    }
+    const token = `dt:${id}:tm`;
+    if (inFlight.has(token)) return { ok: false, already: true, text: ALREADY_TEXT };
+    inFlight.add(token);
+    try {
+        if (cashRefundOverride) {
+            const result = await cashRefundOverride({ user, id, pool, uc: 'UC08' });
+            const mapped = mapCashRefundResult(result || { status: 200, body: { message: 'OK' } });
+            if (mapped.ok) pingInboxAfterDecision('dt', 'ok', id);
+            return mapped;
+        }
+        const sql = sqlTypes();
+        const header = await oneRow(pool, `
+            SELECT dt.*, hd.MaKho, ca.MaQuay
+            FROM PhieuDoiTra dt
+            JOIN HoaDon hd ON hd.MaHD=dt.MaHD
+            LEFT JOIN CaLamViec ca ON ca.MaCa=COALESCE(dt.MaCaHoan, hd.MaCa)
+            WHERE dt.MaDT=@Id`, { Id: { type: sql?.VarChar, value: String(id) } });
+        if (!header) return { ok: false, status: 404, text: 'Không tìm thấy phiếu đổi trả.' };
+        if (String(header.TrangThai || '') !== 'Chờ xử lý hoàn tiền') {
+            return { ok: false, status: 400, already: true, text: NOT_WAITING_CASH };
+        }
+        const shift = await resolveOpenShiftForReturn(pool, header);
+        if (!shift?.MaCa) return { ok: false, status: 400, text: NO_OPEN_SHIFT_CASH };
+        const {
+            loadOpenShiftDrawer, loadRefundLines, payWaitingCashRefund
+        } = require('./returnRefundService');
+        const { cashRefundDrawerShort, cashRefundDrawerBlock, canonicalRefundMethod, HOAN_CHO_XU_LY } = require('./financialRules');
+        const lines = await loadRefundLines(pool, header.MaDT).catch(() => []);
+        const waiting = lines.filter(row =>
+            canonicalRefundMethod(row.PhuongThuc) === 'Tiền mặt'
+            && String(row.TrangThaiHoan || '').toUpperCase() === HOAN_CHO_XU_LY
+        );
+        const need = waiting.reduce((sum, row) => sum + Number(row.SoTienHoan || 0), 0);
+        const drawer = await loadOpenShiftDrawer(pool, shift.MaCa);
+        const short = cashRefundDrawerShort({
+            soTienHoan: need, tienMatTrongKet: drawer.TienMatTrongKet
+        });
+        if (short.blocked) {
+            return {
+                ok: false,
+                status: 400,
+                text: cashRefundDrawerBlock(short) || NO_OPEN_SHIFT_CASH,
+                drawerShort: short,
+                waitingCash: true
+            };
+        }
+        try {
+            const paid = await payWaitingCashRefund({
+                connection: pool,
+                ticket: header,
+                maCa: shift.MaCa,
+                user,
+                req: { ip: 'telegram' }
+            });
+            pingInboxAfterDecision('dt', 'ok', id);
+            return {
+                ok: true,
+                status: 200,
+                text: OK_PAY_CASH,
+                fly: paid?.message
+            };
+        } catch (error) {
+            return mapCashRefundResult({
+                status: error.status || 400,
+                body: {
+                    message: error.message,
+                    drawerShort: error.drawerShort,
+                    waitingCash: error.waitingCash
+                }
+            });
+        }
+    } finally {
+        inFlight.delete(token);
+    }
+};
+
 const lineQty = (row) => row.SoLuong ?? row.SL ?? row.SLThucTe ?? row.ChenhLech;
 const linePrice = (row) => row.DonGia ?? row.DonGiaVon ?? 0;
 const lineAmount = (row) => {
@@ -405,33 +567,117 @@ const loadKk = async (pool, id) => {
     };
 };
 
+const attachReturnMoney = async (pool, header) => {
+    const need = Number(header.SoTienHoan || 0);
+    const empty = {
+        need, hoanQr: null, hoanTm: null, paidQR: null, paidTM: null,
+        drawerAvail: null, drawerShort: null, drawerBlocked: false,
+        drawerMissing: false, drawerShift: '', cashNeed: need
+    };
+    try {
+        const { loadInvoiceRefundState, loadOpenShiftDrawer, loadRefundLines } = require('./returnRefundService');
+        const {
+            previewRefundAllocation, cashRefundDrawerShort, canonicalRefundMethod, HOAN_CHO_XU_LY
+        } = require('./financialRules');
+        const state = await loadInvoiceRefundState(pool, header.MaHD);
+        const preview = previewRefundAllocation({
+            need,
+            payments: state.payments,
+            refundLines: state.refundLines,
+            legacyTickets: state.legacyTickets
+        });
+        const refundLines = await loadRefundLines(pool, header.MaDT).catch(() => []);
+        const waitingTm = refundLines.filter(row =>
+            canonicalRefundMethod(row.PhuongThuc) === 'Tiền mặt'
+            && String(row.TrangThaiHoan || '').toUpperCase() === HOAN_CHO_XU_LY
+        );
+        const cashNeed = waitingTm.length
+            ? waitingTm.reduce((sum, row) => sum + Number(row.SoTienHoan || 0), 0)
+            : Number(preview?.allocation?.hoanTm || 0);
+        const shift = await resolveOpenShiftForReturn(pool, header);
+        let drawerAvail = null;
+        let drawerShort = null;
+        let drawerBlocked = false;
+        let drawerMissing = !shift?.MaCa;
+        if (shift?.MaCa) {
+            const drawer = await loadOpenShiftDrawer(pool, shift.MaCa).catch(() => null);
+            const short = cashRefundDrawerShort({
+                soTienHoan: cashNeed,
+                tienMatTrongKet: drawer?.TienMatTrongKet
+            });
+            drawerAvail = short.avail;
+            drawerShort = short.short;
+            drawerBlocked = short.blocked;
+        } else if (cashNeed > 0) {
+            drawerBlocked = true;
+        }
+        return {
+            need,
+            hoanQr: preview?.allocation?.hoanQr ?? 0,
+            hoanTm: preview?.allocation?.hoanTm ?? 0,
+            paidQR: preview?.paid?.QR ?? null,
+            paidTM: preview?.paid?.TM ?? null,
+            drawerAvail,
+            drawerShort,
+            drawerBlocked,
+            drawerMissing,
+            drawerShift: shift?.MaCa || '',
+            cashNeed
+        };
+    } catch {
+        return empty;
+    }
+};
+
 const loadDt = async (pool, id) => {
     const sql = sqlTypes();
-    const header = await oneRow(pool, `
+    const idInput = { Id: { type: sql?.VarChar, value: id } };
+    let header = await oneRow(pool, `
         SELECT dt.MaDT, dt.TrangThai, dt.NgayLap, dt.HinhThucXuLy, dt.LyDo, dt.SoTienHoan, dt.MaHD,
-               dt.KetQuaKiemTra, nv.TenNV NguoiLap, kh.TenKH, hd.TongThanhToan, ca.MaQuay
+               dt.KetQuaKiemTra, dt.MaCaHoan, dt.MaQuayXuLy, nv.TenNV NguoiLap, kh.TenKH,
+               hd.TongThanhToan, ca.MaQuay, hd.MaCa MaCaGoc
         FROM PhieuDoiTra dt
         JOIN NhanVien nv ON nv.MaNV=dt.MaNV_Lap
         JOIN HoaDon hd ON hd.MaHD=dt.MaHD
         LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
-        LEFT JOIN CaLamViec ca ON ca.MaCa=hd.MaCa
-        WHERE dt.MaDT=@Id`, { Id: { type: sql?.VarChar, value: id } });
+        LEFT JOIN CaLamViec ca ON ca.MaCa=COALESCE(dt.MaCaHoan, hd.MaCa)
+        WHERE dt.MaDT=@Id`, idInput);
+    if (!header) {
+        header = await oneRow(pool, `
+            SELECT dt.MaDT, dt.TrangThai, dt.NgayLap, dt.HinhThucXuLy, dt.LyDo, dt.SoTienHoan, dt.MaHD,
+                   dt.KetQuaKiemTra, nv.TenNV NguoiLap, kh.TenKH, hd.TongThanhToan, ca.MaQuay, hd.MaCa MaCaGoc
+            FROM PhieuDoiTra dt
+            JOIN NhanVien nv ON nv.MaNV=dt.MaNV_Lap
+            JOIN HoaDon hd ON hd.MaHD=dt.MaHD
+            LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
+            LEFT JOIN CaLamViec ca ON ca.MaCa=hd.MaCa
+            WHERE dt.MaDT=@Id`, idInput);
+    }
     if (!header) return null;
     const lines = await loadLinesSafe(pool, `
         SELECT ct.MaSP, sp.TenSP, ct.SoLuong, ct.DonGia, ct.ThanhTien, ct.LoaiDong
         FROM ChiTietDoiTra ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
         WHERE ct.MaDT=@Id ORDER BY ct.LoaiDong, sp.TenSP`, { Id: { type: sql?.VarChar, value: id } });
+    const pending = /chờ duyệt/i.test(header.TrangThai || '');
+    const waitingCash = /chờ xử lý hoàn tiền/i.test(header.TrangThai || '');
+    const money = await attachReturnMoney(pool, header);
+    const title = waitingCash
+        ? 'CHỜ XỬ LÝ HOÀN TIỀN'
+        : (pending ? 'ĐỔI TRẢ CHỜ DUYỆT TIỀN' : 'PHIẾU ĐỔI TRẢ');
     return {
-        kind: 'dt', id, title: 'ĐỔI TRẢ CHỜ DUYỆT',
+        kind: 'dt', id, title,
         status: header.TrangThai, createdBy: header.NguoiLap, createdAt: header.NgayLap,
-        party: header.TenKH, extra: { HinhThuc: header.HinhThucXuLy, Quay: header.MaQuay },
+        party: header.TenKH,
+        extra: { HinhThuc: header.HinhThucXuLy, Quay: header.MaQuayXuLy || header.MaQuay },
         lines, totals: { tong: header.SoTienHoan || header.TongThanhToan },
         docs: [
             { label: 'Phiếu đổi trả', value: header.MaDT },
             { label: 'Hóa đơn gốc', value: header.MaHD }
         ],
         photos: collectPhotos(lines),
-        pending: /chờ duyệt/i.test(header.TrangThai || ''),
+        pending,
+        waitingCash,
+        money,
         note: [header.LyDo, header.KetQuaKiemTra].filter(Boolean).join(' · ')
     };
 };
@@ -585,6 +831,27 @@ const buildApprovalCard = (dossier = {}, lang = 'vi') => {
     if (extras.Kho) rows.push(kv('Kho / quầy', textCode(extras.Kho)));
     if (extras.Quay) rows.push(kv('Quầy', textCode(extras.Quay)));
     if (extras.HinhThuc) rows.push(kv('Hình thức', textCode(extras.HinhThuc)));
+    if (dossier.kind === 'dt' && dossier.money) {
+        const money = dossier.money;
+        rows.push('', sectionTitle('💸', 'Hoàn tiền (QR trước, TM sau)'));
+        rows.push(kv('Số cần hoàn', moneyCode(money.need)));
+        if (money.hoanQr != null) rows.push(kv('Preview QR', moneyCode(money.hoanQr)));
+        if (money.hoanTm != null) rows.push(kv('Preview TM', moneyCode(money.hoanTm)));
+        if (money.paidQR != null) rows.push(kv('HĐ đã thu QR', moneyCode(money.paidQR)));
+        if (money.paidTM != null) rows.push(kv('HĐ đã thu TM', moneyCode(money.paidTM)));
+        if (money.drawerMissing) {
+            rows.push(kv('Két khả dụng', textCode('Chưa có ca đang mở tại quầy')));
+        } else if (money.drawerAvail != null) {
+            rows.push(kv('Két khả dụng', moneyCode(money.drawerAvail)));
+            if (money.drawerShift) rows.push(kv('Ca két', textCode(money.drawerShift)));
+        }
+        if (money.drawerBlocked && money.drawerMissing) {
+            rows.push('<i>Chưa có ca mở — bổ quỹ trên ca thu ngân đang mở rồi Chi hoàn TM. Không két âm, không chi dở.</i>');
+        } else if (money.drawerBlocked) {
+            rows.push(kv('Thiếu TM', moneyCode(money.drawerShort)));
+            rows.push('<i>Két thiếu — bổ quỹ rồi Chi hoàn TM. Không ghi két âm, không chi dở.</i>');
+        }
+    }
     if (extras.PhuongThuc) rows.push(kv('Phương thức', textCode(extras.PhuongThuc === 'Chuyển khoản' ? 'Chuyển khoản' : extras.PhuongThuc)));
     if (extras.CongNo) rows.push(kv('Công nợ', textCode(extras.CongNo)));
     if (extras.MaDN) rows.push(kv('Đề nghị', textCode(extras.MaDN)));
@@ -618,9 +885,17 @@ const buildApprovalCard = (dossier = {}, lang = 'vi') => {
         }
     }
     if (dossier.note) rows.push('', `<i>${escapeHtml(String(dossier.note).slice(0, 400))}</i>`);
-    rows.push('', pending
-        ? '<blockquote>🛡 <b>Xác nhận an toàn</b>\nDuyệt hoặc từ chối sẽ gọi đúng nghiệp vụ Fly và ghi Nhật ký hệ thống.</blockquote>'
-        : `<i>${escapeHtml(t(lang, 'flyHint'))}</i>`);
+    if (dossier.confirmMode === 'approve') {
+        rows.push('', '<blockquote>⚠️ <b>Xác nhận duyệt phiếu</b>\nBước 1/2: duyệt phiếu (UC08). Hệ thống chưa chi tiền ở bước này. Ghi Nhật ký như Fly.</blockquote>');
+    } else if (dossier.confirmMode === 'pay') {
+        rows.push('', '<blockquote>⚠️ <b>Xác nhận chi hoàn TM</b>\nBước 2/2: chỉ chi khi két đủ. Không ghi két âm, không chi dở. Ghi Nhật ký như Fly.</blockquote>');
+    } else if (pending) {
+        rows.push('', '<blockquote>🛡 <b>Xác nhận an toàn</b>\nDuyệt hoặc từ chối sẽ gọi đúng nghiệp vụ Fly và ghi Nhật ký hệ thống.</blockquote>');
+    } else if (dossier.waitingCash) {
+        rows.push('', '<blockquote>🛡 <b>Chi hoàn TM khi két đủ</b>\nCùng hàm Fly. Két thiếu thì báo thiếu — không két âm, không chi dở.</blockquote>');
+    } else {
+        rows.push('', `<i>${escapeHtml(t(lang, 'flyHint'))}</i>`);
+    }
     return rows.filter(line => line !== '').join('\n');
 };
 
@@ -785,12 +1060,28 @@ const approvalKeyboard = (dossier = {}) => {
         return { inline_keyboard: [[{ text: '📊 Báo cáo', callback_data: 'cmd:reports' }]] };
     }
     const rows = [];
-    if (dossier.pending) {
-        const actions = [{ text: '✅ Duyệt', callback_data: decisionCallbackData('ok', kind, id) }];
+    if (dossier.confirmMode === 'approve') {
+        rows.push([
+            { text: '✅ Xác nhận duyệt', callback_data: decisionCallbackData('ok', kind, id) },
+            { text: '↩️ Quay lại', callback_data: decisionCallbackData('dt', kind, id) }
+        ]);
+    } else if (dossier.confirmMode === 'pay') {
+        rows.push([
+            { text: '✅ Xác nhận chi TM', callback_data: decisionCallbackData('tm', kind, id) },
+            { text: '↩️ Quay lại', callback_data: decisionCallbackData('dt', kind, id) }
+        ]);
+    } else if (dossier.pending) {
+        const approveAction = kind === 'dt' ? 'cf' : 'ok';
+        const actions = [{ text: '✅ Duyệt', callback_data: decisionCallbackData(approveAction, kind, id) }];
         if (KIND_META[kind].rejectReason) {
             actions.push({ text: '❌ Từ chối', callback_data: decisionCallbackData('no', kind, id) });
         }
         rows.push(actions);
+    } else if (kind === 'dt' && dossier.waitingCash) {
+        const canPay = !dossier.money?.drawerBlocked && !dossier.money?.drawerMissing;
+        if (canPay) {
+            rows.push([{ text: '💵 Chi hoàn TM khi két đủ', callback_data: decisionCallbackData('cq', kind, id) }]);
+        }
     }
     rows.push([
         { text: '🔄 Cập nhật', callback_data: decisionCallbackData('dt', kind, id) },
@@ -803,8 +1094,9 @@ const approvalKeyboard = (dossier = {}) => {
     return { inline_keyboard: rows };
 };
 
-const composePendingPush = async (pool, kind, id, lang = 'vi') => {
+const composePendingPush = async (pool, kind, id, lang = 'vi', { confirmMode } = {}) => {
     const dossier = await loadDossier(pool, kind, id);
+    if (confirmMode) dossier.confirmMode = confirmMode;
     return {
         text: buildApprovalCard(dossier, lang),
         extra: { reply_markup: approvalKeyboard(dossier), disable_notification: false },
@@ -885,7 +1177,9 @@ const pendingListKeyboard = (items = []) => {
     if (!cards.length) return null;
     return {
         inline_keyboard: cards.map(item => ([{
-            text: `${item.tone === 'urgent' ? '🔴' : '🟡'} Xem ${item.id}`,
+            text: item.waitingCash
+                ? `💵 Chi hoàn ${item.id}`
+                : `${item.tone === 'urgent' ? '🔴' : '🟡'} Xem ${item.id}`,
             callback_data: decisionCallbackData('dt', item.kind, item.id)
         }]))
     };
@@ -898,11 +1192,16 @@ module.exports = {
     DENY_403,
     OK_APPROVE,
     OK_REJECT,
+    OK_PAY_CASH,
     ALREADY_TEXT,
     ASK_REASON,
+    NOT_WAITING_CASH,
+    NO_OPEN_SHIFT_CASH,
     MAX_LINES,
     parseDecisionCallback,
     parseInboxKind,
+    isReturnMoneyInbox,
+    filterReturnMoneyInbox,
     decisionCallbackData,
     canDecideKind,
     roleHasUc,
@@ -910,8 +1209,10 @@ module.exports = {
     consumeReject,
     peekReject,
     runFlyDecision,
+    runFlyCashRefund,
     invokeFlyHandler,
     setFlyHandlerOverride,
+    setCashRefundOverride,
     resetDecisionState,
     loadDossier,
     buildApprovalCard,

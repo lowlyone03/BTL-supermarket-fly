@@ -15,7 +15,7 @@ Gửi riêng tư đủ ba thành phần sau:
 2. File database `SupermarketFlyDB_2026-08-30_*.bak` trong thư mục `D:\UDTHTKT\BTL\TaiLieu_Du_An\05_Backup\Database_Backups`.
 3. File `SupermarketFly_Uploads_2026-08-30_*.zip` trong cùng thư mục backup.
 
-Ảnh sản phẩm mẫu nằm trong mã nguồn và đi theo Git. Ảnh do người dùng tải lên nằm trong `server/uploads`, bị Git bỏ qua, nên phải bàn giao bằng file ZIP riêng.
+Ảnh sản phẩm mẫu (36 SKU gốc + 4 bánh trung thu BK007–BK010) nằm trong mã nguồn và đi theo Git. Ảnh do người dùng tải lên sau đó nằm trong `server/uploads` (Git bỏ qua). File `.bak` không chứa binary ảnh — chỉ lưu path.
 
 Không gửi công khai file `.env`, database hoặc mật khẩu thật. Với nhóm môn học, nên dùng Google Drive/OneDrive có giới hạn người được truy cập hoặc một Git repository riêng tư.
 
@@ -86,21 +86,11 @@ Nếu SQL Server báo không đọc được file `.bak`, hãy chép file vào t
 
 Không chạy `npm run setup:next` sau khi đã restore bản backup mới nhất. Lệnh đó dành cho việc nâng cấp/chuẩn hóa một database cũ và có thể thay đổi dữ liệu test.
 
-## 5. Khôi phục ảnh sản phẩm tải lên
+## 5. Ảnh sản phẩm sau restore `.bak`
 
-Giải nén file `SupermarketFly_Uploads_2026-08-30_*.zip`. Chép thư mục `uploads` nhận được vào:
+File `.bak` không chứa binary ảnh, chỉ lưu `SanPham.DuongDanAnh`. Ảnh mẫu (36 SKU gốc + BK007–BK010) đã nằm trong Git. Khi chạy API, `server/seed-images/products` được copy vào `server/uploads/products` (kể cả alias path hash cũ). Không cần ZIP uploads riêng để thấy 4 bánh trung thu.
 
-```text
-supermarket-fly\server\uploads
-```
-
-Cấu trúc đúng sau khi chép:
-
-```text
-server\uploads\products\...
-```
-
-Nếu file ZIP không có ảnh thì đây vẫn là trạng thái hợp lệ: tại thời điểm backup chưa có ảnh runtime nào; ảnh sản phẩm mẫu vẫn lấy từ tài nguyên đã lưu trong Git.
+Ảnh do tester tải lên sau đó vẫn nằm runtime trong `server/uploads` và không đi theo Git.
 
 ## 6. Cài thư viện và chạy ứng dụng
 

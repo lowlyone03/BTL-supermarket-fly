@@ -252,6 +252,9 @@ const run = async () => {
         assert.equal(gateway.decideCancelledInvoiceAction({
             invoiceStatus: 'Đã hủy', paymentStatus: 'Thất bại'
         }), 'ignore');
+        assert.equal(gateway.decideCancelledInvoiceAction({
+            invoiceStatus: 'Đã hủy', paymentStatus: 'Đã hủy'
+        }), 'ignore');
         assert.equal(gateway.decideGatewayAction({
             paymentStatus: 'Thất bại',
             paymentAmount: 20000,

@@ -51,12 +51,18 @@
     imagePreviewUrl = null;
   };
 
-  const renderImagePreview = (source = '', label = '') => {
+  const renderImagePreview = (source = '', label = '', product = null) => {
     const preview = document.getElementById('productImagePreview');
     if (!preview) return;
     preview.classList.toggle('is-empty', !source);
+    const fallback = product && window.FLY_PRODUCT_IMAGES?.hasBundledImage?.(product.MaSP || product)
+      ? window.FLY_PRODUCT_IMAGES.url(product.MaSP || product)
+      : '';
+    const onerror = fallback && fallback !== source
+      ? `this.onerror=null;this.src='${esc(fallback)}'`
+      : '';
     preview.innerHTML = source
-      ? `<img src="${esc(source)}" alt="Xem trước ảnh sản phẩm">`
+      ? `<img src="${esc(source)}" alt="Xem trước ảnh sản phẩm"${onerror ? ` onerror="${onerror}"` : ''}>`
       : '<span>Ảnh</span>';
     setText('productImageName', label || 'JPG, PNG hoặc WebP · tối đa 5 MB');
   };
@@ -250,7 +256,7 @@
       : 'Bắt buộc khi thêm mới; ảnh được dùng tại quản lý sản phẩm, kho và POS.';
     clearImagePreviewUrl();
     const currentImage = isEditing ? window.FLY_PRODUCT_IMAGES?.resolve(item) || '' : '';
-    renderImagePreview(currentImage, currentImage ? `Ảnh hiện tại của ${item.MaSP}` : 'JPG, PNG hoặc WebP · tối đa 5 MB');
+    renderImagePreview(currentImage, currentImage ? `Ảnh hiện tại của ${item.MaSP}` : 'JPG, PNG hoặc WebP · tối đa 5 MB', item);
     el('productModal').style.display = 'flex';
     if (!isEditing) await window.suggestProductCode();
     if (!stillOnPage()) return;
@@ -491,7 +497,7 @@
     if (!file) {
       const item = allProducts.find(product => product.MaSP === editingCode) || products.find(product => product.MaSP === editingCode);
       const currentImage = item ? window.FLY_PRODUCT_IMAGES?.resolve(item) || '' : '';
-      return renderImagePreview(currentImage, currentImage ? `Ảnh hiện tại của ${item.MaSP}` : 'JPG, PNG hoặc WebP · tối đa 5 MB');
+      return renderImagePreview(currentImage, currentImage ? `Ảnh hiện tại của ${item.MaSP}` : 'JPG, PNG hoặc WebP · tối đa 5 MB', item);
     }
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       input.value = '';
@@ -523,6 +529,9 @@
       await Promise.all([window.loadProducts(), loadAllProducts()]);
     } catch (error) { toastError(error); }
   });
+
+  const pendingProductSearch = window.FLY_SEARCH?.takePendingQuery?.('../admin/products.html');
+  if (pendingProductSearch && el('productSearch')) el('productSearch').value = pendingProductSearch;
 
   Promise.all([loadCategories(), window.loadProducts()]).catch(error => toastError(error));
 })();

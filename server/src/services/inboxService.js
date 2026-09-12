@@ -132,7 +132,7 @@ const listForRole = async (pool, user) => {
     if (isRole(user, 'Quản lý')) {
         const poolSafe = pool;
         await ensurePayrollSchema(poolSafe).catch(() => {});
-        const [po, px, kk, dt, pc, cc, pcl, latePay] = await Promise.all([
+        const [po, px, kk, dt, dtWait, pc, cc, pcl, latePay] = await Promise.all([
             q().query(`SELECT TOP 8 po.MaPO, po.NgayLap, ncc.TenNCC, nv.TenNV
                        FROM DonMuaHang po JOIN NhaCungCap ncc ON ncc.MaNCC=po.MaNCC
                        JOIN NhanVien nv ON nv.MaNV=po.MaNV_Lap
@@ -146,6 +146,9 @@ const listForRole = async (pool, user) => {
             q().query(`SELECT TOP 8 dt.MaDT, dt.NgayLap, dt.HinhThucXuLy, nv.TenNV
                        FROM PhieuDoiTra dt JOIN NhanVien nv ON nv.MaNV=dt.MaNV_Lap
                        WHERE dt.TrangThai=N'Chờ duyệt' ORDER BY dt.NgayLap DESC`),
+            q().query(`SELECT TOP 8 dt.MaDT, dt.NgayLap, dt.HinhThucXuLy, dt.SoTienHoan, nv.TenNV
+                       FROM PhieuDoiTra dt JOIN NhanVien nv ON nv.MaNV=COALESCE(dt.MaNV_XuLy, dt.MaNV_Lap)
+                       WHERE dt.TrangThai=N'Chờ xử lý hoàn tiền' ORDER BY dt.NgayLap DESC`),
             q().query(`SELECT TOP 8 pc.MaPhieu, pc.NgayChungTu, pc.SoTien, nv.TenNV
                        FROM PhieuChi pc JOIN NhanVien nv ON nv.MaNV=pc.MaNV
                        WHERE pc.TrangThai=N'Chờ duyệt' ORDER BY pc.NgayChungTu DESC`),
@@ -170,6 +173,9 @@ const listForRole = async (pool, user) => {
             ...many(kk.recordset, r => row(`kk:${r.MaKK}`, 'manager-purchase-approvals', 'Kiểm kê chờ duyệt điều chỉnh',
                 `${r.MaKK} · ${r.TenNV}`, r.NgayKiemKe, 'urgent')),
             ...many(dt.recordset, r => row(`dt:${r.MaDT}`, 'manager-purchase-approvals', 'Đổi trả chờ duyệt',
+                `${r.MaDT} · ${r.HinhThucXuLy} · ${r.TenNV}`, r.NgayLap, 'urgent')),
+            ...many(dtWait.recordset, r => row(`dt-cash:${r.MaDT}`, 'cashier-returns',
+                'Chờ xử lý hoàn tiền — két không đủ TM, không ghi két âm',
                 `${r.MaDT} · ${r.HinhThucXuLy} · ${r.TenNV}`, r.NgayLap, 'urgent')),
             ...many(pc.recordset, r => row(`pc:${r.MaPhieu}`, 'manager-payables', 'Phiếu chi chờ duyệt và giao tiền',
                 `${r.MaPhieu} · ${r.TenNV}`, r.NgayChungTu, 'urgent')),
@@ -398,7 +404,7 @@ const listForRole = async (pool, user) => {
                 ORDER BY NgayDuyet DESC`)),
             safeRows(() => q().input('MaNV', sql.VarChar, maNV).query(`
                 SELECT TOP 8 MaDT, NgayDuyet, HinhThucXuLy, TrangThai, MaGiaoDichHoan FROM PhieuDoiTra
-                WHERE TrangThai IN (N'Đang hoàn tiền', N'Hoàn tiền thất bại')
+                WHERE TrangThai IN (N'Đang hoàn tiền', N'Hoàn tiền thất bại', N'Chờ xử lý hoàn tiền')
                   AND (MaNV_XuLy=@MaNV OR ISNULL(MaNV_XuLy, MaNV_Lap)=@MaNV)
                 ORDER BY NgayDuyet DESC`))
         ]);
@@ -409,6 +415,8 @@ const listForRole = async (pool, user) => {
             ...many(refunding, r => row(`dt-rf:${r.MaDT}`, 'cashier-returns',
                 r.TrangThai === 'Đang hoàn tiền'
                     ? 'Đang hoàn ZaloPay — Query, khách đã có thể về'
+                    : r.TrangThai === 'Chờ xử lý hoàn tiền'
+                        ? 'Chờ xử lý hoàn tiền — két đủ mới chi TM, không chi dở'
                     : 'Hoàn ZaloPay thất bại — Query rồi thử lại, không trả tiền mặt',
                 `${r.MaDT} · ${r.MaGiaoDichHoan || 'm_refund_id'}`, r.NgayDuyet, 'urgent')),
             ...many(ready, r => row(`dt-ok:${r.MaDT}`, 'cashier-returns',

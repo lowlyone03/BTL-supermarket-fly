@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { calculateGrossProfit, evaluateThreeWayMatch, isRestockAccepted, looksUnsellable, isEqualValueExchange, expectedDrawerCash, cashHandoverExcludingOpening, defaultRefundMethod, originalInvoicePayMethod, canonicalRefundMethod, cashRefundExceedsDrawer, cashRefundDrawerWarning, cashRefundDrawerBlock, cashierMayRefundCash, exchangeMoneyDelta, refundableQrRemaining, qrRefundWouldExceedCap, nextRefundSendAction, qrNet, zpTransIdOf } = require('./src/services/financialRules');
+const { calculateGrossProfit, evaluateThreeWayMatch, isRestockAccepted, looksUnsellable, isEqualValueExchange, expectedDrawerCash, cashHandoverExcludingOpening, defaultRefundMethod, originalInvoicePayMethod, canonicalRefundMethod, cashRefundExceedsDrawer, cashRefundDrawerWarning, cashRefundDrawerBlock, cashierMayRefundCash, exchangeMoneyDelta, refundableQrRemaining, qrRefundWouldExceedCap, nextRefundSendAction, qrNet, zpTransIdOf, allocateRefund } = require('./src/services/financialRules');
 const { resolveReportingPeriod } = require('./src/services/reportingPeriod');
 
 const test = (name, run) => {
@@ -92,11 +92,14 @@ test('Chặn cứng két thiếu khi hoàn TM — không cho phép két âm', ()
     const block = cashRefundDrawerBlock({ soTienHoan: 300_000, tienMatTrongKet: 200_000 });
     assert.match(block, /200/);
     assert.match(block, /300/);
-    assert.match(block, /két không đủ/i);
-    assert.match(block, /phương thức thanh toán ban đầu/i);
+    assert.match(block, /Không đủ tiền mặt để hoàn/i);
+    assert.match(block, /thiếu/i);
     assert.equal(cashRefundDrawerWarning({ soTienHoan: 100_000, tienMatTrongKet: 200_000 }), '');
-    assert.equal(cashierMayRefundCash('QR'), false);
+    assert.equal(cashierMayRefundCash('QR'), true);
     assert.equal(cashierMayRefundCash('Tiền mặt'), true);
+    const split = allocateRefund(600_000, { QR: 500_000, TM: 300_000 });
+    assert.equal(split.hoanQr, 500_000);
+    assert.equal(split.hoanTm, 100_000);
 });
 
 test('Hoàn QR không đổi két dự kiến; expectedDrawerCash không được dùng để cho phép két âm', () => {

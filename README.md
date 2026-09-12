@@ -528,6 +528,8 @@ Bot Telegram cho Quản lý với đầy đủ tính năng:
 
 - **Dashboard trạng thái:** Doanh thu, giá vốn, lãi gộp, tỷ trọng 4 kênh thanh toán, cảnh báo.
 - **Duyệt chứng từ inline:** PO, phiếu xuất, kiểm kê, đổi trả, phiếu chi NCC, chấm công — duyệt ngay trên Telegram bằng nút inline button.
+- **Duyệt tiền trả hàng (`/returns`):** Quản lý (UC08) xem phiếu chờ duyệt / chờ xử lý hoàn TM, xem preview QR→TM và két, xác nhận rồi duyệt hoặc chi hoàn TM khi két đủ — cùng API Fly, không két âm, không chi dở. Thu ngân không duyệt trên bot.
+- **Đồng bộ thông báo đổi trả:** một sự kiện (chờ duyệt / duyệt / từ chối / chờ chi TM / đã chi) cập nhật inbox desktop (SSE) và sửa thẻ Telegram tại chỗ — không nhân bản, không để nút Duyệt sau khi đã xử lý.
 - **Báo cáo Tháng/Quý/Năm:** So sánh cùng tiến độ kỳ trước.
 - **Bảo mật:** OTP xác thực, kiểm tra vai trò/quyền UC, webhook secret, chống gửi lặp, ghi nhật ký.
 
@@ -825,6 +827,10 @@ npm start
 # hoặc: npm run start:zalopay
 ```
 
+### Khôi phục `.bak` trên máy khác
+
+File `.bak` chỉ chứa metadata, kể cả cột `SanPham.DuongDanAnh` — **không chứa file ảnh**. Ảnh 36 SKU gốc nằm trong `desktop/src/assets/products`. Ảnh 4 bánh trung thu (BK007–BK010) nằm trong `server/seed-images/products` (được Git theo dõi) và API copy vào `server/uploads/products` lúc `npm start`. Clone repo + restore `.bak` + chạy API là đủ để thấy ảnh; không cần ZIP uploads riêng cho 4 SKU này.
+
 ### Test nhóm (nhiều máy, 1 database)
 
 ```bash
@@ -897,6 +903,7 @@ Thư mục `server/migrations/`, chạy lần lượt bởi `npm run setup:next`
 | `20260911_EmployeePermsPartialPay` | 11/09 | Phân quyền cá nhân + chi trả |
 | `20260911_ZaloPayQrPending` | 11/09 | QR ZaloPay chờ xác nhận |
 | `20260911_ZaloPayRefund` | 11/09 | Hoàn tiền ZaloPay |
+| `20260912_MooncakeImages` | 12/09 | Path relative ảnh BK007–BK010 |
 
 ---
 

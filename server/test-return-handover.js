@@ -45,7 +45,7 @@ const ticket = (overrides = {}) => ({
 });
 
 test('Nháp / chờ kiểm / chờ duyệt / đã duyệt là phiếu dở; hoàn thành / từ chối / đã hủy thì không', () => {
-    for (const status of ['Nháp', 'Chờ kiểm tra', 'Chờ duyệt', 'Đã duyệt']) {
+    for (const status of ['Nháp', 'Chờ kiểm tra', 'Chờ duyệt', 'Đã duyệt', 'Chờ xử lý hoàn tiền']) {
         assert.equal(isUnfinishedReturn({ TrangThai: status }), true);
         assert.equal(isClosedReturn({ TrangThai: status }), false);
     }

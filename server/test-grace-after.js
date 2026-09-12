@@ -57,6 +57,7 @@ test('Phiếu đã bàn giao: phải tiếp nhận rồi mới complete trên ca
     assert.equal(canCompleteAssignedReturn({ ...claimed, TrangThai: 'Hoàn thành' }, 'NV2', 'Q01'), false);
     assert.equal(canCompleteAssignedReturn({ ...claimed, TrangThai: 'Đang hoàn tiền' }, 'NV2', 'Q01'), true);
     assert.equal(canCompleteAssignedReturn({ ...claimed, TrangThai: 'Hoàn tiền thất bại' }, 'NV2', 'Q01'), true);
+    assert.equal(canCompleteAssignedReturn({ ...claimed, TrangThai: 'Chờ xử lý hoàn tiền' }, 'NV2', 'Q01'), true);
 });
 
 test('Phiếu nháp treo: ca sau chưa tiếp nhận thì chưa gửi Thủ kho', () => {

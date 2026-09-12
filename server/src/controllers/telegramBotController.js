@@ -9,7 +9,7 @@ const {
     langKeyboardRow, buildStartWelcomeUnbound, buildStartWelcomeBound,
     buildStartWelcomeGuest, buildHelpMessage, buildTodayMessage,
     buildRevenueMessage, buildFlyDashboard, buildDebtMessage, buildLowstockMessage,
-    buildShiftsMessage, buildPaymentsMessage, summarizePaymentShifts, buildPendingMessage, buildAlertsMessage,
+    buildShiftsMessage, buildPaymentsMessage, summarizePaymentShifts, buildPendingMessage, buildReturnsMessage, buildAlertsMessage,
     buildPayrollSummaryMessage, buildPayrollOneMessage,
     buildReportsMenu, reportsMenuKeyboard, buildPnlOnlyMessage,
     buildManagementReportMessage, managementReportKeyboard,
@@ -47,7 +47,7 @@ const TELEGRAM_COMMAND_SCOPES = [
 ];
 const TELEGRAM_COMMAND_LANGS = ['vi', 'en', 'zh'];
 const FAST_PATH_COMMANDS = new Set([
-    'today', 'pending', 'docs', 'reports', 'help', 'fly', 'guide', 'rules',
+    'today', 'pending', 'returns', 'docs', 'reports', 'help', 'fly', 'guide', 'rules',
     'revenue', 'debt', 'lowstock', 'shifts', 'payments', 'alerts', 'payroll'
 ]);
 const registeredChatCommands = new Set();
@@ -95,6 +95,7 @@ const BOT_NATIVE_COMMANDS = [
     { command: 'shifts', description: 'Ca làm' },
     { command: 'payments', description: 'Thanh toán' },
     { command: 'pending', description: 'Việc chờ duyệt' },
+    { command: 'returns', description: 'Duyệt tiền trả hàng' },
     { command: 'docs', description: 'Chứng từ / giấy tờ' },
     { command: 'reports', description: 'Báo cáo cửa hàng / Thủ kho' },
     { command: 'guide', description: 'Tài liệu / quy tắc kế toán' },
@@ -143,6 +144,7 @@ const FLY_BUTTONS = [
     { id: 'docs', key: 'flyDocs', uc: [] },
     { id: 'guide', key: 'flyGuide', uc: [] },
     { id: 'pending', key: 'flyPending', uc: [] },
+    { id: 'returns', key: 'flyReturns', uc: ['UC08'] },
     { id: 'reports', key: 'flyReports', uc: ['UC10'] },
     { id: 'shifts', key: 'flyShifts', uc: ['UC10', 'UC22', 'UC29'] },
     { id: 'payments', key: 'flyPayments', uc: ['UC10', 'UC25', 'UC29'] },
@@ -821,6 +823,18 @@ const cmdPending = async (pool, user, lang = 'vi') => {
     };
 };
 
+const cmdReturns = async (pool, user, lang = 'vi') => {
+    const denied = denyIfNoUc(user, ['UC08'], lang);
+    if (denied) return denied;
+    const { listForRole } = require('../services/inboxService');
+    const items = teleDecision.filterReturnMoneyInbox(await listForRole(pool, user));
+    const kb = teleDecision.pendingListKeyboard(items);
+    return {
+        text: buildReturnsMessage(items, lang),
+        extra: kb ? { reply_markup: kb } : {}
+    };
+};
+
 const loadPnlDay = async (pool) => {
     try {
         const { resolveReportingPeriod } = require('../services/reportingPeriod');
@@ -1019,6 +1033,7 @@ const runCommand = async (name, user, pool, chatId, arg, lang = 'vi') => {
         case 'shifts': return cmdShifts(pool, user, lang);
         case 'payments': return cmdPayments(pool, user, lang);
         case 'pending': return cmdPending(pool, user, lang);
+        case 'returns': return cmdReturns(pool, user, lang);
         case 'docs': return cmdDocs(pool, user, arg, lang);
         case 'reports': return cmdReports(pool, user, lang);
         case 'alerts': return cmdAlerts(pool, user, lang);
@@ -1048,7 +1063,7 @@ const parseCommand = (text) => {
     if (askBare) return { name: 'ask', arg: String(askBare[1] || '').trim() };
     const guide = raw.match(/^\/(?:guide|rules)(?:\s+(.+))?$/i);
     if (guide) return { name: 'guide', arg: String(guide[1] || '').trim() };
-    const simple = raw.match(/^\/(help|fly|today|debt|lowstock|shifts|payments|pending|reports|alerts|unlink|revenue)\s*$/i);
+    const simple = raw.match(/^\/(help|fly|today|debt|lowstock|shifts|payments|pending|returns|reports|alerts|unlink|revenue)\s*$/i);
     if (simple) return { name: simple[1].toLowerCase() };
     if (/^\/[A-Za-z0-9_]+/i.test(raw)) return { name: 'unknown', raw };
     const fromReply = matchReplyCommand(raw);
@@ -1272,6 +1287,21 @@ const deliverCallbackResult = async (query, result, extra = {}, name = 'fly', la
     return deliverCommandResult(chatId, decorated, extra);
 };
 
+const syncReturnCardAfterDecision = async (pool, parsed, chatId, messageId, phase) => {
+    if (parsed.kind !== 'dt' || !parsed.id) return;
+    if (messageId) {
+        try {
+            const packed = await teleDecision.composePendingPush(pool, 'dt', parsed.id);
+            await notify.editMessageText(chatId, messageId, packed.text, packed.extra);
+            await notify.rememberCard(pool, phase === 'waiting_cash' || packed.dossier?.waitingCash
+                ? 'DT_CHO_HOAN' : 'DT_CHO_DUYET', parsed.id, chatId, messageId);
+        } catch { /* giữ markup cũ nếu sửa thẻ lỗi */ }
+    }
+    try {
+        await notify.notifyReturnMoneyEvent(pool, { maDT: parsed.id, phase });
+    } catch { /* sửa thẻ kênh khác lỗi không chặn kết quả duyệt */ }
+};
+
 const completedDecisionKeyboard = (parsed, lang = 'vi') => ({
     inline_keyboard: [
         [
@@ -1326,12 +1356,66 @@ const handleDecisionCallback = async (chatId, parsed, user, pool, lang, query = 
     if (parsed.action === 'dt') {
         const packed = await teleDecision.composePendingPush(pool, parsed.kind, parsed.id, lang);
         await deliverCallbackResult(query, packed, {}, 'pending', lang, `dt:${parsed.kind}:${parsed.id}`);
+        if (parsed.kind === 'dt' && query.message?.message_id) {
+            await notify.rememberCard(pool, packed.dossier?.waitingCash ? 'DT_CHO_HOAN' : 'DT_CHO_DUYET',
+                parsed.id, chatId, query.message.message_id);
+        }
         await sendRelatedPhotos(chatId, packed.dossier);
         return { ok: true, command: 'detail', kind: parsed.kind, id: parsed.id };
     }
     if (!teleDecision.canDecideKind(user, parsed.kind)) {
         await reply(chatId, teleDecision.DENY_403);
         return { forbidden: true, status: 403 };
+    }
+    if (parsed.action === 'cf') {
+        const packed = await teleDecision.composePendingPush(pool, parsed.kind, parsed.id, lang, { confirmMode: 'approve' });
+        await deliverCallbackResult(query, packed, {}, 'pending', lang, `cf:${parsed.kind}:${parsed.id}`);
+        return { ok: true, command: 'confirm', kind: parsed.kind, id: parsed.id };
+    }
+    if (parsed.action === 'cq' || parsed.action === 'tm') {
+        if (parsed.kind !== 'dt') {
+            await reply(chatId, 'Chỉ chi hoàn TM trên phiếu đổi trả.');
+            return { ok: false, command: 'pay', kind: parsed.kind, id: parsed.id };
+        }
+    }
+    if (parsed.action === 'cq') {
+        const preview = await teleDecision.composePendingPush(pool, parsed.kind, parsed.id, lang);
+        if (!preview.dossier?.waitingCash) {
+            await reply(chatId, teleDecision.NOT_WAITING_CASH);
+            return { ok: false, command: 'pay', kind: parsed.kind, id: parsed.id };
+        }
+        if (preview.dossier.money?.drawerMissing || preview.dossier.money?.drawerBlocked) {
+            await deliverCallbackResult(query, preview, {}, 'pending', lang, `dt:${parsed.kind}:${parsed.id}`);
+            return { ok: false, command: 'pay-blocked', kind: parsed.kind, id: parsed.id, drawerShort: preview.dossier.money };
+        }
+        const packed = await teleDecision.composePendingPush(pool, parsed.kind, parsed.id, lang, { confirmMode: 'pay' });
+        await deliverCallbackResult(query, packed, {}, 'pending', lang, `cq:${parsed.kind}:${parsed.id}`);
+        return { ok: true, command: 'confirm-pay', kind: parsed.kind, id: parsed.id };
+    }
+    if (parsed.action === 'tm') {
+        const verdict = await teleDecision.runFlyCashRefund({
+            user, id: parsed.id, pool
+        });
+        const messageId = query.message?.message_id;
+        if (messageId && verdict.ok) {
+            await notify.setMessageReaction(chatId, messageId, '👍').catch(() => {});
+            await syncReturnCardAfterDecision(pool, parsed, chatId, messageId, 'paid');
+        } else if (messageId) {
+            await notify.editMessageReplyMarkup(chatId, messageId, completedDecisionKeyboard(parsed, lang)).catch(() => {});
+        }
+        await reply(chatId, verdict.text, {
+            ...(verdict.ok ? { effect: 'success' } : {}),
+            reply_markup: completedDecisionKeyboard(parsed, lang)
+        });
+        return {
+            ok: verdict.ok,
+            status: verdict.status,
+            already: verdict.already,
+            command: 'pay',
+            kind: parsed.kind,
+            id: parsed.id,
+            drawerShort: verdict.drawerShort
+        };
     }
     if (parsed.action === 'no') {
         teleDecision.rememberReject(chatId, parsed.kind, parsed.id);
@@ -1346,7 +1430,12 @@ const handleDecisionCallback = async (chatId, parsed, user, pool, lang, query = 
     const messageId = query.message?.message_id;
     if (messageId && verdict.ok) {
         await notify.setMessageReaction(chatId, messageId, parsed.action === 'no' ? '👎' : '👍').catch(() => {});
-        await notify.editMessageReplyMarkup(chatId, messageId, completedDecisionKeyboard(parsed, lang)).catch(() => {});
+        if (parsed.kind === 'dt') {
+            await syncReturnCardAfterDecision(pool, parsed, chatId, messageId,
+                parsed.action === 'no' ? 'rejected' : 'approved');
+        } else {
+            await notify.editMessageReplyMarkup(chatId, messageId, completedDecisionKeyboard(parsed, lang)).catch(() => {});
+        }
     }
     await reply(chatId, verdict.text, {
         ...(verdict.ok ? { effect: parsed.action === 'no' ? 'alert' : 'success' } : {}),
@@ -1376,6 +1465,9 @@ const handleRejectReasonMessage = async (chatId, text, bound) => {
         chatId
     });
     await reply(chatId, verdict.text);
+    if (verdict.ok && pending.kind === 'dt') {
+        await syncReturnCardAfterDecision(bound.pool, { kind: 'dt', id: pending.id }, chatId, null, 'rejected');
+    }
     return { ok: verdict.ok, rejected: true, status: verdict.status, kind: pending.kind, id: pending.id, lang: live };
 };
 
@@ -1412,7 +1504,7 @@ const handlePrivateMessage = async (message) => {
         }
         return handleAskCommand(boundAsk, chatId, text, message);
     }
-    if (FORBIDDEN_TEXT.test(text) && !/^\/ask\b/i.test(text) && !matchReplyCommand(text) && !/^\/(today|pending|reports|help|fly)/i.test(text)) {
+    if (FORBIDDEN_TEXT.test(text) && !/^\/ask\b/i.test(text) && !matchReplyCommand(text) && !/^\/(today|pending|returns|reports|help|fly)/i.test(text)) {
         await reply(chatId, t(lang, 'denyWrite'));
         return { forbidden: true };
     }
@@ -1987,7 +2079,9 @@ module.exports = {
     isTelegramPolling,
     READ_CALLBACK,
     runFlyDecision: teleDecision.runFlyDecision,
+    runFlyCashRefund: teleDecision.runFlyCashRefund,
     setFlyHandlerOverride: teleDecision.setFlyHandlerOverride,
+    setCashRefundOverride: teleDecision.setCashRefundOverride,
     parseDecisionCallback: teleDecision.parseDecisionCallback,
     setAskOverride: teleAsk.setAskOverride,
     setAskDocOverride: teleAsk.setAskDocOverride,

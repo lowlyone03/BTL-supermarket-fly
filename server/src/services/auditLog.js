@@ -156,6 +156,11 @@ const ACTION_META = {
         giaiThich: 'Hóa đơn nháp bị hủy. Tiền và tồn kho không đổi vì chưa hoàn thành.',
         mucDo: 'Cảnh báo', nhom: 'tien-ton'
     },
+    'Hủy thanh toán': {
+        viecLam: 'Hủy thanh toán phiên chưa hoàn thành',
+        giaiThich: 'Khách thôi mua khi HĐ còn Nháp (có thể đã thu TM / QR đang chờ). Query ZaloPay lần cuối. QR chưa thành công: trả lại TM, void thanh toán, HĐ Đã hủy — không phiếu trả, không doanh thu. QR đã đủ: không hủy, hoàn thành HĐ, chuyển Trả hàng.',
+        mucDo: 'Cảnh báo', nhom: 'tien-ton'
+    },
     'Thu tiền hóa đơn': {
         viecLam: 'Thu tiền hóa đơn',
         giaiThich: 'Ghi nhận một lần khách trả tiền. Hóa đơn chỉ hoàn thành khi đã thu đủ.',

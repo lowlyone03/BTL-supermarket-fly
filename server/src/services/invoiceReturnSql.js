@@ -30,6 +30,14 @@ OUTER APPLY (
     WHERE tt.MaHD = hd.MaHD AND tt.TrangThai = N'Thành công'
     ORDER BY tt.SoTien DESC, tt.NgayTT
 ) ttgoc
+OUTER APPLY (
+    SELECT
+        COALESCE(SUM(CASE WHEN tt.PhuongThuc=N'Tiền mặt' THEN tt.SoTien ELSE 0 END),0) TienMatDaThu,
+        COALESCE(SUM(CASE WHEN tt.PhuongThuc=N'QR' THEN tt.SoTien ELSE 0 END),0) TienQrDaThu
+    FROM ThanhToan tt
+    WHERE tt.MaHD = hd.MaHD AND tt.TrangThai = N'Thành công'
+      AND (tt.GhiChu IS NULL OR tt.GhiChu NOT LIKE N'Thu chênh đổi hàng%')
+) ttbd
 `;
 
 const INVOICE_RETURN_COLUMNS = `
@@ -40,7 +48,9 @@ const INVOICE_RETURN_COLUMNS = `
     COALESCE(dt.TienDaHoan, 0) AS TienDaHoan,
     COALESCE(ban.SLBan, 0) AS SLBan,
     COALESCE(tra.SLDaTra, 0) AS SLDaTra,
-    ttgoc.PhuongThucGoc
+    ttgoc.PhuongThucGoc,
+    COALESCE(ttbd.TienMatDaThu, 0) AS TienMatDaThu,
+    COALESCE(ttbd.TienQrDaThu, 0) AS TienQrDaThu
 `;
 
 module.exports = { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS };

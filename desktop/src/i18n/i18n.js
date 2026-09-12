@@ -68,6 +68,7 @@
     'Hoàn thành': 'st.done',
     'Đang hoàn tiền': 'st.refunding',
     'Hoàn tiền thất bại': 'st.refundFail',
+    'Chờ xử lý hoàn tiền': 'st.refundWait',
     'Đã hủy': 'st.cancelled',
     'Đã gửi Nhà cung cấp': 'st.sentNcc',
     'Nhà cung cấp xác nhận': 'st.nccOk',

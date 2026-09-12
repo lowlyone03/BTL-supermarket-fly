@@ -492,6 +492,11 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         assert.equal(picked[0].id, 'po:PO001');
         const saleOnly = notify.pickInboxToPush(items, { recordId: 'HD001', now });
         assert.equal(saleOnly.length, 0);
+        const returns = notify.pickInboxToPush([
+            { id: 'dt:DT001', title: 'Đổi trả chờ duyệt', detail: 'DT001', at: now },
+            { id: 'dt-cash:DT002', title: 'Chờ xử lý hoàn tiền', detail: 'DT002', at: now }
+        ], { recordId: 'DT001', now });
+        assert.equal(returns.length, 0, 'đổi trả đi kênh riêng, không nhân bản qua inbox poll');
     });
 
     await test('Telegram lỗi không làm fail closeShift (notifySafely + fetch throw)', async () => {
@@ -719,6 +724,9 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         assert.equal(bot.parseCommand('Công nợ').name, 'debt');
         assert.equal(bot.parseCommand('📋 Công nợ').name, 'debt');
         assert.equal(bot.parseCommand('Việc chờ').name, 'pending');
+        assert.equal(bot.parseCommand('/returns').name, 'returns');
+        assert.equal(bot.parseCommand('💵 Trả hàng').name, 'returns');
+        assert.equal(bot.parseCommand('Duyệt tiền trả hàng').name, 'returns');
         assert.equal(bot.parseCommand('📋 Summary /fly').name, 'fly');
         assert.equal(bot.parseCommand('💰 今日销售').name, 'revenue');
         assert.equal(DENY_VIEW.includes('không xem'), true);
@@ -2253,6 +2261,202 @@ process.env.TELEGRAM_WEBHOOK_URL = '';
         assert.match(topic.text, /lãi gộp/i);
         assert.match(topic.text, /không trừ/i);
         assert.match(topic.text, /NCC/i);
+    });
+
+    await test('Inbox dt-cash và callback duyệt tiền trả hàng', () => {
+        assert.deepEqual(teleDecision.parseInboxKind('dt:DT00001'), { kind: 'dt', id: 'DT00001' });
+        assert.deepEqual(teleDecision.parseInboxKind('dt-cash:DT00002'), {
+            kind: 'dt', id: 'DT00002', waitingCash: true
+        });
+        assert.deepEqual(bot.parseDecisionCallback('cf:dt:DT00001'), { action: 'cf', kind: 'dt', id: 'DT00001' });
+        assert.deepEqual(bot.parseDecisionCallback('cq:dt:DT00002'), { action: 'cq', kind: 'dt', id: 'DT00002' });
+        assert.deepEqual(bot.parseDecisionCallback('tm:dt:DT00002'), { action: 'tm', kind: 'dt', id: 'DT00002' });
+        const pendingKb = teleDecision.approvalKeyboard({ kind: 'dt', id: 'DT00001', pending: true });
+        assert.ok(pendingKb.inline_keyboard.flat().some(btn => btn.callback_data === 'cf:dt:DT00001'));
+        assert.ok(!pendingKb.inline_keyboard.flat().some(btn => btn.callback_data === 'ok:dt:DT00001'));
+        const confirmKb = teleDecision.approvalKeyboard({
+            kind: 'dt', id: 'DT00001', pending: true, confirmMode: 'approve'
+        });
+        assert.ok(confirmKb.inline_keyboard.flat().some(btn => btn.callback_data === 'ok:dt:DT00001'));
+        assert.ok(confirmKb.inline_keyboard.flat().some(btn => btn.text === '✅ Xác nhận duyệt'));
+        const waitKb = teleDecision.approvalKeyboard({
+            kind: 'dt', id: 'DT00002', waitingCash: true,
+            money: { drawerBlocked: false, drawerMissing: false }
+        });
+        assert.ok(waitKb.inline_keyboard.flat().some(btn => btn.callback_data === 'cq:dt:DT00002'));
+        const shortKb = teleDecision.approvalKeyboard({
+            kind: 'dt', id: 'DT00002', waitingCash: true,
+            money: { drawerBlocked: true, drawerMissing: false, drawerShort: 50000 }
+        });
+        assert.ok(!shortKb.inline_keyboard.flat().some(btn => /Chi hoàn/.test(btn.text)));
+        const listKb = teleDecision.pendingListKeyboard([
+            { id: 'dt-cash:DT00002', title: 'Chờ xử lý hoàn tiền', tone: 'urgent' }
+        ]);
+        assert.ok(listKb.inline_keyboard.flat().some(btn => /Chi hoàn DT00002/.test(btn.text)));
+        const ql = { TenVaiTro: 'Quản lý', TrangThaiTK: 1 };
+        const tn = { TenVaiTro: 'Thu ngân', TrangThaiTK: 1 };
+        const kt = { TenVaiTro: 'Kế toán', TrangThaiTK: 1 };
+        assert.equal(teleDecision.canDecideKind(ql, 'dt'), true);
+        assert.equal(teleDecision.canDecideKind(tn, 'dt'), false);
+        assert.equal(teleDecision.canDecideKind(kt, 'dt'), false);
+        const card = teleDecision.buildApprovalCard({
+            kind: 'dt', id: 'DT00001', title: 'ĐỔI TRẢ CHỜ DUYỆT TIỀN',
+            status: 'Chờ duyệt', createdBy: 'Lan', party: 'Khách A',
+            pending: true,
+            docs: [{ label: 'Hóa đơn gốc', value: 'HD00001' }],
+            money: {
+                need: 150000, hoanQr: 100000, hoanTm: 50000,
+                paidQR: 100000, paidTM: 80000,
+                drawerAvail: 200000, drawerBlocked: false, drawerShift: 'CA01'
+            },
+            totals: { tong: 150000 }, lines: []
+        });
+        assert.match(card, /HD00001/);
+        assert.match(card, /Preview QR/);
+        assert.match(card, /Preview TM/);
+        assert.match(card, /Két khả dụng/);
+        assert.match(card, /150\.000 ₫/);
+    });
+
+    await test('QL xác nhận rồi duyệt đổi trả; thu ngân bị chặn', async () => {
+        bot.resetChatLangCache();
+        const audits = [];
+        bot.setFlyHandlerOverride(async (ctx) => {
+            audits.push(ctx);
+            return { status: 200, body: { message: 'Đã phê duyệt phiếu đổi trả.' } };
+        });
+        const qlRow = {
+            MaNV: 'NV001', ChatId: '42', MaTK: 1, Bat: 1, TenNV: 'Nguyễn Minh Anh',
+            MaTKLive: 1, MaVaiTro: 1, TrangThaiTK: 1, TenVaiTro: 'Quản lý'
+        };
+        const sent = collectSent(qlRow);
+        const confirm = await bot.handleUpdate({
+            callback_query: {
+                id: 'dt-cf',
+                data: 'cf:dt:DT00001',
+                message: { chat: { id: 42, type: 'private' }, message_id: 11, text: 'old' }
+            }
+        });
+        assert.equal(confirm.command, 'confirm');
+        assert.equal(audits.length, 0);
+        const approved = await bot.handleUpdate({
+            callback_query: {
+                id: 'dt-ok',
+                data: 'ok:dt:DT00001',
+                message: { chat: { id: 42, type: 'private' }, message_id: 12, text: 'old' }
+            }
+        });
+        assert.equal(approved.ok, true);
+        assert.equal(audits.length, 1);
+        assert.equal(audits[0].kind, 'dt');
+        assert.equal(audits[0].uc, 'UC08');
+        assert.match(sent.find(item => /Đã duyệt trên Telegram/.test(item.text || '')).text, /nhật ký/);
+        bot.setFlyHandlerOverride(null);
+
+        bot.resetChatLangCache();
+        let called = 0;
+        bot.setFlyHandlerOverride(async () => {
+            called += 1;
+            return { status: 200, body: { message: 'should not' } };
+        });
+        const tnRow = {
+            MaNV: 'NV008', ChatId: '42', MaTK: 2, Bat: 1, TenNV: 'Thu ngân test',
+            MaTKLive: 2, MaVaiTro: 4, TrangThaiTK: 1, TenVaiTro: 'Thu ngân'
+        };
+        collectSent(tnRow);
+        const denied = await bot.handleUpdate({
+            callback_query: {
+                id: 'dt-tn',
+                data: 'ok:dt:DT00001',
+                message: { chat: { id: 42, type: 'private' } }
+            }
+        });
+        assert.equal(denied.status, 403);
+        assert.equal(called, 0);
+        bot.setFlyHandlerOverride(null);
+    });
+
+    await test('Chi hoàn TM: két đủ thì chi, két thiếu thì báo, không gọi khi thu ngân', async () => {
+        bot.resetChatLangCache();
+        const pays = [];
+        bot.setCashRefundOverride(async (ctx) => {
+            pays.push(ctx);
+            return { status: 200, body: { message: 'Đã chi hoàn tiền mặt 50.000 đ.' } };
+        });
+        const qlRow = {
+            MaNV: 'NV001', ChatId: '42', MaTK: 1, Bat: 1, TenNV: 'Nguyễn Minh Anh',
+            MaTKLive: 1, MaVaiTro: 1, TrangThaiTK: 1, TenVaiTro: 'Quản lý'
+        };
+        const sent = collectSent(qlRow);
+        const paid = await bot.handleUpdate({
+            callback_query: {
+                id: 'dt-tm',
+                data: 'tm:dt:DT00002',
+                message: { chat: { id: 42, type: 'private' }, message_id: 21, text: 'old' }
+            }
+        });
+        assert.equal(paid.ok, true);
+        assert.equal(paid.command, 'pay');
+        assert.equal(pays.length, 1);
+        assert.equal(pays[0].id, 'DT00002');
+        assert.match(sent.find(item => /chi hoàn tiền mặt/i.test(item.text || '')).text, /nhật ký/);
+        bot.setCashRefundOverride(async () => ({
+            status: 400,
+            body: {
+                message: 'Không đủ tiền mặt để hoàn. Cần 80.000 đ / khả dụng 10.000 đ / thiếu 70.000 đ.',
+                drawerShort: { need: 80000, avail: 10000, short: 70000, blocked: true },
+                waitingCash: true
+            }
+        }));
+        sent.length = 0;
+        const blocked = await bot.handleUpdate({
+            callback_query: {
+                id: 'dt-short',
+                data: 'tm:dt:DT00002',
+                message: { chat: { id: 42, type: 'private' } }
+            }
+        });
+        assert.equal(blocked.ok, false);
+        assert.match(
+            (sent.find(item => /Không đủ tiền mặt/.test(item.text || '')) || {}).text || '',
+            /Không đủ tiền mặt/
+        );
+        bot.setCashRefundOverride(null);
+
+        const tn = await teleDecision.runFlyCashRefund({
+            user: { TenVaiTro: 'Thu ngân', TrangThaiTK: 1, MaNV: 'NV008' },
+            id: 'DT00002'
+        });
+        assert.equal(tn.status, 403);
+        assert.equal(tn.ok, false);
+    });
+
+    await test('Đồng bộ thẻ trả hàng: sửa tại chỗ, không nhân bản dt qua inbox', async () => {
+        notify.resetTelegramRuntime();
+        const keys = notify.relatedPushKeys('INBOX', 'dt-cash:DT001');
+        assert.ok(keys.some(row => row.loai === 'DT_CHO_HOAN' && row.ma === 'DT001'));
+        assert.ok(!keys.some(row => row.loai === 'DT_CHO_DUYET' && row.ma === '-cash:DT001'));
+        const edits = [];
+        notify.setTelegramRuntime({
+            fetchFn: async (url, opts) => {
+                edits.push({ method: String(url).split('/').pop(), ...JSON.parse(opts.body || '{}') });
+                return { json: async () => ({ ok: true, result: { message_id: 77 } }) };
+            },
+            getPool: async () => null,
+            getSql: () => fakeSql
+        });
+        await notify.rememberCard(null, 'DT_CHO_DUYET', 'DT001', '42', 77);
+        const cards = await notify.listReturnCards(null, 'DT001');
+        assert.equal(cards.length, 1);
+        assert.equal(cards[0].messageId, 77);
+        const edited = await notify.editTrackedCards(null, 'DT001', 'ĐÃ DUYỆT — hết nút Duyệt', {
+            reply_markup: { inline_keyboard: [] }
+        });
+        assert.equal(edited, 1);
+        assert.equal(edits[0].method, 'editMessageText');
+        assert.equal(edits[0].message_id, 77);
+        assert.match(edits[0].text, /ĐÃ DUYỆT/);
+        notify.resetTelegramRuntime();
     });
 
     notify.resetTelegramRuntime();

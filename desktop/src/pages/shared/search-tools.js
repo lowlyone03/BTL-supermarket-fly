@@ -113,14 +113,27 @@
     manager: '../admin/employees.html'
   }[role] || '../admin/employees.html');
 
+  const looksLikeProductQuery = query => {
+    const compact = String(query || '').trim();
+    if (!compact) return false;
+    const n = normalize(compact);
+    if (/^(sp|bk|sua|ngk|hmp|dh|gd)[a-z0-9]*$/i.test(compact.replace(/\s+/g, ''))) return true;
+    if (/^\d{8,}$/.test(compact.replace(/\s+/g, ''))) return true;
+    return /\b(banh|keo|sua|nuoc|gao|dau goi|nuoc giat|coca|pepsi|lavie|chocopie|trung thu|mooncake)\b/i.test(n);
+  };
+
   const resolveDestination = (query, { role, currentTarget } = {}) => {
-    if (currentTarget && PAGE_SEARCH_IDS[currentTarget]) return currentTarget;
     const compact = String(query || '').trim();
     if (role === 'cashier') {
       if (/^dt/i.test(compact)) return 'cashier-returns';
+      if (/^hd/i.test(compact)) return 'cashier-invoices';
       if (/^(kh\d|0\d{8,}|84\d{8,})/i.test(compact) && !/^hd/i.test(compact)) return 'cashier-customers';
-      return 'cashier-invoices';
+      if (looksLikeProductQuery(compact)) return 'cashier-pos';
     }
+    if ((role === 'manager' || role === 'admin' || !role) && looksLikeProductQuery(compact)) {
+      return '../admin/products.html';
+    }
+    if (currentTarget && PAGE_SEARCH_IDS[currentTarget]) return currentTarget;
     if (role === 'warehouse') {
       if (/^dt/i.test(compact)) return 'warehouse-returns';
       if (/^px/i.test(compact)) return 'warehouse-stock-issues';
@@ -140,7 +153,7 @@
     }
     if (/^nv/i.test(compact)) return '../admin/employees.html';
     if (/^(tk|acc)/i.test(compact)) return '../admin/accounts.html';
-    if (/^(sp|dm)/i.test(compact)) return '../admin/products.html';
+    if (/^(sp|dm)/i.test(compact) || looksLikeProductQuery(compact)) return '../admin/products.html';
     if (/^km/i.test(compact)) return '../admin/promotions.html';
     return defaultDestination(role);
   };
@@ -208,6 +221,7 @@
     findPageSearch,
     applyToPageSearch,
     resolveDestination,
+    looksLikeProductQuery,
     defaultDestination,
     bindSearchField
   };

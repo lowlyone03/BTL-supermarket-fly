@@ -77,6 +77,18 @@ const ensureTelegramSchema = async (connection) => {
                     CONSTRAINT PK_TelegramPushLog PRIMARY KEY (LoaiSuKien, MaChungTu)
                 );
             END`);
+        await run(connection, `
+            IF OBJECT_ID(N'dbo.TelegramCardMsg', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.TelegramCardMsg (
+                    LoaiSuKien  NVARCHAR(50) NOT NULL,
+                    MaChungTu   VARCHAR(50)  NOT NULL,
+                    ChatId      VARCHAR(32)  NOT NULL,
+                    MessageId   BIGINT       NOT NULL,
+                    NgayCapNhat DATETIME     NOT NULL CONSTRAINT DF_TelegramCardMsg_NgayCapNhat DEFAULT (GETDATE()),
+                    CONSTRAINT PK_TelegramCardMsg PRIMARY KEY (LoaiSuKien, MaChungTu, ChatId)
+                );
+            END`);
         schemaReady = true;
     })().catch((error) => {
         schemaPromise = null;
