@@ -7,6 +7,73 @@ const requestOf = (connection) => (
 let ready = false;
 let pending = null;
 
+const resetReturnRefundSchemaCache = () => {
+    ready = false;
+    pending = null;
+};
+
+/** UNIQUE KEY → DROP CONSTRAINT. Index thường / filtered → DROP INDEX. */
+const REPLACE_MREFUND_UNIQUE_SQL = `
+            IF OBJECT_ID(N'dbo.GiaoDichHoan', N'U') IS NOT NULL
+            BEGIN
+            IF EXISTS (
+                SELECT 1 FROM sys.key_constraints
+                WHERE name = N'UX_GiaoDichHoan_MRefundId'
+                  AND parent_object_id = OBJECT_ID(N'dbo.GiaoDichHoan')
+                  AND [type] = N'UQ'
+            )
+                ALTER TABLE dbo.GiaoDichHoan DROP CONSTRAINT UX_GiaoDichHoan_MRefundId;
+
+            DECLARE @uqSql NVARCHAR(MAX) = N'';
+            SELECT @uqSql = @uqSql + N'ALTER TABLE dbo.GiaoDichHoan DROP CONSTRAINT '
+                + QUOTENAME(kc.name) + N';'
+            FROM sys.key_constraints kc
+            WHERE kc.parent_object_id = OBJECT_ID(N'dbo.GiaoDichHoan')
+              AND kc.[type] = N'UQ'
+              AND EXISTS (
+                    SELECT 1
+                    FROM sys.index_columns ic
+                    JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+                    WHERE ic.object_id = kc.parent_object_id
+                      AND ic.index_id = kc.unique_index_id
+                      AND ic.is_included_column = 0
+                      AND c.name = N'MRefundId'
+              )
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM sys.index_columns ic
+                    JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+                    WHERE ic.object_id = kc.parent_object_id
+                      AND ic.index_id = kc.unique_index_id
+                      AND ic.is_included_column = 0
+                      AND c.name <> N'MRefundId'
+              );
+            IF @uqSql <> N'' EXEC sp_executesql @uqSql;
+
+            IF EXISTS (
+                SELECT 1 FROM sys.indexes i
+                WHERE i.name = N'UX_GiaoDichHoan_MRefundId'
+                  AND i.object_id = OBJECT_ID(N'dbo.GiaoDichHoan')
+                  AND i.is_unique_constraint = 0
+                  AND i.is_primary_key = 0
+                  AND (
+                        i.has_filter = 0
+                     OR ISNULL(i.filter_definition, N'') NOT LIKE N'%MRefundId%IS NOT NULL%'
+                  )
+            )
+                DROP INDEX UX_GiaoDichHoan_MRefundId ON dbo.GiaoDichHoan;
+
+            IF NOT EXISTS (
+                SELECT 1 FROM sys.indexes
+                WHERE name = N'UX_GiaoDichHoan_MRefundId'
+                  AND object_id = OBJECT_ID(N'dbo.GiaoDichHoan')
+            )
+                EXEC(N'CREATE UNIQUE INDEX UX_GiaoDichHoan_MRefundId
+                    ON dbo.GiaoDichHoan (MRefundId)
+                    WHERE MRefundId IS NOT NULL');
+            END
+`;
+
 const ensureReturnRefundSchema = async (connection) => {
     if (ready) return;
     if (pending) return pending;
@@ -55,26 +122,8 @@ const ensureReturnRefundSchema = async (connection) => {
                 ALTER TABLE dbo.GiaoDichHoan ALTER COLUMN ZpTransIdGoc VARCHAR(50) NULL;
             IF COL_LENGTH(N'dbo.GiaoDichHoan', N'MRefundId') IS NOT NULL
                 ALTER TABLE dbo.GiaoDichHoan ALTER COLUMN MRefundId VARCHAR(45) NULL;`);
+        await requestOf(connection).query(REPLACE_MREFUND_UNIQUE_SQL);
         await requestOf(connection).query(`
-            IF EXISTS (
-                SELECT 1 FROM sys.indexes
-                WHERE name = N'UX_GiaoDichHoan_MRefundId'
-                  AND object_id = OBJECT_ID(N'dbo.GiaoDichHoan')
-                  AND is_unique = 1
-            )
-            BEGIN
-                DROP INDEX UX_GiaoDichHoan_MRefundId ON dbo.GiaoDichHoan;
-            END
-            IF NOT EXISTS (
-                SELECT 1 FROM sys.indexes
-                WHERE name = N'UX_GiaoDichHoan_MRefundId'
-                  AND object_id = OBJECT_ID(N'dbo.GiaoDichHoan')
-            )
-            BEGIN
-                CREATE UNIQUE INDEX UX_GiaoDichHoan_MRefundId
-                    ON dbo.GiaoDichHoan (MRefundId)
-                    WHERE MRefundId IS NOT NULL;
-            END
             UPDATE gd SET
                 gd.PhuongThuc = COALESCE(gd.PhuongThuc, N'QR'),
                 gd.MaHD = COALESCE(gd.MaHD, dt.MaHD)
@@ -89,4 +138,8 @@ const ensureReturnRefundSchema = async (connection) => {
     return pending;
 };
 
-module.exports = { ensureReturnRefundSchema };
+module.exports = {
+    ensureReturnRefundSchema,
+    resetReturnRefundSchemaCache,
+    REPLACE_MREFUND_UNIQUE_SQL
+};
