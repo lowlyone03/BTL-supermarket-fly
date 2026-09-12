@@ -96,6 +96,24 @@ const inspectMRefundUnique = async (pool) => {
             `SELECT COUNT(*) AS So FROM dbo.GiaoDichHoan`
         )).recordset[0].So;
 
+        await pool.request().query(`
+            IF EXISTS (
+                SELECT 1 FROM sys.indexes i
+                WHERE i.name = N'UX_GiaoDichHoan_MRefundId'
+                  AND i.object_id = OBJECT_ID(N'dbo.GiaoDichHoan')
+                  AND i.is_unique_constraint = 0
+            )
+                DROP INDEX UX_GiaoDichHoan_MRefundId ON dbo.GiaoDichHoan;
+            IF NOT EXISTS (
+                SELECT 1 FROM sys.key_constraints
+                WHERE name = N'UX_GiaoDichHoan_MRefundId'
+                  AND parent_object_id = OBJECT_ID(N'dbo.GiaoDichHoan')
+            )
+                ALTER TABLE dbo.GiaoDichHoan
+                    ADD CONSTRAINT UX_GiaoDichHoan_MRefundId UNIQUE (MRefundId);`);
+        const legacy = await inspectMRefundUnique(pool);
+        assert.equal(Number(legacy?.IsUniqueConstraint), 1, 'Mô phỏng UNIQUE KEY như migration ZaloPayRefund');
+
         resetReturnRefundSchemaCache();
         await ensureReturnRefundSchema(pool);
         const after1 = await inspectMRefundUnique(pool);
@@ -118,7 +136,7 @@ const inspectMRefundUnique = async (pool) => {
             `SELECT COUNT(*) AS So FROM dbo.GiaoDichHoan`
         )).recordset[0].So;
         assert.equal(Number(afterCount), Number(beforeCount), 'Không được xóa dòng GiaoDichHoan');
-        console.log('✓ DB ensureReturnRefundSchema chạy 2 lần — filtered unique index, dữ liệu giữ nguyên');
+        console.log('✓ DB UNIQUE CONSTRAINT → filtered index, ensure ×2, dữ liệu giữ nguyên');
         console.log('RETURN REFUND SCHEMA PASS (unit + DB ×2).');
     } finally {
         try { await pool.close(); } catch { /* ignore */ }
