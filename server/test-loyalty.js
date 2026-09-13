@@ -10,6 +10,7 @@ const {
     normalizePolicy, publicPolicy, POS_AUTO_PROMO
 } = require('./src/services/loyaltyPolicy');
 const { mergeLoyaltyDiscount, bannerForOffer, countOffersFromTable } = require('./src/services/loyaltyApply');
+const { earnPointsForPayment, POINT_EARN_UNIT, POINT_VALUE_VND } = require('./src/services/loyaltyPoints');
 
 const test = (name, run) => {
     try {
@@ -170,6 +171,30 @@ test('Áp VIP: không cộng đôi % với KM phần trăm', () => {
     assert.equal(over.tienGiamGia, 20000);
 });
 
+test('Giỏ 345.000đ + KM 50.000đ + 10 điểm: VIP 10% áp/bỏ đổi phải thanh toán', () => {
+    const policy = normalizePolicy({ vipMaxPercent: 10, vipEnabled: true });
+    const pointValue = 1000;
+    const goods = 345000;
+    const km = 50000;
+    const pointsVnd = 10 * pointValue;
+    const off = goods - km - pointsVnd;
+    const vip = mergeLoyaltyDiscount({
+        loai: 'VIP', policy, tongTienHang: goods,
+        kmAmount: km, kmIsPercent: false
+    });
+    const on = goods - vip.tienGiamGia - pointsVnd;
+    assert.equal(off, 285000);
+    assert.equal(vip.tienGiamCS, 29500);
+    assert.equal(vip.tienGiamGia, 79500);
+    assert.equal(on, 255500);
+    assert.notEqual(off, on);
+
+    const vipOnly = mergeLoyaltyDiscount({ loai: 'VIP', policy, tongTienHang: goods });
+    assert.equal(goods - pointsVnd, 335000);
+    assert.equal(vipOnly.tienGiamGia, 34500);
+    assert.equal(goods - vipOnly.tienGiamGia - pointsVnd, 300500);
+});
+
 test('Win-back 1 lần, không âm; mới chỉ nhân điểm', () => {
     const policy = normalizePolicy({ winBackVoucherVnd: 20000, newMemberPointMultiplier: 2 });
     const wb = mergeLoyaltyDiscount({ loai: 'win-back', policy, tongTienHang: 15000, kmAmount: 0 });
@@ -186,6 +211,35 @@ test('Win-back 1 lần, không âm; mới chỉ nhân điểm', () => {
     });
     assert.equal(off.tienGiamCS, 0);
     assert.equal(off.loai, null);
+});
+
+test('Tích điểm: 1 điểm / 4.000.000đ mỗi lần thanh toán', () => {
+    assert.equal(POINT_EARN_UNIT, 4_000_000);
+    assert.equal(POINT_VALUE_VND, 1000);
+    assert.equal(earnPointsForPayment({ maKH: null, tongThanhToan: 12_000_000 }), 0);
+    assert.equal(earnPointsForPayment({ tongThanhToan: 12_000_000 }), 0);
+    assert.equal(earnPointsForPayment({ maKH: 'KH1', tongThanhToan: 345_000 }), 0);
+    assert.equal(earnPointsForPayment({ maKH: 'KH1', tongThanhToan: 3_999_999 }), 0);
+    assert.equal(earnPointsForPayment({ maKH: 'KH1', tongThanhToan: 4_000_000 }), 1);
+    assert.equal(earnPointsForPayment({ maKH: 'KH1', tongThanhToan: 7_999_999 }), 1);
+    assert.equal(earnPointsForPayment({ maKH: 'KH1', tongThanhToan: 8_000_000 }), 2);
+    assert.equal(earnPointsForPayment({ maKH: 'KH1', tongThanhToan: 12_000_000 }), 3);
+    assert.equal(earnPointsForPayment({ maKH: 'KH1', tongThanhToan: 4_000_000, heSoDiem: 2 }), 2);
+});
+
+test('POS hiện quy đổi 1 điểm = 1.000đ và tách KM / chính sách', () => {
+    const pos = require('node:fs').readFileSync(require('node:path').join(__dirname, '../desktop/src/pages/cashier/cashier-pages.js'), 'utf8');
+    assert.match(pos, /1 điểm =/);
+    assert.match(pos, /TienGiamKM/);
+    assert.match(pos, /pointValue/);
+    assert.match(pos, /Tích điểm: 1 điểm \//);
+    assert.match(pos, /Sẽ cộng \+/);
+    const sales = require('node:fs').readFileSync(require('node:path').join(__dirname, 'src/controllers/salesController.js'), 'utf8');
+    assert.match(sales, /earnPointsForPayment/);
+    assert.match(sales, /TienGiamKM/);
+    const points = require('node:fs').readFileSync(require('node:path').join(__dirname, 'src/services/loyaltyPoints.js'), 'utf8');
+    assert.match(points, /POINT_VALUE_VND \|\| 1000/);
+    assert.match(points, /4_000_000/);
 });
 
 test('Banner POS đúng chữ chính sách; không auto', () => {

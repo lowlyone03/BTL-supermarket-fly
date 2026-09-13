@@ -65,7 +65,7 @@ Mật khẩu chung: `123`
 
 Hệ thống không cho đóng ca nếu còn hóa đơn nháp hoặc thanh toán chờ xác nhận.
 
-Công thức điểm mặc định để test: chi `10.000 đ` được `1 điểm`, `1 điểm` đổi `1.000 đ`. Có thể đổi bằng `POINT_EARN_UNIT` và `POINT_VALUE_VND` trong `.env` khi nhóm chốt chính sách chính thức.
+Công thức điểm mặc định: mỗi lần thanh toán `floor(TongThanhToan / 4.000.000)` được cộng điểm (`4.000.000 đ` → 1 điểm; dưới 4 triệu → 0). `1 điểm` đổi `1.000 đ`. Có thể đổi bằng `POINT_EARN_UNIT` và `POINT_VALUE_VND` trong `.env`.
 
 ### C. Quản lý duyệt công
 

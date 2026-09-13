@@ -9,9 +9,16 @@ const {
     mergeEffective,
     uniqueCodes,
     saveEmployeeOverrides,
-    clearEmployeeOverrides,
-    foldRole
+    clearEmployeeOverrides
 } = require('../services/effectivePermissions');
+const {
+    isFounderAccount,
+    isManagerRoleName,
+    roleChangeKind,
+    roleChangeVerdict,
+    staffRoleFlags,
+    ensureFounderAccountSchema
+} = require('../services/founderAccount');
 
 // Lấy danh sách vai trò
 const getRoles = async (req, res) => {
@@ -124,15 +131,18 @@ const getStaffPermissions = async (req, res) => {
     try {
         const pool = await poolPromise;
         await ensureEmployeePermissionSchema(pool);
+        await ensureFounderAccountSchema(pool);
         const [roles, functions, employees] = await Promise.all([
             pool.request().query(`SELECT MaVaiTro, TenVaiTro, MoTa FROM VaiTro ORDER BY MaVaiTro`),
             pool.request().query(`SELECT MaChucNang, TenChucNang, Nhom FROM ChucNang ORDER BY Nhom, MaChucNang`),
             pool.request().query(`
                 SELECT n.MaNV, n.TenNV, n.ChucVu, n.TrangThai,
-                       t.MaTK, t.MaVaiTro, t.TrangThai AS TrangThaiTK, v.TenVaiTro
+                       t.MaTK, t.MaVaiTro, t.TrangThai AS TrangThaiTK, t.TenDangNhap,
+                       t.IsFounder, t.MaVaiTroTruoc, v.TenVaiTro, vp.TenVaiTro AS TenVaiTroTruoc
                 FROM NhanVien n
                 LEFT JOIN TaiKhoan t ON t.MaNV = n.MaNV
                 LEFT JOIN VaiTro v ON v.MaVaiTro = t.MaVaiTro
+                LEFT JOIN VaiTro vp ON vp.MaVaiTro = t.MaVaiTroTruoc
                 ORDER BY CASE COALESCE(v.TenVaiTro, n.ChucVu)
                     WHEN N'Quản lý' THEN 1
                     WHEN N'Nhân viên mua hàng' THEN 2
@@ -155,20 +165,29 @@ const getStaffPermissions = async (req, res) => {
             const override = emp.MaNV ? await loadOverrideCodes(pool, emp.MaNV) : null;
             const codes = mergeEffective({ roleCodes, overrideCodes: override, tenVaiTro });
             const extra = codes.filter((code) => !roleCodes.includes(code));
+            const flags = staffRoleFlags({
+                ...emp,
+                HasAccount: Boolean(emp.MaTK),
+                TenVaiTro: tenVaiTro
+            });
             staff.push({
                 MaNV: emp.MaNV,
                 TenNV: emp.TenNV,
                 ChucVu: emp.ChucVu,
                 TrangThai: emp.TrangThai,
-                HasAccount: Boolean(emp.MaTK),
+                HasAccount: flags.HasAccount,
                 MaTK: emp.MaTK || null,
+                TenDangNhap: emp.TenDangNhap || null,
                 MaVaiTro: maVaiTro || null,
                 TenVaiTro: tenVaiTro,
+                MaVaiTroTruoc: emp.MaVaiTroTruoc || null,
+                TenVaiTroTruoc: emp.TenVaiTroTruoc || null,
                 TrangThaiTK: emp.TrangThaiTK,
                 CheDo: override ? 'TuyChinh' : 'TheoVaiTro',
                 codes,
                 roleCodes,
-                extra
+                extra,
+                ...flags
             });
         }
         res.json({
@@ -197,7 +216,7 @@ const updateEmployeePermissions = async (req, res) => {
         await ensureEmployeePermissionSchema(transaction);
         const emp = await new sql.Request(transaction)
             .input('MaNV', sql.VarChar, maNV)
-            .query(`SELECT n.MaNV, n.TenNV, n.ChucVu, t.MaVaiTro, v.TenVaiTro
+            .query(`SELECT n.MaNV, n.TenNV, n.ChucVu, t.MaVaiTro, t.TenDangNhap, t.IsFounder, v.TenVaiTro
                     FROM NhanVien n
                     LEFT JOIN TaiKhoan t ON t.MaNV = n.MaNV
                     LEFT JOIN VaiTro v ON v.MaVaiTro = t.MaVaiTro
@@ -211,9 +230,13 @@ const updateEmployeePermissions = async (req, res) => {
             await transaction.rollback();
             return res.status(400).json({ message: 'Nhân viên chưa có tài khoản nên chưa gán quyền đăng nhập.' });
         }
-        if (foldRole(row.TenVaiTro || row.ChucVu) === 'quản lý') {
+        if (isManagerRoleName(row.TenVaiTro || row.ChucVu)) {
             await transaction.rollback();
-            return res.status(400).json({ message: 'Quyền vai trò Quản lý được cố định, không tùy chỉnh từng người.' });
+            return res.status(400).json({
+                message: isFounderAccount(row)
+                    ? 'Quyền admin gốc được cố định, không tùy chỉnh từng chức năng.'
+                    : 'Mẫu vai trò Quản lý được cố định. Muốn thu quyền thì hạ vai trò nhân viên này, không tắt từng ô.'
+            });
         }
         const roleCodes = await loadRoleCodesFromDb(transaction, row.MaVaiTro);
         const granted = uniqueCodes(codes);
@@ -279,9 +302,11 @@ const promoteEmployee = async (req, res) => {
         }
         await transaction.begin();
         await ensureEmployeePermissionSchema(transaction);
+        await ensureFounderAccountSchema(transaction);
         const emp = await new sql.Request(transaction)
             .input('MaNV', sql.VarChar, maNV)
-            .query(`SELECT n.MaNV, n.TenNV, n.ChucVu, t.MaTK, t.MaVaiTro, v.TenVaiTro
+            .query(`SELECT n.MaNV, n.TenNV, n.ChucVu, t.MaTK, t.MaVaiTro, t.TenDangNhap, t.IsFounder,
+                           t.MaVaiTroTruoc, v.TenVaiTro
                     FROM NhanVien n
                     LEFT JOIN TaiKhoan t ON t.MaNV = n.MaNV
                     LEFT JOIN VaiTro v ON v.MaVaiTro = t.MaVaiTro
@@ -291,10 +316,6 @@ const promoteEmployee = async (req, res) => {
             return res.status(404).json({ message: 'Không tìm thấy nhân viên.' });
         }
         const row = emp.recordset[0];
-        if (!row.MaTK) {
-            await transaction.rollback();
-            return res.status(400).json({ message: 'Nhân viên chưa có tài khoản, hãy tạo tài khoản trước khi nâng vai trò.' });
-        }
         const role = await new sql.Request(transaction)
             .input('MaVaiTro', sql.Int, maVaiTro)
             .query('SELECT MaVaiTro, TenVaiTro FROM VaiTro WHERE MaVaiTro = @MaVaiTro');
@@ -303,30 +324,64 @@ const promoteEmployee = async (req, res) => {
             return res.status(400).json({ message: 'Vai trò không tồn tại.' });
         }
         const next = role.recordset[0];
+        const verdict = roleChangeVerdict({
+            target: { ...row, HasAccount: Boolean(row.MaTK) },
+            actor: req.user,
+            nextRoleId: Number(next.MaVaiTro)
+        });
+        if (!verdict.ok) {
+            await transaction.rollback();
+            return res.status(400).json({ message: verdict.message });
+        }
+        if (isManagerRoleName(row.TenVaiTro || row.ChucVu) && !isManagerRoleName(next.TenVaiTro)) {
+            const others = await new sql.Request(transaction)
+                .input('MaTK', sql.Int, Number(row.MaTK))
+                .query(`SELECT COUNT(*) AS Total
+                        FROM TaiKhoan t
+                        JOIN VaiTro v ON v.MaVaiTro = t.MaVaiTro
+                        WHERE v.TenVaiTro = N'Quản lý' AND t.MaTK <> @MaTK AND t.TrangThai = 1`);
+            if (!Number(others.recordset[0]?.Total)) {
+                await transaction.rollback();
+                return res.status(400).json({ message: 'Không hạ được người Quản lý cuối cùng đang hoạt động.' });
+            }
+        }
+        const kind = roleChangeKind(row.TenVaiTro || row.ChucVu, next.TenVaiTro);
+        const action = kind === 'demote' ? 'Hạ vai trò nhân viên' : (kind === 'promote' ? 'Nâng vai trò nhân viên' : 'Đổi vai trò nhân viên');
         await new sql.Request(transaction)
             .input('MaNV', sql.VarChar, maNV)
             .input('ChucVu', sql.NVarChar, next.TenVaiTro)
             .query('UPDATE NhanVien SET ChucVu = @ChucVu WHERE MaNV = @MaNV');
+        const leavingManager = isManagerRoleName(row.TenVaiTro || row.ChucVu);
+        const previousRoleId = Number(row.MaVaiTro) || null;
         await new sql.Request(transaction)
             .input('MaTK', sql.Int, row.MaTK)
             .input('MaVaiTro', sql.Int, next.MaVaiTro)
-            .query('UPDATE TaiKhoan SET MaVaiTro = @MaVaiTro WHERE MaTK = @MaTK');
+            .input('MaVaiTroTruoc', sql.Int, leavingManager ? (row.MaVaiTroTruoc || null) : previousRoleId)
+            .query(`UPDATE TaiKhoan
+                    SET MaVaiTro = @MaVaiTro,
+                        MaVaiTroTruoc = CASE
+                            WHEN @MaVaiTroTruoc IS NULL THEN MaVaiTroTruoc
+                            ELSE @MaVaiTroTruoc
+                        END
+                    WHERE MaTK = @MaTK`);
         if (!keepOverrides) {
             await new sql.Request(transaction)
                 .input('MaNV', sql.VarChar, maNV)
                 .query('DELETE FROM dbo.NhanVien_ChucNang WHERE MaNV = @MaNV');
         }
         await logAudit(transaction, {
-            user: req.user, req, action: 'Nâng vai trò nhân viên', table: 'TaiKhoan',
+            user: req.user, req, action, table: 'TaiKhoan',
             recordId: String(row.MaTK), severity: 'Quan trọng',
             content: `${row.TenNV}: ${row.TenVaiTro || row.ChucVu} → ${next.TenVaiTro}`
         });
         await transaction.commit();
+        const verb = kind === 'demote' ? 'hạ' : (kind === 'promote' ? 'nâng' : 'chuyển');
         res.json({
-            message: `Đã chuyển ${row.TenNV} sang vai trò ${next.TenVaiTro}. Nhân viên cần đăng nhập lại.`,
+            message: `Đã ${verb} ${row.TenNV} từ ${row.TenVaiTro || row.ChucVu} sang ${next.TenVaiTro}. Nhân viên cần đăng nhập lại.`,
             MaNV: maNV,
             MaVaiTro: next.MaVaiTro,
-            TenVaiTro: next.TenVaiTro
+            TenVaiTro: next.TenVaiTro,
+            kind
         });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});

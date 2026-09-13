@@ -165,8 +165,8 @@ td small { display: block; margin-top: 4px; color: #7f8b84; font-size: 9px; line
 .permission-note { padding: 14px 17px; display: flex; align-items: center; gap: 12px; border: 1px solid #d8e5dc; border-radius: 15px; background: #eef5f0; }
 .note-icon { width: 29px; height: 29px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--green-700); font-size: 12px; }
 .note-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; }
-.permission-note strong { font-size: 11px; }
-.permission-note p { margin: 3px 0 0; color: #718078; font-size: 9px; }
+.permission-note strong { font-size: 13px; letter-spacing: 0; word-spacing: .04em; }
+.permission-note p { margin: 4px 0 0; color: #5f7268; font-size: 13px; line-height: 1.55; }
 
 .content-area:has(> .perm-module) {
   overflow: hidden;
@@ -188,12 +188,13 @@ td small { display: block; margin-top: 4px; color: #7f8b84; font-size: 9px; line
   align-items: flex-end;
   gap: 16px;
 }
-.perm-module .module-heading h1 { font-size: 26px; letter-spacing: -.03em; }
+.perm-module .module-heading h1 { font-size: 26px; letter-spacing: 0; word-spacing: .06em; line-height: 1.3; }
 .perm-module .module-heading > div:first-child > p:last-child {
-  margin: 6px 0 0;
-  max-width: 760px;
-  font-size: 13px;
-  line-height: 1.5;
+  margin: 8px 0 0;
+  max-width: 820px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  word-spacing: .04em;
 }
 .perm-module .heading-actions { position: sticky; top: 0; z-index: 6; }
 .perm-module #permSaveBtn { min-width: 168px; box-shadow: 0 8px 18px rgba(28, 74, 61, .12); }
@@ -208,8 +209,8 @@ td small { display: block; margin-top: 4px; color: #7f8b84; font-size: 9px; line
   background: linear-gradient(90deg, #eef6f1 0%, #f7fbf8 100%);
 }
 .perm-page-note .note-icon { width: 28px; height: 28px; background: var(--green-800); }
-.perm-page-note strong { color: #1c4a3d; font-size: 12.5px; font-weight: 750; }
-.perm-page-note p { margin: 2px 0 0; color: #5f7268; font-size: 12px; line-height: 1.45; }
+.perm-page-note strong { color: #1c4a3d; font-size: 13.5px; font-weight: 750; letter-spacing: 0; word-spacing: .04em; }
+.perm-page-note p { margin: 4px 0 0; color: #5f7268; font-size: 13px; line-height: 1.6; }
 
 .permission-surface {
   flex: 1 1 auto;
@@ -365,13 +366,14 @@ td small { display: block; margin-top: 4px; color: #7f8b84; font-size: 9px; line
 }
 .perm-tree-head span {
   display: block;
-  color: #6d8076;
-  font-size: 10px;
+  color: #1c4a3d;
+  font-size: 14px;
   font-weight: 800;
-  letter-spacing: .12em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  word-spacing: .05em;
+  text-transform: none;
 }
-.perm-tree-head small { display: block; margin-top: 3px; color: #7a8b83; font-size: 12px; }
+.perm-tree-head small { display: block; margin-top: 5px; color: #5f7268; font-size: 12.5px; line-height: 1.5; }
 
 .perm-role-group {
   margin: 0 0 8px;
@@ -455,15 +457,18 @@ td small { display: block; margin-top: 4px; color: #7f8b84; font-size: 9px; line
   font-weight: 800;
 }
 .perm-emp-row.is-active b { color: #f3faf6; background: #1c4a3d; }
-.perm-emp-copy { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.perm-emp-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .perm-emp-row strong {
   overflow: hidden;
   color: #21372c;
-  font-size: 13px;
+  font-size: 13.5px;
+  letter-spacing: 0;
+  word-spacing: .04em;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.perm-emp-row small { color: #6f7d75; font-size: 11px; }
+.perm-emp-row small { color: #5f7268; font-size: 11.5px; line-height: 1.4; }
 .perm-emp-flags {
   display: flex;
   flex-direction: column;
@@ -473,15 +478,20 @@ td small { display: block; margin-top: 4px; color: #7f8b84; font-size: 9px; line
 .perm-badge {
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
+  padding: 4px 9px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 11px;
   font-style: normal;
-  font-weight: 800;
+  font-weight: 750;
+  letter-spacing: 0;
+  word-spacing: .04em;
   white-space: nowrap;
 }
 .perm-badge.is-role { color: #2b6b52; background: #e7f0ea; }
 .perm-badge.is-custom { color: #8a4b12; background: #fde9d2; }
+.perm-badge.is-founder { color: #8a4b12; background: #f8ead3; }
+.perm-badge.is-promoted { color: #1a4f7a; background: #dceaf6; }
+.perm-badge.is-ok { color: #1c5a42; background: #dceee5; }
 .perm-extra-n { color: #2b7d60; font-size: 10px; font-style: normal; font-weight: 800; }
 
 .perm-editor {
@@ -528,16 +538,17 @@ td small { display: block; margin-top: 4px; color: #7f8b84; font-size: 9px; line
   box-shadow: 0 8px 16px rgba(28, 74, 61, .16);
 }
 .perm-crumb {
-  margin: 0 0 4px;
-  color: #6d8076;
-  font-size: 11px;
+  margin: 0 0 6px;
+  color: #5f7268;
+  font-size: 12.5px;
   font-weight: 700;
-  letter-spacing: .04em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  word-spacing: .05em;
+  text-transform: none;
 }
 .perm-crumb b { color: #1c4a3d; font-weight: 800; }
-.perm-editor-head h2 { margin: 0; color: #17231d; font-size: 22px; letter-spacing: -.03em; }
-.perm-sub { margin: 6px 0 0; max-width: 520px; color: #5f7268; font-size: 13px; line-height: 1.45; }
+.perm-editor-head h2 { margin: 0; color: #17231d; font-size: 22px; letter-spacing: 0; word-spacing: .04em; line-height: 1.3; }
+.perm-sub { margin: 6px 0 0; max-width: 560px; color: #5f7268; font-size: 13.5px; line-height: 1.55; }
 .perm-head-side { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
 .perm-id-stats {
   display: flex;
@@ -557,6 +568,20 @@ td small { display: block; margin-top: 4px; color: #7f8b84; font-size: 9px; line
 }
 .perm-id-stats strong { font-size: 12px; font-variant-numeric: tabular-nums; }
 .perm-lock-note { margin: 0 0 14px; padding: 12px 14px; }
+.perm-status {
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border: 1px solid #d5e2da;
+  border-radius: 14px;
+  background: #f4faf6;
+}
+.perm-status p { margin: 8px 0 0; color: #3f5349; font-size: 13.5px; line-height: 1.6; word-spacing: .03em; }
+.perm-status.is-lock { border-color: #ead7b3; background: #fbf6ea; }
+.perm-status.is-warn { border-color: #ead7b3; background: #fbf6ea; }
+.perm-status.is-ok { border-color: #c9dfd3; background: #f3faf6; }
+.perm-catalog-head { margin: 4px 2px 12px; }
+.perm-catalog-head h3 { margin: 0; color: #1c4a3d; font-size: 16px; font-weight: 750; letter-spacing: 0; word-spacing: .04em; }
+.perm-catalog-head p { margin: 6px 0 0; color: #5f7268; font-size: 13px; line-height: 1.55; }
 
 .perm-catalog { display: grid; gap: 12px; }
 .perm-cat {
@@ -578,42 +603,48 @@ td small { display: block; margin-top: 4px; color: #7f8b84; font-size: 9px; line
 }
 .perm-cat-head h4 {
   margin: 0;
-  color: #2b7d60;
-  font-size: 11px;
+  color: #1c4a3d;
+  font-size: 13.5px;
   font-weight: 800;
-  letter-spacing: .08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  word-spacing: .05em;
+  text-transform: none;
 }
 .perm-cat-count {
   color: #5c6f66;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
 }
-.perm-check-list { display: grid; padding: 6px; }
+.perm-check-list { display: grid; padding: 6px; gap: 2px; }
 .perm-check {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  border-radius: 11px;
-  font-size: 13px;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
   cursor: pointer;
   transition: background .14s ease;
 }
 .perm-check:hover { background: #f3f8f5; }
 .perm-check input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin-top: 2px;
   accent-color: var(--green-700);
   cursor: pointer;
 }
 .perm-check span { min-width: 0; color: #24362d; }
+.perm-check-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.perm-check-copy strong { font-weight: 650; letter-spacing: 0; word-spacing: .04em; line-height: 1.45; }
+.perm-check-copy small { color: #6d7d75; font-size: 11.5px; line-height: 1.4; }
 .perm-check.is-extra { background: #eef7f2; }
-.perm-check.is-extra span { color: #1c4a3d; font-weight: 700; }
+.perm-check.is-extra .perm-check-copy strong { color: #1c4a3d; font-weight: 700; }
 .perm-check.is-revoked { background: #fbf4ef; }
-.perm-check.is-revoked span { color: #8b2e1a; text-decoration: line-through; }
+.perm-check.is-revoked .perm-check-copy strong { color: #8b2e1a; }
 .perm-check em {
   margin-left: auto;
   padding: 2px 8px;
@@ -630,31 +661,33 @@ td small { display: block; margin-top: 4px; color: #7f8b84; font-size: 9px; line
 .perm-check.is-locked input { cursor: not-allowed; }
 
 .perm-promote {
-  margin-top: 16px;
-  padding: 16px;
+  margin: 0 0 16px;
+  padding: 16px 18px;
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 14px;
+  gap: 14px 16px;
   align-items: end;
-  border: 1px dashed #cfe0d6;
+  border: 1px solid #cfe0d6;
   border-radius: 16px;
   background: #f4faf6;
 }
-.perm-promote-copy { flex: 1 1 180px; min-width: 0; }
-.perm-promote-copy h4 { margin: 0 0 4px; color: #1c4a3d; font-size: 13px; }
-.perm-promote-copy p { margin: 0; color: #66786f; font-size: 12px; line-height: 1.45; }
-.perm-promote label { display: flex; flex-direction: column; gap: 6px; color: #35584a; font-size: 12px; font-weight: 700; }
+.perm-promote.is-locked { opacity: .88; background: #f7f8f6; border-style: dashed; }
+.perm-promote-copy { flex: 1 1 220px; min-width: 0; }
+.perm-promote-copy h4 { margin: 0 0 6px; color: #1c4a3d; font-size: 15px; letter-spacing: 0; word-spacing: .04em; }
+.perm-promote-copy p { margin: 0; color: #3f5349; font-size: 13px; line-height: 1.55; }
+.perm-promote label { display: flex; flex-direction: column; gap: 6px; color: #35584a; font-size: 12.5px; font-weight: 700; }
 .perm-promote select {
-  min-width: 200px;
-  height: 40px;
+  min-width: 220px;
+  height: 42px;
   padding: 0 12px;
   border: 1px solid #d5e2da;
   border-radius: 11px;
   color: var(--ink);
   background: #fff;
   font: inherit;
-  font-size: 13px;
+  font-size: 13.5px;
 }
+.perm-promote-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .perm-keep { flex-direction: row !important; align-items: center !important; font-weight: 600 !important; }
 .perm-keep input { accent-color: var(--green-700); }
 
@@ -713,8 +746,9 @@ td small { display: block; margin-top: 4px; color: #7f8b84; font-size: 9px; line
 .perm-matrix th, .perm-matrix td { padding: 11px 12px; text-align: center; }
 .perm-matrix th:first-child, .perm-matrix td:first-child { position: sticky; left: 0; z-index: 4; min-width: 330px; text-align: left; background: #fff; }
 .perm-matrix th:first-child { z-index: 8; background: #f7f8f5; }
-.perm-matrix .group-header { position: sticky; left: 0; z-index: 3; padding: 9px 13px; color: var(--green-700); background: #edf4ef !important; font-size: 8px; font-weight: 800; letter-spacing: .09em; text-align: left !important; text-transform: uppercase; }
-.perm-function { display: flex; align-items: center; gap: 9px; }
+.perm-matrix .group-header { position: sticky; left: 0; z-index: 3; padding: 10px 13px; color: var(--green-700); background: #edf4ef !important; font-size: 13px; font-weight: 800; letter-spacing: 0; word-spacing: .05em; text-align: left !important; text-transform: none; }
+.perm-function { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.perm-function small { color: #6d7d75; font-size: 11px; }
 .perm-matrix tbody tr:hover td { background: #f6faf7; }
 .perm-matrix tbody tr:hover td:first-child { background: #f6faf7; }
 .perm-matrix input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--green-700); cursor: pointer; }
@@ -745,10 +779,14 @@ html[data-theme="dark"] .perm-tree,
 html[data-theme="dark"] .matrix-legend,
 html[data-theme="dark"] .perm-cat-head,
 html[data-theme="dark"] .perm-editor-bar,
+html[data-theme="dark"] .perm-status,
+html[data-theme="dark"] .perm-promote,
 html[data-theme="soft"] .perm-tree,
 html[data-theme="soft"] .matrix-legend,
 html[data-theme="soft"] .perm-cat-head,
-html[data-theme="soft"] .perm-editor-bar {
+html[data-theme="soft"] .perm-editor-bar,
+html[data-theme="soft"] .perm-status,
+html[data-theme="soft"] .perm-promote {
   background: var(--green-50);
   border-color: var(--line);
 }

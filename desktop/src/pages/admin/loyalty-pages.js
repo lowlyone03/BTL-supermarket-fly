@@ -154,7 +154,7 @@
             </span>
           </div>
           <div class="loyalty-policy-actions">
-            <p class="loyalty-policy-note">Ba nhóm cố định. AI không bịa phần trăm. Không tự áp khi chỉ chọn khách.</p>
+            <p class="loyalty-policy-note">Ba nhóm cố định. Tích điểm gốc: 1 điểm / 4.000.000đ mỗi lần thanh toán (làm tròn xuống theo số khách thực trả). × điểm khách mới nhân sau quy tắc đó. AI không bịa phần trăm. Không tự áp khi chỉ chọn khách.</p>
             <div class="loyalty-policy-btns">
               <button type="button" class="loyalty-btn is-ghost" id="loyReset">Khôi phục mặc định</button>
               <button type="submit" class="loyalty-btn" id="loySave">Lưu chính sách</button>

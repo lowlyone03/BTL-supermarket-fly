@@ -109,7 +109,7 @@
             : { ok: !strictCreate || Boolean(gioiTinh), message: 'Giới tính là bắt buộc.' };
         const phoneResult = fields
             ? (strictCreate ? fields.validateRequiredVnPhone?.(sdt, 'Số điện thoại') : fields.validateOptionalVnPhone(sdt))
-            : { ok: !sdt || /^0\d{9,10}$/.test(sdt), message: 'Số điện thoại không hợp lệ' };
+            : { ok: !sdt || /^0[35789]\d{8}$/.test(String(sdt).replace(/[\s().-]/g, '')), message: 'SĐT phải gồm 10 số, bắt đầu bằng 03/05/07/08/09.' };
         const emailResult = fields ? fields.validateOptionalEmail(email) : { ok: !email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), message: 'Email không hợp lệ' };
         const addressResult = fields ? fields.validateOptionalNote(diaChi, 300) : { ok: true };
         const hireResult = fields
@@ -462,7 +462,7 @@
                 validateField('gioiTinh', result.ok, result.message);
             }
             if (id === 'sdt') {
-                const result = fields ? fields.validateOptionalVnPhone(v) : { ok: !v || /^0\d{9,10}$/.test(v), message: 'Số điện thoại không hợp lệ' };
+                const result = fields ? fields.validateOptionalVnPhone(v) : { ok: !v || /^0[35789]\d{8}$/.test(String(v).replace(/[\s().-]/g, '')), message: 'SĐT phải gồm 10 số, bắt đầu bằng 03/05/07/08/09.' };
                 validateField('sdt', result.ok, result.message);
             }
             if (id === 'email') {

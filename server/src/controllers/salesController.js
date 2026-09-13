@@ -2,7 +2,7 @@ const { sql, poolPromise } = require('../config/db');
 const { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS } = require('../services/invoiceReturnSql');
 const { logAudit } = require('../services/auditLog');
 const { assertCashierDuty, CashierDutyError } = require('../services/cashierDuty');
-const { validateRequiredName, validateOptionalVnPhone, validateOptionalEmail, validateOptionalDate, validateOptionalNote } = require('../services/fieldValidators');
+const { validateRequiredName, validateRequiredVnPhone, validateOptionalEmail, validateOptionalDate, validateOptionalNote, phoneSearchDigits } = require('../services/fieldValidators');
 const { invoiceListMatchSql, invoiceViewSql, resolveInvoiceListScope } = require('../services/invoiceSearch');
 const { hasVatColumns } = require('../services/journalEngine');
 const { assertChosenRate } = require('../services/vatSales');
@@ -14,10 +14,14 @@ const {
     findPendingMomoQr
 } = require('../services/paymentGatewayService');
 const { abortCheckoutPayment } = require('../services/abortCheckoutService');
+const { POINT_EARN_UNIT, POINT_VALUE_VND, earnPointsForPayment } = require('../services/loyaltyPoints');
 
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max);
-const POINT_EARN_UNIT = Math.max(1, Number(process.env.POINT_EARN_UNIT || 10000));
-const POINT_VALUE_VND = Math.max(0, Number(process.env.POINT_VALUE_VND || 1000));
+
+const isPercentPromotion = (loaiKM) => {
+    const text = String(loaiKM || '').normalize('NFC').trim();
+    return text === 'Phần trăm' || /%|phần trăm/i.test(text);
+};
 
 const generateId = async (transaction, table, column, prefix) => {
     const result = await new sql.Request(transaction)
@@ -66,7 +70,12 @@ const getCatalog = async (req, res) => {
                 WHERE TrangThai=N'Hiệu lực' AND CONVERT(date,GETDATE()) BETWEEN NgayBatDau AND NgayKetThuc
                 ORDER BY TenKM`)
         ]);
-        res.json({ products: products.recordset, promotions: promotions.recordset, pointValue: POINT_VALUE_VND });
+        res.json({
+            products: products.recordset,
+            promotions: promotions.recordset,
+            pointValue: POINT_VALUE_VND,
+            pointEarnUnit: POINT_EARN_UNIT
+        });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tải danh mục bán hàng.' });
@@ -76,11 +85,19 @@ const getCatalog = async (req, res) => {
 const listCustomers = async (req, res) => {
     try {
         const search = clean(req.query.search, 100);
+        const phoneDigits = phoneSearchDigits(search);
         const pool = await poolPromise;
-        const result = await pool.request().input('Search', sql.NVarChar, `%${search}%`).query(`
+        const result = await pool.request()
+            .input('Search', sql.NVarChar, `%${search}%`)
+            .input('PhoneDigits', sql.VarChar, phoneDigits ? `%${phoneDigits}%` : '')
+            .query(`
             SELECT TOP 50 MaKH,TenKH,SDT,Email,DiaChi,NgaySinh,DiemTichLuy,HangThanhVien
             FROM KhachHang
-            WHERE @Search=N'%%' OR MaKH LIKE @Search COLLATE Latin1_General_100_CI_AI OR TenKH LIKE @Search COLLATE Latin1_General_100_CI_AI OR SDT LIKE @Search COLLATE Latin1_General_100_CI_AI
+            WHERE @Search=N'%%'
+               OR MaKH LIKE @Search COLLATE Latin1_General_100_CI_AI
+               OR TenKH LIKE @Search COLLATE Latin1_General_100_CI_AI
+               OR SDT LIKE @Search COLLATE Latin1_General_100_CI_AI
+               OR (@PhoneDigits <> '' AND SDT LIKE @PhoneDigits)
             ORDER BY TenKH`);
         res.json({ items: result.recordset });
     } catch (error) {
@@ -94,7 +111,7 @@ const saveCustomer = async (req, res) => {
         const tenKHResult = validateRequiredName(req.body.TenKH, 'Tên khách hàng');
         if (!tenKHResult.ok) throw new Error(tenKHResult.message);
         const tenKH = tenKHResult.value;
-        const phone = validateOptionalVnPhone(req.body.SDT);
+        const phone = validateRequiredVnPhone(req.body.SDT, 'Số điện thoại');
         if (!phone.ok) throw new Error(phone.message);
         const email = validateOptionalEmail(req.body.Email);
         if (!email.ok) throw new Error(email.message);
@@ -102,7 +119,7 @@ const saveCustomer = async (req, res) => {
         if (!address.ok) throw new Error(address.message.replace('Ghi chú', 'Địa chỉ'));
         const birthday = validateOptionalDate(req.body.NgaySinh, 'Ngày sinh');
         if (!birthday.ok) throw new Error(birthday.message);
-        const sdt = phone.value || null;
+        const sdt = phone.value;
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         const prefix = `KH${new Date().getFullYear()}`;
         const maKH = await generateId(transaction, 'KhachHang', 'MaKH', prefix);
@@ -127,7 +144,7 @@ const updateCustomer = async (req, res) => {
         const maKH = clean(req.params.id, 20);
         const tenKHResult = validateRequiredName(req.body.TenKH, 'Tên khách hàng');
         if (!tenKHResult.ok) throw new Error(tenKHResult.message);
-        const phone = validateOptionalVnPhone(req.body.SDT);
+        const phone = validateRequiredVnPhone(req.body.SDT, 'Số điện thoại');
         if (!phone.ok) throw new Error(phone.message);
         const email = validateOptionalEmail(req.body.Email);
         if (!email.ok) throw new Error(email.message);
@@ -138,7 +155,7 @@ const updateCustomer = async (req, res) => {
         const pool = await poolPromise;
         const result = await pool.request().input('MaKH', sql.VarChar, maKH)
             .input('TenKH', sql.NVarChar, tenKHResult.value)
-            .input('SDT', sql.VarChar, phone.value || null)
+            .input('SDT', sql.VarChar, phone.value)
             .input('Email', sql.VarChar, email.value || null)
             .input('DiaChi', sql.NVarChar, address.value || null)
             .input('NgaySinh', sql.Date, birthday.value).query(`
@@ -214,11 +231,15 @@ const quoteInvoice = async (req, res) => {
         res.json({
             TongTienHang: calc.TongTienHang,
             TienGiamGia: calc.TienGiamGia,
+            TienGiamKM: calc.TienGiamKM,
             DiemSuDung: calc.DiemSuDung,
             TienDiemQuyDoi: calc.TienDiemQuyDoi,
             TongThanhToan: calc.TongThanhToan,
+            DiemCong: calc.DiemCong,
             lines: calc.lines,
-            loyalty: calc.loyalty || null
+            loyalty: calc.loyalty || null,
+            pointValue: POINT_VALUE_VND,
+            pointEarnUnit: POINT_EARN_UNIT
         });
     } catch (error) {
         res.status(error.status || 400).json({ message: error.message });
@@ -264,12 +285,13 @@ const calculateInvoice = async (source, lines, maKM, diemSuDung, maKH, opts = {}
               AND CONVERT(date,GETDATE()) BETWEEN NgayBatDau AND NgayKetThuc`);
         if (!promotion.recordset.length) throw new Error('Khuyến mãi không còn hiệu lực.');
         const promo = promotion.recordset[0];
-        kmIsPercent = /%|phần trăm/i.test(String(promo.LoaiKM));
+        kmIsPercent = isPercentPromotion(promo.LoaiKM);
         kmPercent = kmIsPercent ? Math.min(100, Number(promo.GiaTri)) : 0;
         tienGiamGia = kmIsPercent
             ? tongTienHang * kmPercent / 100
             : Math.min(tongTienHang, Number(promo.GiaTri));
     }
+    const tienGiamKM = Math.round(tienGiamGia);
     let loyalty = null;
     const loaiCS = String(opts.loaiCS || '').trim();
     if (loaiCS) {
@@ -306,15 +328,24 @@ const calculateInvoice = async (source, lines, maKM, diemSuDung, maKH, opts = {}
     }
     const tienDiem = Math.min(tongTienHang - tienGiamGia, diem * POINT_VALUE_VND);
     if (POINT_VALUE_VND === 0) diem = 0;
+    const tongThanhToan = Math.max(0, Math.round(tongTienHang - tienGiamGia - tienDiem));
     return {
         lines: normalized,
         MaKho: normalized[0].MaKho,
         TongTienHang: tongTienHang,
         TienGiamGia: Math.round(tienGiamGia),
+        TienGiamKM: tienGiamKM,
         DiemSuDung: diem,
         TienDiemQuyDoi: tienDiem,
-        TongThanhToan: Math.max(0, Math.round(tongTienHang - tienGiamGia - tienDiem)),
-        loyalty
+        TongThanhToan: tongThanhToan,
+        DiemCong: earnPointsForPayment({
+            maKH,
+            tongThanhToan,
+            heSoDiem: loyalty?.heSoDiem
+        }),
+        loyalty,
+        pointValue: POINT_VALUE_VND,
+        pointEarnUnit: POINT_EARN_UNIT
     };
 };
 
@@ -571,10 +602,11 @@ const completeInvoiceInternal = async (transaction, {
     const applyRow = invoice.MaKH
         ? await require('../services/loyaltyApply').loadInvoiceApply(transaction, invoice.MaHD)
         : null;
-    const heSoDiem = Math.max(1, Number(applyRow?.HeSoDiem) || 1);
-    const diemCong = invoice.MaKH
-        ? Math.floor(Number(invoice.TongThanhToan) / POINT_EARN_UNIT) * heSoDiem
-        : 0;
+    const diemCong = earnPointsForPayment({
+        maKH: invoice.MaKH,
+        tongThanhToan: invoice.TongThanhToan,
+        heSoDiem: applyRow?.HeSoDiem
+    });
     await new sql.Request(transaction).input('MaHD', sql.VarChar, invoice.MaHD).input('DiemCong', sql.Int, diemCong)
         .query(`UPDATE HoaDon SET TrangThai=N'Hoàn thành',DiemCong=@DiemCong WHERE MaHD=@MaHD`);
     if (invoice.MaKH) {

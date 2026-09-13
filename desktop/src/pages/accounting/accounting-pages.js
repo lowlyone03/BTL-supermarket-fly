@@ -906,7 +906,7 @@
       </div>
       <div class="warehouse-form-grid payment-voucher-fields">
         <div class="warehouse-field" id="payPctField" hidden><label>Phần trăm số còn lại *</label><input id="voucherPct" type="number" min="1" max="100" step="0.1" value="50"></div>
-        <div class="warehouse-field" id="payAmtField" hidden><label>Số tiền chi *</label><input id="voucherAmt" type="number" min="1" max="${remain}" step="1000" value="${Math.min(remain, 1000000)}"></div>
+        <div class="warehouse-field" id="payAmtField" hidden><label>Số tiền chi *</label><input id="voucherAmt" type="number" min="1" max="${remain}" step="1" value="${Math.min(remain, 1000000)}"></div>
         <div class="warehouse-field"><label>Phương thức *</label><select id="voucherMethod"><option ${debt.PhuongThuc === 'Tiền mặt' ? 'selected' : ''}>Tiền mặt</option><option ${debt.PhuongThuc === 'Chuyển khoản' || !debt.PhuongThuc ? 'selected' : ''}>Chuyển khoản</option></select></div>
         <div class="warehouse-field"><label>Nội dung chi *</label><input id="voucherContent" maxlength="500" value="${esc(defaultContent)}"></div>
         <div class="warehouse-field full"><label>Ghi chú</label><textarea id="voucherNote" maxlength="500" rows="3" placeholder="Thông tin bổ sung cho Quản lý kiểm tra">${esc(debt.GhiChu || '')}</textarea></div>

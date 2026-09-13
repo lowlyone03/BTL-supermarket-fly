@@ -1,6 +1,7 @@
 {
     const token = localStorage.getItem('fly_token');
     const API = window.FLY_API_BASE || 'http://localhost:3000/api';
+    const currentUser = JSON.parse(localStorage.getItem('fly_user') || '{}');
     let roles = [];
     let matrix = [];
     let staff = { functions: [], roles: [], employees: [] };
@@ -16,6 +17,17 @@
     const fold = value => String(value || '').trim().toLocaleLowerCase('vi-VN');
     const initials = name => String(name || '?').trim().split(/\s+/).slice(-2).map(part => part[0]).join('').toUpperCase();
     const sortedJoin = list => [...(list || [])].sort().join('|');
+    const roleRank = name => ({
+        'quản lý': 50, 'kế toán': 40, 'nhân viên mua hàng': 30, 'thủ kho': 20, 'thu ngân': 10
+    }[fold(name)] || 0);
+    const isManagerEmp = emp => fold(emp?.TenVaiTro || emp?.ChucVu) === 'quản lý';
+    const isFounderEmp = emp => Boolean(emp?.IsFounder)
+        || fold(emp?.TenDangNhap) === 'admin'
+        || String(emp?.MaNV || '').toUpperCase() === 'NV_QL01';
+    const isSelfEmp = emp => Boolean(emp?.MaNV) && emp.MaNV === currentUser.MaNV;
+    const canChangeRole = emp => Boolean(emp?.HasAccount) && !isFounderEmp(emp) && !isSelfEmp(emp);
+    const canEditCodes = emp => Boolean(emp?.HasAccount) && !isManagerEmp(emp);
+    const roleNameOf = id => (staff.roles || []).find(role => Number(role.MaVaiTro) === Number(id))?.TenVaiTro || '';
 
     window.loadPermissions = async () => {
         try {
@@ -65,7 +77,8 @@
         const saveBtn = document.getElementById('permSaveBtn');
         if (count) {
             const custom = staff.employees.filter(item => item.CheDo === 'TuyChinh').length;
-            count.textContent = `${staff.employees.length} nhân viên · ${custom} tùy chỉnh riêng`;
+            const promoted = staff.employees.filter(item => item.IsPromotedManager).length;
+            count.textContent = `${staff.employees.length} nhân viên · ${custom} tùy chỉnh · ${promoted} admin được phong`;
         }
         if (saveBtn) {
             saveBtn.textContent = viewMode === 'role' ? 'Lưu mẫu vai trò' : 'Lưu quyền nhân viên';
@@ -80,8 +93,8 @@
               <button type="button" class="perm-tab${viewMode === 'role' ? ' is-active' : ''}" data-perm-view="role" role="tab" aria-selected="${viewMode === 'role'}">Mẫu vai trò (tổng)</button>
             </div>
             ${viewMode === 'staff'
-                ? `<label class="perm-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="permSearch" type="search" placeholder="Tìm nhân viên, mã NV..." autocomplete="off" spellcheck="false"></label>`
-                : `<p class="perm-toolbar-hint">Đổi tại đây áp dụng mặc định cho nhân viên chưa có tùy chỉnh riêng.</p>`}
+                ? `<label class="perm-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="permSearch" type="search" placeholder="Tìm tên, mã NV, tài khoản..." autocomplete="off" spellcheck="false"></label>`
+                : `<p class="perm-toolbar-hint">Đổi tại đây áp dụng mặc định cho nhân viên chưa có tùy chỉnh riêng. Cột Quản lý là mẫu cố định — không phải khóa từng người.</p>`}
           </div>
           <div id="permWorkspace" class="perm-workspace">${viewMode === 'role' ? renderRoleMatrix() : renderStaffWorkspace()}</div>`;
         container.querySelectorAll('[data-perm-view]').forEach(btn => {
@@ -125,11 +138,25 @@
         }
         return `<div class="perm-staff-layout">
           <aside class="perm-tree">
-            <div class="perm-tree-head"><span>Vai trò → nhân viên</span><small>Mẫu chung ở trên, từng người ở dưới</small></div>
+            <div class="perm-tree-head">
+              <span>Theo vai trò</span>
+              <small>Chọn một người để xem quyền, nâng hoặc hạ vai trò.</small>
+            </div>
             ${groups.map(renderRoleGroup).join('')}
           </aside>
-          <section class="perm-editor">${emp ? renderEmployeeEditor(emp) : `<div class="perm-empty"><span class="perm-empty-icon"><svg aria-hidden="true"><use href="#i-users"/></svg></span><h3>Chọn một nhân viên</h3><p>Vai trò là mẫu chung. Thu ngân xuất sắc có thể được cấp thêm chức năng hoặc nâng vai trò — không đổi cả nhóm.</p></div>`}</section>
+          <section class="perm-editor">${emp ? renderEmployeeEditor(emp) : `<div class="perm-empty"><span class="perm-empty-icon"><svg aria-hidden="true"><use href="#i-users"/></svg></span><h3>Chọn một nhân viên</h3><p>Vai trò là mẫu chung. Nhân viên được phong admin vẫn hạ được. Chỉ tài khoản gốc bị khóa.</p></div>`}</section>
         </div>`;
+    };
+
+    const treeBadges = (emp) => {
+        const items = [];
+        if (isFounderEmp(emp)) items.push('<em class="perm-badge is-founder">Admin gốc</em>');
+        else if (emp.IsPromotedManager || (isManagerEmp(emp) && !isFounderEmp(emp))) items.push('<em class="perm-badge is-promoted">Được phong</em>');
+        else items.push(emp.CheDo === 'TuyChinh'
+            ? '<em class="perm-badge is-custom">Tùy chỉnh riêng</em>'
+            : '<em class="perm-badge is-role">Theo vai trò</em>');
+        const extra = (emp.extra || []).length ? `<i class="perm-extra-n">+${emp.extra.length} quyền thêm</i>` : '';
+        return `<span class="perm-emp-flags">${items.join('')}${extra}</span>`;
     };
 
     const renderRoleGroup = (role) => {
@@ -143,44 +170,125 @@
           </summary>
           ${role.employees.length ? role.employees.map(emp => {
             const active = emp.MaNV === selectedMaNV ? ' is-active' : '';
-            const badge = emp.CheDo === 'TuyChinh'
-                ? '<em class="perm-badge is-custom">Tùy chỉnh riêng</em>'
-                : '<em class="perm-badge is-role">Theo vai trò</em>';
-            const extra = (emp.extra || []).length ? `<i class="perm-extra-n">+${emp.extra.length} quyền thêm</i>` : '';
-            return `<button type="button" class="perm-emp-row${active}" data-emp-row data-manv="${escapeHtml(emp.MaNV)}" data-search="${escapeHtml(`${emp.TenNV} ${emp.MaNV}`)}">
+            const search = `${emp.TenNV} ${emp.MaNV} ${emp.TenDangNhap || ''}`;
+            return `<button type="button" class="perm-emp-row${active}" data-emp-row data-manv="${escapeHtml(emp.MaNV)}" data-search="${escapeHtml(search)}">
               <b>${escapeHtml(initials(emp.TenNV))}</b>
-              <span class="perm-emp-copy"><strong>${escapeHtml(emp.TenNV)}</strong><small>${escapeHtml(emp.MaNV)}${emp.HasAccount ? '' : ' · chưa có TK'}</small></span>
-              <span class="perm-emp-flags">${badge}${extra}</span>
+              <span class="perm-emp-copy"><strong>${escapeHtml(emp.TenNV)}</strong><small>${escapeHtml(emp.MaNV)}${emp.TenDangNhap ? ` · ${escapeHtml(emp.TenDangNhap)}` : ''}${emp.HasAccount ? '' : ' · chưa có TK'}</small></span>
+              ${treeBadges(emp)}
             </button>`;
           }).join('') : '<p class="perm-empty-inline">Chưa có nhân viên.</p>'}
         </details>`;
     };
 
+    const statusCard = (emp) => {
+        if (isFounderEmp(emp)) {
+            return `<div class="perm-status is-lock">
+              <span class="perm-badge is-founder">Admin gốc — không hạ cấp</span>
+              <p>Đây là tài khoản hệ thống. Không đổi vai trò, không tắt từng chức năng. Nhân viên được phong Quản lý vẫn hạ được — không nhầm với người này.</p>
+            </div>`;
+        }
+        if (isSelfEmp(emp)) {
+            return `<div class="perm-status is-warn">
+              <span class="perm-badge is-role">Tài khoản đang dùng</span>
+              <p>Không tự đổi vai trò của chính mình để tránh mất quyền đang mở trang này. Hãy nhờ admin gốc đổi hộ nếu cần.</p>
+            </div>`;
+        }
+        if (emp.IsPromotedManager || (isManagerEmp(emp) && !isFounderEmp(emp))) {
+            const prev = emp.TenVaiTroTruoc ? ` Vai trò/bộ phận cũ: <b>${escapeHtml(emp.TenVaiTroTruoc)}</b>.` : '';
+            return `<div class="perm-status is-ok">
+              <span class="perm-badge is-promoted">Admin được phong — có thể hạ cấp</span>
+              <p>Người này được nâng từ bộ phận lên Quản lý. Mẫu quyền Quản lý vẫn cố định; muốn thu quyền thì chọn vai trò mới bên dưới.${prev}</p>
+            </div>`;
+        }
+        if (!emp.HasAccount) {
+            return `<div class="perm-status is-warn">
+              <span class="perm-badge is-role">Chưa có tài khoản</span>
+              <p>Tạo tài khoản trước khi gán quyền đăng nhập hoặc đổi vai trò.</p>
+            </div>`;
+        }
+        return `<div class="perm-status is-ok">
+          <span class="perm-badge is-ok">Có thể đổi vai trò</span>
+          <p>Có thể cấp thêm / tắt riêng từng chức năng, hoặc nâng / hạ vai trò. Đổi vai trò không khóa người này.</p>
+        </div>`;
+    };
+
+    const roleChangeCard = (emp) => {
+        if (!emp.HasAccount) {
+            return '<p class="perm-empty-inline">Nhân viên chưa có tài khoản — tạo tài khoản trước khi gán quyền đăng nhập.</p>';
+        }
+        const locked = !canChangeRole(emp);
+        const promoteOptions = (staff.roles || [])
+            .filter(role => Number(role.MaVaiTro) !== Number(emp.MaVaiTro))
+            .map(role => {
+                const prev = Number(role.MaVaiTro) === Number(emp.MaVaiTroTruoc);
+                return `<option value="${role.MaVaiTro}" ${prev ? 'selected' : ''}>${escapeHtml(role.TenVaiTro)}${prev ? ' — vai trò cũ' : ''}</option>`;
+            })
+            .join('');
+        const manager = isManagerEmp(emp);
+        const title = manager ? 'Hạ cấp / đổi vai trò' : 'Nâng cấp / đổi vai trò';
+        const hint = locked
+            ? (isFounderEmp(emp)
+                ? 'Khóa vì đây là admin gốc, không phải vì đang là Quản lý.'
+                : 'Khóa vì đây là tài khoản bạn đang đăng nhập.')
+            : (manager
+                ? 'Chọn vai trò mới rồi bấm Hạ vai trò. Có thể về bộ phận cũ hoặc vai trò thấp hơn.'
+                : 'Chọn vai trò mới. Nâng lên Quản lý vẫn hạ được sau này.');
+        const firstId = (staff.roles || []).find(role => Number(role.MaVaiTro) !== Number(emp.MaVaiTro)
+            && (!emp.MaVaiTroTruoc || Number(role.MaVaiTro) === Number(emp.MaVaiTroTruoc)))?.MaVaiTro
+            || (staff.roles || []).find(role => Number(role.MaVaiTro) !== Number(emp.MaVaiTro))?.MaVaiTro;
+        const btnLabel = roleActionLabel(emp, firstId);
+        return `<div class="perm-promote${locked ? ' is-locked' : ''}">
+            <div class="perm-promote-copy">
+              <h4>${title}</h4>
+              <p>${hint}</p>
+            </div>
+            <label>Vai trò mới
+              <select id="permPromoteRole" ${locked ? 'disabled' : ''}>${promoteOptions}</select>
+            </label>
+            ${canEditCodes(emp) ? '<label class="perm-keep"><input type="checkbox" id="permKeepOverrides"> Giữ quyền riêng sau khi đổi vai trò</label>' : ''}
+            <div class="perm-promote-actions">
+              <button type="button" class="btn btn-primary" id="permPromoteBtn" ${locked ? 'disabled' : ''}>${escapeHtml(btnLabel)}</button>
+              ${canEditCodes(emp) ? '<button type="button" class="btn btn-outline" id="permResetBtn">Khôi phục theo vai trò</button>' : ''}
+            </div>
+          </div>`;
+    };
+
+    const roleActionLabel = (emp, nextId) => {
+        const nextName = roleNameOf(nextId);
+        if (!nextName) return 'Đổi vai trò';
+        if (roleRank(nextName) < roleRank(emp.TenVaiTro || emp.ChucVu)) {
+            return Number(nextId) === Number(emp.MaVaiTroTruoc)
+                ? `Hạ về ${nextName}`
+                : 'Hạ vai trò';
+        }
+        if (roleRank(nextName) > roleRank(emp.TenVaiTro || emp.ChucVu)) return 'Nâng vai trò';
+        return 'Đổi vai trò';
+    };
+
     const renderEmployeeEditor = (emp) => {
-        const locked = fold(emp.TenVaiTro) === 'quản lý';
+        const codesLocked = !canEditCodes(emp);
         const groups = groupedFunctions();
         const roleSet = new Set(emp.roleCodes || []);
         const draftSet = new Set(draftCodes);
         const extraCount = draftCodes.filter(code => !roleSet.has(code)).length;
         const revokedCount = [...roleSet].filter(code => !draftSet.has(code)).length;
         const custom = emp.CheDo === 'TuyChinh';
-        const promoteOptions = (staff.roles || [])
-            .filter(role => Number(role.MaVaiTro) !== Number(emp.MaVaiTro))
-            .map(role => `<option value="${role.MaVaiTro}">${escapeHtml(role.TenVaiTro)}</option>`)
-            .join('');
         const catalog = Object.entries(groups).map(([nhom, funcs]) => {
             const onCount = funcs.filter(fn => draftSet.has(fn.MaChucNang)).length;
             return `
           <div class="perm-cat" data-perm-cat>
-            <div class="perm-cat-head"><h4>${escapeHtml(nhom)}</h4><span class="perm-cat-count" data-cat-count>${onCount}/${funcs.length}</span></div>
+            <div class="perm-cat-head"><h4>${escapeHtml(nhom)}</h4><span class="perm-cat-count" data-cat-count>${onCount} / ${funcs.length} được phép</span></div>
             <div class="perm-check-list">
             ${funcs.map(fn => {
                 const on = draftSet.has(fn.MaChucNang);
                 const inherited = roleSet.has(fn.MaChucNang);
                 const mark = on && !inherited ? ' is-extra' : (!on && inherited ? ' is-revoked' : '');
-                return `<label class="perm-check${mark}${locked ? ' is-locked' : ''}">
-                  <input type="checkbox" data-uc="${escapeHtml(fn.MaChucNang)}" data-inherited="${inherited ? '1' : '0'}" ${on ? 'checked' : ''} ${locked ? 'disabled' : ''}>
-                  <span>${escapeHtml(fn.TenChucNang)}</span>
+                return `<label class="perm-check${mark}${codesLocked ? ' is-locked' : ''}">
+                  <input type="checkbox" data-uc="${escapeHtml(fn.MaChucNang)}" data-inherited="${inherited ? '1' : '0'}" ${on ? 'checked' : ''} ${codesLocked ? 'disabled' : ''}>
+                  <span class="perm-check-copy">
+                    <strong>${escapeHtml(fn.TenChucNang)}</strong>
+                    <small>${escapeHtml(fn.MaChucNang)}${inherited ? ' · có trong mẫu vai trò' : ' · ngoài mẫu vai trò'}</small>
+                  </span>
                   ${on && !inherited ? '<em>thêm</em>' : ''}
                   ${!on && inherited ? '<em>tắt riêng</em>' : ''}
                 </label>`;
@@ -188,14 +296,14 @@
             </div>
           </div>`;
         }).join('');
-        const barText = locked
-            ? 'Quyền Quản lý được cố định.'
+        const barText = codesLocked
+            ? (isFounderEmp(emp) ? 'Admin gốc: quyền cố định, không hạ cấp.' : 'Mẫu Quản lý cố định. Hạ vai trò ở khung phía trên nếu muốn thu quyền.')
             : (custom ? 'Đang dùng quyền riêng, khớp với dữ liệu đã lưu.' : 'Đang khớp mẫu vai trò.');
-        const subText = locked
-            ? 'Quyền Quản lý được cố định. Không tùy chỉnh từng người — muốn đổi người khác, dùng nâng vai trò.'
-            : (custom
-                ? 'Đang dùng quyền riêng, không còn bám sát mẫu vai trò.'
-                : 'Đang kế thừa đúng mẫu vai trò. Tick thêm hoặc bỏ để tạo tùy chỉnh.');
+        const headBadge = isFounderEmp(emp)
+            ? '<span class="perm-badge is-founder">Admin gốc — không hạ cấp</span>'
+            : (canChangeRole(emp)
+                ? '<span class="perm-badge is-ok">Có thể đổi vai trò</span>'
+                : '<span class="perm-badge is-role">Không tự đổi vai trò</span>');
         return `<div class="perm-editor-scroll">
           <header class="perm-editor-head">
             <div class="perm-identity">
@@ -203,11 +311,12 @@
               <div>
                 <p class="perm-crumb">Vai trò <b>${escapeHtml(emp.TenVaiTro || emp.ChucVu || '—')}</b> → nhân viên</p>
                 <h2>${escapeHtml(emp.TenNV)}</h2>
-                <p class="perm-sub">${escapeHtml(emp.MaNV)}${emp.HasAccount ? '' : ' · chưa có TK'}. ${subText}</p>
+                <p class="perm-sub">${escapeHtml(emp.MaNV)}${emp.TenDangNhap ? ` · ${escapeHtml(emp.TenDangNhap)}` : ''}${emp.HasAccount ? '' : ' · chưa có TK'}</p>
               </div>
             </div>
             <div class="perm-head-side">
-              ${custom ? '<span class="perm-badge is-custom">Tùy chỉnh riêng</span>' : '<span class="perm-badge is-role">Theo vai trò</span>'}
+              ${headBadge}
+              ${custom && !isManagerEmp(emp) ? '<span class="perm-badge is-custom">Tùy chỉnh riêng</span>' : ''}
               <div class="perm-id-stats">
                 <span><strong data-stat-on>${draftCodes.length}</strong> được phép</span>
                 <span><strong data-stat-extra>${extraCount}</strong> thêm</span>
@@ -215,17 +324,13 @@
               </div>
             </div>
           </header>
-          ${locked ? '<div class="permission-note perm-lock-note"><div><strong>Quản lý được cố định</strong><p>Không tùy chỉnh từng người. Muốn đổi người khác, dùng nâng vai trò.</p></div></div>' : ''}
+          ${statusCard(emp)}
+          ${roleChangeCard(emp)}
+          <div class="perm-catalog-head">
+            <h3>Chức năng được phép</h3>
+            <p>${codesLocked ? 'Các ô dưới đây chỉ để xem — mẫu Quản lý không chỉnh từng người.' : 'Tick thêm hoặc bỏ để tạo quyền riêng, không đổi cả nhóm vai trò.'}</p>
+          </div>
           <div class="perm-catalog">${catalog}</div>
-          ${emp.HasAccount && !locked ? `<div class="perm-promote">
-            <div class="perm-promote-copy"><h4>Nâng / đổi vai trò</h4><p>Đổi mẫu cha của nhân viên này. Quyền riêng có thể giữ hoặc xóa.</p></div>
-            <label>Vai trò mới
-              <select id="permPromoteRole">${promoteOptions}</select>
-            </label>
-            <label class="perm-keep"><input type="checkbox" id="permKeepOverrides"> Giữ quyền riêng sau khi đổi vai trò</label>
-            <button type="button" class="btn btn-secondary" id="permPromoteBtn">Nâng vai trò</button>
-            <button type="button" class="btn btn-outline" id="permResetBtn">Khôi phục theo vai trò</button>
-          </div>` : (!emp.HasAccount ? '<p class="perm-empty-inline">Nhân viên chưa có tài khoản — tạo tài khoản trước khi gán quyền đăng nhập.</p>' : '')}
         </div>
         <footer class="perm-editor-bar"><p data-perm-dirty>${barText}</p></footer>`;
     };
@@ -253,7 +358,7 @@
             const boxes = cat.querySelectorAll('input[data-uc]');
             const n = [...boxes].filter(el => el.checked).length;
             const el = cat.querySelector('[data-cat-count]');
-            if (el) el.textContent = `${n}/${boxes.length}`;
+            if (el) el.textContent = `${n} / ${boxes.length} được phép`;
         }
         const editor = box.closest('.perm-editor') || document;
         const roleSet = new Set(emp?.roleCodes || []);
@@ -293,14 +398,30 @@
                 paintPermissionRow(box);
             });
         });
+        const select = root.querySelector('#permPromoteRole');
+        const actionBtn = root.querySelector('#permPromoteBtn');
+        const syncLabel = () => {
+            const emp = selectedEmployee();
+            if (!emp || !actionBtn || !select) return;
+            actionBtn.textContent = roleActionLabel(emp, select.value);
+        };
+        select?.addEventListener('change', syncLabel);
+        syncLabel();
         root.querySelector('#permResetBtn')?.addEventListener('click', resetEmployee);
-        root.querySelector('#permPromoteBtn')?.addEventListener('click', promoteEmployee);
+        actionBtn?.addEventListener('click', changeEmployeeRole);
     };
 
     const saveEmployeeDraft = async () => {
         const emp = selectedEmployee();
         if (!emp) return window.showToast('Chọn nhân viên trước khi lưu.', 'error');
-        if (fold(emp.TenVaiTro) === 'quản lý') return window.showToast('Quyền Quản lý được cố định.', 'error');
+        if (!canEditCodes(emp)) {
+            return window.showToast(
+                isFounderEmp(emp)
+                    ? 'Admin gốc: quyền cố định.'
+                    : 'Mẫu Quản lý cố định. Hãy hạ vai trò nếu muốn thu quyền.',
+                'error'
+            );
+        }
         try {
             const res = await fetch(`${API}/roles/employees/${encodeURIComponent(emp.MaNV)}/permissions`, {
                 method: 'PUT',
@@ -335,10 +456,23 @@
         }
     };
 
-    const promoteEmployee = async () => {
+    const changeEmployeeRole = async () => {
         const emp = selectedEmployee();
         const select = document.getElementById('permPromoteRole');
         if (!emp || !select?.value) return window.showToast('Chọn vai trò mới.', 'error');
+        if (!canChangeRole(emp)) {
+            return window.showToast(
+                isFounderEmp(emp) ? 'Admin gốc không được hạ cấp.' : 'Không thể tự đổi vai trò của chính mình.',
+                'error'
+            );
+        }
+        const nextName = roleNameOf(select.value);
+        const fromName = emp.TenVaiTro || emp.ChucVu || '—';
+        const demote = roleRank(nextName) < roleRank(fromName);
+        const ok = window.confirm(demote
+            ? `Hạ ${emp.TenNV} từ ${fromName} xuống ${nextName}? Nhân viên mất quyền của vai trò cũ sau khi đăng nhập lại.`
+            : `Chuyển ${emp.TenNV} từ ${fromName} sang ${nextName}?`);
+        if (!ok) return;
         try {
             const res = await fetch(`${API}/roles/employees/${encodeURIComponent(emp.MaNV)}/promote`, {
                 method: 'POST',
@@ -368,7 +502,7 @@
             grouped[m.Nhom][m.MaChucNang].perms[m.MaVaiTro] = m.DuocPhep;
         });
 
-        let html = `<div class="perm-role-board"><p class="perm-role-lead">Mẫu vai trò áp dụng mặc định cho nhân viên chưa có tùy chỉnh riêng. Đổi mẫu không xóa quyền riêng đã lưu.</p>
+        let html = `<div class="perm-role-board"><p class="perm-role-lead">Mẫu vai trò áp dụng mặc định cho nhân viên chưa có tùy chỉnh riêng. Cột Quản lý là mẫu vận hành cố định — khác với việc khóa admin gốc trên tab Theo nhân viên.</p>
         <div class="perm-matrix-scroller"><table class="perm-matrix"><thead><tr><th>Chức năng</th>`;
         roles.forEach(r => { html += `<th>${escapeHtml(r.TenVaiTro)}</th>`; });
         html += `</tr></thead><tbody>`;
@@ -376,11 +510,11 @@
         for (const [nhom, funcs] of Object.entries(grouped)) {
             html += `<tr><td colspan="${roles.length + 1}" class="group-header">${escapeHtml(nhom)}</td></tr>`;
             for (const [maCN, data] of Object.entries(funcs)) {
-                html += `<tr><td><div class="perm-function"><span>${escapeHtml(data.ten)}</span></div></td>`;
+                html += `<tr><td><div class="perm-function"><span>${escapeHtml(data.ten)}</span><small>${escapeHtml(maCN)}</small></div></td>`;
                 roles.forEach(r => {
                     const isChecked = data.perms[r.MaVaiTro] ? 'checked' : '';
                     const disabled = (r.TenVaiTro === 'Quản lý') ? 'disabled' : '';
-                    const title = disabled ? 'title="Quyền Quản lý được cố định"' : '';
+                    const title = disabled ? 'title="Mẫu vai trò Quản lý được cố định"' : '';
                     html += `<td><input type="checkbox" data-role="${r.MaVaiTro}" data-func="${escapeHtml(maCN)}" ${isChecked} ${disabled} ${title}></td>`;
                 });
                 html += `</tr>`;

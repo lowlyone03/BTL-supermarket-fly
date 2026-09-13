@@ -67,10 +67,13 @@
         if (used) used.textContent = accounts.filter(account => Boolean(account.LanDangNhapCuoi)).length;
         body.innerHTML = filtered.length ? filtered.map(account => {
             const isCurrent = account.MaNV === currentUser.MaNV;
+            const isFounder = Number(account.IsFounder) === 1 || String(account.TenDangNhap || '').toLowerCase() === 'admin' || String(account.MaNV || '').toUpperCase() === 'NV_QL01';
+            const roleLocked = isCurrent || isFounder;
+            const roleTitle = isFounder ? 'Admin gốc — không hạ cấp' : (isCurrent ? 'Không thể tự đổi vai trò' : '');
             return `<tr class="acc-row" data-acc-action="detail" data-ma-tk="${account.MaTK}">
-                <td><strong>${escapeHtml(account.TenDangNhap)}</strong><small>${isCurrent ? 'Tài khoản đang sử dụng' : `Mã TK: ${escapeHtml(account.MaTK)}`}</small></td>
+                <td><strong>${escapeHtml(account.TenDangNhap)}</strong><small>${isFounder ? 'Admin gốc — không hạ cấp' : (isCurrent ? 'Tài khoản đang sử dụng' : `Mã TK: ${escapeHtml(account.MaTK)}`)}</small></td>
                 <td><div class="person-cell"><span class="person-avatar">${escapeHtml(account.TenNV.split(/\s+/).slice(-2).map(part => part[0]).join('').toUpperCase())}</span><span><strong>${escapeHtml(account.TenNV)}</strong><small>${escapeHtml(account.ChucVu)}${account.CCCD ? ` · CCCD ${escapeHtml(account.CCCD)}` : ''}</small></span></div></td>
-                <td><select class="role-select" onchange="updateRole(${account.MaTK}, this.value)" ${isCurrent ? 'disabled title="Không thể tự đổi vai trò"' : ''}>
+                <td><select class="role-select" onchange="updateRole(${account.MaTK}, this.value)" ${roleLocked ? `disabled title="${roleTitle}"` : ''}>
                     ${roles.map(role => `<option value="${role.MaVaiTro}" ${Number(role.MaVaiTro) === Number(account.MaVaiTro) ? 'selected' : ''}>${escapeHtml(role.TenVaiTro)}</option>`).join('')}
                 </select></td>
                 <td><span class="badge ${Number(account.TrangThai) === 1 ? 'badge-success' : 'badge-danger'}">${Number(account.TrangThai) === 1 ? 'Hoạt động' : 'Bị khóa'}</span></td>

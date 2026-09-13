@@ -94,6 +94,8 @@ const ensureEmployeePermissionSchema = async (connection) => {
                AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_NVCN_ChucNang')
                 ALTER TABLE dbo.NhanVien_ChucNang ADD CONSTRAINT FK_NVCN_ChucNang
                     FOREIGN KEY (MaChucNang) REFERENCES dbo.ChucNang (MaChucNang);`, 'FK_NVCN_ChucNang');
+        const { ensureFounderAccountSchema } = require('./founderAccount');
+        await ensureFounderAccountSchema(connection);
         schemaReady = true;
     })().catch((error) => {
         schemaPromise = null;

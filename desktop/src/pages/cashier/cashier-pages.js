@@ -81,6 +81,23 @@
   const avatar = text => window.FLY_UI?.avatar(text) || '';
   const productPhoto = (item, className = '') => window.FLY_PRODUCT_IMAGES?.markup(item, { className }) || avatar(item?.TenSP || item?.MaSP || 'SP');
   const person = (name, sub = '') => window.FLY_UI?.person(name, sub) || `<strong>${esc(name)}</strong>${sub ? `<small>${esc(sub)}</small>` : ''}`;
+  const formatSdt = (value) => {
+    const fields = window.FLY_FIELDS;
+    if (fields?.formatVnPhone) return fields.formatVnPhone(value);
+    return String(value ?? '').trim();
+  };
+  const sdtIsValid = (value) => {
+    if (!value) return false;
+    const fields = window.FLY_FIELDS;
+    if (fields?.validateOptionalVnPhone) return fields.validateOptionalVnPhone(value).ok;
+    return /^0[35789]\d{8}$/.test(String(value).replace(/[\s().-]/g, ''));
+  };
+  const sdtText = (value, empty = '—') => formatSdt(value) || empty;
+  const sdtCell = (value, email = '') => {
+    if (!value) return `—<small>${esc(email || '')}</small>`;
+    const flag = sdtIsValid(value) ? '' : '<small>SĐT chưa chuẩn</small>';
+    return `${esc(sdtText(value))}${flag}<small>${esc(email || '')}</small>`;
+  };
   const emptyRow = (cols, query, noun, idle) => `<tr><td colspan="${cols}" class="warehouse-empty">${esc(window.FLY_SEARCH?.emptyMessage?.(query, noun, idle) || (String(query || '').trim() ? `Không tìm thấy ${noun} khớp.` : idle))}</td></tr>`;
   const bindListSearch = (input, load) => {
     if (window.FLY_SEARCH?.bindSearchField) return window.FLY_SEARCH.bindSearchField(input, load);
@@ -182,7 +199,8 @@
         { label: 'Tiền hàng', value: inv.TongTienHang, format: 'money' },
         { label: 'Giảm giá', value: inv.TienGiamGia, format: 'money' },
         { label: 'Điểm quy đổi', value: inv.TienDiemQuyDoi, format: 'money' },
-        { label: 'Tổng thanh toán', value: inv.TongThanhToan, format: 'money' }
+        { label: 'Tổng thanh toán', value: inv.TongThanhToan, format: 'money' },
+        ...(inv.MaKH ? [{ label: 'Điểm cộng', value: `${Number(inv.DiemCong) || 0} điểm` }] : [])
       ],
       note: 'Bản in hóa đơn gốc lúc bán. Đổi trả sau này in trên phiếu DT riêng, không sửa chứng từ này.',
       signatures: ['Thu ngân', 'Khách hàng']
@@ -297,22 +315,29 @@
 
   const customerEditor = (context, existing, onDone) => {
     const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
-    overlay.innerHTML = `<div class="warehouse-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">HỒ SƠ THÀNH VIÊN</p><h2>${existing ? esc(existing.TenKH) : 'Thêm khách hàng'}</h2></div><button type="button" class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="warehouse-form-grid"><div class="warehouse-field"><label>Tên khách *</label><input id="khName" value="${esc(existing?.TenKH || '')}"></div><div class="warehouse-field"><label>Số điện thoại</label><input id="khPhone" value="${esc(existing?.SDT || '')}"></div><div class="warehouse-field"><label>Email</label><input id="khEmail" value="${esc(existing?.Email || '')}"></div><div class="warehouse-field"><label>Địa chỉ</label><input id="khAddress" value="${esc(existing?.DiaChi || '')}"></div></div>${existing ? `<p class="cashier-payment-help">Điểm ${existing.DiemTichLuy} · Hạng ${esc(existing.HangThanhVien)}. Thu ngân không được sửa điểm.</p>` : ''}</div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Hủy</button><button type="button" class="warehouse-primary save">Lưu</button></div></div>`;
+    overlay.innerHTML = `<div class="warehouse-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">HỒ SƠ THÀNH VIÊN</p><h2>${existing ? esc(existing.TenKH) : 'Thêm khách hàng'}</h2></div><button type="button" class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="warehouse-form-grid"><div class="warehouse-field"><label>Tên khách *</label><input id="khName" value="${esc(existing?.TenKH || '')}"></div><div class="warehouse-field"><label>Số điện thoại *</label><input id="khPhone" inputmode="tel" autocomplete="tel" maxlength="16" placeholder="03/05/07/08/09xxxxxxxx" value="${esc(existing?.SDT || '')}"><small>10 số, bắt đầu bằng 03/05/07/08/09. Chấp nhận +84.</small></div><div class="warehouse-field"><label>Email</label><input id="khEmail" value="${esc(existing?.Email || '')}"></div><div class="warehouse-field"><label>Địa chỉ</label><input id="khAddress" value="${esc(existing?.DiaChi || '')}"></div></div>${existing ? `<p class="cashier-payment-help">Điểm ${existing.DiemTichLuy} · Hạng ${esc(existing.HangThanhVien)}. Thu ngân không được sửa điểm.</p>` : ''}</div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Hủy</button><button type="button" class="warehouse-primary save">Lưu</button></div></div>`;
     document.body.appendChild(overlay);
     const close = () => overlay.remove();
     overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+    const phoneInput = overlay.querySelector('#khPhone');
+    phoneInput.addEventListener('blur', () => {
+      const fields = window.FLY_FIELDS;
+      if (!fields?.validateOptionalVnPhone) return;
+      const result = fields.validateOptionalVnPhone(phoneInput.value);
+      if (result.ok && result.value) phoneInput.value = result.value;
+    });
     overlay.querySelector('.save').addEventListener('click', async () => {
       const payload = { TenKH: overlay.querySelector('#khName').value, SDT: overlay.querySelector('#khPhone').value, Email: overlay.querySelector('#khEmail').value, DiaChi: overlay.querySelector('#khAddress').value };
       const fields = window.FLY_FIELDS;
       if (fields) {
         const invalid = fields.firstError(
           fields.validateRequiredName(payload.TenKH, 'Tên khách hàng'),
-          fields.validateOptionalVnPhone(payload.SDT),
+          fields.validateRequiredVnPhone(payload.SDT, 'Số điện thoại'),
           fields.validateOptionalEmail(payload.Email)
         );
         if (invalid) return context.showToast(invalid.message, 'error');
         payload.TenKH = fields.validateRequiredName(payload.TenKH, 'Tên khách hàng').value;
-        payload.SDT = fields.validateOptionalVnPhone(payload.SDT).value;
+        payload.SDT = fields.validateRequiredVnPhone(payload.SDT, 'Số điện thoại').value;
         payload.Email = fields.validateOptionalEmail(payload.Email).value;
       }
       try {
@@ -471,10 +496,28 @@
     const linesPayload = () => [...cart.values()].map(item => ({ MaSP: item.MaSP, SoLuong: Number(item.SoLuong) }));
     const cartTotal = () => [...cart.values()].reduce((sum, line) => sum + Number(line.GiaBan) * Number(line.SoLuong), 0);
     const payableAmount = () => Math.round(Number(quote?.TongThanhToan ?? cartTotal()));
+    const pointUnit = () => Math.max(0, Number(quote?.pointValue ?? catalog.pointValue ?? 1000));
+    const earnUnit = () => Math.max(1, Number(quote?.pointEarnUnit ?? catalog.pointEarnUnit ?? 4_000_000));
+    const previewEarn = () => {
+      if (!customer) return 0;
+      if (quote && quote.DiemCong != null && Number.isFinite(Number(quote.DiemCong))) {
+        return Math.max(0, Math.round(Number(quote.DiemCong)));
+      }
+      const heSo = Math.max(1, Number(quote?.loyalty?.heSoDiem || 1));
+      return Math.floor(Math.max(0, Number(quote?.TongThanhToan || 0)) / earnUnit()) * heSo;
+    };
+    const isPercentPromo = (loai) => {
+      const text = String(loai || '').normalize('NFC').trim();
+      return text === 'Phần trăm' || /%|phần trăm/i.test(text);
+    };
+    const promoOptionLabel = (item) => {
+      const val = isPercentPromo(item.LoaiKM) ? `${Number(item.GiaTri)}%` : money(item.GiaTri);
+      return `${item.TenKM} · ${val}`;
+    };
     const quoteBody = () => ({
       MaKH: customer?.MaKH || null,
       MaKM: maKM || null,
-      DiemSuDung: Number(diemSuDung) || 0,
+      DiemSuDung: Math.max(0, Math.round(Number(diemSuDung) || 0)),
       lines: linesPayload(),
       LoaiCS: loaiCS || null
     });
@@ -507,15 +550,41 @@
           : '';
       }
       const applied = Boolean(loaiCS);
-      const hint = applied
-        ? (loaiCS === 'mới' ? 'Sẽ nhân điểm khi hoàn thành hóa đơn. Chưa trừ tiền.' : 'Đã trừ trên tạm tính. Không cộng thêm phần trăm KM.')
-        : 'Chưa trừ tiền. Bấm Áp dụng theo chính sách.';
+      const csAmt = Number(quote?.loyalty?.tienGiamCS || 0);
+      let hint = 'Chưa trừ tiền. Bấm Áp dụng theo chính sách.';
+      if (applied && loaiCS === 'mới') {
+        hint = 'Sẽ nhân điểm sau quy tắc 1 điểm / 4.000.000đ mỗi lần thanh toán. Chưa trừ tiền.';
+      } else if (applied && csAmt > 0) {
+        hint = `Đã trừ ${money(csAmt)} trên tạm tính.`;
+      } else if (applied) {
+        hint = 'KM phần trăm đang chọn đã ≥ VIP — tổng không đổi. Bỏ KM hoặc bỏ chính sách.';
+      }
       return `<div class="cashier-loyalty-banner${applied ? ' is-on' : ''}">
         <div><strong>${esc(loyaltyOffer.banner || offer.shortLabel)}</strong><small>${esc(hint)}</small></div>
         ${applied
           ? '<button type="button" class="warehouse-secondary" id="clearLoyalty">Bỏ áp dụng</button>'
           : '<button type="button" class="warehouse-primary" id="applyLoyalty">Áp dụng theo chính sách</button>'}
       </div>`;
+    };
+    const quoteBreakdown = () => {
+      if (!quote) return '';
+      const unit = pointUnit();
+      const kmAmt = Number(quote.TienGiamKM || 0);
+      const csAmt = Number(quote.loyalty?.tienGiamCS || 0);
+      const parts = [
+        `Tiền hàng ${money(quote.TongTienHang)}`,
+        kmAmt ? `KM ${money(kmAmt)}` : null,
+        csAmt ? `Chính sách ${money(csAmt)}` : (quote.loyalty?.loai ? `Chính sách ${esc(quote.loyalty.label || quote.loyalty.loai)}` : null),
+        diemSuDung
+          ? `Điểm ${diemSuDung} × ${money(unit)} = ${money(quote.TienDiemQuyDoi)}`
+          : (Number(quote.TienDiemQuyDoi) ? `Điểm ${money(quote.TienDiemQuyDoi)}` : null),
+        customer
+          ? (previewEarn()
+            ? `Sẽ cộng +${previewEarn()} điểm`
+            : `Chưa đủ ${money(earnUnit())} để tích điểm`)
+          : null
+      ].filter(Boolean);
+      return `<small class="cashier-quote-break">${parts.join(' · ')}</small>`;
     };
     const pickCustomer = () => {
       const overlay = document.createElement('div'); overlay.className = 'warehouse-modal-backdrop';
@@ -524,7 +593,7 @@
       const close = () => overlay.remove();
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
       const renderList = items => {
-        overlay.querySelector('#customerResults').innerHTML = items.length ? items.map(item => `<button type="button" class="cashier-customer-hit" data-id="${esc(item.MaKH)}">${avatar(item.TenKH)}<span><strong>${esc(item.TenKH)}</strong><small>${esc(item.SDT || '—')} · ${esc(item.HangThanhVien)} · ${item.DiemTichLuy} điểm</small></span></button>`).join('') : '<div class="warehouse-empty">Không tìm thấy. Có thể tạo thành viên mới.</div>';
+        overlay.querySelector('#customerResults').innerHTML = items.length ? items.map(item => `<button type="button" class="cashier-customer-hit" data-id="${esc(item.MaKH)}">${avatar(item.TenKH)}<span><strong>${esc(item.TenKH)}</strong><small>${esc(sdtText(item.SDT))}${item.SDT && !sdtIsValid(item.SDT) ? ' · SĐT chưa chuẩn' : ''} · ${esc(item.HangThanhVien)} · ${item.DiemTichLuy} điểm</small></span></button>`).join('') : '<div class="warehouse-empty">Không tìm thấy. Có thể tạo thành viên mới.</div>';
       };
       let customerSearchVersion = 0;
       const runCustomerSearch = (window.FLY_SEARCH?.debounce || ((handler, delay) => { let timer; return (...args) => { clearTimeout(timer); timer = setTimeout(() => handler(...args), delay); }; }))(async (query, version) => {
@@ -576,13 +645,13 @@
           </article>
           <article class="warehouse-table-card cashier-cart-panel">
             <div class="warehouse-panel-title"><div><p>${draftId ? `NHÁP ${esc(draftId)}` : 'HÓA ĐƠN NHÁP'}</p><h2>Giỏ hàng</h2></div><span class="status-pill draft">${cart.size} mặt hàng</span></div>
-            <div class="cashier-customer-row"><div class="cashier-customer-who">${avatar(customer?.TenKH || 'K')}<div><strong>${customer ? esc(customer.TenKH) : 'Khách vãng lai'}</strong><small>${customer ? `${esc(customer.SDT || '')} · ${esc(customer.HangThanhVien)} · ${customer.DiemTichLuy} điểm` : 'Không tích điểm'}</small></div></div><button class="warehouse-secondary" id="selectCustomer">Chọn khách</button></div>
+            <div class="cashier-customer-row"><div class="cashier-customer-who">${avatar(customer?.TenKH || 'K')}<div><strong>${customer ? esc(customer.TenKH) : 'Khách vãng lai'}</strong><small>${customer ? `${esc(sdtText(customer.SDT, ''))} · ${esc(customer.HangThanhVien)} · ${customer.DiemTichLuy} điểm` : 'Không tích điểm'}</small></div></div><button class="warehouse-secondary" id="selectCustomer">Chọn khách</button></div>
             ${loyaltyPanel()}
-            <div class="cashier-pos-extras"><label>Khuyến mãi<select id="promoSelect"><option value="">Không áp dụng</option>${(catalog.promotions || []).map(item => `<option value="${esc(item.MaKM)}" ${maKM === item.MaKM ? 'selected' : ''}>${esc(item.TenKM)}</option>`).join('')}</select></label>${customer ? `<label>Dùng điểm<input id="pointInput" type="number" min="0" max="${customer.DiemTichLuy}" value="${diemSuDung}"></label>` : ''}</div>
+            <div class="cashier-pos-extras"><label>Khuyến mãi<select id="promoSelect"><option value="">Không áp dụng</option>${(catalog.promotions || []).map(item => `<option value="${esc(item.MaKM)}" ${maKM === item.MaKM ? 'selected' : ''}>${esc(promoOptionLabel(item))}</option>`).join('')}</select></label>${customer ? `<label>Dùng điểm<input id="pointInput" type="number" min="0" max="${customer.DiemTichLuy}" value="${diemSuDung}"><small class="cashier-point-hint">1 điểm = ${money(pointUnit())} · ${diemSuDung || 0} điểm = ${money((Number(diemSuDung) || 0) * pointUnit())}</small><small class="cashier-point-hint">Tích điểm: 1 điểm / ${money(earnUnit())} mỗi lần thanh toán</small></label>` : ''}</div>
             ${(catalog.promotions || []).length ? '' : '<small class="cashier-quote-break">Chưa có KM hiệu lực. Quản lý tạo/ngừng chương trình ở menu Khuyến mãi.</small>'}
             <div class="cashier-cart-lines">${cart.size ? [...cart.values()].map(line => `<div class="cashier-cart-line">${productPhoto(line, 'cart-product-photo')}<div><strong>${esc(line.TenSP)}</strong><small>${money(line.GiaBan)} × ${line.SoLuong}</small></div>${window.FLY_QTY.stepperMarkup({ id: line.MaSP, value: line.SoLuong, min: 1, inputClass: 'cashier-cart-qty-input', wrapClass: 'cashier-cart-qty', ariaLabel: `Số lượng ${line.TenSP}` })}<strong>${money(Number(line.GiaBan) * line.SoLuong)}</strong></div>`).join('') : '<div class="warehouse-empty">Quét hoặc chọn sản phẩm để bắt đầu.</div>'}</div>
             <div class="cashier-cart-total"><span>PHẢI THANH TOÁN</span><strong>${money(payable)}</strong></div>
-            ${quote ? `<small class="cashier-quote-break">Tiền hàng ${money(quote.TongTienHang)} · Giảm ${money(quote.TienGiamGia)} · Điểm ${money(quote.TienDiemQuyDoi)}${quote.loyalty?.loai ? ` · Chính sách ${esc(quote.loyalty.label || quote.loyalty.loai)}` : ''}</small>` : ''}
+            ${quoteBreakdown()}
             <div class="cashier-pos-actions"><button type="button" class="warehouse-secondary" id="saveDraft" ${cart.size ? '' : 'disabled'}>Lưu nháp</button>${draftId ? '<button type="button" class="warehouse-danger" id="cancelDraft">Hủy nháp</button>' : ''}<button type="button" class="warehouse-primary cashier-checkout" id="checkout" ${cart.size ? '' : 'disabled'}><svg><use href="#i-cash"/></svg>Thanh toán</button></div>
           </article>
         </section>`;
@@ -674,11 +743,28 @@
         loaiCS = loyaltyOffer.GoiY.category;
         await refreshQuote(true);
         render();
-        context.showToast('Đã áp theo chính sách cửa hàng.', 'success');
+        const csAmt = Number(quote?.loyalty?.tienGiamCS || 0);
+        context.showToast(
+          csAmt > 0
+            ? `Đã trừ ${money(csAmt)} theo chính sách cửa hàng.`
+            : (loaiCS
+              ? 'Đã áp chính sách. Tổng không đổi vì KM phần trăm đã ≥ mức VIP.'
+              : 'Không áp được chính sách.'),
+          csAmt > 0 || loaiCS ? 'success' : 'error'
+        );
       });
       root.querySelector('#clearLoyalty')?.addEventListener('click', async () => {
+        const csAmt = Number(quote?.loyalty?.tienGiamCS || 0);
         loaiCS = null;
-        await refreshQuote();
+        if (quote && csAmt) {
+          quote = {
+            ...quote,
+            TienGiamGia: Math.max(0, Number(quote.TienGiamGia) - csAmt),
+            TongThanhToan: Number(quote.TongThanhToan) + csAmt,
+            loyalty: null
+          };
+        }
+        await refreshQuote(true);
         render();
       });
       root.querySelector('#promoSelect')?.addEventListener('change', async event => { maKM = event.target.value; await refreshQuote(); render(); });
@@ -774,7 +860,12 @@
         if (splash) {
           splash.hidden = false;
           const line = overlay.querySelector('#paySuccessText');
-          if (line) line.textContent = `${detail.invoice.MaHD} · ${money(detail.invoice.TongThanhToan)}`;
+          if (line) {
+            const earned = Number(detail.invoice.DiemCong) || 0;
+            line.textContent = earned
+              ? `${detail.invoice.MaHD} · ${money(detail.invoice.TongThanhToan)} · +${earned} điểm`
+              : `${detail.invoice.MaHD} · ${money(detail.invoice.TongThanhToan)}`;
+          }
         }
         context.showToast(`Thanh toán thành công · ${detail.invoice.MaHD}`, 'success');
         await new Promise(resolve => setTimeout(resolve, 1600));
@@ -1086,12 +1177,12 @@
       try {
         const data = await api(context, `/cashier/customers?search=${encodeURIComponent(search)}`);
         if (seq !== loadSeq || !root.querySelector('#customerBody')) return;
-        root.querySelector('#customerBody').innerHTML = data.items.length ? data.items.map(item => `<tr><td>${person(item.TenKH, item.MaKH)}</td><td>${esc(item.SDT || '—')}<small>${esc(item.Email || '')}</small></td><td class="num">${item.DiemTichLuy}</td><td>${esc(item.HangThanhVien)}</td><td><button class="warehouse-secondary" data-edit="${esc(item.MaKH)}" data-name="${esc(item.TenKH)}" data-phone="${esc(item.SDT || '')}" data-points="${item.DiemTichLuy}" data-rank="${esc(item.HangThanhVien)}">Cập nhật</button></td></tr>`).join('') : emptyRow(5, search, 'khách hàng', 'Chưa có khách hàng phù hợp.');
+        root.querySelector('#customerBody').innerHTML = data.items.length ? data.items.map(item => `<tr><td>${person(item.TenKH, item.MaKH)}</td><td>${sdtCell(item.SDT, item.Email)}</td><td class="num">${item.DiemTichLuy}</td><td>${esc(item.HangThanhVien)}</td><td><button class="warehouse-secondary" data-edit="${esc(item.MaKH)}" data-name="${esc(item.TenKH)}" data-phone="${esc(item.SDT || '')}" data-points="${item.DiemTichLuy}" data-rank="${esc(item.HangThanhVien)}">Cập nhật</button></td></tr>`).join('') : emptyRow(5, search, 'khách hàng', 'Chưa có khách hàng phù hợp.');
       } catch (error) { context.showToast(error.message, 'error'); }
     };
     if (!root.querySelector('#customerBody')) {
       const preset = window.FLY_SEARCH?.takePendingQuery?.('cashier-customers') || '';
-      root.innerHTML = `${heading('THU NGÂN / KHÁCH HÀNG', 'Thành viên cửa hàng', 'Tìm theo tên, mã KH hoặc số điện thoại, xem điểm và hạng. Không được tự sửa điểm.', '<button class="warehouse-primary" id="newCustomer">Thêm thành viên</button>')}<article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"></use></svg><input id="customerQuery" placeholder="Tên, mã KH hoặc số điện thoại..." value="${esc(preset)}"></label><button class="warehouse-icon-button" id="refreshCustomers">↻</button></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>KHÁCH HÀNG</th><th>LIÊN HỆ</th><th>ĐIỂM</th><th>HẠNG</th><th></th></tr></thead><tbody id="customerBody"></tbody></table></div></article>`;
+      root.innerHTML = `${heading('THU NGÂN / KHÁCH HÀNG', 'Thành viên cửa hàng', 'Tìm theo tên, mã KH hoặc số điện thoại, xem điểm và hạng. Tích điểm: 1 điểm / 4.000.000đ mỗi lần thanh toán. Không được tự sửa điểm.', '<button class="warehouse-primary" id="newCustomer">Thêm thành viên</button>')}<article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"></use></svg><input id="customerQuery" placeholder="Tên, mã KH hoặc số điện thoại..." value="${esc(preset)}"></label><button class="warehouse-icon-button" id="refreshCustomers">↻</button></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>KHÁCH HÀNG</th><th>LIÊN HỆ</th><th>ĐIỂM</th><th>HẠNG</th><th></th></tr></thead><tbody id="customerBody"></tbody></table></div></article>`;
       bindListSearch(root.querySelector('#customerQuery'), load);
       root.querySelector('#refreshCustomers').addEventListener('click', load);
       root.querySelector('#newCustomer').addEventListener('click', () => customerEditor(context, null, load));
@@ -1134,7 +1225,7 @@
             : ownDraft
               ? `<button type="button" class="warehouse-primary" data-continue="${esc(item.MaHD)}">Tiếp tục thanh toán</button><button type="button" class="warehouse-danger" data-cancel="${esc(item.MaHD)}">Hủy thanh toán</button>`
               : `<button type="button" class="warehouse-secondary" data-detail="${esc(item.MaHD)}">Chi tiết</button>`;
-          return `<tr class="${view ? 'cashier-invoice-has-return' : ''}"><td><strong>${esc(item.MaHD)}</strong><small>${fmtTime(item.NgayLap)} · Ca ${esc(item.MaCa || '—')}${item.TenNV ? ` · ${esc(item.TenNV)}` : ''}</small></td><td>${person(item.TenKH || 'Khách vãng lai', item.SDT || '')}</td>${invoiceAmountCell(item)}<td>${invoiceStatusHtml(item)}</td><td><div class="warehouse-row-actions">${actions}</div></td></tr>`;
+          return `<tr class="${view ? 'cashier-invoice-has-return' : ''}"><td><strong>${esc(item.MaHD)}</strong><small>${fmtTime(item.NgayLap)} · Ca ${esc(item.MaCa || '—')}${item.TenNV ? ` · ${esc(item.TenNV)}` : ''}</small></td><td>${person(item.TenKH || 'Khách vãng lai', sdtText(item.SDT, ''))}</td>${invoiceAmountCell(item)}<td>${invoiceStatusHtml(item)}</td><td><div class="warehouse-row-actions">${actions}</div></td></tr>`;
         }).join('') : emptyRow(5, search, 'hóa đơn', idle);
       } catch (error) { context.showToast(error.message, 'error'); }
     };
@@ -1189,7 +1280,7 @@
       const mix = Number(item.TienMatDaThu) > 0 && Number(item.TienQrDaThu) > 0
         ? `TM ${money(item.TienMatDaThu)} + QR ${money(item.TienQrDaThu)}`
         : (item.PhuongThucGoc ? (canonicalRefundMethod(item.PhuongThucGoc) || item.PhuongThucGoc) : '');
-      return `<button type="button" class="cashier-invoice-hit${view ? ' has-return' : ''}" data-hd="${esc(item.MaHD)}">${avatar(item.TenKH || 'K')}<div><strong>${esc(item.MaHD)}</strong><small>${esc(item.TenKH || 'Khách vãng lai')}${item.SDT ? ` · ${esc(item.SDT)}` : ''}</small>${view ? `<span class="status-pill ${view.tone}">${esc(view.label)}</span>` : ''}</div><div class="cashier-invoice-hit-meta"><span>${fmtTime(item.NgayLap)}</span><span>Ca ${esc(item.MaCa || '—')} · ${esc(item.TenNV)}</span>${mix ? `<span>${esc(mix)}</span>` : ''}<strong>${money(item.TongThanhToan)}</strong>${view && view.refunded ? `<small>Đã hoàn ${money(view.refunded)}</small>` : ''}</div></button>`;
+      return `<button type="button" class="cashier-invoice-hit${view ? ' has-return' : ''}" data-hd="${esc(item.MaHD)}">${avatar(item.TenKH || 'K')}<div><strong>${esc(item.MaHD)}</strong><small>${esc(item.TenKH || 'Khách vãng lai')}${item.SDT ? ` · ${esc(sdtText(item.SDT))}` : ''}</small>${view ? `<span class="status-pill ${view.tone}">${esc(view.label)}</span>` : ''}</div><div class="cashier-invoice-hit-meta"><span>${fmtTime(item.NgayLap)}</span><span>Ca ${esc(item.MaCa || '—')} · ${esc(item.TenNV)}</span>${mix ? `<span>${esc(mix)}</span>` : ''}<strong>${money(item.TongThanhToan)}</strong>${view && view.refunded ? `<small>Đã hoàn ${money(view.refunded)}</small>` : ''}</div></button>`;
     };
     const renderInvoiceForm = (overlay, data) => {
       const inv = data.invoice;

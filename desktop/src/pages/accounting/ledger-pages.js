@@ -2536,11 +2536,11 @@
         <h2>Lập thẻ tài sản</h2>
         <form id="tsForm" class="lg-form lg-grid-2" data-keep-native>
           <label><span>Tên TSCĐ</span><input id="tsTen" required maxlength="200" placeholder="Ví dụ: Tủ mát cửa hàng"></label>
-          <label><span>Nguyên giá (chưa VAT)</span><input type="number" id="tsNg" min="1" step="1000" required placeholder="0"></label>
+          <label><span>Nguyên giá (chưa VAT)</span><input type="number" id="tsNg" min="1" step="1" required placeholder="0"></label>
           <label><span>Ngày mua</span><input type="date" id="tsMua" required value="${todayISO()}"></label>
           <label><span>Ngày đưa vào sử dụng</span><input type="date" id="tsSd" required value="${todayISO()}"></label>
           <label><span>Số tháng khấu hao</span><input type="number" id="tsThang" min="1" value="36" required></label>
-          <label><span>Tiền thuế VAT</span><input type="number" id="tsThue" min="0" step="100" value="0"></label>
+          <label><span>Tiền thuế VAT</span><input type="number" id="tsThue" min="0" step="1" value="0"></label>
           <label><span>Tài khoản tiền</span><select id="tsTK"><option value="111">111 — ${esc(accountName('111'))}</option><option value="112">112 — ${esc(accountName('112'))}</option></select></label>
           <div class="lg-actions" style="align-self:end;margin:0"><button class="lg-btn lg-btn-primary" type="submit">Lập thẻ</button></div>
         </form>

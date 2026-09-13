@@ -299,6 +299,15 @@
   border-radius: 8px;
 }
 
+.cashier-point-hint {
+  display: block;
+  margin-top: 2px;
+  color: #6f7d75;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
 .cashier-pos-actions {
   display: flex;
   gap: 8px;

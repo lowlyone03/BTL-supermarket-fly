@@ -9,6 +9,7 @@ const {
 const {
     validateEmployeeCode, validateEmployeeProfileFields
 } = require('../services/fieldValidators');
+const { isFounderAccount, ensureFounderAccountSchema } = require('../services/founderAccount');
 
 const EMPLOYEE_STATUSES = ['Đang làm việc', 'Nghỉ việc'];
 
@@ -203,12 +204,6 @@ const createEmployee = async (req, res) => {
             return res.status(400).json({ message: validation.error });
         }
         const { MaNV, TenNV, ChucVu } = validation.employee;
-        if (ChucVu === 'Quản lý') {
-            const managerCount = await pool.request().query("SELECT COUNT(*) AS Total FROM NhanVien WHERE ChucVu = N'Quản lý' AND TrangThai = N'Đang làm việc'");
-            if (managerCount.recordset[0].Total > 0) {
-                return res.status(400).json({ message: 'Hệ thống chỉ có một Quản lý cửa hàng.' });
-            }
-        }
 
         // Kiểm tra trùng mã
         const check = await pool.request()
@@ -270,13 +265,18 @@ const updateEmployee = async (req, res) => {
         if (maNV === req.user.MaNV && (TrangThai !== 'Đang làm việc' || Number(MaVaiTro) !== Number(req.user.MaVaiTro))) {
             return res.status(400).json({ message: 'Không thể tự đổi vai trò hoặc cho chính mình nghỉ việc.' });
         }
-        if (ChucVu === 'Quản lý') {
-            const managerCount = await pool.request()
-                .input('MaNV', sql.VarChar, maNV)
-                .query("SELECT COUNT(*) AS Total FROM NhanVien WHERE ChucVu = N'Quản lý' AND TrangThai = N'Đang làm việc' AND MaNV <> @MaNV");
-            if (managerCount.recordset[0].Total > 0) {
-                return res.status(400).json({ message: 'Hệ thống chỉ có một Quản lý cửa hàng.' });
-            }
+        await ensureFounderAccountSchema(pool);
+        const current = await pool.request()
+            .input('MaNV', sql.VarChar, maNV)
+            .query(`SELECT n.MaNV, n.ChucVu, t.MaTK, t.MaVaiTro, t.TenDangNhap, t.IsFounder
+                    FROM NhanVien n
+                    LEFT JOIN TaiKhoan t ON t.MaNV = n.MaNV
+                    WHERE n.MaNV = @MaNV`);
+        const currentRow = current.recordset[0];
+        if (currentRow && isFounderAccount(currentRow)
+            && (ChucVu !== 'Quản lý' || TrangThai !== 'Đang làm việc'
+                || (currentRow.MaVaiTro != null && Number(MaVaiTro) !== Number(currentRow.MaVaiTro)))) {
+            return res.status(400).json({ message: 'Admin gốc không được hạ cấp, đổi vai trò hay cho nghỉ việc.' });
         }
 
         const transaction = new sql.Transaction(pool);

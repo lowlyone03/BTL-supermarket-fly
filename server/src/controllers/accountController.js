@@ -5,25 +5,38 @@ const { validateUsername, validateEmployeeCode, toIsoDate } = require('../servic
 const { ensureEmployeeProfileSchema } = require('../services/employeeProfileSchema');
 const { HOSO_SELECT, PROFILE_KEYS, hasProfileInput, upsertEmployeeProfile } = require('../services/employeeHoSo');
 const { validateEmployeeInput, bindEmployeeFields } = require('./employeeController');
+const {
+    isFounderAccount,
+    isManagerRoleName,
+    roleChangeKind,
+    roleChangeVerdict,
+    ensureFounderAccountSchema
+} = require('../services/founderAccount');
 
 // Lấy danh sách tài khoản
 const getAccounts = async (req, res) => {
     try {
         const pool = await poolPromise;
         await ensureEmployeeProfileSchema(pool);
+        await ensureFounderAccountSchema(pool);
         const result = await pool.request().query(`
             SELECT t.MaTK, t.TenDangNhap, t.MaNV, t.MaVaiTro, t.TrangThai, t.NgayTao, t.LanDangNhapCuoi,
+                   t.IsFounder, t.MaVaiTroTruoc,
                    n.TenNV, n.ChucVu, n.CCCD, n.NgaySinh, n.GioiTinh, n.SDT, n.Email, n.DiaChi, n.NgayVaoLam,
                    n.TrangThai AS TrangThaiNV,
-                   v.TenVaiTro,
+                   v.TenVaiTro, vp.TenVaiTro AS TenVaiTroTruoc,
                    ${HOSO_SELECT}
             FROM TaiKhoan t
             JOIN NhanVien n ON t.MaNV = n.MaNV
             JOIN VaiTro v ON t.MaVaiTro = v.MaVaiTro
+            LEFT JOIN VaiTro vp ON vp.MaVaiTro = t.MaVaiTroTruoc
             LEFT JOIN HoSoNhanVien hs ON hs.MaNV = n.MaNV
             ORDER BY t.NgayTao DESC
         `);
-        res.json(result.recordset);
+        res.json(result.recordset.map(row => ({
+            ...row,
+            IsFounder: isFounderAccount(row) ? 1 : 0
+        })));
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Lỗi server' });
@@ -169,10 +182,11 @@ const toggleAccountStatus = async (req, res) => {
         }
 
         const pool = await poolPromise;
+        await ensureFounderAccountSchema(pool);
 
         const account = await pool.request()
             .input('MaTK', sql.Int, maTK)
-            .query('SELECT TenDangNhap, TrangThai, MaNV FROM TaiKhoan WHERE MaTK = @MaTK');
+            .query('SELECT TenDangNhap, TrangThai, MaNV, IsFounder FROM TaiKhoan WHERE MaTK = @MaTK');
 
         if (account.recordset.length === 0) {
             return res.status(404).json({ message: 'Không tìm thấy tài khoản!' });
@@ -181,6 +195,9 @@ const toggleAccountStatus = async (req, res) => {
         const currentStatus = account.recordset[0].TrangThai;
         const newStatus = currentStatus === 1 ? 0 : 1;
         const username = account.recordset[0].TenDangNhap;
+        if (newStatus === 0 && isFounderAccount(account.recordset[0])) {
+            return res.status(400).json({ message: 'Không khóa được tài khoản admin gốc.' });
+        }
         const actionStr = newStatus === 1 ? 'Mở khóa' : 'Khóa';
 
         await pool.request()
@@ -251,51 +268,59 @@ const updateAccountRole = async (req, res) => {
             return res.status(400).json({ message: 'Vui lòng chọn vai trò!' });
         }
 
-        // Không cho admin tự đổi vai trò của chính mình để tránh mất quyền
-        if (Number(maTK) === Number(req.user.MaTK)) {
-            return res.status(400).json({ message: 'Không thể tự đổi vai trò của chính mình!' });
-        }
-
         const pool = await poolPromise;
+        await ensureFounderAccountSchema(pool);
         const role = await pool.request()
             .input('MaVaiTro', sql.Int, MaVaiTro)
-            .query('SELECT TenVaiTro FROM VaiTro WHERE MaVaiTro = @MaVaiTro');
+            .query('SELECT MaVaiTro, TenVaiTro FROM VaiTro WHERE MaVaiTro = @MaVaiTro');
         if (role.recordset.length === 0) {
             return res.status(400).json({ message: 'Vai trò không hợp lệ!' });
         }
-        if (role.recordset[0].TenVaiTro === 'Quản lý') {
-            const managerCount = await pool.request()
-                .input('MaTK', sql.Int, Number(maTK) || 0)
-                .query(`SELECT COUNT(*) AS Total
-                        FROM TaiKhoan t
-                        JOIN VaiTro v ON v.MaVaiTro = t.MaVaiTro
-                        WHERE v.TenVaiTro = N'Quản lý' AND t.MaTK <> @MaTK`);
-            if (managerCount.recordset[0].Total > 0) {
-                return res.status(400).json({ message: 'Hệ thống chỉ có một tài khoản Quản lý.' });
-            }
+
+        const current = await pool.request()
+            .input('MaTK', sql.Int, maTK)
+            .query(`SELECT t.MaTK, t.MaNV, t.MaVaiTro, t.TenDangNhap, t.IsFounder, v.TenVaiTro
+                    FROM TaiKhoan t
+                    LEFT JOIN VaiTro v ON v.MaVaiTro = t.MaVaiTro
+                    WHERE t.MaTK = @MaTK`);
+        if (current.recordset.length === 0) {
+            return res.status(404).json({ message: 'Không tìm thấy tài khoản!' });
+        }
+        const row = current.recordset[0];
+        const next = role.recordset[0];
+        const verdict = roleChangeVerdict({
+            target: { ...row, HasAccount: true },
+            actor: req.user,
+            nextRoleId: Number(next.MaVaiTro)
+        });
+        if (!verdict.ok) {
+            return res.status(400).json({ message: verdict.message });
         }
 
         const transaction = new sql.Transaction(pool);
         await transaction.begin();
         let account;
         try {
-            account = await new sql.Request(transaction)
-                .input('MaTK', sql.Int, maTK)
-                .query('SELECT MaNV FROM TaiKhoan WHERE MaTK = @MaTK');
-            if (account.recordset.length === 0) {
-                await transaction.rollback();
-                return res.status(404).json({ message: 'Không tìm thấy tài khoản!' });
-            }
+            account = { recordset: [row] };
 
+            const leavingManager = isManagerRoleName(row.TenVaiTro);
+            const previousRoleId = leavingManager ? (null) : (Number(row.MaVaiTro) || null);
             await new sql.Request(transaction)
                 .input('MaTK', sql.Int, maTK)
                 .input('MaVaiTro', sql.Int, MaVaiTro)
-                .query('UPDATE TaiKhoan SET MaVaiTro = @MaVaiTro WHERE MaTK = @MaTK');
+                .input('MaVaiTroTruoc', sql.Int, previousRoleId)
+                .query(`UPDATE TaiKhoan
+                        SET MaVaiTro = @MaVaiTro,
+                            MaVaiTroTruoc = CASE
+                                WHEN @MaVaiTroTruoc IS NULL THEN MaVaiTroTruoc
+                                ELSE @MaVaiTroTruoc
+                            END
+                        WHERE MaTK = @MaTK`);
 
             // Đồng bộ chức vụ để một nhân viên không bị gắn hai actor khác nhau.
             await new sql.Request(transaction)
-                .input('MaNV', sql.VarChar, account.recordset[0].MaNV)
-                .input('ChucVu', sql.NVarChar, role.recordset[0].TenVaiTro)
+                .input('MaNV', sql.VarChar, row.MaNV)
+                .input('ChucVu', sql.NVarChar, next.TenVaiTro)
                 .query('UPDATE NhanVien SET ChucVu = @ChucVu WHERE MaNV = @MaNV');
 
             await transaction.commit();
@@ -304,10 +329,11 @@ const updateAccountRole = async (req, res) => {
             throw error;
         }
 
-        // Ghi nhật ký
+        const kind = roleChangeKind(row.TenVaiTro, next.TenVaiTro);
+        const action = kind === 'demote' ? 'Hạ vai trò nhân viên' : (kind === 'promote' ? 'Nâng vai trò nhân viên' : 'Đổi vai trò');
         await logAudit(pool, {
-            user: req.user, req, action: 'Đổi vai trò', table: 'TaiKhoan', recordId: String(maTK),
-            severity: 'Quan trọng', content: `Cập nhật vai trò tài khoản thành ${role.recordset[0].TenVaiTro}`
+            user: req.user, req, action, table: 'TaiKhoan', recordId: String(maTK),
+            severity: 'Quan trọng', content: `${row.TenDangNhap}: ${row.TenVaiTro || ''} → ${next.TenVaiTro}`
         });
 
         try {

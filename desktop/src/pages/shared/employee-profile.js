@@ -275,7 +275,7 @@
         <div class="form-grid">
           ${fieldGroup(p + 'nguoiLienHe', 'Người liên hệ', `<input type="text" id="${p}nguoiLienHe" maxlength="150">`)}
           ${fieldGroup(p + 'quanHeLienHe', 'Quan hệ', `<select id="${p}quanHeLienHe">${optionHtml(f.EMPLOYEE_RELATIONS)}</select>`)}
-          ${fieldGroup(p + 'sdtLienHe', 'SĐT người liên hệ', `<input type="text" id="${p}sdtLienHe" maxlength="20">`)}
+          ${fieldGroup(p + 'sdtLienHe', 'SĐT người liên hệ', `<input type="text" id="${p}sdtLienHe" inputmode="tel" maxlength="16" placeholder="03/05/07/08/09xxxxxxxx">`)}
           ${fieldGroup(p + 'ghiChuHoSo', 'Ghi chú hồ sơ', `<textarea id="${p}ghiChuHoSo" rows="2" maxlength="500"></textarea>`, true)}
         </div>
       </div>`;

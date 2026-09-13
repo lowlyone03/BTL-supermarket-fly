@@ -1,6 +1,7 @@
 (() => {
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const VN_PHONE_RE = /^0\d{9,10}$/;
+  const VN_PHONE_RE = /^0[35789]\d{8}$/;
+  const VN_PHONE_MESSAGE = 'SĐT phải gồm 10 số, bắt đầu bằng 03/05/07/08/09.';
   const SHIPMENT_DOC_RE = /^[A-Za-z0-9][A-Za-z0-9./_-]{2,49}$/;
   const VN_PLATE_RE = /^\d{2}[A-Z]{1,2}[-\s]?\d{3,5}(?:[.\s]\d{2})?$/i;
   const USERNAME_RE = /^[a-z0-9._-]{3,50}$/;
@@ -57,8 +58,19 @@
     let digits = String(value ?? '').trim().replace(/[\s().-]/g, '');
     if (!digits) return '';
     if (digits.startsWith('+84')) digits = `0${digits.slice(3)}`;
-    else if (digits.startsWith('84') && digits.length >= 11) digits = `0${digits.slice(2)}`;
+    else if (/^84\d{9}$/.test(digits)) digits = `0${digits.slice(2)}`;
     return digits;
+  };
+
+  const formatVnPhone = (value) => {
+    const phone = normalizeVnPhone(value);
+    if (!VN_PHONE_RE.test(phone)) return String(value ?? '').trim();
+    return `${phone.slice(0, 4)} ${phone.slice(4, 7)} ${phone.slice(7)}`;
+  };
+
+  const phoneSearchDigits = (value) => {
+    const digits = normalizeVnPhone(value).replace(/\D/g, '');
+    return digits.length >= 3 ? digits : '';
   };
 
   const validateOptionalEmail = (value) => {
@@ -73,7 +85,7 @@
     if (!raw) return { ok: true, value: '' };
     const phone = normalizeVnPhone(raw);
     if (!VN_PHONE_RE.test(phone)) {
-      return { ok: false, message: 'Số điện thoại phải là số Việt Nam (0 + 9 hoặc 10 chữ số, chấp nhận +84).' };
+      return { ok: false, message: VN_PHONE_MESSAGE };
     }
     return { ok: true, value: phone };
   };
@@ -371,11 +383,7 @@
   const validateRequiredVnPhone = (value, label = 'Số điện thoại') => {
     const raw = trim(value, 20);
     if (!raw) return { ok: false, message: `${label} là bắt buộc.` };
-    const result = validateOptionalVnPhone(value);
-    if (!result.ok) {
-      return { ok: false, message: result.message.replace('Số điện thoại', label) };
-    }
-    return result;
+    return validateOptionalVnPhone(value);
   };
 
   const validateRequiredCccd = (value) => {
@@ -542,12 +550,12 @@
   };
 
   window.FLY_FIELDS = {
-    EMAIL_RE, VN_PHONE_RE, SHIPMENT_DOC_RE, VN_PLATE_RE,
+    EMAIL_RE, VN_PHONE_RE, VN_PHONE_MESSAGE, SHIPMENT_DOC_RE, VN_PLATE_RE,
     USERNAME_RE, EMPLOYEE_CODE_RE, ENTITY_CODE_RE, VN_TAX_RE, VN_CCCD_RE, VN_BHXH_RE, VN_BANK_ACC_RE,
     EMPLOYEE_GENDERS, EMPLOYEE_ETHNICITIES, EMPLOYEE_RELIGIONS, EMPLOYEE_NATIONALITIES,
     EMPLOYEE_MARITAL, EMPLOYEE_EDUCATION, EMPLOYEE_RELATIONS, EMPLOYEE_PROFILE_DEFAULTS,
     EMPLOYEE_PROFILE_FIELD_IDS, MARITAL_STATUSES, BARCODE_RE,
-    trim, normalizeVnPhone,
+    trim, normalizeVnPhone, formatVnPhone, phoneSearchDigits,
     validateOptionalEmail, validateOptionalVnPhone,
     validateRequiredName, validateOptionalName, validateRequiredText,
     validateUsername, validateNewPassword, validateEmployeeCode, validateRequiredCode,

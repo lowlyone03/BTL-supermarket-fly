@@ -555,7 +555,7 @@ Bot Telegram cho Quản lý với đầy đủ tính năng:
 ### 7.6 Chương trình khách hàng thành viên (P4 MVP)
 
 - Phân hạng RFM (Recency, Frequency, Monetary).
-- Tích điểm khi mua, trừ điểm quy đổi giảm giá.
+- Tích điểm khi mua: `1 điểm / 4.000.000đ` mỗi lần thanh toán (làm tròn xuống theo số khách thực trả). Trừ điểm quy đổi: `1 điểm = 1.000đ`.
 - QL cấu hình chính sách loyalty.
 
 ### 7.7 Nhật ký & Thông báo

@@ -1105,7 +1105,7 @@ Kỳ vọng: nháp được hủy đúng; hóa đơn đã hoàn tất không đ�
 [POS-28] Thanh toán tiền mặt đủ một lần
 Bước: thêm giao dịch tiền mặt Thành công đúng tổng phải trả; hoàn tất.
 Kỳ vọng: hóa đơn Hoàn thành; tồn giảm đúng; có sổ xuất bán; doanh thu/giá vốn ghi nhận;
-điểm khách được cộng theo cấu hình (mặc định 10.000đ chi tiêu = 1 điểm).
+điểm khách được cộng theo cấu hình (mặc định 4.000.000đ mỗi lần thanh toán = 1 điểm, làm tròn xuống theo TongThanhToan).
 
 [POS-29] Thanh toán hỗn hợp tiền mặt + QR
 Bước: chia đúng tổng; QR Thành công có mã giao dịch duy nhất.

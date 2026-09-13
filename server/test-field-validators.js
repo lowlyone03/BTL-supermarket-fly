@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const {
-    normalizeVnPhone, validateOptionalEmail, validateOptionalVnPhone,
+    normalizeVnPhone, formatVnPhone, phoneSearchDigits, validateOptionalEmail, validateOptionalVnPhone,
     validateRequiredName, validateOptionalName, validateShipmentDocument, validateOptionalPackages,
     validateOptionalVnPlate, validateShipmentTimes, validateOptionalNote,
     validateUsername, validateNewPassword, validateEmployeeCode, validateRequiredCode,
@@ -27,14 +27,25 @@ test('Email trống được phép; nhập thì phải đúng format', () => {
     assert.equal(validateOptionalEmail('sai-email').ok, false);
 });
 
-test('SĐT VN chuẩn hóa +84/84 về 0 và chấp nhận 10–11 số', () => {
+test('SĐT VN: 10 số 03/05/07/08/09, chuẩn hóa +84, từ chối số dài/cố định', () => {
     assert.equal(normalizeVnPhone('+84901234567'), '0901234567');
     assert.equal(normalizeVnPhone('84901234567'), '0901234567');
+    assert.equal(normalizeVnPhone('090-123-4567'), '0901234567');
     assert.equal(validateOptionalVnPhone('').ok, true);
     assert.equal(validateOptionalVnPhone('0901234567').ok, true);
-    assert.equal(validateOptionalVnPhone('09012345678').ok, true);
+    assert.equal(validateOptionalVnPhone('+84 901 234 567').value, '0901234567');
+    assert.equal(validateOptionalVnPhone('0381 367 897').value, '0381367897');
+    assert.equal(formatVnPhone('0381367897'), '0381 367 897');
+    assert.equal(phoneSearchDigits('0381 367 897'), '0381367897');
+    assert.equal(validateOptionalVnPhone('09012345678').ok, false);
     assert.equal(validateOptionalVnPhone('0123').ok, false);
-    assert.equal(validateOptionalVnPhone('02412345678').ok, true);
+    assert.equal(validateOptionalVnPhone('02412345678').ok, false);
+    assert.equal(validateOptionalVnPhone('0601234567').ok, false);
+    assert.equal(validateOptionalVnPhone('0990279678280').ok, false);
+    assert.equal(validateOptionalVnPhone('092786876879978').ok, false);
+    assert.equal(validateOptionalVnPhone('abc').ok, false);
+    assert.match(validateOptionalVnPhone('0123').message, /03\/05\/07\/08\/09/);
+    assert.equal(validateRequiredVnPhone('', 'Số điện thoại').ok, false);
 });
 
 test('Tên bắt buộc tối thiểu 2 ký tự sau trim, không toàn số', () => {

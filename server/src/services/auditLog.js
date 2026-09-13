@@ -26,6 +26,7 @@ const TABLE_LABELS = {
     NhanVien: 'Hồ sơ nhân viên',
     TaiKhoan: 'Tài khoản đăng nhập',
     VaiTro_ChucNang: 'Phân quyền chức năng',
+    NhanVien_ChucNang: 'Phân quyền nhân viên',
     LichLamViec: 'Lịch làm việc',
     ChamCong: 'Chấm công',
     KyLuong: 'Kỳ lương',
@@ -575,6 +576,31 @@ const ACTION_META = {
         viecLam: 'Sửa phân quyền chức năng',
         giaiThich: 'Thay đổi menu/API mà từng vai trò được dùng. Ảnh hưởng toàn cửa hàng.',
         mucDo: 'Quan trọng', nhom: 'he-thong'
+    },
+    'Phân quyền nhân viên': {
+        viecLam: 'Tùy chỉnh quyền theo nhân viên',
+        giaiThich: 'Cấp thêm hoặc thu quyền riêng cho một người, không đổi mẫu vai trò.',
+        mucDo: 'Quan trọng', nhom: 'he-thong', target: '../admin/permissions.html'
+    },
+    'Khôi phục quyền theo vai trò': {
+        viecLam: 'Khôi phục quyền theo vai trò',
+        giaiThich: 'Xóa tùy chỉnh riêng, nhân viên trở lại đúng mẫu vai trò.',
+        mucDo: 'Thông tin', nhom: 'he-thong', target: '../admin/permissions.html'
+    },
+    'Nâng vai trò nhân viên': {
+        viecLam: 'Nâng vai trò nhân viên',
+        giaiThich: 'Phong nhân viên lên vai trò cao hơn. Admin được phong vẫn hạ được sau này.',
+        mucDo: 'Quan trọng', nhom: 'he-thong', target: '../admin/permissions.html'
+    },
+    'Hạ vai trò nhân viên': {
+        viecLam: 'Hạ vai trò nhân viên',
+        giaiThich: 'Hạ nhân viên đã được phong về vai trò/bộ phận cũ hoặc thấp hơn. Không áp dụng admin gốc.',
+        mucDo: 'Quan trọng', nhom: 'he-thong', target: '../admin/permissions.html'
+    },
+    'Đổi vai trò nhân viên': {
+        viecLam: 'Đổi vai trò nhân viên',
+        giaiThich: 'Chuyển nhân viên sang vai trò khác cùng cấp. Không đổi admin gốc.',
+        mucDo: 'Quan trọng', nhom: 'he-thong', target: '../admin/permissions.html'
     },
     'Telegram liên kết': {
         viecLam: 'Liên kết Telegram',

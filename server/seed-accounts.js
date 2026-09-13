@@ -3,6 +3,8 @@ const { sql, poolPromise } = require('./src/config/db');
 const bcrypt = require('bcrypt');
 const { purgeExtraCashier } = require('./purge-extra-cashier');
 const { ensureEmployeeProfileSchema } = require('./src/services/employeeProfileSchema');
+const { ensureEmployeePermissionSchema } = require('./src/services/effectivePermissions');
+const { markKnownFounders } = require('./src/services/founderAccount');
 const { backfillSeedHoSo } = require('./src/services/employeeHoSo');
 
 const employees = [
@@ -26,6 +28,7 @@ async function seedData() {
     try {
         const pool = await poolPromise;
         await ensureEmployeeProfileSchema(pool);
+        await ensureEmployeePermissionSchema(pool);
         console.log('--- BẮT ĐẦU TẠO DỮ LIỆU MẪU ---');
 
         // Chuẩn hóa đúng 5 vai trò trong tài liệu. Không xóa tài khoản/chứng từ đã có.
@@ -179,6 +182,7 @@ async function seedData() {
                         CONVERT(date, GETDATE()), DATEADD(day, 90, CONVERT(date, GETDATE())), N'Hiệu lực');
         `);
 
+        await markKnownFounders(pool);
         await purgeExtraCashier(pool);
         console.log('--- HOÀN TẤT TẠO DỮ LIỆU ---');
         process.exit(0);

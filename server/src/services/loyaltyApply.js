@@ -66,7 +66,6 @@ const mergeLoyaltyDiscount = ({
     if (loai === 'VIP') {
         if (!p.vipEnabled) return base;
         const pct = p.vipMaxPercent;
-        const vipAmt = Math.round(tong * pct / 100);
         if (kmIsPercent) {
             const mergedPct = Math.max(Number(kmPercent) || 0, pct);
             const merged = Math.round(tong * mergedPct / 100);
@@ -78,16 +77,18 @@ const mergeLoyaltyDiscount = ({
                 giaTri: `${pct}%`
             };
         }
-        if (vipAmt > km) {
-            return {
-                tienGiamGia: Math.min(tong, vipAmt),
-                tienGiamCS: Math.max(0, vipAmt - km),
-                heSoDiem: 1,
-                loai: 'VIP',
-                giaTri: `${pct}%`
-            };
-        }
-        return { ...base, loai: 'VIP', giaTri: `${pct}%` };
+        // Fixed-amount KM: apply VIP % to the remainder so Áp dụng / Bỏ áp dụng
+        // always changes the payable. Old max(KM, VIP) swallowed VIP 10% whenever
+        // a campaign of ≥ 10% of the cart (e.g. 50.000đ on 345.000đ) was selected.
+        const remaining = Math.max(0, tong - km);
+        const vipOnRemain = Math.round(remaining * pct / 100);
+        return {
+            tienGiamGia: Math.min(tong, km + vipOnRemain),
+            tienGiamCS: vipOnRemain,
+            heSoDiem: 1,
+            loai: 'VIP',
+            giaTri: `${pct}%`
+        };
     }
     if (loai === 'win-back') {
         if (!p.winBackEnabled) return base;

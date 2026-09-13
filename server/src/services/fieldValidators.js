@@ -1,7 +1,8 @@
 /** Chuẩn hóa và kiểm tra SĐT / tên / email / mã / số — dùng chung FE+BE. */
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const VN_PHONE_RE = /^0\d{9,10}$/;
+const VN_PHONE_RE = /^0[35789]\d{8}$/;
+const VN_PHONE_MESSAGE = 'SĐT phải gồm 10 số, bắt đầu bằng 03/05/07/08/09.';
 const SHIPMENT_DOC_RE = /^[A-Za-z0-9][A-Za-z0-9./_-]{2,49}$/;
 const VN_PLATE_RE = /^\d{2}[A-Z]{1,2}[-\s]?\d{3,5}(?:[.\s]\d{2})?$/i;
 const USERNAME_RE = /^[a-z0-9._-]{3,50}$/;
@@ -58,8 +59,19 @@ const normalizeVnPhone = (value) => {
     let digits = String(value ?? '').trim().replace(/[\s().-]/g, '');
     if (!digits) return '';
     if (digits.startsWith('+84')) digits = `0${digits.slice(3)}`;
-    else if (digits.startsWith('84') && digits.length >= 11) digits = `0${digits.slice(2)}`;
+    else if (/^84\d{9}$/.test(digits)) digits = `0${digits.slice(2)}`;
     return digits;
+};
+
+const formatVnPhone = (value) => {
+    const phone = normalizeVnPhone(value);
+    if (!VN_PHONE_RE.test(phone)) return String(value ?? '').trim();
+    return `${phone.slice(0, 4)} ${phone.slice(4, 7)} ${phone.slice(7)}`;
+};
+
+const phoneSearchDigits = (value) => {
+    const digits = normalizeVnPhone(value).replace(/\D/g, '');
+    return digits.length >= 3 ? digits : '';
 };
 
 const validateOptionalEmail = (value) => {
@@ -74,7 +86,7 @@ const validateOptionalVnPhone = (value) => {
     if (!raw) return { ok: true, value: '' };
     const phone = normalizeVnPhone(raw);
     if (!VN_PHONE_RE.test(phone)) {
-        return { ok: false, message: 'Số điện thoại phải là số Việt Nam (0 + 9 hoặc 10 chữ số, chấp nhận +84).' };
+        return { ok: false, message: VN_PHONE_MESSAGE };
     }
     return { ok: true, value: phone };
 };
@@ -372,11 +384,7 @@ const validateOptionalText = (value, label, { min = 0, max = 150 } = {}) => {
 const validateRequiredVnPhone = (value, label = 'Số điện thoại') => {
     const raw = trim(value, 20);
     if (!raw) return { ok: false, message: `${label} là bắt buộc.` };
-    const result = validateOptionalVnPhone(value);
-    if (!result.ok) {
-        return { ok: false, message: result.message.replace('Số điện thoại', label) };
-    }
-    return result;
+    return validateOptionalVnPhone(value);
 };
 
 const validateRequiredCccd = (value) => {
@@ -556,6 +564,9 @@ module.exports = {
     BARCODE_RE,
     trim,
     normalizeVnPhone,
+    formatVnPhone,
+    phoneSearchDigits,
+    VN_PHONE_MESSAGE,
     validateOptionalEmail,
     validateOptionalVnPhone,
     validateRequiredName,

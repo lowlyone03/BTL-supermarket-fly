@@ -11,6 +11,13 @@ const {
     hasUc
 } = require('./src/services/effectivePermissions');
 const { ALL, catalogFor, visibleFor } = require('./src/services/assistantScenarios');
+const {
+    isFounderAccount,
+    isManagerRoleName,
+    roleChangeKind,
+    roleChangeVerdict,
+    staffRoleFlags
+} = require('./src/services/founderAccount');
 
 const test = (name, run) => {
     try {
@@ -85,6 +92,48 @@ test('Catalog kịch bản AI: mỗi mục có UC hợp lệ; thu ngân không t
     const cashierCat = catalogFor(cashier);
     assert.ok(cashierCat.total < ALL.length);
     assert.ok(!JSON.stringify(cashierCat.groups).includes('kt-phan-tram-tra'));
+});
+
+test('Admin gốc nhận diện theo IsFounder / admin / NV_QL01, không theo vai trò Quản lý', () => {
+    assert.equal(isFounderAccount({ TenDangNhap: 'admin', TenVaiTro: 'Quản lý' }), true);
+    assert.equal(isFounderAccount({ MaNV: 'NV_QL01', TenVaiTro: 'Quản lý' }), true);
+    assert.equal(isFounderAccount({ IsFounder: 1, TenDangNhap: 'quanly2' }), true);
+    assert.equal(isFounderAccount({ TenDangNhap: 'ketoan', TenVaiTro: 'Quản lý', MaNV: 'NV_KT01' }), false);
+    assert.equal(isFounderAccount({ TenDangNhap: 'thungan', TenVaiTro: 'Quản lý', MaNV: 'NV_TN01', IsFounder: 0 }), false);
+    assert.equal(isManagerRoleName('Quản lý'), true);
+});
+
+test('Nhân viên được phong admin vẫn hạ được; admin gốc thì không', () => {
+    const promoted = {
+        MaTK: 9, MaNV: 'NV_TN01', TenDangNhap: 'thungan', TenVaiTro: 'Quản lý', MaVaiTro: 1, HasAccount: true
+    };
+    const founder = {
+        MaTK: 1, MaNV: 'NV_QL01', TenDangNhap: 'admin', TenVaiTro: 'Quản lý', MaVaiTro: 1, IsFounder: 1, HasAccount: true
+    };
+    assert.equal(roleChangeVerdict({ target: promoted, actor: { MaTK: 1 }, nextRoleId: 4 }).ok, true);
+    assert.equal(roleChangeVerdict({ target: founder, actor: { MaTK: 9 }, nextRoleId: 4 }).ok, false);
+    assert.equal(roleChangeVerdict({ target: founder, actor: { MaTK: 9 }, nextRoleId: 4 }).code, 'founder');
+    assert.equal(roleChangeVerdict({ target: promoted, actor: { MaTK: 9 }, nextRoleId: 4 }).code, 'self');
+    assert.equal(roleChangeKind('Thu ngân', 'Quản lý'), 'promote');
+    assert.equal(roleChangeKind('Quản lý', 'Thu ngân'), 'demote');
+    const flags = staffRoleFlags(promoted);
+    assert.equal(flags.IsFounder, false);
+    assert.equal(flags.IsPromotedManager, true);
+    assert.equal(flags.CanChangeRole, true);
+    assert.equal(staffRoleFlags(founder).CanChangeRole, false);
+});
+
+test('UI phân quyền không khóa mọi Quản lý; khóa theo admin gốc', () => {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const ui = fs.readFileSync(path.join(__dirname, '../desktop/src/pages/admin/permissions.js'), 'utf8');
+    assert.doesNotMatch(ui, /const locked = fold\(emp\.TenVaiTro\) === 'quản lý'/);
+    assert.match(ui, /Admin gốc — không hạ cấp/);
+    assert.match(ui, /Có thể đổi vai trò/);
+    assert.match(ui, /isFounderEmp/);
+    const api = fs.readFileSync(path.join(__dirname, 'src/controllers/roleController.js'), 'utf8');
+    assert.match(api, /roleChangeVerdict/);
+    assert.match(api, /Hạ vai trò nhân viên/);
 });
 
 test('NhanVien_ChucNang.MaChucNang cùng kiểu VARCHAR(20) với ChucNang', () => {

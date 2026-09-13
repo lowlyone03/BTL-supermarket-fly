@@ -117,7 +117,7 @@
                 <div class="form-group"><label>Số CCCD <span class="req-create">*</span></label><input type="text" id="cccd" inputmode="numeric" placeholder="12 số (hoặc CMND 9 số)" maxlength="12"><small class="emp-field-error" id="cccd_err"></small></div>
                 <div class="form-group"><label>Ngày sinh <span class="req-create">*</span></label><input type="date" id="ngaySinh" data-date-range="birth"><small class="emp-field-error" id="ngaySinh_err"></small></div>
                 <div class="form-group"><label>Giới tính <span class="req-create">*</span></label><select id="gioiTinh"><option value="">Chưa chọn</option><option value="Nam">Nam</option><option value="Nữ">Nữ</option></select><small class="emp-field-error" id="gioiTinh_err"></small></div>
-                <div class="form-group"><label>Số điện thoại <span class="req-create">*</span></label><input type="text" id="sdt" placeholder="09xxxxxxxx hoặc +84..." maxlength="20"><small class="emp-field-error" id="sdt_err"></small></div>
+                <div class="form-group"><label>Số điện thoại <span class="req-create">*</span></label><input type="text" id="sdt" inputmode="tel" placeholder="03/05/07/08/09xxxxxxxx hoặc +84..." maxlength="16"><small class="emp-field-error" id="sdt_err"></small></div>
                 <div class="form-group"><label>Email</label><input type="email" id="email" placeholder="ten@supermarket.fly"><small class="emp-field-error" id="email_err"></small></div>
                 <div class="form-group form-span-2"><label>Địa chỉ liên hệ</label><input type="text" id="diaChi" placeholder="Nhập địa chỉ liên hệ" maxlength="300"><small class="emp-field-error" id="diaChi_err"></small></div>
               </div></div>
@@ -154,7 +154,7 @@
               <div class="emp-form-section"><div class="emp-section-heading"><small>LIÊN HỆ KHẨN CẤP</small><h4>Người thân khi cần liên hệ</h4></div><div class="form-grid">
                 <div class="form-group"><label>Họ tên người liên hệ</label><input type="text" id="nguoiLienHe" placeholder="Họ tên" maxlength="150"><small class="emp-field-error" id="nguoiLienHe_err"></small></div>
                 <div class="form-group"><label>Quan hệ</label><select id="quanHeLienHe"><option value="">Chưa chọn</option><option>Bố</option><option>Mẹ</option><option>Vợ</option><option>Chồng</option><option>Con</option><option>Anh/Chị</option><option>Em</option><option>Người thân</option></select><small class="emp-field-error" id="quanHeLienHe_err"></small></div>
-                <div class="form-group"><label>SĐT người liên hệ</label><input type="text" id="sdtLienHe" placeholder="09xxxxxxxx" maxlength="20"><small class="emp-field-error" id="sdtLienHe_err"></small></div>
+                <div class="form-group"><label>SĐT người liên hệ</label><input type="text" id="sdtLienHe" inputmode="tel" placeholder="03/05/07/08/09xxxxxxxx" maxlength="16"><small class="emp-field-error" id="sdtLienHe_err"></small></div>
                 <div class="form-group form-span-2"><label>Ghi chú hồ sơ</label><textarea id="ghiChuHoSo" rows="2" maxlength="500" placeholder="Ghi chú ngắn (không bắt buộc)"></textarea><small class="emp-field-error" id="ghiChuHoSo_err"></small></div>
               </div></div>
               <div class="emp-form-section" id="empAccountSection" style="display:none"><div class="emp-section-heading"><small>TÀI KHOẢN HỆ THỐNG</small><h4>Truy cập &amp; phân quyền</h4></div><div class="emp-account-info" id="empAccountInfo"></div></div>
@@ -236,16 +236,16 @@
     'permissions.html': `
       <section class="admin-module perm-module">
         <header class="module-heading">
-          <div><p class="module-kicker">KIỂM SOÁT / PHÂN QUYỀN</p><h1>Phân quyền theo nhân viên</h1><p>Vai trò là mẫu chung (tổng). Mở từng người để cấp thêm hoặc thu quyền — thu ngân xuất sắc có thể cao hơn đồng nghiệp mà không đổi cả vai trò.</p></div>
+          <div><p class="module-kicker">KIỂM SOÁT / PHÂN QUYỀN</p><h1>Phân quyền theo nhân viên</h1><p>Vai trò là mẫu chung. Mở từng người để cấp thêm, thu quyền, nâng hoặc hạ vai trò. Admin gốc bị khóa; nhân viên được phong Quản lý vẫn hạ được về bộ phận cũ.</p></div>
           <div class="heading-actions"><span class="record-count" id="permRecordCount">0 nhân viên</span><button class="btn btn-primary" id="permSaveBtn" type="button">Lưu quyền nhân viên</button></div>
         </header>
-        <div class="permission-note perm-page-note"><span class="note-icon"><svg aria-hidden="true"><use href="#i-shield"/></svg></span><div><strong>Nhân viên là cấp con của vai trò</strong><p>Không tùy chỉnh thì kế thừa mẫu. Có tùy chỉnh thì badge “tùy chỉnh riêng”. Quyền Quản lý cố định. Nhân viên cần tải lại trang sau khi được cấp thêm.</p></div></div>
+        <div class="permission-note perm-page-note"><span class="note-icon"><svg aria-hidden="true"><use href="#i-shield"/></svg></span><div><strong>Admin gốc khác với admin được phong</strong><p>Không tùy chỉnh thì kế thừa mẫu. Badge “Admin gốc — không hạ cấp” chỉ dành cho tài khoản hệ thống. Người được nâng lên Quản lý có badge “Có thể đổi vai trò”. Nhân viên cần tải lại trang sau khi được cấp thêm.</p></div></div>
         <article class="surface-card data-surface permission-surface">
-          <div class="matrix-legend"><span><i class="legend-dot allowed"></i> Được phép</span><span><i class="legend-dot denied"></i> Không được phép</span><span class="perm-legend-custom"><i class="legend-dot custom"></i> Tùy chỉnh riêng</span><span><i class="legend-lock"><svg aria-hidden="true"><use href="#i-lock"/></svg></i> Quyền cố định</span></div>
+          <div class="matrix-legend"><span><i class="legend-dot allowed"></i> Được phép</span><span><i class="legend-dot denied"></i> Không được phép</span><span class="perm-legend-custom"><i class="legend-dot custom"></i> Tùy chỉnh riêng</span><span><i class="legend-lock"><svg aria-hidden="true"><use href="#i-lock"/></svg></i> Admin gốc / mẫu Quản lý</span></div>
           <div class="matrix-container" id="matrixContainer"><div class="empty-state">Đang tải phân quyền nhân viên...</div></div>
         </article>
       </section>
-      <script src="../admin/permissions.js?v=emp-perm-2"></script>`,
+      <script src="../admin/permissions.js?v=emp-perm-3"></script>`,
 
     'audit-log.html': `
       <section class="admin-module audit-trace">
