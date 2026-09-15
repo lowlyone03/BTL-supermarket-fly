@@ -83,10 +83,12 @@ Gói Personal miễn phí đủ 7 máy học tập.
 
 Sáu người kia **không** cài app thêm. TV1 mở một link `https://....trycloudflare.com`, gửi nhóm.
 
-**Hướng dẫn từng nút (tải file, hai cửa sổ, copy link, lỗi thường gặp):**  
-`HUONG_DAN_CLOUDFLARE_TUNNEL.md`
+**Hướng dẫn từng nút (tải file, hai cửa sổ, copy link, lỗi thường gặp, timeout trycloudflare):**  
+`HUONG_DAN_CLOUDFLARE_TUNNEL.md` (phần E + F).
 
 Tóm tắt: tải `cloudflared.exe` vào thư mục dự án → mở `4_CHAY_MAY_CHU_NHOM.bat` → mở `6_MO_DUONG_HAM_CLOUDFLARE.bat` → copy một dòng `https://....trycloudflare.com` → thành viên dán nguyên link vào ô Máy chủ nhóm.
+
+Test ZaloPay IPN trên TV1: `npm run start:zalopay` (không dùng file 6). Quick tunnel hay timeout từ mạng VN — đó **không** phải lỗi app; Tailscale **không** thay được webhook ZaloPay.
 
 ---
 

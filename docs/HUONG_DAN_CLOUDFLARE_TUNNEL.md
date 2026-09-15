@@ -18,12 +18,16 @@ Node chỉ đọc `.env` lúc start (`loadEnv` trong `server/src/app.js`) — st
 Thứ tự script (đừng đảo):
 
 1. Kiểm tra `cloudflared.exe` (thiếu thì in link tải, không chạy im).
-2. Mở **cửa sổ tunnel**: `cloudflared tunnel --url http://localhost:3000`
-3. Đợi in `https://….trycloudflare.com`
-4. Ghi `server/.env` (không query string):
+2. Tắt **tunnel cũ của project này** nếu là zombie (chạy nhưng không có URL). Tunnel hệ thống / named tunnel khác thì **không** đụng.
+3. Nếu tunnel project **còn sống và đã có URL** → dùng lại, không mở thêm.
+4. Mở **cửa sổ tunnel**: `cloudflared tunnel --url http://localhost:3000` (timeout thì tự thử lại tối đa 4 lần).
+5. Đợi in `https://….trycloudflare.com` (có thể 30–180 giây nếu Cloudflare chậm).
+6. **Chỉ khi đã có URL và tunnel còn sống** mới ghi `server/.env` (không query string):
    - `PAYMENT_IPN_URL=https://XXXX/api/payments/gateway/ipn`
    - `PAYMENT_RETURN_URL=https://XXXX/api/payments/gateway/return`
-5. **Mới** `npm start` (API + Electron)
+7. **Mới** `npm start` (API + Electron)
+
+Fail / timeout → **không ghi** URL hỏng vào `.env`. Không cần tắt-mở cửa sổ bán hàng.
 
 Vẫn **hai cửa sổ**: tunnel phải sống suốt buổi; app chạy cửa sổ kia.
 Tắt tunnel = link đổi = chạy lại file 7 (script ghi `.env` rồi start lại).
@@ -118,7 +122,7 @@ cd D:\UDTHTKT\BTL\supermarket-fly
 
 ### B3. Lấy đúng dòng link
 
-Đợi 5–15 giây. Trong cửa sổ sẽ có khung, **một dòng https** giống:
+Đợi 5–30 giây (mạng chậm / Cloudflare quá tải có thể tới 1–2 phút). Trong cửa sổ sẽ có khung, **một dòng https** giống:
 
 ```text
 +--------------------------------------------------------------------------------------------+
@@ -222,12 +226,58 @@ Tài khoản vẫn như cũ, mật khẩu `123`. Phân công TV2–TV7 xem `HUON
 | --- | --- | --- |
 | File 6 / file 7 báo không thấy `cloudflared.exe` | File chưa đổi tên hoặc để sai thư mục | Làm lại A1, để `cloudflared.exe` cạnh các file `.bat` |
 | File 6 báo cổng 3000 chưa chạy | Chưa mở file 4, hoặc file 4 lỗi SQL | Mở file 4 trước, thử `http://localhost:3000/api/health` |
-| Cửa sổ cloudflared chạy mãi không có `https://` | Mạng chậm / bị chặn | Đợi 30 giây. Thử tắt VPN máy TV1. Chạy lại file 6 |
+| Cửa sổ cloudflared chạy mãi không có `https://` | Mạng chậm / bị chặn | Đợi thêm. Tắt VPN. Chạy lại file 6 hoặc `npm run start:zalopay` |
+| `failed to request quick Tunnel` / `context deadline exceeded` / `invalid UUID length` | Quick tunnel Cloudflare lỗi (timeout hoặc API trả rỗng). **Không phải lỗi app.** | Đợi 1–2 phút, chạy lại `npm run start:zalopay`. Script tự tắt tunnel cũ **của project**, thử 4 lần. **Không** cần tắt-mở Electron. Vẫn fail: phần F |
+| `Cloudflared da tat truoc khi co URL` | Quick tunnel chết vì timeout, hoặc Windows chặn `.exe` | Đọc cửa sổ tunnel. Timeout → hàng trên. SmartScreen → More info → Run anyway |
+| Script báo *Dung lai tunnel dang chay* | Còn cloudflared project sống **kèm URL** | Giữ cửa sổ tunnel. Không mở thêm file 6 |
 | Thành viên bấm Kiểm tra ra chữ đỏ | Sai link; thiếu `https://`; TV1 đã tắt hầm; dán thêm `/api` | TV1 còn 2 cửa sổ không? Gửi lại đúng 1 dòng https. Thành viên xóa hết ô rồi dán lại |
 | Kiểm tra xanh nhưng login lỗi | App cũ không hiểu https | `git pull` bản có ô Máy chủ nhóm; dán **cả** `https://...` |
 | Vào được lúc đầu rồi đứt | Máy TV1 ngủ; wifi TV1 mất; đóng nhầm cửa sổ | TV1 tắt Sleep, mở lại file 4 rồi file 6, gửi **link mới** |
 | Windows chặn `.exe` | SmartScreen | More info → Run anyway |
-| Link rất dài / có chữ `failed to request quick Tunnel` | Cloudflare quá tải hoặc mạng trường chặn | Đợi 1 phút chạy lại. Nếu vẫn fail: dùng Tailscale (`HUONG_DAN_KHAC_WIFI.md`) |
+| QR ZaloPay không callback | Tunnel chết hoặc `.env` còn URL buổi trước | Chỉ `start:zalopay` mới ghi IPN. Timeout thì script **không** ghi URL hỏng |
+
+---
+
+## Phần F — Timeout trycloudflare (ZaloPay)
+
+Quick tunnel `trycloudflare.com` **hay fail** từ mạng Việt Nam / Wi-Fi trường: timeout HTTPS tới `https://api.trycloudflare.com/tunnel`, hoặc API trả về rỗng (`invalid UUID length: 0`). SuperMarket Fly và ZaloPay sandbox vẫn ổn — chỉ webhook IPN/Telegram cần URL HTTPS công khai.
+
+`npm run start:zalopay` / file 7:
+
+1. Tắt cloudflared **của project này** (logfile `supermarket-fly-cloudflare-tunnel-*.log` hoặc `--url http://localhost:3000` dùng `cloudflared.exe` trong thư mục dự án). Không tắt named tunnel / Windows service của máy.
+2. Tunnel cũ còn sống **và đã in URL** → dùng lại, ghi `.env`.
+3. Zombie (chạy nhưng không có URL) → tắt rồi mở mới.
+4. Timeout → thử lại tối đa 4 lần (nghỉ 5s, 10s, 20s).
+5. Vẫn fail → **không ghi** URL vào `server/.env`. URL trycloudflare buổi trước đã chết.
+
+**Không** khởi động lại cửa sổ bán hàng cho lỗi này.
+
+Nếu thử lại vài lần vẫn timeout:
+
+- Tắt VPN; thử mạng điện thoại (4G/5G) trên máy TV1.
+- **Named Cloudflare Tunnel** (ổn định hơn; cần tài khoản Cloudflare **và** domain trỏ nameserver Cloudflare):
+
+```powershell
+cd D:\UDTHTKT\BTL\supermarket-fly
+.\cloudflared.exe tunnel login
+.\cloudflared.exe tunnel create supermarket-fly
+.\cloudflared.exe tunnel route dns supermarket-fly zalopay.yourdomain.com
+.\cloudflared.exe tunnel run supermarket-fly
+```
+
+Rồi ghi tay vào `server/.env` (HTTPS của domain bạn, không phải trycloudflare):
+
+```text
+PAYMENT_IPN_URL=https://zalopay.yourdomain.com/api/payments/gateway/ipn
+PAYMENT_RETURN_URL=https://zalopay.yourdomain.com/api/payments/gateway/return
+TELEGRAM_PUBLIC_BASE_URL=https://zalopay.yourdomain.com
+TELEGRAM_WEBHOOK_URL=https://zalopay.yourdomain.com/api/telegram/webhook
+```
+
+sau đó `npm start` (không cần file 7). Giữ cửa sổ `tunnel run` mở.
+
+- Không có domain: dùng **ngrok** (`HUONG_DAN_KHAC_WIFI.md` cách 3) rồi ghi cùng 3 biến `.env` với host ngrok.
+- **Tailscale không thay** được cho ZaloPay IPN — máy chủ ZaloPay không gọi được IP `100.x`. Tailscale chỉ cho thành viên khác Wi-Fi vào API.
 
 ---
 

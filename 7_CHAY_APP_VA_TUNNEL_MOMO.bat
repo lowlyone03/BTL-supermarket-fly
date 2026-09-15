@@ -23,7 +23,10 @@ set "APP_EXIT=%ERRORLEVEL%"
 if not "%APP_EXIT%"=="0" (
   echo.
   echo [LOI] Khong khoi dong duoc app + tunnel ZaloPay.
+  echo Neu thay "context deadline exceeded": timeout toi trycloudflare.com, KHONG phai loi app.
+  echo Khong can tat-mo cua so ban hang. Doi 1-2 phut roi chay lai npm run start:zalopay.
   echo Thieu cloudflared.exe: xem docs\HUONG_DAN_CLOUDFLARE_TUNNEL.md phan A1.
+  echo Timeout / tunnel chet: xem phan E + F.
   echo Hay chup toan bo cua so nay.
 )
 

@@ -947,7 +947,7 @@ Thư mục `server/migrations/`, chạy lần lượt bởi `npm run setup:next`
 | Thu ngân không vào POS | Không có ca công bố hôm nay, hoặc ngoài giờ / đã hết ca |
 | SQL không kết nối | Kiểm tra: instance `SQLEXPRESS`, ODBC 17, database `SupermarketFlyDB`, Windows Auth |
 | Cổng 3000 bị chiếm | Đóng process Node cũ (`taskkill /IM node.exe /F`) rồi chạy lại |
-| Tunnel không mở | Kiểm tra `cloudflared.exe` tồn tại. Script tự tìm ở root/Desktop/Downloads |
+| Tunnel không mở | Kiểm tra `cloudflared.exe`. Timeout `api.trycloudflare.com` là lỗi mạng/Cloudflare, không phải lỗi app — chạy lại `npm run start:zalopay` (tự retry). Xem `docs/HUONG_DAN_CLOUDFLARE_TUNNEL.md` phần E + F |
 
 ---
 

@@ -19,7 +19,10 @@ Set-Location -LiteralPath $RepoRoot
 
 $DownloadUrl = 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe'
 $UrlPattern = 'https://[A-Za-z0-9-]+\.trycloudflare\.com'
-$WaitSeconds = 90
+$WaitSeconds = 240
+$MaxTunnelAttempts = 4
+$TunnelLogMarker = 'supermarket-fly-cloudflare-tunnel'
+$LocalTunnelTarget = 'http://localhost:3000'
 
 function Find-Cloudflared {
     $homeDir = $env:USERPROFILE
@@ -99,7 +102,7 @@ function Get-ListeningPids {
             }
         }
     }
-    return @($ids | Sort-Object -Unique)
+    $ids | Sort-Object -Unique
 }
 
 function Test-IsFlyNodePid {
@@ -276,6 +279,274 @@ function Read-SharedText {
     }
 }
 
+function Test-QuickTunnelTimeoutText {
+    param([string]$Text)
+    if (-not $Text) { return $false }
+    if ($Text -match 'context deadline exceeded') { return $true }
+    if ($Text -match 'failed to request quick Tunnel') { return $true }
+    if ($Text -match 'Client\.Timeout exceeded') { return $true }
+    if ($Text -match 'i/o timeout') { return $true }
+    if ($Text -match 'failed to parse quick Tunnel ID') { return $true }
+    if ($Text -match 'invalid UUID') { return $true }
+    if ($Text -match 'connection reset') { return $true }
+    if ($Text -match 'tls handshake timeout') { return $true }
+    return $false
+}
+
+function Get-TunnelStatePath {
+    param([string]$LogPath)
+    return ($LogPath + '.state')
+}
+
+function Read-TunnelStateMap {
+    param([string]$LogPath)
+    $map = @{
+        status  = ''
+        attempt = ''
+        detail  = ''
+        url     = ''
+    }
+    $text = Read-SharedText (Get-TunnelStatePath $LogPath)
+    if (-not $text) { return $map }
+    foreach ($line in ($text -split "`r?`n")) {
+        $eq = $line.IndexOf('=')
+        if ($eq -lt 1) { continue }
+        $k = $line.Substring(0, $eq).Trim().ToLowerInvariant()
+        $v = $line.Substring($eq + 1).Trim()
+        if ($map.ContainsKey($k)) { $map[$k] = $v }
+    }
+    return $map
+}
+
+function Get-LogPathFromCommandLine {
+    param([string]$CommandLine)
+    if (-not $CommandLine) { return '' }
+    $m = [regex]::Match($CommandLine, '(?i)--logfile\s+"?([^\s"]+)')
+    if ($m.Success) { return $m.Groups[1].Value }
+    $m2 = [regex]::Match($CommandLine, '(?i)-LogPath\s+"?([^\s"]+)')
+    if ($m2.Success) { return $m2.Groups[1].Value }
+    return ''
+}
+
+function Test-IsProjectCloudflared {
+    param(
+        [int]$ProcessId,
+        [string]$CloudflaredPath
+    )
+    $proc = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    if (-not $proc) { return $false }
+    if ([string]$proc.ProcessName -notmatch '(?i)^cloudflared$') { return $false }
+    $cmd = Get-ProcessCommandLine -ProcessId $ProcessId
+    $exeOurs = $false
+    try {
+        if ($CloudflaredPath -and $proc.Path -and (
+                [string]::Equals($proc.Path, $CloudflaredPath, [StringComparison]::OrdinalIgnoreCase)
+            )) {
+            $exeOurs = $true
+        }
+    } catch {
+    }
+    if (-not $cmd) { return $exeOurs }
+    if ($cmd -match '(?i)(\s|^)service(\s|$)') { return $false }
+    if ($cmd -match '(?i)tunnel\s+run\b' -and $cmd -notmatch [regex]::Escape($LocalTunnelTarget)) {
+        return $false
+    }
+    if ($cmd -match [regex]::Escape($TunnelLogMarker)) { return $true }
+    if ($CloudflaredPath -and $cmd -match [regex]::Escape($CloudflaredPath)) { $exeOurs = $true }
+    $hasLocalUrl = $cmd -match [regex]::Escape($LocalTunnelTarget)
+    $inRepo = $cmd -match [regex]::Escape($RepoRoot)
+    if ($hasLocalUrl -and ($exeOurs -or $inRepo)) { return $true }
+    return $false
+}
+
+function Test-IsProjectTunnelRunner {
+    param([int]$ProcessId)
+    $proc = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    if (-not $proc) { return $false }
+    if ([string]$proc.ProcessName -notmatch '(?i)^(powershell|pwsh)$') { return $false }
+    $cmd = Get-ProcessCommandLine -ProcessId $ProcessId
+    if (-not $cmd) { return $false }
+    if ($cmd -notmatch '(?i)run-cloudflared-tunnel\.ps1') { return $false }
+    if ($cmd -match [regex]::Escape($TunnelLogMarker)) { return $true }
+    if ($cmd -match [regex]::Escape($RepoRoot)) { return $true }
+    return $false
+}
+
+function Get-ProjectCloudflaredProcesses {
+    param([string]$CloudflaredPath)
+    foreach ($p in @(Get-Process -Name 'cloudflared' -ErrorAction SilentlyContinue)) {
+        if (Test-IsProjectCloudflared -ProcessId $p.Id -CloudflaredPath $CloudflaredPath) {
+            Write-Output $p
+        }
+    }
+}
+
+function Get-ProjectTunnelRunnerProcesses {
+    foreach ($name in @('powershell', 'pwsh')) {
+        foreach ($p in @(Get-Process -Name $name -ErrorAction SilentlyContinue)) {
+            if (Test-IsProjectTunnelRunner -ProcessId $p.Id) {
+                Write-Output $p
+            }
+        }
+    }
+}
+
+function Get-TunnelOriginFromProcess {
+    param([int]$ProcessId)
+    $cmd = Get-ProcessCommandLine -ProcessId $ProcessId
+    $log = Get-LogPathFromCommandLine $cmd
+    if (-not $log) { return $null }
+    $origin = Get-TunnelOriginFromText (Read-SharedText $log)
+    if ($origin) { return $origin }
+    $state = Read-TunnelStateMap $log
+    if ($state.url) {
+        return (Get-TunnelOriginFromText $state.url)
+    }
+    return $null
+}
+
+function Stop-PidQuiet {
+    param(
+        [int]$ProcessId,
+        [string]$Label
+    )
+    $proc = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    if (-not $proc) { return $true }
+    try {
+        Stop-Process -Id $ProcessId -Force -ErrorAction Stop
+        Write-FlyOk ("Da tat {0} (PID {1})." -f $Label, $ProcessId)
+        return $true
+    } catch {
+        Write-FlyWarn ("Khong tat duoc {0} PID {1}: {2}" -f $Label, $ProcessId, $_.Exception.Message)
+        return $false
+    }
+}
+
+function Stop-StaleProjectTunnels {
+    param(
+        [string]$CloudflaredPath,
+        [int[]]$KeepPids
+    )
+    $keep = @{}
+    foreach ($id in @($KeepPids)) {
+        if ($id -gt 0) { $keep[$id] = $true }
+    }
+
+    foreach ($p in @(Get-ProjectCloudflaredProcesses -CloudflaredPath $CloudflaredPath)) {
+        if ($keep.ContainsKey([int]$p.Id)) { continue }
+        Stop-PidQuiet -ProcessId $p.Id -Label 'cloudflared cu (project)' | Out-Null
+    }
+
+    foreach ($p in @(Get-ProjectTunnelRunnerProcesses)) {
+        if ($keep.ContainsKey([int]$p.Id)) { continue }
+        Stop-PidQuiet -ProcessId $p.Id -Label 'cua so tunnel cu' | Out-Null
+    }
+
+    $waitUntil = (Get-Date).AddSeconds(6)
+    while ((Get-Date) -lt $waitUntil) {
+        $left = @(
+            Get-ProjectCloudflaredProcesses -CloudflaredPath $CloudflaredPath |
+                Where-Object { -not $keep.ContainsKey([int]$_.Id) }
+        )
+        if ($left.Count -eq 0) { break }
+        Start-Sleep -Milliseconds 250
+    }
+}
+
+function Resolve-ExistingProjectTunnel {
+    param([string]$CloudflaredPath)
+
+    $cfList = @(Get-ProjectCloudflaredProcesses -CloudflaredPath $CloudflaredPath)
+    $healthy = @()
+    $zombies = @()
+    foreach ($p in $cfList) {
+        $found = Get-TunnelOriginFromProcess -ProcessId $p.Id
+        if ($found) {
+            $healthy += , @{ Proc = $p; Origin = $found }
+        } else {
+            $zombies += , $p
+        }
+    }
+
+    foreach ($z in $zombies) {
+        Write-FlyWarn ("Tunnel cu khong co URL (PID {0}). Dang tat zombie." -f $z.Id)
+        Stop-PidQuiet -ProcessId $z.Id -Label 'cloudflared zombie' | Out-Null
+    }
+
+    $keepIds = @()
+    $origin = $null
+    if ($healthy.Count -gt 0) {
+        $chosen = $healthy[0]
+        $origin = [string]$chosen.Origin
+        $keepIds += [int]$chosen.Proc.Id
+        Write-FlyOk ("Dung lai tunnel dang chay (co URL): {0}" -f $origin)
+        if ($healthy.Count -gt 1) {
+            Write-FlyWarn 'Co nhieu tunnel project. Giu cai dau, tat cai du.'
+            for ($i = 1; $i -lt $healthy.Count; $i++) {
+                Stop-PidQuiet -ProcessId ([int]$healthy[$i].Proc.Id) -Label 'cloudflared du' | Out-Null
+            }
+        }
+        foreach ($r in @(Get-ProjectTunnelRunnerProcesses)) {
+            $children = @(Get-CimInstance Win32_Process -Filter ("ParentProcessId={0}" -f $r.Id) -ErrorAction SilentlyContinue)
+            $hasCf = $false
+            foreach ($ch in $children) {
+                if ([string]$ch.Name -match '(?i)cloudflared') { $hasCf = $true; break }
+            }
+            if ($hasCf) { $keepIds += [int]$r.Id }
+        }
+    }
+
+    Stop-StaleProjectTunnels -CloudflaredPath $CloudflaredPath -KeepPids $keepIds
+    Start-Sleep -Milliseconds 400
+
+    if ($origin) {
+        $still = Get-Process -Id $keepIds[0] -ErrorAction SilentlyContinue
+        if ($still) { return $origin }
+        Write-FlyWarn 'Tunnel vua dung lai da tat. Se mo tunnel moi.'
+        return $null
+    }
+    return $null
+}
+
+function Show-TunnelFailureHelp {
+    param(
+        [string]$LogText,
+        [string]$Reason
+    )
+    Write-FlyWaitDone
+    $timeout = Test-QuickTunnelTimeoutText $LogText
+    if ($timeout -or $Reason -eq 'timeout') {
+        Write-FlyErr 'Quick tunnel trycloudflare.com that bai (timeout hoac Cloudflare tra ve rong).'
+        Write-FlyInfo 'Day la loi mang / Cloudflare, KHONG phai loi app SuperMarket Fly hay ZaloPay.'
+        Write-FlyInfo 'Khong can tat-mo cua so ban hang (Electron).'
+        Write-Host ''
+        Write-FlyInfo 'Lam gi tiep:'
+        Write-FlyInfo '  1. Doi 1-2 phut, chay lai: npm run start:zalopay'
+        Write-FlyInfo '     Script tu tat tunnel cu CUA PROJECT nay, thu 4 lan neu timeout.'
+        Write-FlyInfo '  2. Tat VPN. Neu mang truong chan Cloudflare, doi mang (4G).'
+        Write-FlyInfo '  3. Van fail: named Cloudflare Tunnel (can tai khoan + domain) hoac ngrok.'
+        Write-FlyInfo '     Tailscale khong thay cho ZaloPay IPN (khong phai HTTPS public).'
+        Write-FlyInfo '  Xem docs/HUONG_DAN_CLOUDFLARE_TUNNEL.md phan E + F.'
+        Write-FlyWarn 'Khong ghi server/.env (tranh URL do). URL trycloudflare cu da chet.'
+        return
+    }
+    if ($Reason -eq 'smartscreen' -or $Reason -eq 'never-started') {
+        Write-FlyErr 'cloudflared khong chay duoc (SmartScreen / Windows chan .exe?).'
+        Write-FlyInfo 'Cua so tunnel: More info -> Run anyway. Xem docs phan A1.'
+        Write-FlyInfo 'Khong phai loi app. Khong ghi server/.env.'
+        return
+    }
+    if ($Reason -eq 'closed') {
+        Write-FlyErr 'Cua so tunnel da dong truoc khi co URL.'
+        Write-FlyInfo 'Giu cua so Cloudflare mo. Chay lai npm run start:zalopay.'
+        Write-FlyInfo 'Khong ghi server/.env.'
+        return
+    }
+    Write-FlyErr 'Khong lay duoc URL trycloudflare.com.'
+    Write-FlyInfo 'Xem cua so tunnel. Khong phai loi app. Khong ghi server/.env.'
+    Write-FlyInfo 'Tai: docs/HUONG_DAN_CLOUDFLARE_TUNNEL.md phan E + F.'
+}
+
 Write-FlyBanner 'SUPERMARKET FLY - ZaloPay tunnel' @(
     '1  Mo Cloudflare tunnel',
     '2  Ghi URL vao server/.env',
@@ -302,41 +573,96 @@ if (-not (Test-Path -LiteralPath $runner)) {
     exit 1
 }
 
-$existingTunnel = Get-Process -Name 'cloudflared' -ErrorAction SilentlyContinue
-if ($existingTunnel) {
-    Write-FlyWarn 'Da co cloudflared dang chay. Dong cua so tunnel cu neu khong dung.'
-    Write-Host ''
+$otherCloudflared = @(Get-Process -Name 'cloudflared' -ErrorAction SilentlyContinue)
+$projectCloudflared = @(Get-ProjectCloudflaredProcesses -CloudflaredPath $cf)
+if ($otherCloudflared.Count -gt $projectCloudflared.Count) {
+    Write-FlyWarn 'Co cloudflared khong thuoc project nay. Script khong tat chung.'
 }
 
-$arg = "-NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File `"$runner`" -CloudflaredPath `"$cf`" -LogPath `"$logFile`""
-Start-Process -FilePath 'powershell.exe' -ArgumentList $arg -WorkingDirectory $RepoRoot | Out-Null
-
-Write-FlyInfo 'Da mo cua so tunnel. Dang lay https://....trycloudflare.com'
-Write-Host ''
-
-$origin = $null
-$startedAt = Get-Date
-$deadline = $startedAt.AddSeconds($WaitSeconds)
-while ((Get-Date) -lt $deadline) {
-    $origin = Get-TunnelOriginFromText (Read-SharedText $logFile)
-    if ($origin) { break }
-    $alive = Get-Process -Name 'cloudflared' -ErrorAction SilentlyContinue
-    $elapsed = [int]((Get-Date) - $startedAt).TotalSeconds
-    if (-not $alive -and $elapsed -gt 8) {
-        Write-FlyWaitDone
-        Write-FlyErr 'cloudflared da tat truoc khi in URL.'
-        Write-FlyInfo 'Xem cua so tunnel (SmartScreen / mang bi chan).'
-        Write-FlyInfo 'Tai lai: docs/HUONG_DAN_CLOUDFLARE_TUNNEL.md phan A + E.'
-        exit 1
-    }
-    Write-FlyWait -Elapsed $elapsed -MaxSeconds $WaitSeconds
-    Start-Sleep -Seconds 1
-}
-Write-FlyWaitDone
+$origin = Resolve-ExistingProjectTunnel -CloudflaredPath $cf
+$runnerProc = $null
 
 if (-not $origin) {
-    Write-FlyErr 'Het gio, chua thay https://....trycloudflare.com'
-    Write-FlyInfo 'De cua so tunnel mo, doi them, hoac tat VPN roi chay lai.'
+    $arg = "-NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File `"$runner`" -CloudflaredPath `"$cf`" -LogPath `"$logFile`" -MaxAttempts $MaxTunnelAttempts"
+    $runnerProc = Start-Process -FilePath 'powershell.exe' -ArgumentList $arg -WorkingDirectory $RepoRoot -PassThru
+
+    Write-FlyInfo 'Da mo cua so tunnel. Dang lay https://....trycloudflare.com'
+    Write-FlyInfo ('Thu toi da {0} lan neu Cloudflare timeout (doi toi {1}s).' -f $MaxTunnelAttempts, $WaitSeconds)
+    Write-Host ''
+
+    $startedAt = Get-Date
+    $deadline = $startedAt.AddSeconds($WaitSeconds)
+    $sawTimeoutHint = $false
+    $sawCloudflared = $false
+    while ((Get-Date) -lt $deadline) {
+        $logText = Read-SharedText $logFile
+        $origin = Get-TunnelOriginFromText $logText
+        $state = Read-TunnelStateMap $logFile
+        if (-not $origin -and $state.url) {
+            $origin = Get-TunnelOriginFromText $state.url
+        }
+
+        $elapsed = [int]((Get-Date) - $startedAt).TotalSeconds
+        $runnerAlive = $false
+        if ($runnerProc) {
+            $runnerAlive = [bool](Get-Process -Id $runnerProc.Id -ErrorAction SilentlyContinue)
+        }
+        $cfAlive = @(Get-ProjectCloudflaredProcesses -CloudflaredPath $cf)
+        if ($cfAlive.Count -gt 0) { $sawCloudflared = $true }
+
+        if ($origin -and $cfAlive.Count -gt 0) { break }
+
+        if ((Test-QuickTunnelTimeoutText $logText) -and -not $sawTimeoutHint) {
+            $sawTimeoutHint = $true
+            Write-FlyWaitDone
+            Write-FlyWarn 'Quick tunnel Cloudflare loi. Dang thu lai (khong phai loi app)...'
+        }
+
+        if ($state.status -eq 'failed') {
+            $why = $state.detail
+            if (-not $why) { $why = 'timeout' }
+            Show-TunnelFailureHelp -LogText $logText -Reason $why
+            exit 1
+        }
+
+        if (-not $runnerAlive -and $elapsed -gt 8) {
+            $why = 'closed'
+            if (-not $sawCloudflared) { $why = 'never-started' }
+            elseif (Test-QuickTunnelTimeoutText $logText) { $why = 'timeout' }
+            Show-TunnelFailureHelp -LogText $logText -Reason $why
+            exit 1
+        }
+
+        Write-FlyWait -Elapsed $elapsed -MaxSeconds $WaitSeconds
+        Start-Sleep -Seconds 1
+    }
+    Write-FlyWaitDone
+
+    if (-not $origin) {
+        $logText = Read-SharedText $logFile
+        $why = 'timeout'
+        if (-not (Test-QuickTunnelTimeoutText $logText) -and -not $sawCloudflared) {
+            $why = 'never-started'
+        }
+        Show-TunnelFailureHelp -LogText $logText -Reason $why
+        exit 1
+    }
+
+    $cfAlive = @(Get-ProjectCloudflaredProcesses -CloudflaredPath $cf)
+    if ($cfAlive.Count -eq 0) {
+        Show-TunnelFailureHelp -LogText (Read-SharedText $logFile) -Reason 'closed'
+        exit 1
+    }
+}
+
+if (-not $origin -or $origin -notmatch ('^' + $UrlPattern + '$')) {
+    Show-TunnelFailureHelp -LogText (Read-SharedText $logFile) -Reason 'timeout'
+    exit 1
+}
+
+$stillUp = @(Get-ProjectCloudflaredProcesses -CloudflaredPath $cf)
+if ($stillUp.Count -eq 0) {
+    Show-TunnelFailureHelp -LogText (Read-SharedText $logFile) -Reason 'closed'
     exit 1
 }
 
@@ -347,6 +673,7 @@ $returnUrl = $origin + '/api/payments/gateway/return'
 $telegramWebhook = $origin + '/api/telegram/webhook'
 $envPath = Join-Path $RepoRoot 'server\.env'
 
+# Chi ghi .env khi tunnel con song va URL hop le. Fail o tren khong dung ham nay.
 Update-DotEnvKey -Path $envPath -Key 'PAYMENT_IPN_URL' -Value $ipnUrl
 Update-DotEnvKey -Path $envPath -Key 'PAYMENT_RETURN_URL' -Value $returnUrl
 Update-DotEnvKey -Path $envPath -Key 'TELEGRAM_WEBHOOK_URL' -Value $telegramWebhook

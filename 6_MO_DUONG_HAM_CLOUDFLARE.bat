@@ -45,9 +45,12 @@ if errorlevel 1 (
 
 echo API da san sang.
 echo.
-echo Dang tao link. Doi 5-15 giay, tim dong https://....trycloudflare.com
+echo Dang tao link. Doi 5-30 giay, tim dong https://....trycloudflare.com
 echo Copy NGUYEN dong https do gui nhom.
 echo Thanh vien dan vao o "May chu nhom" roi bam Kiem tra.
+echo.
+echo Neu "failed to request quick Tunnel" / timeout: doi 1-2 phut roi chay lai file nay.
+echo Test ZaloPay (ghi .env + retry): 7_CHAY_APP_VA_TUNNEL_MOMO.bat / npm run start:zalopay
 echo.
 echo Tat cua so nay thi link doi. Phai mo lai va gui link moi.
 echo ==============================================
