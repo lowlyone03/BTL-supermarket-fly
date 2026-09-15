@@ -6,6 +6,8 @@ const { validMonth, VALID_METHODS, dateKey, voucherMaPhieu } = require('../servi
 const { voucherSelect } = require('./payrollController');
 const { vietnamCalendar } = require('../services/reportingPeriod');
 const { loadFund, snapshotFund, listPayouts } = require('../services/payrollFund');
+const { WORKFLOW_EVENTS } = require('../services/notifyCatalog');
+const { publishAfterCommit } = require('../services/notifyService');
 
 const clean = (value, max = 120, fallback = null) => String(value ?? '').trim().slice(0, max) || fallback;
 
@@ -73,6 +75,9 @@ const createVouchers = async (req, res) => {
             created.push({ MaPhieu: maPhieu, MaNV: maNV, TenNV: row.TenNV, SoTien: soTien, PhuongThuc: method });
         }
         await transaction.commit();
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.PAYROLL_VOUCHER_SUBMITTED, {
+            entityId: month, actor: req.user
+        });
         res.status(201).json({
             message: `Đã lập ${created.length} Phiếu chi lương kỳ ${month} và gửi Quản lý duyệt. Bảng lương chưa chuyển Đã thanh toán.`,
             items: created
@@ -260,6 +265,12 @@ const payVoucher = async (req, res) => {
             soTien: amount, phuongThuc: voucher.PhuongThuc, ngay: today
         });
         await transaction.commit();
+        await publishAfterCommit(pool,
+            success ? WORKFLOW_EVENTS.PAYROLL_PAID : WORKFLOW_EVENTS.PAYROLL_FAILED, {
+                entityId: maPhieu,
+                actor: req.user,
+                recipientUsers: success ? [voucher.MaNV] : [voucher.MaNV_Lap].filter(Boolean)
+            });
         res.json({
             message: success
                 ? `Đã chi lương thành công cho ${voucher.TenNV} từ quỹ chung. Quỹ còn: TM ${matCon}, CK ${ckCon}.`
@@ -360,6 +371,9 @@ const decideVoucher = approved => async (req, res) => {
         });
         await transaction.commit();
         notifyInboxChanged({ action: 'Từ chối Phiếu chi lương', table: 'PhieuChiLuong', recordId: maPhieu });
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.PAYROLL_VOUCHER_REJECTED, {
+            entityId: maPhieu, actor: req.user, recipientUsers: [voucher.MaNV_Lap].filter(Boolean)
+        });
         res.json({ message: `Đã từ chối Phiếu chi lương ${maPhieu}.`, MaPhieu: maPhieu, TrangThai: 'Từ chối' });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
@@ -461,6 +475,9 @@ const handOverFund = async (req, res) => {
         });
         await transaction.commit();
         notifyInboxChanged({ action: 'Giao quỹ lương chung', table: 'QuyLuongKy', recordId: month });
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.PAYROLL_FUND_HANDED, {
+            entityId: month, actor: req.user
+        });
         res.json({
             message: `Đã giao quỹ chung kỳ ${month}. Tiền mặt ${tmTopUp ? `+${tmTopUp}` : 'không thêm'}; chuyển khoản ${ckTopUp ? `+${ckTopUp}` : 'không thêm'}. Kế toán chi từng người từ quỹ còn lại.`,
             MaKy: month,

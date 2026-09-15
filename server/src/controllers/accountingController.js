@@ -2,6 +2,8 @@ const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
 const { roundMoney, evaluateThreeWayMatch } = require('../services/financialRules');
 const { postPurchaseMatch } = require('../services/accountingHooks');
+const { WORKFLOW_EVENTS } = require('../services/notifyCatalog');
+const { publishAfterCommit } = require('../services/notifyService');
 
 const clean = (value, max, fallback = null) => String(value ?? '').trim().slice(0, max) || fallback;
 
@@ -337,8 +339,22 @@ const reconcileInvoice = async (req, res) => {
             await postPurchaseMatch(transaction, { maHDMH: MaHDMH, maNV: req.user.MaNV, user: req.user, matched: true });
         }
         await transaction.commit();
+        const poCreator = invoice.MaPO
+            ? await new sql.Request(await poolPromise).input('MaPO', sql.VarChar, invoice.MaPO)
+                .query('SELECT MaNV_Lap FROM DonMuaHang WHERE MaPO=@MaPO')
+                .then(result => result.recordset[0]?.MaNV_Lap)
+                .catch(() => null)
+            : null;
+        await publishAfterCommit(await poolPromise,
+            matched ? WORKFLOW_EVENTS.INVOICE_MATCHED : WORKFLOW_EVENTS.INVOICE_MISMATCHED, {
+                entityId: MaHDMH,
+                actor: req.user,
+                recipientUsers: matched ? [poCreator].filter(Boolean) : []
+            });
         res.json({
-            message: matched ? 'Đối chiếu thành công. Công nợ phải trả đã được ghi nhận.' : 'Hồ sơ còn chênh lệch, chưa phát sinh công nợ.',
+            message: matched
+                ? `Đối chiếu ${MaHDMH} thành công. Công nợ phải trả đã được ghi nhận.`
+                : `Hóa đơn ${MaHDMH} còn chênh lệch, chưa phát sinh công nợ.`,
             MaHDMH, MaCNPTra, TrangThaiDoiChieu: matched ? 'Đã khớp' : 'Chênh lệch',
             differences, differenceDetails: matchResult.differences, totals: matchResult.totals
         });

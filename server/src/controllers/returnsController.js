@@ -1,5 +1,7 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
+const { WORKFLOW_EVENTS } = require('../services/notifyCatalog');
+const { publishAfterCommit } = require('../services/notifyService');
 const {
     isRestockAccepted, looksUnsellable, roundMoney,
     originalInvoicePayMethod,
@@ -50,8 +52,10 @@ const generateId = async (transaction, table, column, prefix) => {
     return `${prefix}${String(last ? Number(last.slice(prefix.length)) + 1 : 1).padStart(4, '0')}`;
 };
 
-const writeAudit = (request, user, action, recordId, content) =>
-    logAudit(request, { user, action, table: 'PhieuDoiTra', recordId, content, uc: 'UC26', severity: 'Quan trọng' });
+const writeAudit = (request, user, action, recordId, content, options = {}) =>
+    logAudit(request, {
+        user, action, table: 'PhieuDoiTra', recordId, content, uc: 'UC26', severity: 'Quan trọng', ...options
+    });
 
 const loadDetail = async (pool, maDT) => {
     const headerSql = (withXuLy) => `
@@ -501,8 +505,12 @@ const submitReturn = async (req, res) => {
         if (!result.recordset[0].affected) {
             return res.status(400).json({ message: 'Chỉ phiếu nháp bạn đang phụ trách mới gửi Thủ kho. Phiếu sót từ ca trước cần bấm Tiếp nhận trước.' });
         }
-        await writeAudit(pool.request(), req.user, 'Gửi hàng đổi trả cho Thủ kho', req.params.id, 'Chờ kiểm tra tình trạng hàng');
-        res.json({ message: 'Đã gửi hàng cho Thủ kho kiểm tra.' });
+        await writeAudit(pool.request(), req.user, 'Gửi hàng đổi trả cho Thủ kho', req.params.id,
+            'Chờ kiểm tra tình trạng hàng', { deferSideEffects: true });
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.RETURN_SUBMITTED, {
+            entityId: maDT, actor: req.user
+        });
+        res.json({ message: `Đã gửi Phiếu đổi trả ${maDT} tới Thủ kho kiểm tra tình trạng hàng.` });
     } catch (error) {
         res.status(400).json({ message: error.message });
     }
@@ -541,10 +549,14 @@ const inspectReturn = async (req, res) => {
                SELECT @@ROWCOUNT affected;`);
         if (!result.recordset[0].affected) return res.status(400).json({ message: revising ? 'Không sửa được kết quả kiểm tra.' : 'Phiếu không còn ở trạng thái chờ kiểm tra.' });
         await writeAudit(pool.request(), req.user, revising ? 'Sửa kết quả kiểm đổi trả' : 'Kiểm tra hàng đổi trả', maDT,
-            revising ? `Trước: ${ticket.KetQuaKiemTra || '—'}. Sau: ${ketQua}` : ketQua);
+            revising ? `Trước: ${ticket.KetQuaKiemTra || '—'}. Sau: ${ketQua}` : ketQua,
+            { deferSideEffects: true });
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.RETURN_INSPECTED, {
+            entityId: maDT, actor: req.user
+        });
         let message = revising
-            ? 'Đã sửa kết quả kiểm tra. Quản lý sẽ thấy kết quả mới khi duyệt.'
-            : 'Đã ghi kết quả kiểm tra và chuyển Quản lý phê duyệt.';
+            ? `Đã sửa kết quả kiểm tra Phiếu đổi trả ${maDT}. Quản lý sẽ thấy kết quả mới khi duyệt.`
+            : `Đã kiểm tra Phiếu đổi trả ${maDT} và chuyển tới Quản lý phê duyệt.`;
         if (restock && looksUnsellable(ticket.LyDo)) {
             message += ' Lưu ý: lý do thu ngân là hàng hỏng/hết hạn nhưng Thủ kho chọn nhập lại kho bán.';
         } else if (!restock) {
@@ -718,11 +730,20 @@ const decideReturn = (approved) => async (req, res) => {
             .input('LyDo', sql.NVarChar, reason || null).query(`
                 UPDATE PhieuDoiTra SET TrangThai=@TrangThai, MaNV_Duyet=@MaNV, NgayDuyet=GETDATE(),
                     GhiChu=COALESCE(@LyDo, GhiChu)
-                WHERE MaDT=@MaDT AND TrangThai=N'Chờ duyệt';
-                SELECT @@ROWCOUNT affected;`);
-        if (!result.recordset[0].affected) return res.status(400).json({ message: 'Phiếu không còn chờ phê duyệt.' });
-        await writeAudit(pool.request(), req.user, approved ? 'Phê duyệt đổi trả' : 'Từ chối đổi trả', req.params.id, reason || 'Đồng ý theo kết quả kiểm tra của Thủ kho');
-        res.json({ message: approved ? 'Đã phê duyệt phiếu đổi trả.' : 'Đã từ chối phiếu đổi trả.' });
+                OUTPUT inserted.MaNV_Lap,inserted.MaNV_XuLy
+                WHERE MaDT=@MaDT AND TrangThai=N'Chờ duyệt'`);
+        if (!result.recordset.length) return res.status(400).json({ message: 'Phiếu không còn chờ phê duyệt.' });
+        await writeAudit(pool.request(), req.user, approved ? 'Phê duyệt đổi trả' : 'Từ chối đổi trả',
+            req.params.id, reason || 'Đồng ý theo kết quả kiểm tra của Thủ kho', { deferSideEffects: true });
+        const owner = result.recordset[0].MaNV_XuLy || result.recordset[0].MaNV_Lap;
+        await publishAfterCommit(pool, approved ? WORKFLOW_EVENTS.RETURN_APPROVED : WORKFLOW_EVENTS.RETURN_REJECTED, {
+            entityId: req.params.id, actor: req.user, recipientUsers: [owner]
+        });
+        res.json({
+            message: approved
+                ? `Đã phê duyệt Phiếu đổi trả ${req.params.id}. Phiếu được chuyển tới Thu ngân phụ trách để hoàn tất với khách.`
+                : `Đã từ chối Phiếu đổi trả ${req.params.id}. Thu ngân phụ trách đã được báo kiểm tra phản hồi.`
+        });
     } catch (error) {
         res.status(400).json({ message: error.message });
     }
@@ -1031,6 +1052,9 @@ const completeReturn = async (req, res) => {
                 `${historyNote}. Đổi ngang — không hoàn tiền.`);
             await postReturnJournals(transaction, { maDT, maNV: req.user.MaNV, user: req.user });
             await transaction.commit();
+            await publishAfterCommit(await poolPromise, WORKFLOW_EVENTS.RETURN_COMPLETED, {
+                entityId: maDT, actor: req.user, recipientUsers: [ticket.MaNV_Lap].filter(Boolean)
+            });
             return res.json({
                 message: `Đã hoàn tất ${maDT}. Đổi ngang giá, không sinh hoàn tiền.`,
                 MaDT: maDT, MaCaHoan: maCaHoan, TrangThai: 'Hoàn thành', completed: true
@@ -1056,6 +1080,15 @@ const completeReturn = async (req, res) => {
         } catch (journalError) {
             if (journalTxn._aborted !== true) await journalTxn.rollback().catch(() => {});
             console.error(journalError);
+        }
+        if (settled.waitingCash) {
+            await publishAfterCommit(await poolPromise, WORKFLOW_EVENTS.RETURN_REFUND_WAITING, {
+                entityId: maDT, actor: req.user, recipientUsers: [req.user.MaNV, ticket.MaNV_Lap].filter(Boolean)
+            });
+        } else if (settled.completed) {
+            await publishAfterCommit(await poolPromise, WORKFLOW_EVENTS.RETURN_COMPLETED, {
+                entityId: maDT, actor: req.user, recipientUsers: [ticket.MaNV_Lap].filter(Boolean)
+            });
         }
         return res.json({
             MaDT: maDT,

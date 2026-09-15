@@ -23,6 +23,12 @@
     if (!response.ok) throw new Error(data.message || 'Không thể xử lý yêu cầu.');
     return data;
   };
+  const afterAccountingMutation = async (context, { close, onDone, message, toastType = 'success' } = {}) => {
+    try { if (message) context.showToast(message, toastType); } catch { /* toast must not block close/reload */ }
+    try { close?.(); } catch { /* still reload the list */ }
+    try { await onDone?.(); } catch (error) { context.showToast?.(error.message, 'error'); }
+    try { await context.refreshInbox?.(); } catch { /* việc mới is best-effort */ }
+  };
   const phrase = (text) => window.FLY_I18N?.phrase?.(text) || text;
   const heading = (kicker, title, subtitle, action = '') => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(phrase(kicker))}</p><h1>${esc(phrase(title))}</h1><p>${esc(phrase(subtitle))}</p></div>${action}</header>`;
   const printOrder = data => {
@@ -238,7 +244,19 @@
     } catch (error) { context.showToast(error.message, 'error'); }
   };
 
-  const shipmentModal = (context, order, onDone) => {
+  const defaultExpectedPackages = (order, lines) => {
+    const fromLines = Array.isArray(lines);
+    const remaining = fromLines
+      ? lines.reduce((sum, line) => {
+          const qty = Number(line?.SLConThieu);
+          return sum + (Number.isFinite(qty) ? qty : 0);
+        }, 0)
+      : Number(order?.TongConThieu);
+    if (!Number.isFinite(remaining) || remaining <= 0) return '';
+    return String(Math.trunc(remaining));
+  };
+
+  const shipmentModal = (context, order, onDone, lines) => {
     const now = new Date();
     const expected = new Date(now.getTime() + 4 * 60 * 60 * 1000);
     const localValue = value => {
@@ -247,14 +265,56 @@
     };
     const overlay = document.createElement('div');
     overlay.className = 'warehouse-modal-backdrop';
-    const missing = Number(order.TongConThieu);
-    const packagePrefill = Number.isFinite(missing) && missing > 0 ? String(missing) : '';
-    overlay.innerHTML = `<div class="warehouse-modal shipment-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">THEO DÕI NHÀ CUNG CẤP</p><h2>Ghi nhận chuyến giao hàng</h2><p>${esc(order.MaPO)} · ${esc(order.TenNCC)}</p></div><button class="warehouse-icon-button close" aria-label="Đóng">×</button></div><div class="warehouse-modal-body"><div class="shipment-rule"><svg><use href="#i-truck"></use></svg><div><strong>Ghi nhận theo thông báo của Nhà cung cấp</strong><span>Bước này chuyển hàng sang trạng thái đang vận chuyển. Hàng chưa được tính vào tồn kho cho tới khi Thủ kho kiểm nhận và xác nhận nhập. Số kiện gợi ý theo tổng SL còn thiếu trên đơn — có thể sửa hoặc xóa.</span></div></div><div class="warehouse-form-grid"><div class="warehouse-field"><label>Số phiếu giao / vận đơn *</label><input id="shipmentDocument" maxlength="50" placeholder="Ví dụ: PGH-240826-01"></div><div class="warehouse-field"><label>Số kiện dự kiến</label><input id="shipmentPackages" type="number" min="1" step="1" placeholder="Ví dụ: 42" value="${esc(packagePrefill)}"></div><div class="warehouse-field"><label>Thời gian xuất phát *</label>${window.FLY_VI_DATE.datetimeField('shipmentDeparture', localValue(now))}</div><div class="warehouse-field"><label>Dự kiến đến kho *</label>${window.FLY_VI_DATE.datetimeField('shipmentArrival', localValue(expected))}</div><div class="warehouse-field"><label>Biển số xe</label><input id="shipmentPlate" maxlength="20" placeholder="Ví dụ: 29H-123.45"></div><div class="warehouse-field"><label>Tài xế</label><input id="shipmentDriver" maxlength="100" placeholder="Họ tên người giao"></div><div class="warehouse-field"><label>Số điện thoại tài xế</label><input id="shipmentPhone" inputmode="tel" maxlength="16" placeholder="Số liên hệ khi xe đến"></div><div class="warehouse-field"><label>Ghi chú vận chuyển</label><input id="shipmentNote" maxlength="500" placeholder="Niêm phong, bảo quản lạnh..."></div></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-primary save-shipment"><svg><use href="#i-truck"></use></svg>Ghi nhận đang giao</button></div></div>`;
+    const packagePrefill = defaultExpectedPackages(order, lines);
+    const reqMark = '<span class="shipment-req" aria-hidden="true">*</span>';
+    const optMark = '<span class="shipment-opt">không bắt buộc</span>';
+    overlay.innerHTML = `<div class="warehouse-modal shipment-modal" role="dialog" aria-modal="true" aria-labelledby="shipmentModalTitle"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">THEO DÕI NHÀ CUNG CẤP</p><h2 id="shipmentModalTitle">Ghi nhận chuyến giao hàng</h2><p class="shipment-modal-context">${esc(order.MaPO)} · ${esc(order.TenNCC)}</p></div><button type="button" class="warehouse-icon-button close" aria-label="Đóng">×</button></div><div class="warehouse-modal-body"><div class="shipment-rule"><svg aria-hidden="true"><use href="#i-truck"></use></svg><div><strong>Ghi nhận theo thông báo của Nhà cung cấp</strong><span>Bước này chuyển hàng sang trạng thái đang vận chuyển. Hàng chưa được tính vào tồn kho cho tới khi Thủ kho kiểm nhận và xác nhận nhập. Số kiện dự kiến gợi ý theo SL còn thiếu của đúng đơn đang mở (${esc(order.MaPO)}) — không lấy từ chuyến giao khác. Có thể sửa hoặc để trống.</span></div></div><section class="shipment-section"><h3>Vận đơn</h3><div class="shipment-grid"><div class="warehouse-field"><label for="shipmentDocument">Số phiếu giao / vận đơn ${reqMark}</label><input id="shipmentDocument" maxlength="50" placeholder="Ví dụ: PGH-240826-01" autocomplete="off"><small class="warehouse-field-error" id="shipmentDocument_err"></small></div><div class="warehouse-field"><label for="shipmentPackages">Số kiện dự kiến của ${esc(order.MaPO)} ${optMark}</label><input id="shipmentPackages" name="soKien-${esc(order.MaPO)}" type="number" min="1" step="1" inputmode="numeric" autocomplete="off" data-lpignore="true" placeholder="${packagePrefill ? `Gợi ý ${esc(packagePrefill)} theo SL còn thiếu` : 'Để trống nếu chưa rõ'}" value="${esc(packagePrefill)}"><small class="warehouse-field-hint" id="shipmentPackagesHint">${packagePrefill ? `Gợi ý theo SL còn thiếu trên đơn ${esc(order.MaPO)}: ${esc(packagePrefill)} (không dùng số kiện chuyến trước). Có thể sửa.` : `Đơn ${esc(order.MaPO)} không còn số lượng thiếu — để trống, không tự điền số kiện.`}</small><small class="warehouse-field-error" id="shipmentPackages_err"></small></div></div></section><section class="shipment-section"><h3>Lịch trình</h3><div class="shipment-grid shipment-schedule-grid"><div class="warehouse-field shipment-datetime-field"><label>Thời gian xuất phát ${reqMark}</label><p class="shipment-datetime-caption"><span>Ngày · tháng · năm</span><span>Giờ · phút</span></p>${window.FLY_VI_DATE.datetimeField('shipmentDeparture', localValue(now))}<small class="warehouse-field-error" id="shipmentDeparture_err"></small></div><div class="warehouse-field shipment-datetime-field"><label>Dự kiến đến kho ${reqMark}</label><p class="shipment-datetime-caption"><span>Ngày · tháng · năm</span><span>Giờ · phút</span></p>${window.FLY_VI_DATE.datetimeField('shipmentArrival', localValue(expected))}<small class="warehouse-field-error" id="shipmentArrival_err"></small></div></div></section><section class="shipment-section"><h3>Phương tiện &amp; liên hệ</h3><div class="shipment-grid"><div class="warehouse-field"><label for="shipmentPlate">Biển số xe ${optMark}</label><input id="shipmentPlate" maxlength="20" placeholder="Ví dụ: 29H-123.45" autocomplete="off"><small class="warehouse-field-error" id="shipmentPlate_err"></small></div><div class="warehouse-field"><label for="shipmentDriver">Tài xế ${optMark}</label><input id="shipmentDriver" maxlength="100" placeholder="Họ tên người giao"><small class="warehouse-field-error" id="shipmentDriver_err"></small></div><div class="warehouse-field"><label for="shipmentPhone">Số điện thoại tài xế ${optMark}</label><input id="shipmentPhone" inputmode="tel" maxlength="16" placeholder="Số liên hệ khi xe đến" autocomplete="tel"><small class="warehouse-field-error" id="shipmentPhone_err"></small></div></div></section><section class="shipment-section"><h3>Ghi chú</h3><div class="shipment-grid shipment-note-grid"><div class="warehouse-field shipment-note-field"><label for="shipmentNote">Ghi chú vận chuyển ${optMark}</label><textarea id="shipmentNote" maxlength="500" rows="3" placeholder="Niêm phong, bảo quản lạnh..."></textarea><small class="warehouse-field-error" id="shipmentNote_err"></small></div></div></section></div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Hủy</button><button type="button" class="warehouse-primary save-shipment"><svg aria-hidden="true"><use href="#i-truck"></use></svg>Ghi nhận đang giao</button></div></div>`;
     document.body.appendChild(overlay);
-    const close = () => overlay.remove();
+    const packagesInput = overlay.querySelector('#shipmentPackages');
+    if (packagesInput) {
+      packagesInput.autocomplete = 'off';
+      packagesInput.value = packagePrefill;
+      packagesInput.defaultValue = packagePrefill;
+    }
+    window.FLY_VI_DATE?.mount?.(overlay);
+    const previous = document.activeElement;
+    const close = () => {
+      overlay.remove();
+      if (previous && typeof previous.focus === 'function') {
+        try { previous.focus(); } catch { /* ignore */ }
+      }
+    };
     overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
     overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+    overlay.addEventListener('keydown', event => {
+      if (event.key !== 'Escape' || event.repeat) return;
+      if (overlay.querySelector('.fly-vi-year-trigger[aria-expanded="true"]')) return;
+      event.preventDefault();
+      close();
+    });
+    const markField = (id, result) => {
+      const ok = !result || result.ok !== false;
+      const fields = window.FLY_FIELDS;
+      if (fields?.setFieldError) fields.setFieldError(id, ok, result?.message);
+      else {
+        const input = overlay.querySelector(`#${id}`);
+        const err = overlay.querySelector(`#${id}_err`);
+        input?.classList.toggle('input-error', !ok);
+        if (err) err.textContent = ok ? '' : (result?.message || '');
+      }
+      overlay.querySelector(`#${id}`)?.closest('.fly-vi-datetime')?.classList.toggle('is-invalid', !ok);
+      return ok;
+    };
+    const focusFirstInvalid = () => {
+      const invalid = overlay.querySelector('.input-error, .fly-vi-datetime.is-invalid');
+      if (!invalid) return;
+      invalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const focusable = invalid.matches('input, textarea, select, button') ? invalid : invalid.querySelector('select, button, input');
+      focusable?.focus();
+    };
+    let submitting = false;
     overlay.querySelector('.save-shipment').addEventListener('click', async () => {
+      if (submitting) return;
       const button = overlay.querySelector('.save-shipment');
       const body = {
         SoPhieuGiao: overlay.querySelector('#shipmentDocument').value,
@@ -268,30 +328,51 @@
       };
       const fields = window.FLY_FIELDS;
       if (fields) {
-        const invalid = fields.firstError(
-          fields.validateShipmentDocument(body.SoPhieuGiao),
-          fields.validateShipmentTimes(body.NgayXuatPhat, body.NgayGioDuKienDen),
-          fields.validateOptionalPackages(body.SoKien),
-          fields.validateOptionalVnPlate(body.BienSoXe),
-          fields.validateOptionalName(body.TenTaiXe, 'Tên tài xế'),
-          fields.validateOptionalVnPhone(body.SDTTaiXe),
-          fields.validateOptionalNote(body.GhiChu, 500)
-        );
-        if (invalid) return context.showToast(invalid.message, 'error');
-        body.SoPhieuGiao = fields.validateShipmentDocument(body.SoPhieuGiao).value;
-        body.SoKien = fields.validateOptionalPackages(body.SoKien).value;
-        body.BienSoXe = fields.validateOptionalVnPlate(body.BienSoXe).value;
-        body.TenTaiXe = fields.validateOptionalName(body.TenTaiXe, 'Tên tài xế').value;
-        body.SDTTaiXe = fields.validateOptionalVnPhone(body.SDTTaiXe).value;
-        body.GhiChu = fields.validateOptionalNote(body.GhiChu, 500).value;
+        const doc = fields.validateShipmentDocument(body.SoPhieuGiao);
+        const times = fields.validateShipmentTimes(body.NgayXuatPhat, body.NgayGioDuKienDen);
+        const packages = fields.validateOptionalPackages(body.SoKien);
+        const plate = fields.validateOptionalVnPlate(body.BienSoXe);
+        const driver = fields.validateOptionalName(body.TenTaiXe, 'Tên tài xế');
+        const phone = fields.validateOptionalVnPhone(body.SDTTaiXe);
+        const note = fields.validateOptionalNote(body.GhiChu, 500);
+        const checks = [
+          markField('shipmentDocument', doc),
+          markField('shipmentPackages', packages),
+          markField('shipmentDeparture', times),
+          markField('shipmentArrival', times),
+          markField('shipmentPlate', plate),
+          markField('shipmentDriver', driver),
+          markField('shipmentPhone', phone),
+          markField('shipmentNote', note)
+        ];
+        if (checks.some(ok => !ok)) {
+          focusFirstInvalid();
+          return context.showToast(fields.firstError(doc, times, packages, plate, driver, phone, note)?.message || 'Vui lòng kiểm tra lại thông tin chuyến giao.', 'error');
+        }
+        body.SoPhieuGiao = doc.value;
+        body.SoKien = packages.value;
+        body.BienSoXe = plate.value;
+        body.TenTaiXe = driver.value;
+        body.SDTTaiXe = phone.value;
+        body.GhiChu = note.value;
       } else if (!body.SoPhieuGiao.trim() || !body.NgayXuatPhat || !body.NgayGioDuKienDen) {
         return context.showToast('Vui lòng nhập số phiếu giao và đủ thời gian vận chuyển.', 'error');
       }
+      submitting = true;
+      const idleHtml = button.innerHTML;
       button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      button.innerHTML = '<svg aria-hidden="true"><use href="#i-truck"></use></svg>Đang ghi nhận...';
       try {
         const result = await api(context, `/purchasing/purchase-orders/${order.MaPO}/shipments`, { method: 'POST', body: JSON.stringify(body) });
         context.showToast(result.message, 'success'); close(); await onDone();
-      } catch (error) { button.disabled = false; context.showToast(error.message, 'error'); }
+      } catch (error) {
+        submitting = false;
+        button.disabled = false;
+        button.removeAttribute('aria-busy');
+        button.innerHTML = idleHtml;
+        context.showToast(error.message, 'error');
+      }
     });
     overlay.querySelector('#shipmentDocument').focus();
   };
@@ -315,7 +396,7 @@
     };
     root.innerHTML = `${heading('MUA HÀNG / ĐƠN MUA', 'Đơn mua hàng', 'Lập Đơn mua từ Phiếu đề nghị, gửi Quản lý phê duyệt và theo dõi Nhà cung cấp.', '<button class="warehouse-primary" id="newOrder"><svg><use href="#i-plus"/></svg>Lập Đơn mua</button>')}<article class="warehouse-table-card purchase-order-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"/></svg><input id="orderSearch" placeholder="Tìm mã đơn, Phiếu đề nghị hoặc Nhà cung cấp..." value="${esc(window.FLY_SEARCH?.takePendingQuery?.('purchasing-orders') || '')}"></label><div class="warehouse-toolbar-actions"><select id="orderStatus"><option value="">Tất cả trạng thái</option><option>Nháp</option><option>Chờ duyệt</option><option>Đã duyệt</option><option>Yêu cầu chỉnh sửa</option><option>Từ chối</option><option>Đã gửi Nhà cung cấp</option><option>Nhà cung cấp xác nhận</option><option>Đang giao</option><option>Giao một phần</option><option>Hoàn thành</option></select><button class="warehouse-icon-button" id="refreshOrders" title="Làm mới danh sách"><svg><use href="#i-refresh"/></svg></button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table purchase-order-table"><colgroup><col style="width:15%"><col style="width:22%"><col style="width:10%"><col style="width:13%"><col style="width:16%"><col style="width:24%"></colgroup><thead><tr><th>ĐƠN MUA</th><th>NHÀ CUNG CẤP</th><th>NGÀY GIAO</th><th>GIÁ TRỊ</th><th>TRẠNG THÁI</th><th>THAO TÁC</th></tr></thead><tbody id="orderBody"></tbody></table></div></article>`;
     let timer; root.querySelector('#orderSearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250); }); root.querySelector('#orderStatus').addEventListener('change', load); root.querySelector('#refreshOrders').addEventListener('click', load); root.querySelector('#newOrder').addEventListener('click', () => createOrderModal(context, load));
-    root.addEventListener('click', async event => { const view = event.target.closest('[data-view-order]'); if (view) return orderDetailModal(context, view.dataset.viewOrder, false, load); const edit = event.target.closest('[data-edit-order]'); if (edit) return editOrderModal(context, edit.dataset.editOrder, load); const shipment = event.target.closest('[data-record-shipment]'); if (shipment) { try { const item = (await api(context, `/purchasing/purchase-orders/${shipment.dataset.recordShipment}`)).order; return shipmentModal(context, item, load); } catch (error) { context.showToast(error.message, 'error'); return; } } const submit = event.target.closest('[data-submit-order]'); if (submit) { try { const data = await api(context, `/purchasing/purchase-orders/${submit.dataset.submitOrder}/submit`, { method: 'POST' }); context.showToast(data.message, 'success'); await load(); } catch (error) { context.showToast(error.message, 'error'); } return; } const send = event.target.closest('[data-send-supplier]'); if (send) { try { const data = await api(context, `/purchasing/purchase-orders/${send.dataset.sendSupplier}/send-supplier`, { method: 'POST' }); context.showToast(data.message, 'success'); await load(); } catch (error) { context.showToast(error.message, 'error'); } return; } const confirm = event.target.closest('[data-confirm-supplier]'); if (confirm) { try { const data = await api(context, `/purchasing/purchase-orders/${confirm.dataset.confirmSupplier}/supplier-confirm`, { method: 'POST' }); context.showToast(data.message, 'success'); await load(); } catch (error) { context.showToast(error.message, 'error'); } } });
+    root.addEventListener('click', async event => { const view = event.target.closest('[data-view-order]'); if (view) return orderDetailModal(context, view.dataset.viewOrder, false, load); const edit = event.target.closest('[data-edit-order]'); if (edit) return editOrderModal(context, edit.dataset.editOrder, load); const shipment = event.target.closest('[data-record-shipment]'); if (shipment) { try { const data = await api(context, `/purchasing/purchase-orders/${shipment.dataset.recordShipment}`); return shipmentModal(context, data.order, load, data.lines); } catch (error) { context.showToast(error.message, 'error'); return; } } const submit = event.target.closest('[data-submit-order]'); if (submit) { try { const data = await api(context, `/purchasing/purchase-orders/${submit.dataset.submitOrder}/submit`, { method: 'POST' }); context.showToast(data.message, 'success'); await load(); } catch (error) { context.showToast(error.message, 'error'); } return; } const send = event.target.closest('[data-send-supplier]'); if (send) { try { const data = await api(context, `/purchasing/purchase-orders/${send.dataset.sendSupplier}/send-supplier`, { method: 'POST' }); context.showToast(data.message, 'success'); await load(); } catch (error) { context.showToast(error.message, 'error'); } return; } const confirm = event.target.closest('[data-confirm-supplier]'); if (confirm) { try { const data = await api(context, `/purchasing/purchase-orders/${confirm.dataset.confirmSupplier}/supplier-confirm`, { method: 'POST' }); context.showToast(data.message, 'success'); await load(); } catch (error) { context.showToast(error.message, 'error'); } } });
     await load(); if (sessionStorage.getItem('fly_order_source_request')) createOrderModal(context, load);
   };
 
@@ -420,22 +501,30 @@
         const HinhThucCapQuy = overlay.querySelector('#fundMethod').value;
         const GhiChuCapQuy = overlay.querySelector('#fundNote').value.trim();
         if (!window.confirm(`Xác nhận đã giao ${money(voucher.SoTienPhieuChi)} cho Kế toán theo hình thức ${HinhThucCapQuy}? Công nợ chưa giảm cho đến khi Kế toán thanh toán NCC thành công.`)) return;
-        event.currentTarget.disabled = true;
+        const button = event.currentTarget;
+        button.disabled = true;
         try {
           const result = await api(context, `/admin/approvals/payment-vouchers/${id}/approve`, { method: 'POST', body: JSON.stringify({ HinhThucCapQuy, GhiChuCapQuy }) });
-          context.showToast(result.message, 'success'); close(); await onDone();
-        } catch (error) { context.showToast(error.message, 'error'); event.currentTarget.disabled = false; }
+          await afterAccountingMutation(context, { close, onDone, message: result.message });
+        } catch (error) {
+          context.showToast(error.message, 'error');
+          if (button.isConnected) button.disabled = false;
+        }
       });
       overlay.querySelector('.reject-payment-voucher').addEventListener('click', async event => {
         const reasonField = overlay.querySelector('.reject-reason-field');
         reasonField.hidden = false;
         const reason = overlay.querySelector('#rejectFundReason').value.trim();
         if (!reason) return context.showToast('Nhập lý do từ chối Phiếu chi.', 'error');
-        event.currentTarget.disabled = true;
+        const button = event.currentTarget;
+        button.disabled = true;
         try {
           const result = await api(context, `/admin/approvals/payment-vouchers/${id}/reject`, { method: 'POST', body: JSON.stringify({ LyDo: reason }) });
-          context.showToast(result.message, 'success'); close(); await onDone();
-        } catch (error) { context.showToast(error.message, 'error'); event.currentTarget.disabled = false; }
+          await afterAccountingMutation(context, { close, onDone, message: result.message });
+        } catch (error) {
+          context.showToast(error.message, 'error');
+          if (button.isConnected) button.disabled = false;
+        }
       });
     } catch (error) { context.showToast(error.message, 'error'); }
   };
@@ -452,21 +541,29 @@
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
       overlay.querySelector('.approve-payroll-voucher').addEventListener('click', async event => {
         if (!window.confirm(`Duyệt phiếu ${voucher.MaPhieu} cho ${voucher.TenNV}? Chưa giao quỹ.`)) return;
-        event.currentTarget.disabled = true;
+        const button = event.currentTarget;
+        button.disabled = true;
         try {
           const result = await api(context, `/admin/approvals/payroll-vouchers/${id}/approve`, { method: 'POST', body: JSON.stringify({}) });
-          context.showToast(result.message, 'success'); close(); await onDone();
-        } catch (error) { context.showToast(error.message, 'error'); event.currentTarget.disabled = false; }
+          await afterAccountingMutation(context, { close, onDone, message: result.message });
+        } catch (error) {
+          context.showToast(error.message, 'error');
+          if (button.isConnected) button.disabled = false;
+        }
       });
       overlay.querySelector('.reject-payroll-voucher').addEventListener('click', async event => {
         overlay.querySelector('.reject-reason-field').hidden = false;
         const reason = overlay.querySelector('#payrollRejectReason').value.trim();
         if (!reason) return context.showToast('Nhập lý do từ chối Phiếu chi lương.', 'error');
-        event.currentTarget.disabled = true;
+        const button = event.currentTarget;
+        button.disabled = true;
         try {
           const result = await api(context, `/admin/approvals/payroll-vouchers/${id}/reject`, { method: 'POST', body: JSON.stringify({ LyDo: reason }) });
-          context.showToast(result.message, 'success'); close(); await onDone();
-        } catch (error) { context.showToast(error.message, 'error'); event.currentTarget.disabled = false; }
+          await afterAccountingMutation(context, { close, onDone, message: result.message });
+        } catch (error) {
+          context.showToast(error.message, 'error');
+          if (button.isConnected) button.disabled = false;
+        }
       });
     } catch (error) { context.showToast(error.message, 'error'); }
   };
@@ -483,13 +580,17 @@
     overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
     overlay.querySelector('.confirm-handover').addEventListener('click', async event => {
       if (!window.confirm(`Giao quỹ cho kế toán ${receiver}, kỳ ${maKy}: TM ${money(tm)}, CK ${money(ck)}?`)) return;
-      event.currentTarget.disabled = true;
+      const button = event.currentTarget;
+      button.disabled = true;
       try {
         const result = await api(context, `/admin/approvals/payroll-fund/${maKy}/handover`, {
           method: 'POST', body: JSON.stringify({ GhiChu: overlay.querySelector('#payrollHandoverNote').value.trim() })
         });
-        context.showToast(result.message, 'success'); close(); await onDone();
-      } catch (error) { context.showToast(error.message, 'error'); event.currentTarget.disabled = false; }
+        await afterAccountingMutation(context, { close, onDone, message: result.message });
+      } catch (error) {
+        context.showToast(error.message, 'error');
+        if (button.isConnected) button.disabled = false;
+      }
     });
   };
 

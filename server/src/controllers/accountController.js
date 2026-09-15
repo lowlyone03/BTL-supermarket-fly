@@ -216,6 +216,18 @@ const toggleAccountStatus = async (req, res) => {
             await syncMembershipSafe(pool, account.recordset[0].MaNV);
         } catch { /* chat không chặn khóa TK */ }
 
+        try {
+            const { WORKFLOW_EVENTS } = require('../services/notifyCatalog');
+            const { publishAfterCommit } = require('../services/notifyService');
+            await publishAfterCommit(pool, WORKFLOW_EVENTS.ACCOUNT_CHANGED, {
+                entityId: String(maTK),
+                actor: req.user,
+                recipientUsers: [account.recordset[0].MaNV]
+            });
+        } catch (notifyError) {
+            console.error(notifyError);
+        }
+
         res.json({ message: `${actionStr} tài khoản thành công!` });
     } catch (error) {
         console.error(error);
@@ -340,6 +352,18 @@ const updateAccountRole = async (req, res) => {
             const { syncMembershipSafe } = require('../services/chatService');
             await syncMembershipSafe(pool, account.recordset[0].MaNV);
         } catch { /* chat không chặn đổi vai trò */ }
+
+        try {
+            const { WORKFLOW_EVENTS } = require('../services/notifyCatalog');
+            const { publishAfterCommit } = require('../services/notifyService');
+            await publishAfterCommit(pool, WORKFLOW_EVENTS.ACCOUNT_CHANGED, {
+                entityId: String(maTK),
+                actor: req.user,
+                recipientUsers: [row.MaNV]
+            });
+        } catch (notifyError) {
+            console.error(notifyError);
+        }
 
         res.json({ message: 'Cập nhật vai trò thành công!' });
     } catch (error) {

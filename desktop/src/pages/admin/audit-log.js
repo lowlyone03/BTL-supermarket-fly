@@ -243,15 +243,75 @@
         state.page = 1;
         loadLogs();
     };
+    const auditExportMeta = () => {
+        const textOf = id => document.getElementById(id)?.selectedOptions?.[0]?.textContent?.trim() || '';
+        const filters = [
+            textOf('logKind'), textOf('logRole'), textOf('logActor'), textOf('logAction'),
+            document.getElementById('logSearch')?.value.trim() ? `Tìm: ${document.getElementById('logSearch').value.trim()}` : ''
+        ].filter(value => value && !/^Tất cả/i.test(value));
+        return {
+            from: document.getElementById('logFrom')?.value || '',
+            to: document.getElementById('logTo')?.value || '',
+            periodLabel: `${document.getElementById('logFrom')?.value || '—'} đến ${document.getElementById('logTo')?.value || '—'}`,
+            filterLabel: filters.join(' · ') || 'Tất cả thao tác phù hợp khoảng ngày',
+            preparedBy: JSON.parse(localStorage.getItem('fly_user') || '{}').TenNV || 'Quản lý',
+            status: 'Bản trích xuất nhật ký'
+        };
+    };
+    const loadAuditExport = async () => api(`/accounts/audit-log?${queryString({ page: '1', pageSize: '500' })}`);
     window.exportAuditCsv = async () => {
         try {
-            const blob = await api(`/accounts/audit-log/export?${queryString({ page: '1', pageSize: '500' })}`, { blob: true });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = 'nhat-ky-he-thong.csv';
-            link.click();
-            URL.revokeObjectURL(url);
+            const data = await loadAuditExport();
+            if (!window.FLY_DEPARTMENT_EXPORT?.downloadCsv) throw new Error('Chưa tải được bộ xuất báo cáo.');
+            window.FLY_DEPARTMENT_EXPORT.downloadCsv('AUDIT', data, auditExportMeta());
+        } catch (error) {
+            window.showToast?.(error.message, 'error');
+        }
+    };
+    window.exportAuditExcel = async () => {
+        try {
+            const data = await loadAuditExport();
+            if (!window.FLY_DEPARTMENT_EXPORT?.downloadExcel) throw new Error('Chưa tải được bộ xuất Excel.');
+            window.FLY_DEPARTMENT_EXPORT.downloadExcel('AUDIT', data, auditExportMeta());
+        } catch (error) {
+            window.showToast?.(error.message, 'error');
+        }
+    };
+    window.printAuditReport = async () => {
+        try {
+            const data = await loadAuditExport();
+            const meta = auditExportMeta();
+            if (!window.FLY_PRINT?.show) throw new Error('Chưa tải được máy in báo cáo.');
+            window.FLY_PRINT.show({
+                variant: 'report',
+                orientation: 'landscape',
+                title: 'BÁO CÁO NHẬT KÝ HỆ THỐNG',
+                number: `BCNK-${String(meta.to || vnDateKey(new Date())).replaceAll('-', '')}`,
+                documentDate: new Date(),
+                status: 'Bản trích xuất nhật ký',
+                fields: [
+                    { label: 'Từ ngày', value: meta.from, format: 'date' },
+                    { label: 'Đến ngày', value: meta.to, format: 'date' },
+                    { label: 'Bộ lọc', value: meta.filterLabel },
+                    { label: 'Người lập', value: meta.preparedBy }
+                ],
+                columns: [
+                    { label: 'Thời gian', value: row => fmtTime(row.ThoiGian) },
+                    { label: 'Người làm', value: row => row.TenNV || row.TenDangNhap || 'Hệ thống' },
+                    { label: 'Vai trò', key: 'TenVaiTro' },
+                    { label: 'Việc làm', value: row => row.viecLam || row.HanhDong || '—' },
+                    { label: 'Chứng từ', key: 'doiTuongMa' },
+                    { label: 'Kết quả', key: 'ketQuaHienThi' },
+                    { label: 'Giải thích', key: 'giaiThich' }
+                ],
+                rows: data.items || [],
+                summary: [
+                    { label: 'Tổng bản ghi', value: (data.items || []).length },
+                    { label: 'Khoảng ngày', value: meta.periodLabel }
+                ],
+                note: 'Nhật ký hệ thống không thể sửa hoặc xóa. Bản in dùng để đối chiếu và giải trình nội bộ.',
+                signatures: ['Quản trị hệ thống', 'Quản lý cửa hàng']
+            });
         } catch (error) {
             window.showToast?.(error.message, 'error');
         }

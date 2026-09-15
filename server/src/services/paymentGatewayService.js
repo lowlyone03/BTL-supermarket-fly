@@ -573,6 +573,17 @@ const handleIpn = async (payload, req) => {
             source: 'IPN'
         });
         await transaction.commit();
+        try {
+            const { WORKFLOW_EVENTS } = require('./notifyCatalog');
+            const { publishAfterCommit } = require('./notifyService');
+            await publishAfterCommit(await poolPromise, WORKFLOW_EVENTS.QR_RESULT, {
+                entityId: payment.MaHD,
+                actor: { MaNV: GATEWAY_ACTOR, TenNV: 'Cổng thanh toán' },
+                recipientUsers: [payment.MaNV]
+            });
+        } catch (notifyError) {
+            console.error(notifyError);
+        }
         return { accepted: true, ...applied, merchantReply: ipnReplyForApplied(applied) };
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});

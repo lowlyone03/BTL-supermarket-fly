@@ -3,6 +3,7 @@ const { ensurePayrollSchema } = require('./payrollSchema');
 const { vietnamCalendar } = require('./reportingPeriod');
 const { listInboxForEmployee } = require('./storeProfitLoss');
 const { ensureReturnHandoverSchema } = require('./returnHandover');
+const { derivedInboxKey, parseInboxIdentity } = require('./notificationReadService');
 
 const roleOf = user => String(user?.TenVaiTro || '').trim();
 const roleKey = user => roleOf(user).toLocaleLowerCase('vi-VN');
@@ -86,11 +87,76 @@ const listPendingAttendance = async (pool, { top = 8 } = {}) => {
     return result.recordset || [];
 };
 
+const SKIP_PERSISTED_EVENTS = new Set(['qr.result']);
+
+const noticeTone = (mucDo, title) => {
+    const blob = `${mucDo || ''} ${title || ''}`;
+    return /cảnh báo|khẩn|lỗ/i.test(blob) ? 'urgent' : 'info';
+};
+
+const entityDedupeKey = item => {
+    if (item?.entityType && item?.entityId) return `${item.entityType}:${item.entityId}`;
+    const parsed = parseInboxIdentity(item?.id);
+    return parsed.entityType ? `${parsed.entityType}:${parsed.entityId}` : '';
+};
+
+const mergeInboxItems = (primary, secondary) => {
+    const seenIds = new Set();
+    const seenEntities = new Set();
+    const out = [];
+    for (const item of [...(primary || []), ...(secondary || [])]) {
+        if (!item?.id) continue;
+        const id = String(item.id);
+        if (seenIds.has(id)) continue;
+        const entity = entityDedupeKey(item);
+        if (entity && seenEntities.has(entity)) continue;
+        seenIds.add(id);
+        if (entity) seenEntities.add(entity);
+        out.push(item);
+    }
+    return out;
+};
+
+const listPersistedWorkflowItems = async (pool, user) => {
+    const maNV = user?.MaNV;
+    if (!maNV) return [];
+    try {
+        await require('./notifySchema').ensureNotifySchema(pool);
+        const result = await pool.request().input('MaNV', sql.VarChar, maNV).query(`
+            SELECT TOP 50 n.MaNhan, n.DaDoc, e.EventKey, e.EntityType, e.EntityId,
+                   e.Title, e.Detail, e.Tone, e.Target, e.NgayTao EventAt
+            FROM dbo.ThongBaoNguoiNhan n
+            JOIN dbo.ThongBaoSuKien e ON e.MaSuKien=n.MaSuKien
+            WHERE n.MaNV=@MaNV AND n.DaAn=0
+            ORDER BY e.NgayTao DESC`);
+        return (result.recordset || [])
+            .filter(row => !SKIP_PERSISTED_EVENTS.has(String(row.EventKey || '')))
+            .map(row => {
+                const derived = derivedInboxKey(row.EntityType, row.EntityId);
+                return {
+                    id: derived || `nhan:${row.MaNhan}`,
+                    target: row.Target || '',
+                    title: row.Title,
+                    detail: row.Detail || '',
+                    at: row.EventAt,
+                    tone: row.Tone === 'warning' || row.Tone === 'urgent' ? 'urgent' : 'info',
+                    read: Boolean(row.DaDoc),
+                    maNhan: row.MaNhan,
+                    entityType: row.EntityType,
+                    entityId: row.EntityId
+                };
+            });
+    } catch (error) {
+        console.error(error);
+        return [];
+    }
+};
+
 const inboxHint = {
     'Quản lý': 'Việc nhân viên vừa gửi hiện ngay. Chấm công chờ duyệt: mở menu Duyệt công (cả ngày cũ và ca hành chính). Chuông kêu một tiếng khi có việc mới — không cần F5.',
-    'Thủ kho': 'Đổi trả, xe đến kho, phiếu xuất đã duyệt hoặc kiểm kê bị từ chối cần đếm lại hiện ngay. Chuông kêu một tiếng khi có việc mới.',
-    'Nhân viên mua hàng': 'Đề nghị từ kho, đơn mua đã duyệt, và việc kế toán nhờ xin gia hạn NCC hiện ngay. Chuông kêu một tiếng khi có việc mới.',
-    'Kế toán': 'Ca đã chốt, hóa đơn chờ đối chiếu, phiếu chi Quản lý vừa duyệt hoặc từ chối, và phiếu sẵn sàng thanh toán hiện ngay. Chuông kêu một tiếng khi có việc mới.',
+    'Thủ kho': 'Chuyến giao chờ nhận, đổi trả, phiếu xuất đã duyệt hoặc kiểm kê bị từ chối cần đếm lại hiện ngay. Chuông kêu một tiếng khi có việc mới.',
+    'Nhân viên mua hàng': 'Đề nghị từ kho, đơn mua đã duyệt, chuyến đã gửi Thủ kho, và việc kế toán nhờ xin gia hạn NCC hiện ngay. Chuông kêu một tiếng khi có việc mới.',
+    'Kế toán': 'Ca đã chốt, phiếu nhập cần đối chiếu, hóa đơn chờ khớp, phiếu chi Quản lý vừa duyệt hoặc từ chối, và phiếu sẵn sàng thanh toán hiện ngay. Chuông kêu một tiếng khi có việc mới.',
     'Thu ngân': 'Lịch hôm nay, đổi trả chờ kho/quản lý, và phiếu đã duyệt cần xác nhận — hiện ngay khi có việc mới.'
 };
 
@@ -110,12 +176,13 @@ const listForRole = async (pool, user) => {
                 r.TieuDe,
                 r.NoiDung,
                 r.NgayGui,
-                'urgent'
+                noticeTone(r.MucDo, r.TieuDe)
             );
         }));
     } catch { /* bảng thông báo chưa có thì bỏ qua */ }
 
-    const schedule = await q().input('MaNV', sql.VarChar, maNV).query(`
+    try {
+        const schedule = await q().input('MaNV', sql.VarChar, maNV).query(`
         SELECT TOP 1 l.MaLich, lc.TenCa, l.BatDauDuKien, cc.ThoiGianVao
         FROM LichLamViec l
         JOIN LoaiCa lc ON lc.MaLoaiCa=l.MaLoaiCa
@@ -123,73 +190,80 @@ const listForRole = async (pool, user) => {
         WHERE l.MaNV=@MaNV AND l.TrangThai=N'Đã công bố'
           AND l.NgayLam=CONVERT(date, GETDATE())
         ORDER BY l.BatDauDuKien`);
-    if (schedule.recordset[0] && !schedule.recordset[0].ThoiGianVao && role !== 'Quản lý') {
-        const s = schedule.recordset[0];
-        items.push(row(`lich:${s.MaLich}`, 'cashier-schedule', 'Lịch làm việc hôm nay',
-            `${s.TenCa} · hãy chấm công vào trước khi làm việc`, s.BatDauDuKien, 'info'));
+        if (schedule.recordset[0] && !schedule.recordset[0].ThoiGianVao && role !== 'Quản lý') {
+            const s = schedule.recordset[0];
+            items.push(row(`lich:${s.MaLich}`, 'cashier-schedule', 'Lịch làm việc hôm nay',
+                `${s.TenCa} · hãy chấm công vào trước khi làm việc`, s.BatDauDuKien, 'info'));
+        }
+    } catch (error) {
+        console.error(error);
     }
 
     if (isRole(user, 'Quản lý')) {
+      try {
         const poolSafe = pool;
         await ensurePayrollSchema(poolSafe).catch(() => {});
         const [po, px, kk, dt, dtWait, pc, cc, pcl, latePay] = await Promise.all([
-            q().query(`SELECT TOP 8 po.MaPO, po.NgayLap, ncc.TenNCC, nv.TenNV
+            safeRows(() => q().query(`SELECT TOP 8 po.MaPO, po.NgayLap, ncc.TenNCC, nv.TenNV
                        FROM DonMuaHang po JOIN NhaCungCap ncc ON ncc.MaNCC=po.MaNCC
                        JOIN NhanVien nv ON nv.MaNV=po.MaNV_Lap
-                       WHERE po.TrangThai=N'Chờ duyệt' ORDER BY po.NgayLap DESC`),
-            q().query(`SELECT TOP 8 px.MaPX, px.NgayXuat, px.LoaiXuat, nv.TenNV
+                       WHERE po.TrangThai=N'Chờ duyệt' ORDER BY po.NgayLap DESC`)),
+            safeRows(() => q().query(`SELECT TOP 8 px.MaPX, px.NgayXuat, px.LoaiXuat, nv.TenNV
                        FROM PhieuXuat px JOIN NhanVien nv ON nv.MaNV=px.MaNV
-                       WHERE px.TrangThai=N'Chờ duyệt' ORDER BY px.NgayXuat DESC`),
-            q().query(`SELECT TOP 8 kk.MaKK, kk.NgayKiemKe, nv.TenNV
+                       WHERE px.TrangThai=N'Chờ duyệt' ORDER BY px.NgayXuat DESC`)),
+            safeRows(() => q().query(`SELECT TOP 8 kk.MaKK, kk.NgayKiemKe, nv.TenNV
                        FROM KiemKe kk JOIN NhanVien nv ON nv.MaNV=kk.MaNV
-                       WHERE kk.TrangThai=N'Chờ duyệt điều chỉnh' ORDER BY kk.NgayKiemKe DESC`),
-            q().query(`SELECT TOP 8 dt.MaDT, dt.NgayLap, dt.HinhThucXuLy, nv.TenNV
+                       WHERE kk.TrangThai=N'Chờ duyệt điều chỉnh' ORDER BY kk.NgayKiemKe DESC`)),
+            safeRows(() => q().query(`SELECT TOP 8 dt.MaDT, dt.NgayLap, dt.HinhThucXuLy, nv.TenNV
                        FROM PhieuDoiTra dt JOIN NhanVien nv ON nv.MaNV=dt.MaNV_Lap
-                       WHERE dt.TrangThai=N'Chờ duyệt' ORDER BY dt.NgayLap DESC`),
-            q().query(`SELECT TOP 8 dt.MaDT, dt.NgayLap, dt.HinhThucXuLy, dt.SoTienHoan, nv.TenNV
+                       WHERE dt.TrangThai=N'Chờ duyệt' ORDER BY dt.NgayLap DESC`)),
+            safeRows(() => q().query(`SELECT TOP 8 dt.MaDT, dt.NgayLap, dt.HinhThucXuLy, dt.SoTienHoan, nv.TenNV
                        FROM PhieuDoiTra dt JOIN NhanVien nv ON nv.MaNV=COALESCE(dt.MaNV_XuLy, dt.MaNV_Lap)
-                       WHERE dt.TrangThai=N'Chờ xử lý hoàn tiền' ORDER BY dt.NgayLap DESC`),
-            q().query(`SELECT TOP 8 pc.MaPhieu, pc.NgayChungTu, pc.SoTien, nv.TenNV
+                       WHERE dt.TrangThai=N'Chờ xử lý hoàn tiền' ORDER BY dt.NgayLap DESC`)),
+            safeRows(() => q().query(`SELECT TOP 8 pc.MaPhieu, pc.NgayChungTu, pc.SoTien, nv.TenNV
                        FROM PhieuChi pc JOIN NhanVien nv ON nv.MaNV=pc.MaNV
-                       WHERE pc.TrangThai=N'Chờ duyệt' ORDER BY pc.NgayChungTu DESC`),
-            listPendingAttendance(poolSafe, { top: 8 }).then(recordset => ({ recordset })),
-            q().query(`SELECT TOP 8 pcl.MaPhieu, pcl.NgayLap, pcl.SoTien, nv.TenNV, pcl.MaKy, pcl.PhuongThuc
+                       WHERE pc.TrangThai=N'Chờ duyệt' ORDER BY pc.NgayChungTu DESC`)),
+            safeRows(() => listPendingAttendance(poolSafe, { top: 8 })),
+            safeRows(() => q().query(`SELECT TOP 8 pcl.MaPhieu, pcl.NgayLap, pcl.SoTien, nv.TenNV, pcl.MaKy, pcl.PhuongThuc
                        FROM PhieuChiLuong pcl JOIN NhanVien nv ON nv.MaNV=pcl.MaNV
-                       WHERE pcl.TrangThai=N'Chờ duyệt' ORDER BY pcl.NgayLap DESC`),
-            q().query(`SELECT TOP 8 k.MaKy, CONVERT(varchar(10),k.NgayTraDuKien,23) NgayTraDuKien,
+                       WHERE pcl.TrangThai=N'Chờ duyệt' ORDER BY pcl.NgayLap DESC`)),
+            safeRows(() => q().query(`SELECT TOP 8 k.MaKy, CONVERT(varchar(10),k.NgayTraDuKien,23) NgayTraDuKien,
                               SUM(CASE WHEN bl.TrangThai<>N'Đã thanh toán' THEN 1 ELSE 0 END) SoChuaChi
                        FROM KyLuong k JOIN BangLuong bl ON bl.MaKy=k.MaKy
                        WHERE k.TrangThai IN (N'Đã khóa', N'Đã thanh toán')
                          AND k.NgayTraDuKien IS NOT NULL
                          AND CONVERT(date, GETDATE()) >= DATEADD(day,-2,k.NgayTraDuKien)
                          AND EXISTS (SELECT 1 FROM BangLuong b WHERE b.MaKy=k.MaKy AND b.TrangThai<>N'Đã thanh toán')
-                       GROUP BY k.MaKy, k.NgayTraDuKien`)
+                       GROUP BY k.MaKy, k.NgayTraDuKien`))
         ]);
         items.push(
-            ...many(po.recordset, r => row(`po:${r.MaPO}`, 'manager-purchase-approvals', 'Đơn mua chờ duyệt',
+            ...many(po, r => row(`po:${r.MaPO}`, 'manager-purchase-approvals', 'Đơn mua chờ duyệt',
                 `${r.MaPO} · ${r.TenNCC} · ${r.TenNV}`, r.NgayLap, 'urgent')),
-            ...many(px.recordset, r => row(`px:${r.MaPX}`, 'manager-purchase-approvals', 'Phiếu xuất chờ duyệt',
+            ...many(px, r => row(`px:${r.MaPX}`, 'manager-purchase-approvals', 'Phiếu xuất chờ duyệt',
                 `${r.MaPX} · ${r.LoaiXuat} · ${r.TenNV}`, r.NgayXuat, 'urgent')),
-            ...many(kk.recordset, r => row(`kk:${r.MaKK}`, 'manager-purchase-approvals', 'Kiểm kê chờ duyệt điều chỉnh',
+            ...many(kk, r => row(`kk:${r.MaKK}`, 'manager-purchase-approvals', 'Kiểm kê chờ duyệt điều chỉnh',
                 `${r.MaKK} · ${r.TenNV}`, r.NgayKiemKe, 'urgent')),
-            ...many(dt.recordset, r => row(`dt:${r.MaDT}`, 'manager-purchase-approvals', 'Đổi trả chờ duyệt',
+            ...many(dt, r => row(`dt:${r.MaDT}`, 'manager-purchase-approvals', 'Đổi trả chờ duyệt',
                 `${r.MaDT} · ${r.HinhThucXuLy} · ${r.TenNV}`, r.NgayLap, 'urgent')),
-            ...many(dtWait.recordset, r => row(`dt-cash:${r.MaDT}`, 'cashier-returns',
+            ...many(dtWait, r => row(`dt-cash:${r.MaDT}`, 'cashier-returns',
                 'Chờ xử lý hoàn tiền — két không đủ TM, không ghi két âm',
                 `${r.MaDT} · ${r.HinhThucXuLy} · ${r.TenNV}`, r.NgayLap, 'urgent')),
-            ...many(pc.recordset, r => row(`pc:${r.MaPhieu}`, 'manager-payables', 'Phiếu chi chờ duyệt và giao tiền',
+            ...many(pc, r => row(`pc:${r.MaPhieu}`, 'manager-payables', 'Phiếu chi chờ duyệt và giao tiền',
                 `${r.MaPhieu} · ${r.TenNV}`, r.NgayChungTu, 'urgent')),
-            ...many(cc.recordset, r => row(`cc:${r.MaChamCong}`, 'manager-workforce-approve', 'Chấm công chờ duyệt',
+            ...many(cc, r => row(`cc:${r.MaChamCong}`, 'manager-workforce-approve', 'Chấm công chờ duyệt',
                 [r.TenNV, r.TenCa, vnDay(r.NgayLam)].filter(Boolean).join(' · '), r.NgayLam, 'urgent')),
-            ...many(pcl.recordset, r => row(`pcl:${r.MaPhieu}`, 'manager-purchase-approvals', 'Phiếu chi lương chờ duyệt và giao quỹ',
+            ...many(pcl, r => row(`pcl:${r.MaPhieu}`, 'manager-purchase-approvals', 'Phiếu chi lương chờ duyệt và giao quỹ',
                 `${r.MaPhieu} · ${r.TenNV} · ${r.PhuongThuc} · kỳ ${r.MaKy}`, r.NgayLap, 'urgent')),
-            ...many(latePay.recordset, r => row(`luong-tre:${r.MaKy}`, 'manager-purchase-approvals',
+            ...many(latePay, r => row(`luong-tre:${r.MaKy}`, 'manager-purchase-approvals',
                 vietnamCalendar().date > String(r.NgayTraDuKien).slice(0, 10)
                     ? `Lương kỳ ${r.MaKy} chi trễ sau mùng 10`
                     : `Lương kỳ ${r.MaKy} sắp đến hạn tất toán mùng 10`,
                 `${r.SoChuaChi} nhân viên chưa chi · hạn ${String(r.NgayTraDuKien).slice(0, 10)}`,
                 r.NgayTraDuKien, 'urgent'))
         );
+      } catch (error) {
+        console.error(error);
+      }
     }
 
     if (isRole(user, 'Thủ kho')) {
@@ -197,10 +271,12 @@ const listForRole = async (pool, user) => {
             safeRows(() => q().query(`SELECT TOP 8 dt.MaDT, dt.NgayLap, dt.HinhThucXuLy, nv.TenNV
                        FROM PhieuDoiTra dt JOIN NhanVien nv ON nv.MaNV=dt.MaNV_Lap
                        WHERE dt.TrangThai=N'Chờ kiểm tra' ORDER BY dt.NgayLap DESC`)),
-            safeRows(() => q().query(`SELECT TOP 8 gh.MaTBGH, gh.MaPO, gh.NgayDen, ncc.TenNCC
+            safeRows(() => q().query(`SELECT TOP 8 gh.MaTBGH, gh.MaPO, gh.TrangThai, gh.NgayTao, gh.NgayDen, ncc.TenNCC
                        FROM ThongBaoGiaoHang gh JOIN DonMuaHang po ON po.MaPO=gh.MaPO
                        JOIN NhaCungCap ncc ON ncc.MaNCC=po.MaNCC
-                       WHERE gh.TrangThai=N'Đã đến kho' ORDER BY gh.NgayDen DESC`)),
+                       WHERE gh.TrangThai IN (N'Đang giao', N'Đã đến kho')
+                       ORDER BY CASE WHEN gh.TrangThai=N'Đã đến kho' THEN 0 ELSE 1 END,
+                                COALESCE(gh.NgayDen, gh.NgayTao) DESC`)),
             safeRows(() => q().input('MaNV', sql.VarChar, maNV).query(`
                        SELECT TOP 8 MaPX, NgayXuat, LoaiXuat FROM PhieuXuat
                        WHERE MaNV=@MaNV AND TrangThai=N'Đã duyệt' ORDER BY NgayDuyet DESC`)),
@@ -239,8 +315,10 @@ const listForRole = async (pool, user) => {
         items.push(
             ...many(returns, r => row(`dt:${r.MaDT}`, 'warehouse-returns', 'Hàng khách trả chờ kiểm',
                 `${r.MaDT} · ${r.HinhThucXuLy} · ${r.TenNV}`, r.NgayLap, 'urgent')),
-            ...many(arrive, r => row(`gh:${r.MaTBGH}`, 'warehouse-receiving', 'Xe giao đã đến kho',
-                `${r.MaPO} · ${r.TenNCC} · nhận và kiểm hàng`, r.NgayDen, 'urgent')),
+            ...many(arrive, r => row(`gh:${r.MaTBGH}`, 'warehouse-receiving',
+                r.TrangThai === 'Đang giao' ? 'Chuyến giao chờ nhận' : 'Xe giao đã đến kho',
+                `${r.MaTBGH} · ${r.MaPO} · ${r.TenNCC} · ${r.TrangThai === 'Đang giao' ? 'ghi nhận xe đến' : 'nhận và kiểm hàng'}`,
+                r.NgayDen || r.NgayTao, 'urgent')),
             ...many(issues, r => row(`px:${r.MaPX}`, 'warehouse-stock-issues', 'Phiếu xuất đã duyệt, cần xác nhận xuất',
                 `${r.MaPX} · ${r.LoaiXuat} · trừ tồn khi bạn xác nhận`, r.NgayXuat, 'urgent')),
             ...many(feedback, r => row(`dn:${r.MaDN}`, 'warehouse-requests', 'Đề nghị cần bổ sung',
@@ -262,26 +340,36 @@ const listForRole = async (pool, user) => {
     }
 
     if (isRole(user, 'Nhân viên mua hàng')) {
-        const [requests, approved, revise] = await Promise.all([
-            q().query(`SELECT TOP 8 dn.MaDN, dn.NgayGui, dn.LyDo, nv.TenNV
+        const [requests, approved, revise, sent] = await Promise.all([
+            safeRows(() => q().query(`SELECT TOP 8 dn.MaDN, dn.NgayGui, dn.LyDo, nv.TenNV
                        FROM DeNghiMuaHang dn JOIN NhanVien nv ON nv.MaNV=dn.MaNV_Lap
-                       WHERE dn.TrangThai=N'Đã gửi' ORDER BY dn.NgayGui DESC`),
-            q().input('MaNV', sql.VarChar, maNV).query(`
+                       WHERE dn.TrangThai=N'Đã gửi' ORDER BY dn.NgayGui DESC`)),
+            safeRows(() => q().input('MaNV', sql.VarChar, maNV).query(`
                        SELECT TOP 8 po.MaPO, po.NgayDuyet, ncc.TenNCC
                        FROM DonMuaHang po JOIN NhaCungCap ncc ON ncc.MaNCC=po.MaNCC
-                       WHERE po.MaNV_Lap=@MaNV AND po.TrangThai=N'Đã duyệt' ORDER BY po.NgayDuyet DESC`),
-            q().input('MaNV', sql.VarChar, maNV).query(`
+                       WHERE po.MaNV_Lap=@MaNV AND po.TrangThai=N'Đã duyệt' ORDER BY po.NgayDuyet DESC`)),
+            safeRows(() => q().input('MaNV', sql.VarChar, maNV).query(`
                        SELECT TOP 8 po.MaPO, po.NgayLap, po.LyDoTuChoi, ncc.TenNCC
                        FROM DonMuaHang po JOIN NhaCungCap ncc ON ncc.MaNCC=po.MaNCC
-                       WHERE po.MaNV_Lap=@MaNV AND po.TrangThai=N'Yêu cầu chỉnh sửa' ORDER BY po.NgayLap DESC`)
+                       WHERE po.MaNV_Lap=@MaNV AND po.TrangThai=N'Yêu cầu chỉnh sửa' ORDER BY po.NgayLap DESC`)),
+            safeRows(() => q().input('MaNV', sql.VarChar, maNV).query(`
+                       SELECT TOP 8 gh.MaTBGH, gh.MaPO, gh.TrangThai, gh.NgayTao, ncc.TenNCC
+                       FROM ThongBaoGiaoHang gh
+                       JOIN DonMuaHang po ON po.MaPO=gh.MaPO
+                       JOIN NhaCungCap ncc ON ncc.MaNCC=po.MaNCC
+                       WHERE po.MaNV_Lap=@MaNV AND gh.TrangThai IN (N'Đang giao', N'Đã đến kho')
+                       ORDER BY gh.NgayTao DESC`))
         ]);
         items.push(
-            ...many(requests.recordset, r => row(`dn:${r.MaDN}`, 'purchasing-inbox', 'Đề nghị mua từ kho',
+            ...many(requests, r => row(`dn:${r.MaDN}`, 'purchasing-inbox', 'Đề nghị mua từ kho',
                 `${r.MaDN} · ${r.TenNV} · ${r.LyDo || 'Cần lập đơn mua'}`, r.NgayGui, 'urgent')),
-            ...many(approved.recordset, r => row(`po:${r.MaPO}`, 'purchasing-orders', 'Đơn mua đã duyệt, gửi Nhà cung cấp',
+            ...many(approved, r => row(`po:${r.MaPO}`, 'purchasing-orders', 'Đơn mua đã duyệt, gửi Nhà cung cấp',
                 `${r.MaPO} · ${r.TenNCC}`, r.NgayDuyet, 'urgent')),
-            ...many(revise.recordset, r => row(`po-fix:${r.MaPO}`, 'purchasing-orders', 'Đơn mua cần chỉnh theo Quản lý',
-                `${r.MaPO} · ${r.TenNCC} · ${r.LyDoTuChoi || ''}`, r.NgayLap, 'info'))
+            ...many(revise, r => row(`po-fix:${r.MaPO}`, 'purchasing-orders', 'Đơn mua cần chỉnh theo Quản lý',
+                `${r.MaPO} · ${r.TenNCC} · ${r.LyDoTuChoi || ''}`, r.NgayLap, 'info')),
+            ...many(sent, r => row(`gh:${r.MaTBGH}`, 'purchasing-orders',
+                r.TrangThai === 'Đang giao' ? `Đã gửi chuyến ${r.MaTBGH} cho Thủ kho` : `Thủ kho đang nhận chuyến ${r.MaTBGH}`,
+                `${r.MaPO} · ${r.TenNCC} · ${r.TrangThai}`, r.NgayTao, 'info'))
         );
         const giaHan = await safeRows(() => q().query(`
             SELECT TOP 8 g.MaGiaHan, g.MaCNPTra, g.NgayYeuCau, g.HanCu, ncc.TenNCC, cn.SoTienConLai, nv.TenNV
@@ -291,14 +379,14 @@ const listForRole = async (pool, user) => {
             LEFT JOIN NhanVien nv ON nv.MaNV = g.MaNV_YeuCau
             WHERE g.TrangThai IN (N'ChoLienHe', N'DaLienHe') AND cn.SoTienConLai > 0
             ORDER BY g.NgayYeuCau DESC`));
-        items.push(...many(giaHan, r => row(`gh:${r.MaGiaHan}`, 'purchasing-suppliers', 'Kế toán nhờ xin gia hạn NCC',
+        items.push(...many(giaHan, r => row(`giahan:${r.MaGiaHan}`, 'purchasing-suppliers', 'Kế toán nhờ xin gia hạn NCC',
             joinDetail(r.TenNCC, r.MaCNPTra, moneyVi(r.SoTienConLai), r.HanCu ? `hạn cũ ${vnDay(r.HanCu)}` : '', r.TenNV),
             r.NgayYeuCau, 'urgent')));
     }
 
     if (isRole(user, 'Kế toán')) {
         await ensurePayrollSchema(pool).catch(() => {});
-        const [shifts, invoices, pay, payReject, overdue, payrollPay, payrollReject] = await Promise.all([
+        const [shifts, invoices, receipts, pay, payReject, overdue, payrollPay, payrollReject] = await Promise.all([
             safeRows(() => q().query(`SELECT TOP 8 ca.MaCa, ca.ThoiGianKetThuc, nv.TenNV
                        FROM CaLamViec ca JOIN NhanVien nv ON nv.MaNV=ca.MaNV
                        WHERE ca.TrangThai=N'Đã chốt' AND ca.TrangThaiDoiSoat=N'Chờ Kế toán đối soát'
@@ -307,6 +395,11 @@ const listForRole = async (pool, user) => {
                        FROM HoaDonMuaHang hd JOIN NhaCungCap ncc ON ncc.MaNCC=hd.MaNCC
                        WHERE hd.TrangThaiDoiChieu IN (N'Chờ đối chiếu', N'Chờ Phiếu nhập', N'Chênh lệch')
                        ORDER BY hd.NgayTiepNhan DESC`)),
+            safeRows(() => q().query(`SELECT TOP 8 pn.MaPN, pn.MaPO, pn.NgayXacNhan, ncc.TenNCC
+                       FROM PhieuNhap pn JOIN NhaCungCap ncc ON ncc.MaNCC=pn.MaNCC
+                       WHERE pn.TrangThai=N'Đã xác nhận'
+                         AND NOT EXISTS (SELECT 1 FROM HoaDonMuaHang hd WHERE hd.MaPN=pn.MaPN)
+                       ORDER BY pn.NgayXacNhan DESC`)),
             safeRows(() => q().query(`SELECT TOP 8 pc.MaPhieu, pc.NgayDuyet, pc.SoTien, pc.TrangThai, ncc.TenNCC,
                               nvDuyet.TenNV NguoiDuyet
                        FROM PhieuChi pc
@@ -346,6 +439,8 @@ const listForRole = async (pool, user) => {
                 `${r.MaCa} · ${r.TenNV}`, r.ThoiGianKetThuc, 'urgent')),
             ...many(invoices, r => row(`hdmh:${r.MaHDMH}`, 'accounting-invoices', 'Hóa đơn Nhà cung cấp cần đối chiếu',
                 `${r.SoHoaDon} · ${r.TenNCC} · ${r.TrangThaiDoiChieu}`, r.NgayTiepNhan, 'urgent')),
+            ...many(receipts, r => row(`pn:${r.MaPN}`, 'accounting-invoices', 'Phiếu nhập đã xác nhận, cần lập hóa đơn',
+                `${r.MaPN} · ${r.MaPO} · ${r.TenNCC}`, r.NgayXacNhan, 'urgent')),
             ...many(pay, r => row(`pc-pay:${r.MaPhieu}`, 'accounting-payables', pcPayTitle(r),
                 pcPayDetail(r), r.NgayDuyet, 'urgent')),
             ...many(payReject, r => row(`pc-no:${r.MaPhieu}`, 'accounting-payables', pcRejectTitle(r),
@@ -430,18 +525,21 @@ const listForRole = async (pool, user) => {
         );
     }
 
-    items.sort((a, b) => {
+    const persisted = await listPersistedWorkflowItems(pool, user);
+    const merged = mergeInboxItems(items, persisted);
+    merged.sort((a, b) => {
         const rank = { urgent: 0, info: 1, wait: 2 };
         const diff = (rank[a.tone] ?? 3) - (rank[b.tone] ?? 3);
         if (diff) return diff;
         return new Date(b.at || 0) - new Date(a.at || 0);
     });
-    return items;
+    return merged;
 };
 
 module.exports = {
     listForRole, inboxHint, roleOf, isRole,
     listPendingAttendance, PENDING_CHAM_CONG_PREDICATE,
     moneyVi, joinDetail, pcPayTitle, pcPayDetail, pcRejectTitle, pcRejectDetail,
-    pclRejectTitle, pclRejectDetail
+    pclRejectTitle, pclRejectDetail,
+    mergeInboxItems, listPersistedWorkflowItems
 };

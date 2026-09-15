@@ -441,8 +441,10 @@ const getStoreOperationsReport = async (req, res) => {
                 ORDER BY DoanhThuHoaDon DESC`),
             pool.request().query(`
                 SELECT
-                  (SELECT COUNT(*) FROM SanPham sp JOIN TonKho tk ON tk.MaSP=sp.MaSP
-                    WHERE sp.TrangThai IN (N'Đang bán',N'Đang kinh doanh') AND tk.SLTon<=sp.TonKhoToiThieu) TonThap,
+                  (SELECT COUNT(*) FROM SanPham sp
+                    OUTER APPLY (SELECT SUM(t.SLTon) SLTon FROM TonKho t WHERE t.MaSP=sp.MaSP) tk
+                    WHERE sp.TrangThai IN (N'Đang bán',N'Đang kinh doanh')
+                      AND ISNULL(tk.SLTon,0)<sp.TonKhoToiThieu) TonThap,
                   (SELECT COUNT(*) FROM CongNoPhaiTra WHERE SoTienConLai>0 AND HanThanhToan<CONVERT(date,GETDATE())) CongNoQuaHan,
                   (SELECT COUNT(*) FROM CaLamViec WHERE TrangThai=N'Đã chốt' AND TrangThaiDoiSoat=N'Chờ Kế toán đối soát') CaChoDoiSoat,
                   (SELECT COUNT(*) FROM PhieuDoiTra WHERE TrangThai IN (N'Chờ kiểm tra',N'Chờ duyệt',N'Đã duyệt')) DoiTraDangXuLy`),
@@ -603,15 +605,17 @@ const getWarehouseReport = async (req, res) => {
             pool.request().query(`
                 SELECT COUNT(*) TongMatHang,
                        COALESCE(SUM(CASE WHEN ISNULL(tk.SLTon,0)<=0 THEN 1 ELSE 0 END),0) HetHang,
-                       COALESCE(SUM(CASE WHEN ISNULL(tk.SLTon,0)<=sp.TonKhoToiThieu THEN 1 ELSE 0 END),0) TonThap,
+                       COALESCE(SUM(CASE WHEN ISNULL(tk.SLTon,0)<sp.TonKhoToiThieu THEN 1 ELSE 0 END),0) TonThap,
                        COALESCE(SUM(CASE WHEN tk.SLTon>0 THEN tk.SLTon ELSE 0 END),0) TongTon,
                        COALESCE(SUM(tk.GiaTriTon),0) GiaTriTon
-                FROM SanPham sp LEFT JOIN TonKho tk ON tk.MaSP=sp.MaSP
+                FROM SanPham sp
+                OUTER APPLY (SELECT SUM(t.SLTon) SLTon, SUM(t.GiaTriTon) GiaTriTon FROM TonKho t WHERE t.MaSP=sp.MaSP) tk
                 WHERE sp.TrangThai IN (N'Đang bán',N'Đang kinh doanh')`),
             pool.request().query(`
                 SELECT TOP 20 sp.MaSP, sp.TenSP, sp.DonViTinh, sp.TonKhoToiThieu, ISNULL(tk.SLTon,0) SLTon
-                FROM SanPham sp LEFT JOIN TonKho tk ON tk.MaSP=sp.MaSP
-                WHERE sp.TrangThai IN (N'Đang bán',N'Đang kinh doanh') AND ISNULL(tk.SLTon,0)<=sp.TonKhoToiThieu
+                FROM SanPham sp
+                OUTER APPLY (SELECT SUM(t.SLTon) SLTon FROM TonKho t WHERE t.MaSP=sp.MaSP) tk
+                WHERE sp.TrangThai IN (N'Đang bán',N'Đang kinh doanh') AND ISNULL(tk.SLTon,0)<sp.TonKhoToiThieu
                 ORDER BY (sp.TonKhoToiThieu-ISNULL(tk.SLTon,0)) DESC, sp.TenSP`),
             bindPeriod(pool, period).query(`
                 SELECT

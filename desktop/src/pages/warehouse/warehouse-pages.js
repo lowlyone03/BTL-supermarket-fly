@@ -66,7 +66,22 @@
     const action = item.ActionLabel || (item.TrangThai === 'Đang kiểm' ? 'Tiếp tục kiểm' : 'Xem chi tiết');
     return `<tr class="${rowClass}"><td><strong>${esc(item.MaKK)}</strong><small>${esc(item.TenKho)}</small></td><td>${fmtDate(item.NgayKiemKe)}</td><td><strong>${item.SoMatHang || 0} mặt hàng</strong><small>${item.SoMatHangChenhLech || 0} mặt hàng chênh lệch</small></td><td><strong>Thừa ${item.TongThua || 0}</strong><small>Thiếu ${item.TongThieu || 0}</small></td><td><span class="status-pill ${statusClass(display)}">${esc(display)}</span>${note ? `<small class="${noteClass}">${esc(note)}</small>` : ''}</td><td><button class="warehouse-secondary" data-view-inventory-count="${esc(openId)}">${esc(action)}</button></td></tr>`;
   };
-  const stockStatus = item => item.MucTon === 'Hết hàng' ? 'out' : ['Cần bổ sung', 'Chưa nhập lần đầu'].includes(item.MucTon) ? 'low' : 'ok';
+  const APPROACHING_MIN_UNITS = 5;
+  const classifyMucTon = item => {
+    if (item?.MucTon === 'Chưa nhập lần đầu') return 'Chưa nhập lần đầu';
+    const qty = Number(item?.SLTon);
+    const min = Number(item?.TonKhoToiThieu);
+    const onHand = Number.isFinite(qty) ? qty : 0;
+    const minimum = Number.isFinite(min) ? min : 0;
+    if (onHand <= 0) return 'Hết hàng';
+    if (onHand <= minimum) return 'Cần bổ sung';
+    if (onHand > minimum && (onHand - minimum) <= APPROACHING_MIN_UNITS) return 'Sắp chạm định mức';
+    return 'Đủ hàng';
+  };
+  const stockStatus = item => {
+    const mucTon = classifyMucTon(item);
+    return mucTon === 'Hết hàng' || mucTon === 'Sắp chạm định mức' ? 'out' : ['Cần bổ sung', 'Chưa nhập lần đầu'].includes(mucTon) ? 'low' : 'ok';
+  };
   const productPhoto = (item, className = '') => window.FLY_PRODUCT_IMAGES?.markup(item, { className }) || '';
   const unsellableConditions = new Set(['Hỏng', 'Hết hạn']);
   const isPreRequestCount = count => /trước khi lập đề nghị/i.test(count?.GhiChu || '');
@@ -856,23 +871,24 @@
 
   const initInventory = async (root, context) => {
     let currentItems = [];
+    const selectedIds = new Set();
     const storedSearch = sessionStorage.getItem('fly_inventory_search');
     const presetLow = sessionStorage.getItem('fly_inventory_low_only');
     if (storedSearch != null) sessionStorage.removeItem('fly_inventory_search');
     if (presetLow != null) sessionStorage.removeItem('fly_inventory_low_only');
     const presetSearch = storedSearch ?? window.FLY_SEARCH?.takePendingQuery?.('warehouse-inventory') ?? '';
-    const selectedItems = () => Array.from(root.querySelectorAll('.inventory-select:checked')).map(box => currentItems.find(item => item.MaSP === box.value)).filter(Boolean);
+    const selectedItems = () => currentItems.filter(item => selectedIds.has(item.MaSP));
     const load = async () => {
       const search = root.querySelector('#inventorySearch')?.value || '';
       const lowOnly = root.querySelector('#lowOnly')?.checked ?? true;
       try {
         const data = await api(context, `/warehouse/inventory?search=${encodeURIComponent(search)}&lowOnly=${lowOnly}`);
-        currentItems = data.items;
-        const rows = data.items.length ? data.items.map(item => `<tr>
-          <td><input type="checkbox" class="inventory-select" value="${esc(item.MaSP)}" ${item.MucTon === 'Đủ hàng' ? '' : 'checked'} aria-label="Chọn ${esc(item.TenSP)}"></td>
+        currentItems = (data.items || []).map(item => ({ ...item, MucTon: classifyMucTon(item) }));
+        const rows = currentItems.length ? currentItems.map(item => `<tr>
+          <td><input type="checkbox" class="inventory-select" value="${esc(item.MaSP)}" ${selectedIds.has(item.MaSP) ? 'checked' : ''} aria-label="Chọn ${esc(item.TenSP)}"></td>
           <td><div class="warehouse-product-cell">${productPhoto(item, 'table-product-photo')}<div><strong>${esc(item.TenSP)}</strong><small>${esc(item.MaSP)} · ${esc(item.MaVach || 'Chưa có mã vạch')}</small></div></div></td><td>${esc(item.TenDM)}</td>
           <td class="num">${item.SLTon}</td><td class="num">${item.TonKhoToiThieu}</td><td class="num">${item.SLDatMua}</td>
-          <td><span class="status-pill ${stockStatus(item)}">${esc(item.MucTon)}</span></td></tr>`).join('') : (search
+          <td><span class="status-pill ${stockStatus(item)}">${esc(classifyMucTon(item))}</span></td></tr>`).join('') : (search
           ? emptyRow(7, search, 'sản phẩm', 'Không tìm thấy sản phẩm.')
           : '<tr><td colspan="7" class="warehouse-empty"><strong>Không có mặt hàng cần xử lý</strong><small>Bỏ lọc “Chỉ hiện hàng cần nhập” để xem toàn bộ tồn, hoặc làm mới danh sách.</small></td></tr>');
         root.querySelector('#inventoryBody').innerHTML = rows;
@@ -890,6 +906,12 @@
     root.querySelector('#inventorySearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250); });
     root.querySelector('#lowOnly').addEventListener('change', load);
     root.querySelector('#refreshInventory').addEventListener('click', load);
+    root.querySelector('#inventoryBody').addEventListener('change', event => {
+      const box = event.target.closest('.inventory-select');
+      if (!box) return;
+      if (box.checked) selectedIds.add(box.value);
+      else selectedIds.delete(box.value);
+    });
     root.querySelector('#checkActual').addEventListener('click', async () => {
       const selected = selectedItems();
       if (!selected.length) return context.showToast('Hãy chọn ít nhất một mặt hàng để kiểm tra số lượng thực tế.', 'error');
@@ -901,6 +923,7 @@
             GhiChu: 'Kiểm tra số lượng thực tế trước khi lập đề nghị mua hàng.'
           })
         });
+        selected.forEach(item => selectedIds.delete(item.MaSP));
         context.showToast(result.message, 'success');
         inventoryCountDetail(context, result.MaKK, load, { followUp: true });
       } catch (error) { context.showToast(error.message, 'error'); }

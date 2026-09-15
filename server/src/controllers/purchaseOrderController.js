@@ -1,5 +1,7 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
+const { WORKFLOW_EVENTS } = require('../services/notifyCatalog');
+const { publishAfterCommit } = require('../services/notifyService');
 const {
     validateShipmentDocument, validateOptionalPackages, validateOptionalVnPlate,
     validateOptionalName, validateOptionalVnPhone, validateOptionalNote, validateShipmentTimes, firstError
@@ -8,8 +10,8 @@ const {
 const editableStatuses = new Set(['Nháp', 'Yêu cầu chỉnh sửa']);
 const clean = (value, max, fallback = null) => String(value ?? '').trim().slice(0, max) || fallback;
 
-const writeAudit = (request, user, action, recordId, content) =>
-    logAudit(request, { user, action, table: 'DonMuaHang', recordId, content, uc: 'UC13' });
+const writeAudit = (request, user, action, recordId, content, options = {}) =>
+    logAudit(request, { user, action, table: 'DonMuaHang', recordId, content, uc: 'UC13', ...options });
 
 const normalizeLines = lines => {
     if (!Array.isArray(lines) || !lines.length) throw new Error('Đơn mua phải có ít nhất một mặt hàng.');
@@ -251,9 +253,16 @@ const submit = async (req, res) => {
         await validateSource(transaction, current.recordset[0], linesResult.recordset, req.params.id);
         await new sql.Request(transaction).input('MaPO', sql.VarChar, req.params.id)
             .query(`UPDATE DonMuaHang SET TrangThai=N'Chờ duyệt',LyDoTuChoi=NULL WHERE MaPO=@MaPO`);
-        await writeAudit(new sql.Request(transaction), req.user, 'Gửi duyệt Đơn mua hàng', req.params.id, 'Chuyển Đơn mua tới Quản lý phê duyệt');
+        await writeAudit(new sql.Request(transaction), req.user, 'Gửi duyệt Đơn mua hàng', req.params.id,
+            'Chuyển Đơn mua tới Quản lý phê duyệt', { deferSideEffects: true });
         await transaction.commit();
-        res.json({ message: 'Đã gửi Đơn mua hàng cho Quản lý phê duyệt.' });
+        const eventKey = current.recordset[0].TrangThai === 'Yêu cầu chỉnh sửa'
+            ? WORKFLOW_EVENTS.PURCHASE_ORDER_RESUBMITTED
+            : WORKFLOW_EVENTS.PURCHASE_ORDER_SUBMITTED;
+        await publishAfterCommit(await poolPromise, eventKey, {
+            entityId: req.params.id, actor: req.user
+        });
+        res.json({ message: `Đã gửi Đơn mua hàng ${req.params.id} tới Quản lý phê duyệt.` });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error); res.status(409).json({ message: error.message || 'Không thể gửi duyệt Đơn mua hàng.' });
@@ -261,36 +270,61 @@ const submit = async (req, res) => {
 };
 
 const approve = async (req, res) => {
+    const pool = await poolPromise;
+    const transaction = new sql.Transaction(pool);
     try {
-        const pool = await poolPromise;
-        const result = await pool.request().input('MaPO', sql.VarChar, req.params.id).input('MaNV', sql.VarChar, req.user.MaNV)
+        await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        const result = await new sql.Request(transaction).input('MaPO', sql.VarChar, req.params.id).input('MaNV', sql.VarChar, req.user.MaNV)
             .query(`UPDATE DonMuaHang SET TrangThai=N'Đã duyệt',MaNV_Duyet=@MaNV,NgayDuyet=GETDATE(),LyDoTuChoi=NULL
-                    OUTPUT inserted.MaPO WHERE MaPO=@MaPO AND TrangThai=N'Chờ duyệt' AND SoNgayThanhToan BETWEEN 30 AND 45`);
-        if (!result.recordset.length) return res.status(409).json({ message: 'Đơn mua không còn ở trạng thái chờ duyệt hoặc điều khoản chưa hợp lệ.' });
-        await writeAudit(pool.request(), req.user, 'Phê duyệt Đơn mua hàng', req.params.id, 'Quản lý phê duyệt Đơn mua; tồn kho chưa thay đổi');
-        res.json({ message: 'Đã phê duyệt Đơn mua hàng.' });
-    } catch (error) { console.error(error); res.status(500).json({ message: 'Không thể phê duyệt Đơn mua hàng.' }); }
+                    OUTPUT inserted.MaPO,inserted.MaNV_Lap WHERE MaPO=@MaPO AND TrangThai=N'Chờ duyệt' AND SoNgayThanhToan BETWEEN 30 AND 45`);
+        if (!result.recordset.length) throw new Error('Đơn mua không còn ở trạng thái chờ duyệt hoặc điều khoản chưa hợp lệ.');
+        await writeAudit(new sql.Request(transaction), req.user, 'Phê duyệt Đơn mua hàng', req.params.id,
+            'Quản lý phê duyệt Đơn mua; tồn kho chưa thay đổi', { deferSideEffects: true });
+        await transaction.commit();
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.PURCHASE_ORDER_APPROVED, {
+            entityId: req.params.id, actor: req.user, recipientUsers: [result.recordset[0].MaNV_Lap]
+        });
+        res.json({ message: `Đã phê duyệt Đơn mua hàng ${req.params.id}. Đơn được chuyển lại Nhân viên mua hàng để gửi Nhà cung cấp.` });
+    } catch (error) {
+        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        console.error(error);
+        res.status(409).json({ message: error.message || 'Không thể phê duyệt Đơn mua hàng.' });
+    }
 };
 
 const decide = status => async (req, res) => {
+    const pool = await poolPromise;
+    const transaction = new sql.Transaction(pool);
     try {
         const reason = clean(req.body.LyDo, 500);
         if (!reason) return res.status(400).json({ message: 'Vui lòng nhập lý do.' });
-        const pool = await poolPromise;
-        const result = await pool.request().input('MaPO', sql.VarChar, req.params.id).input('MaNV', sql.VarChar, req.user.MaNV)
+        await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        const result = await new sql.Request(transaction).input('MaPO', sql.VarChar, req.params.id).input('MaNV', sql.VarChar, req.user.MaNV)
             .input('TrangThai', sql.NVarChar, status).input('LyDo', sql.NVarChar, reason).query(`
                 UPDATE DonMuaHang SET TrangThai=@TrangThai,MaNV_Duyet=@MaNV,NgayDuyet=GETDATE(),LyDoTuChoi=@LyDo
-                OUTPUT inserted.MaPO,inserted.MaDN WHERE MaPO=@MaPO AND TrangThai=N'Chờ duyệt'`);
-        if (!result.recordset.length) return res.status(409).json({ message: 'Đơn mua không còn ở trạng thái chờ duyệt.' });
+                OUTPUT inserted.MaPO,inserted.MaDN,inserted.MaNV_Lap WHERE MaPO=@MaPO AND TrangThai=N'Chờ duyệt'`);
+        if (!result.recordset.length) throw new Error('Đơn mua không còn ở trạng thái chờ duyệt.');
         if (status === 'Từ chối') {
-            const transaction = new sql.Transaction(pool);
-            await transaction.begin();
             await refreshRequestStatus(transaction, result.recordset[0].MaDN);
-            await transaction.commit();
         }
-        await writeAudit(pool.request(), req.user, status === 'Từ chối' ? 'Từ chối Đơn mua hàng' : 'Yêu cầu chỉnh sửa Đơn mua hàng', req.params.id, reason);
-        res.json({ message: status === 'Từ chối' ? 'Đã từ chối Đơn mua hàng.' : 'Đã trả Đơn mua cho Nhân viên mua hàng chỉnh sửa.' });
-    } catch (error) { console.error(error); res.status(500).json({ message: 'Không thể cập nhật quyết định phê duyệt.' }); }
+        await writeAudit(new sql.Request(transaction), req.user,
+            status === 'Từ chối' ? 'Từ chối Đơn mua hàng' : 'Yêu cầu chỉnh sửa Đơn mua hàng',
+            req.params.id, reason, { deferSideEffects: true });
+        await transaction.commit();
+        await publishAfterCommit(pool,
+            status === 'Từ chối' ? WORKFLOW_EVENTS.PURCHASE_ORDER_REJECTED : WORKFLOW_EVENTS.PURCHASE_ORDER_CHANGES, {
+                entityId: req.params.id, actor: req.user, recipientUsers: [result.recordset[0].MaNV_Lap]
+            });
+        res.json({
+            message: status === 'Từ chối'
+                ? `Đã từ chối Đơn mua hàng ${req.params.id}. Nhân viên mua hàng đã được báo kiểm tra phản hồi.`
+                : `Đã trả Đơn mua hàng ${req.params.id} cho Nhân viên mua hàng chỉnh sửa và gửi lại.`
+        });
+    } catch (error) {
+        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        console.error(error);
+        res.status(409).json({ message: error.message || 'Không thể cập nhật quyết định phê duyệt.' });
+    }
 };
 
 const sendSupplier = async (req, res) => {
@@ -307,7 +341,7 @@ const sendSupplier = async (req, res) => {
             WHERE ct.MaPO=@MaPO`);
         await writeAudit(new sql.Request(transaction), req.user, 'Gửi Đơn mua cho Nhà cung cấp', req.params.id, 'Bắt đầu theo dõi số lượng đã đặt nhưng chưa nhận');
         await transaction.commit();
-        res.json({ message: 'Đã ghi nhận gửi Đơn mua cho Nhà cung cấp.' });
+        res.json({ message: `Đã ghi nhận gửi đơn ${req.params.id} cho Nhà cung cấp.` });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error); res.status(409).json({ message: error.message });
@@ -322,7 +356,7 @@ const confirmSupplier = async (req, res) => {
                     OUTPUT inserted.MaPO WHERE MaPO=@MaPO AND MaNV_Lap=@MaNV AND TrangThai=N'Đã gửi Nhà cung cấp'`);
         if (!result.recordset.length) return res.status(409).json({ message: 'Đơn mua chưa được gửi hoặc đã được xác nhận.' });
         await writeAudit(pool.request(), req.user, 'Ghi nhận Nhà cung cấp xác nhận', req.params.id, 'Nhà cung cấp xác nhận thực hiện Đơn mua');
-        res.json({ message: 'Đã ghi nhận Nhà cung cấp xác nhận Đơn mua.' });
+        res.json({ message: `Đã ghi nhận Nhà cung cấp xác nhận đơn ${req.params.id}.` });
     } catch (error) { console.error(error); res.status(500).json({ message: 'Không thể cập nhật xác nhận của Nhà cung cấp.' }); }
 };
 
@@ -384,8 +418,11 @@ const recordShipment = async (req, res) => {
         await writeAudit(new sql.Request(transaction), req.user, 'Ghi nhận Nhà cung cấp giao hàng', req.params.id,
             `Chuyến ${MaTBGH}, phiếu giao ${SoPhieuGiao}; hàng đang vận chuyển và chưa được tính vào tồn kho`);
         await transaction.commit();
+        await publishAfterCommit(await poolPromise, WORKFLOW_EVENTS.DELIVERY_SENT, {
+            entityId: MaTBGH, poId: req.params.id, actor: req.user
+        });
         res.status(201).json({
-            message: 'Đã ghi nhận chuyến giao hàng. Thủ kho sẽ ghi nhận xe đến trước khi kiểm nhận; tồn kho chưa thay đổi.',
+            message: `Đã gửi chuyến ${MaTBGH} của đơn ${req.params.id} cho Thủ kho nhận hàng.`,
             MaTBGH
         });
     } catch (error) {

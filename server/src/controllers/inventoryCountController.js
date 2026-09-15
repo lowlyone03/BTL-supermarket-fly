@@ -14,6 +14,8 @@ const {
 } = require('../services/countApprove');
 const { ensureStoreProfitLossSchema } = require('../services/storeProfitLoss');
 const { notifyInboxChanged } = require('../services/notificationHub');
+const { WORKFLOW_EVENTS } = require('../services/notifyCatalog');
+const { publishAfterCommit } = require('../services/notifyService');
 const { ensureCountSuccessorSchema } = require('../services/countSuccessorSchema');
 const {
     decorateCount,
@@ -41,8 +43,10 @@ const datePrefix = prefix => {
     return `${prefix}${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
 };
 
-const writeAudit = (transaction, user, action, recordId, content) =>
-    logAudit(transaction, { user, action, table: 'KiemKe', recordId, content, uc: 'UC20', severity: 'Quan trọng' });
+const writeAudit = (transaction, user, action, recordId, content, options = {}) =>
+    logAudit(transaction, {
+        user, action, table: 'KiemKe', recordId, content, uc: 'UC20', severity: 'Quan trọng', ...options
+    });
 
 const getWarehouse = async request => {
     const result = await request.query(`SELECT TOP 1 MaKho,TenKho,DiaChi
@@ -423,7 +427,8 @@ const submitCount = async (req, res) => {
             if (!/Invalid column name|MaKK/i.test(error.message || '')) throw error;
         }
         await writeAudit(transaction, req.user, hasDifference ? 'Gửi duyệt điều chỉnh tồn' : 'Hoàn thành kiểm kê', req.params.id,
-            hasDifference ? `${info.SoChenhLech} mặt hàng chênh lệch, chờ Quản lý duyệt` : 'Không phát sinh chênh lệch, không cập nhật tồn');
+            hasDifference ? `${info.SoChenhLech} mặt hàng chênh lệch, chờ Quản lý duyệt` : 'Không phát sinh chênh lệch, không cập nhật tồn',
+            { deferSideEffects: true });
         const closed = await markRejectedRecounted(transaction, {
             MaKK: req.params.id,
             MaKho: header.MaKho,
@@ -434,13 +439,17 @@ const submitCount = async (req, res) => {
             await writeAudit(transaction, req.user, 'Đã đếm lại sau từ chối', oldId, `Thay bằng ${req.params.id}`);
         }
         await transaction.commit();
-        notifyInboxChanged({
-            action: hasDifference ? 'Gửi duyệt điều chỉnh tồn' : 'Hoàn thành kiểm kê',
-            table: 'KiemKe',
-            recordId: req.params.id
-        });
+        if (hasDifference) {
+            await publishAfterCommit(pool, WORKFLOW_EVENTS.INVENTORY_COUNT_SUBMITTED, {
+                entityId: req.params.id, actor: req.user
+            });
+        } else {
+            notifyInboxChanged({ action: 'Hoàn thành kiểm kê', table: 'KiemKe', recordId: req.params.id });
+        }
         res.json({
-            message: hasDifference ? 'Đã chuyển đợt kiểm kê sang Chờ duyệt điều chỉnh.' : 'Đã hoàn thành kiểm kê, không phát sinh chênh lệch.',
+            message: hasDifference
+                ? `Đã gửi kiểm kê ${req.params.id} tới Quản lý duyệt điều chỉnh tồn.`
+                : `Đã hoàn thành kiểm kê ${req.params.id}; không phát sinh chênh lệch.`,
             TrangThai: nextStatus,
             scrapLines,
             existingScrap,
@@ -554,7 +563,8 @@ const approveCount = async (req, res) => {
             written.length ? `Điều chỉnh ${written.length} mặt hàng (${written.join(', ')})` : 'Không ghi thêm điều chỉnh tồn',
             skipped.length ? skipped.join('; ') : ''
         ].filter(Boolean).join('. ');
-        await writeAudit(transaction, req.user, 'Phê duyệt điều chỉnh tồn', req.params.id, auditNote);
+        await writeAudit(transaction, req.user, 'Phê duyệt điều chỉnh tồn', req.params.id,
+            auditNote, { deferSideEffects: true });
         const { postCountJournals } = require('../services/accountingHooks');
         await postCountJournals(transaction, {
             maKK: req.params.id, maNV: req.user.MaNV, user: req.user,
@@ -570,9 +580,12 @@ const approveCount = async (req, res) => {
             await writeAudit(transaction, req.user, 'Đã đếm lại sau từ chối', oldId, `Thay bằng ${req.params.id}`);
         }
         await transaction.commit();
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.INVENTORY_COUNT_APPROVED, {
+            entityId: req.params.id, actor: req.user, recipientUsers: [count.MaNV]
+        });
         const message = written.length
-            ? `Đã duyệt và điều chỉnh tồn cho ${written.length} mặt hàng.${skipped.length ? ` ${skipped.join('. ')}.` : ''}`
-            : `Đã duyệt đợt kiểm kê. ${skipped.join('. ')}.`;
+            ? `Đã duyệt kiểm kê ${req.params.id} và điều chỉnh tồn cho ${written.length} mặt hàng.${skipped.length ? ` ${skipped.join('. ')}.` : ''}`
+            : `Đã duyệt kiểm kê ${req.params.id}. ${skipped.join('. ')}.`;
         res.json({ message });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
@@ -637,7 +650,8 @@ const rejectCount = async (req, res) => {
                     WHERE MaKK=@MaKK AND TrangThai=N'Chờ duyệt điều chỉnh'`);
         const updated = result.recordset[0];
         if (!updated) throw new Error('Đợt kiểm kê không còn ở trạng thái chờ duyệt điều chỉnh.');
-        await writeAudit(transaction, req.user, 'Từ chối điều chỉnh tồn', req.params.id, reason);
+        await writeAudit(transaction, req.user, 'Từ chối điều chỉnh tồn', req.params.id,
+            reason, { deferSideEffects: true });
         await transaction.commit();
         let notified = 0;
         try {
@@ -647,11 +661,13 @@ const rejectCount = async (req, res) => {
         } catch (error) {
             console.error(error);
         }
-        notifyInboxChanged({ action: 'Từ chối điều chỉnh tồn', table: 'KiemKe', recordId: updated.MaKK });
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.INVENTORY_COUNT_REJECTED, {
+            entityId: updated.MaKK, actor: req.user, recipientUsers: [updated.MaNV]
+        });
         res.json({
             message: notified
-                ? `Đã từ chối điều chỉnh; tồn giữ nguyên. Đã báo ${notified} Thủ kho đếm lại.`
-                : 'Đã từ chối điều chỉnh; tồn kho được giữ nguyên. Thủ kho hãy tạo đợt kiểm kê mới.'
+                ? `Đã từ chối điều chỉnh kiểm kê ${updated.MaKK}; tồn giữ nguyên. Đã báo ${notified} Thủ kho đếm lại.`
+                : `Đã từ chối điều chỉnh kiểm kê ${updated.MaKK}; tồn kho giữ nguyên. Thủ kho phụ trách hãy đếm lại.`
         });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});

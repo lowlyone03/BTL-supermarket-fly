@@ -29,7 +29,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="dashboard.css?v=role-hide-3">
+  <link rel="stylesheet" href="dashboard.css?v=inbox-read-1">
   <link rel="stylesheet" href="../admin/admin.css?v=perm-ui-7">
   <link rel="stylesheet" href="../warehouse/warehouse.css?v=fly-dialog-1">
   <link rel="stylesheet" href="../workforce/workforce.css?v=approve-fix-2">
@@ -44,7 +44,7 @@
   <link rel="stylesheet" href="../admin/loyalty.css?v=loy-apply-1">
   <link rel="stylesheet" href="assistant.css?v=assist-ui-10">
   <link rel="stylesheet" href="chat.css?v=chat-p8">
-  <link rel="stylesheet" href="../shared/theme.css?v=i18n-approve-1">
+  <link rel="stylesheet" href="../shared/theme.css?v=inbox-read-1">
 </head>
 <body>
   <svg class="svg-library" aria-hidden="true">
@@ -294,6 +294,14 @@
       <button class="warehouse-icon-button" id="notificationClose" type="button" data-i18n-aria="notify.close" aria-label="Đóng">×</button>
     </header>
     <p class="notification-hint" id="notificationHint"></p>
+    <div class="notification-tools">
+      <div class="notification-filters" role="tablist" aria-label="Lọc thông báo">
+        <button type="button" class="active" data-notification-filter="unread" role="tab" aria-selected="true"><span data-i18n="notify.unread">Chưa đọc</span> <b id="notificationUnreadCount">0</b></button>
+        <button type="button" data-notification-filter="all" role="tab" aria-selected="false" data-i18n="notify.all">Tất cả</button>
+        <button type="button" data-notification-filter="read" role="tab" aria-selected="false" data-i18n="notify.read">Đã đọc</button>
+      </div>
+      <button type="button" class="notification-read-all" id="notificationReadAll" data-i18n="notify.readAll">Đánh dấu tất cả đã đọc</button>
+    </div>
     <ul id="notificationList"></ul>
   </div>
   <div class="toast" id="appToast" role="status" aria-live="polite"></div>
@@ -459,9 +467,9 @@
     </div>
   </aside>
 
-  <script src="../../i18n/vi.js?v=chat-one-2"></script>
-  <script src="../../i18n/en.js?v=chat-one-2"></script>
-  <script src="../../i18n/zh.js?v=chat-one-2"></script>
+  <script src="../../i18n/vi.js?v=inbox-read-1"></script>
+  <script src="../../i18n/en.js?v=inbox-read-1"></script>
+  <script src="../../i18n/zh.js?v=inbox-read-1"></script>
   <script src="../../i18n/ops.js?v=i18n-approve-1"></script>
   <script src="../../i18n/i18n.js?v=i18n-assist-10"></script>
   <script src="../../i18n/appearance.js"></script>
@@ -480,27 +488,28 @@
   <script src="../shared/warehouse-xlsx.js?v=wh-report-5"></script>
   <script src="../shared/warehouse-report-ui.js?v=dept-ui-2"></script>
   <script src="../admin/admin-page-templates.js?v=perm-ui-7"></script>
-  <script src="../warehouse/warehouse-pages.js?v=scrap-qty-1"></script>
+  <script src="../warehouse/warehouse-pages.js?v=stock-gap-5"></script>
   <script src="../warehouse/supplier-pages.js?v=giahan-1"></script>
-  <script src="../warehouse/purchase-order-pages.js?v=i18n-approve-1"></script>
+  <script src="../warehouse/purchase-order-pages.js?v=pay-result-1"></script>
   <script src="../warehouse/receipt-pages.js?v=search-2"></script>
   <script src="../warehouse/stock-issue-pages.js?v=scrap-qty-1"></script>
   <script src="../accounting/store-pnl.js?v=store-pnl-2"></script>
-  <script src="../accounting/accounting-pages.js?v=dept-report-4"></script>
+  <script src="../accounting/accounting-pages.js?v=pay-result-1"></script>
   <script src="../accounting/ledger-print.js?v=ledger-print-1"></script>
-  <script src="../accounting/ledger-pages.js?v=hb-full-2"></script>
+  <script src="../accounting/ledger-pages.js?v=report-export-2"></script>
   <script src="../accounting/reconciliation-pages.js?v=hb-full-2"></script>
   <script src="../admin/loyalty-pages.js?v=loy-apply-1"></script>
   <script src="../workforce/workforce-pages.js?v=close-confirm-1"></script>
   <script src="../cashier/cashier-pages.js?v=cart-top-1"></script>
-  <script src="../shared/role-reports.js?v=dept-report-2"></script>
+  <script src="../shared/role-reports.js?v=report-export-2"></script>
   <script src="../shared/warehouse-keeper-reports.js?v=dept-ui-2"></script>
-  <script src="../shared/department-export.js?v=dept-report-1"></script>
+  <script src="../shared/department-export.js?v=report-export-2"></script>
   <script src="../shared/department-report-ui.js?v=dept-ui-5"></script>
   <script src="../shared/department-keeper-reports.js?v=dept-ui-3"></script>
   <script src="../shared/department-ledger-submit.js?v=dept-report-2"></script>
   <script src="../admin/appearance-pages.js?v=theme-i18n-1"></script>
-  <script src="dashboard.js?v=role-boot-3"></script>
+  <script src="notify-socket.js?v=inbox-read-1"></script>
+  <script src="dashboard.js?v=pay-result-1"></script>
   <script src="chat-panel.js?v=chat-one-3"></script>
   <script src="assistant-panel.js?v=assist-ui-11"></script>
 </body>

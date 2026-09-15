@@ -1,5 +1,7 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
+const { WORKFLOW_EVENTS } = require('../services/notifyCatalog');
+const { publishAfterCommit } = require('../services/notifyService');
 const { storedStockImpact } = require('../services/countScrap');
 const { ensureCountScrapSchema } = require('../services/countScrapSchema');
 const {
@@ -27,8 +29,10 @@ const datePrefix = prefix => {
     return `${prefix}${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
 };
 
-const writeAudit = (transaction, user, action, recordId, content) =>
-    logAudit(transaction, { user, action, table: 'PhieuXuat', recordId, content, uc: 'UC19', severity: 'Quan trọng' });
+const writeAudit = (transaction, user, action, recordId, content, options = {}) =>
+    logAudit(transaction, {
+        user, action, table: 'PhieuXuat', recordId, content, uc: 'UC19', severity: 'Quan trọng', ...options
+    });
 
 const getWarehouse = async request => {
     const result = await request.query(`SELECT TOP 1 MaKho,TenKho,DiaChi
@@ -394,7 +398,8 @@ const persistLinkedIssue = async ({ transaction, user, header, lines, submitNow,
         ? 'phiếu thông tin, xác nhận không trừ tồn'
         : 'tồn kho chưa thay đổi cho tới khi xác nhận xuất';
     await writeAudit(transaction, user, submitNow ? 'Lập và gửi duyệt Phiếu xuất kho' : 'Lập Phiếu xuất kho', maPX,
-        `Hủy hàng từ ${sourceLabel}; ${nextStatus}; ${stockNote}`);
+        `Hủy hàng từ ${sourceLabel}; ${nextStatus}; ${stockNote}`,
+        submitNow ? { deferSideEffects: true } : {});
     return { maPX, nextStatus };
 };
 
@@ -544,6 +549,11 @@ const createIssueFromReturn = async (req, res) => {
             return res.json(existingIssueResponse(saved.existing || { MaPX: null, TrangThai: 'Nháp' }, maDT));
         }
         await transaction.commit();
+        if (submitNow) {
+            await publishAfterCommit(pool, WORKFLOW_EVENTS.STOCK_ISSUE_SUBMITTED, {
+                entityId: saved.maPX, actor: req.user
+            });
+        }
         res.status(201).json({
             MaPX: saved.maPX,
             existed: false,
@@ -576,8 +586,11 @@ const createIssueFromCount = async (req, res) => {
                     .query(`UPDATE PhieuXuat SET TrangThai=N'Chờ duyệt',MaNV_Duyet=NULL,NgayDuyet=NULL,LyDoTuChoi=NULL
                             WHERE MaPX=@MaPX`);
                 await writeAudit(transaction, req.user, 'Gửi duyệt Phiếu xuất kho', source.existing.MaPX,
-                    `Hủy hàng từ kiểm kê ${maKK}; tồn kho chưa thay đổi`);
+                    `Hủy hàng từ kiểm kê ${maKK}; tồn kho chưa thay đổi`, { deferSideEffects: true });
                 await transaction.commit();
+                await publishAfterCommit(pool, WORKFLOW_EVENTS.STOCK_ISSUE_SUBMITTED, {
+                    entityId: source.existing.MaPX, actor: req.user
+                });
                 return res.json({
                     MaPX: source.existing.MaPX,
                     existed: true,
@@ -606,6 +619,11 @@ const createIssueFromCount = async (req, res) => {
             return res.json(existingIssueResponse(saved.existing || { MaPX: null, TrangThai: 'Nháp' }, `kiểm kê ${maKK}`));
         }
         await transaction.commit();
+        if (submitNow) {
+            await publishAfterCommit(pool, WORKFLOW_EVENTS.STOCK_ISSUE_SUBMITTED, {
+                entityId: saved.maPX, actor: req.user
+            });
+        }
         const stockHint = source.impact.KhongTruTon
             ? 'Xác nhận không trừ trùng tồn.'
             : 'Thủ kho xác nhận xuất mới trừ tồn hàng hỏng còn trên kệ.';
@@ -702,9 +720,13 @@ const submitIssue = async (req, res) => {
         await new sql.Request(transaction).input('MaPX', sql.VarChar, req.params.id)
             .query(`UPDATE PhieuXuat SET TrangThai=N'Chờ duyệt',MaNV_Duyet=NULL,NgayDuyet=NULL,LyDoTuChoi=NULL
                     WHERE MaPX=@MaPX`);
-        await writeAudit(transaction, req.user, 'Gửi duyệt Phiếu xuất kho', req.params.id, `${header.LoaiXuat}; tồn kho chưa thay đổi`);
+        await writeAudit(transaction, req.user, 'Gửi duyệt Phiếu xuất kho', req.params.id,
+            `${header.LoaiXuat}; tồn kho chưa thay đổi`, { deferSideEffects: true });
         await transaction.commit();
-        res.json({ message: 'Đã gửi Phiếu xuất cho Quản lý phê duyệt.' });
+        await publishAfterCommit(await poolPromise, WORKFLOW_EVENTS.STOCK_ISSUE_SUBMITTED, {
+            entityId: req.params.id, actor: req.user
+        });
+        res.json({ message: `Đã gửi Phiếu xuất ${req.params.id} tới Quản lý phê duyệt; tồn kho chưa thay đổi.` });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);
@@ -738,14 +760,18 @@ const decideIssue = approved => async (req, res) => {
         await writeAudit(transaction, req.user, approved ? 'Phê duyệt Phiếu xuất kho' : 'Từ chối Phiếu xuất kho',
             req.params.id, approved
                 ? (infoOnly ? 'Cho phép Thủ kho xác nhận phiếu thông tin; tồn kho không đổi' : 'Cho phép Thủ kho thực hiện xuất; tồn kho chưa thay đổi')
-                : reason);
+                : reason, { deferSideEffects: true });
         await transaction.commit();
+        await publishAfterCommit(await poolPromise,
+            approved ? WORKFLOW_EVENTS.STOCK_ISSUE_APPROVED : WORKFLOW_EVENTS.STOCK_ISSUE_REJECTED, {
+                entityId: req.params.id, actor: req.user, recipientUsers: [header.MaNV]
+            });
         res.json({
             message: approved
                 ? (infoOnly
-                    ? 'Đã phê duyệt Phiếu xuất thông tin. Thủ kho xác nhận để khóa hồ sơ; tồn kho không đổi.'
-                    : 'Đã phê duyệt Phiếu xuất. Tồn kho chưa thay đổi cho tới khi Thủ kho xác nhận xuất.')
-                : 'Đã từ chối Phiếu xuất; tồn kho được giữ nguyên.'
+                    ? `Đã phê duyệt Phiếu xuất thông tin ${req.params.id}. Thủ kho sẽ xác nhận để khóa hồ sơ; tồn kho không đổi.`
+                    : `Đã phê duyệt Phiếu xuất ${req.params.id}. Phiếu được chuyển tới Thủ kho xác nhận xuất; tồn kho chưa thay đổi.`)
+                : `Đã từ chối Phiếu xuất ${req.params.id}. Thủ kho đã được báo kiểm tra phản hồi; tồn kho giữ nguyên.`
         });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
@@ -839,8 +865,11 @@ const confirmIssue = async (req, res) => {
             maPX: req.params.id, maNV: req.user.MaNV, user: req.user, header, lines: priced
         });
         await transaction.commit();
+        await publishAfterCommit(await poolPromise, WORKFLOW_EVENTS.STOCK_ISSUE_CONFIRMED, {
+            entityId: req.params.id, actor: req.user, recipientUsers: [header.MaNV_Duyet].filter(Boolean)
+        });
         const message = decreased
-            ? `Đã xác nhận xuất. Giảm tồn ${decreased} mặt hàng.${documented ? ` ${documented} mã ghi nhận thông tin, không trừ trùng.` : ''}`
+            ? `Đã xác nhận xuất ${req.params.id}. Giảm tồn ${decreased} mặt hàng.${documented ? ` ${documented} mã ghi nhận thông tin, không trừ trùng.` : ''}`
             : `Đã xác nhận phiếu xuất thông tin ${req.params.id}. Tồn kho không đổi (đã trừ lúc bán hoặc đã điều chỉnh kiểm kê).`;
         res.json({ message });
     } catch (error) {

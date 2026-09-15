@@ -1,6 +1,8 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
 const { notifyInboxChanged } = require('../services/notificationHub');
+const { WORKFLOW_EVENTS } = require('../services/notifyCatalog');
+const { publishAfterCommit } = require('../services/notifyService');
 const { resolvePayAmount, OVERDUE_EXTENSION_DAYS } = require('../services/payableMath');
 const {
     ensurePayablePaymentSchema,
@@ -36,8 +38,10 @@ const generateId = async (transaction, prefix) => {
     return `${prefix}${String(last ? Number(last.slice(prefix.length)) + 1 : 1).padStart(4, '0')}`;
 };
 
-const writeAudit = (transaction, user, action, recordId, content) =>
-    logAudit(transaction, { user, action, table: 'PhieuChi', recordId, content, uc: 'UC28', severity: 'Quan trọng' });
+const writeAudit = (transaction, user, action, recordId, content, options = {}) =>
+    logAudit(transaction, {
+        user, action, table: 'PhieuChi', recordId, content, uc: 'UC28', severity: 'Quan trọng', ...options
+    });
 
 const payableSelect = `
     SELECT cn.MaCNPTra,cn.MaNCC,ncc.TenNCC,ncc.MaSoThue,ncc.SDT,ncc.Email,
@@ -158,7 +162,8 @@ const voucherPrefix = () => {
 const insertOnePaymentVoucher = async (user, MaCongNo, { PhuongThuc, NoiDung, GhiChu, LoaiThanhToan, PhanTram, SoTien }) => {
     if (!PAYMENT_METHODS.has(PhuongThuc)) throw new Error('Phương thức Phiếu chi chỉ gồm Tiền mặt hoặc Chuyển khoản.');
     if (!NoiDung) throw new Error('Nội dung chi là bắt buộc.');
-    const transaction = new sql.Transaction(await poolPromise);
+    const pool = await poolPromise;
+    const transaction = new sql.Transaction(pool);
     try {
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         await ensurePayablePaymentSchema(transaction);
@@ -206,8 +211,12 @@ const insertOnePaymentVoucher = async (user, MaCongNo, { PhuongThuc, NoiDung, Gh
                            @NoiDung,@MaNV,NULL,NULL,NULL,N'Chờ duyệt',@GhiChu,@LoaiThanhToan,@PhanTram)`);
         const payLabel = planned.remainingAfter > 0 ? 'từng phần' : 'một lần (hết số còn lại)';
         await writeAudit(transaction, user, 'Lập và gửi duyệt Phiếu chi', MaPhieu,
-            `${early ? 'Trước hạn. ' : ''}Công nợ ${MaCongNo}; chi ${payLabel} ${planned.amount}/${Number(debt.SoTienConLai)} cho ${debt.TenNCC}`);
+            `${early ? 'Trước hạn. ' : ''}Công nợ ${MaCongNo}; chi ${payLabel} ${planned.amount}/${Number(debt.SoTienConLai)} cho ${debt.TenNCC}`,
+            { deferSideEffects: true });
         await transaction.commit();
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.PAYMENT_VOUCHER_SUBMITTED, {
+            entityId: MaPhieu, actor: user
+        });
         return {
             message: planned.remainingAfter > 0
                 ? `Đã lập Phiếu chi ${MaPhieu} số ${planned.amount} (còn lại sau khi duyệt+chi dự kiến ${planned.remainingAfter}) và gửi Quản lý duyệt. Công nợ chưa giảm.`
@@ -293,7 +302,8 @@ const createVouchersBulk = async (req, res) => {
 };
 
 const resubmitVoucher = async (req, res) => {
-    const transaction = new sql.Transaction(await poolPromise);
+    const pool = await poolPromise;
+    const transaction = new sql.Transaction(pool);
     try {
         const MaPhieu = clean(req.params.id, 20);
         const PhuongThuc = clean(req.body.PhuongThuc, 30);
@@ -318,9 +328,15 @@ const resubmitVoucher = async (req, res) => {
                     MaNV_Duyet=NULL,NgayDuyet=NULL,LyDoTuChoi=NULL,TrangThai=N'Chờ duyệt'
                 WHERE MaPhieu=@Id`);
         await writeAudit(transaction, req.user, 'Chỉnh sửa và gửi lại Phiếu chi', MaPhieu,
-            `Gửi lại Phiếu chi cho công nợ ${voucher.MaCongNo}`);
+            `Gửi lại Phiếu chi cho công nợ ${voucher.MaCongNo}`, { deferSideEffects: true });
         await transaction.commit();
-        res.json({ message: `Đã chỉnh sửa và gửi lại Phiếu chi ${MaPhieu}.`, MaPhieu, TrangThai: 'Chờ duyệt' });
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.PAYMENT_VOUCHER_RESUBMITTED, {
+            entityId: MaPhieu, actor: req.user
+        });
+        res.json({
+            message: `Đã chỉnh sửa Phiếu chi ${MaPhieu} và gửi lại Quản lý phê duyệt.`,
+            MaPhieu, TrangThai: 'Chờ duyệt'
+        });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         res.status(400).json({ message: error.message });
@@ -391,6 +407,12 @@ const payVoucher = async (req, res) => {
         const { postSupplierPayment } = require('../services/accountingHooks');
         await postSupplierPayment(transaction, { maPhieu: MaPhieu, maNV: req.user.MaNV, user: req.user, success });
         await transaction.commit();
+        await publishAfterCommit(pool,
+            success ? WORKFLOW_EVENTS.PAYMENT_VOUCHER_PAID : WORKFLOW_EVENTS.PAYMENT_VOUCHER_FAILED, {
+                entityId: MaPhieu,
+                actor: req.user,
+                recipientUsers: [voucher.MaNV, voucher.MaNV_Duyet].filter(Boolean)
+            });
         const leftAfter = success
             ? Math.max(0, Number(voucher.SoTienNo) - (Number(voucher.SoTienDaTra) + apply))
             : remaining;
@@ -478,17 +500,17 @@ const decideVoucher = approved => async (req, res) => {
                     GhiChuCapQuy=@GhiChuCapQuy WHERE MaPhieu=@Id`);
         await writeAudit(transaction, req.user, approved ? 'Phê duyệt Phiếu chi' : 'Từ chối Phiếu chi', MaPhieu,
             approved ? `Đã giao tiền (${fundMethod}) cho Kế toán tất toán ${voucher.MaCongNo}; chưa giảm công nợ`
-                : `Từ chối Phiếu chi; công nợ giữ nguyên. Lý do: ${reason}`);
+                : `Từ chối Phiếu chi; công nợ giữ nguyên. Lý do: ${reason}`,
+            { deferSideEffects: true });
         await transaction.commit();
-        notifyInboxChanged({
-            action: approved ? 'Phê duyệt Phiếu chi' : 'Từ chối Phiếu chi',
-            table: 'PhieuChi',
-            recordId: MaPhieu
-        });
+        await publishAfterCommit(pool,
+            approved ? WORKFLOW_EVENTS.PAYMENT_VOUCHER_APPROVED : WORKFLOW_EVENTS.PAYMENT_VOUCHER_REJECTED, {
+                entityId: MaPhieu, actor: req.user, recipientUsers: [voucher.MaNV]
+            });
         res.json({
             message: approved
-                ? `Đã duyệt và giao tiền cho Kế toán trên Phiếu chi ${MaPhieu}. Công nợ chỉ giảm sau khi Kế toán thanh toán thành công cho Nhà cung cấp.`
-                : `Đã từ chối Phiếu chi ${MaPhieu}.`,
+                ? `Đã duyệt Phiếu chi ${MaPhieu} và chuyển tới Kế toán lập phiếu để thanh toán Nhà cung cấp. Công nợ chỉ giảm sau khi thanh toán thành công.`
+                : `Đã từ chối Phiếu chi ${MaPhieu}. Kế toán lập phiếu đã được báo kiểm tra phản hồi.`,
             MaPhieu, TrangThai: approved ? 'Đã duyệt' : 'Từ chối', CongNoDaGiam: false,
             HinhThucCapQuy: approved ? fundMethod : null
         });
@@ -598,6 +620,9 @@ const requestExtension = async (req, res) => {
                 .query('UPDATE CongNoGiaHan SET MaTin = @MaTin WHERE MaGiaHan = @Ma');
         }
         notifyInboxChanged({ action: 'Nhờ mua hàng xin gia hạn NCC', table: 'CongNoGiaHan', recordId: String(maGiaHan) });
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.PAYABLE_EXTENSION_REQUESTED, {
+            entityId: maCN, actor: req.user
+        });
         res.status(201).json({
             message: 'Đã nhờ mua hàng xin gia hạn. Mua hàng sẽ liên hệ NCC; bạn theo dõi trạng thái trên hồ sơ công nợ.',
             MaGiaHan: maGiaHan,
@@ -697,6 +722,9 @@ const grantExtension = async (req, res) => {
             GhiChu: note
         });
         notifyInboxChanged({ action: 'Ghi hạn mới NCC', table: 'CongNoGiaHan', recordId: String(giaHanId) });
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.PAYABLE_EXTENSION_GRANTED, {
+            entityId: maCN, actor: req.user, recipientUsers: [row.MaNV_YeuCau].filter(Boolean)
+        });
         res.json({
             message: `Đã ghi hạn mới ${hanMoi} cho ${row.TenNCC}. Công nợ ${maCN} không còn quá hạn theo hạn cũ.`,
             MaGiaHan: giaHanId,

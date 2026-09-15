@@ -1336,8 +1336,8 @@
         if (invalid) return context.showToast(`Số lượng trả của ${invalid.MaSP} phải là số nguyên lớn hơn 0.`, 'error');
         try {
           const created = await api(context, '/cashier/returns', { method: 'POST', body: JSON.stringify({ MaHD: inv.MaHD, LyDo: overlay.querySelector('#returnReason').value, HinhThucXuLy: overlay.querySelector('input[name=returnFormType]:checked').value, lines }) });
-          await api(context, `/cashier/returns/${created.MaDT}/submit`, { method: 'POST' });
-          context.showToast('Đã gửi hàng cho Thủ kho kiểm tra.', 'success'); overlay.remove(); await load();
+          const submitted = await api(context, `/cashier/returns/${created.MaDT}/submit`, { method: 'POST' });
+          context.showToast(submitted.message, 'success'); overlay.remove(); await load();
         } catch (error) { context.showToast(error.message, 'error'); }
       });
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', () => overlay.remove()));

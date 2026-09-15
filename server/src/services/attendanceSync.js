@@ -8,6 +8,7 @@ const closeOpenAttendance = async (source, maCa = null) => {
         UPDATE cc SET ThoiGianRa = ca.ThoiGianKetThuc, TrangThai = N'Chờ duyệt',
             PhutVeSom = CASE WHEN ca.ThoiGianKetThuc < l.KetThucDuKien
                 THEN DATEDIFF(minute, ca.ThoiGianKetThuc, l.KetThucDuKien) ELSE 0 END
+        OUTPUT inserted.MaChamCong
         FROM ChamCong cc
         JOIN LichLamViec l ON l.MaLich = cc.MaLich
         JOIN CaLamViec ca ON ca.MaNV = l.MaNV

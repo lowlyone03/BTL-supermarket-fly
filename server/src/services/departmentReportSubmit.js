@@ -230,6 +230,15 @@ const submitDepartmentReport = async (pool, user, { kind, report, note = '', maC
         }
         notifyInboxChanged({ action: 'Gửi báo cáo bộ phận', table: 'BaoCaoBoPhanNop', recordId: maBC });
         try {
+            const { publishAfterCommit } = require('./notifyService');
+            const { WORKFLOW_EVENTS } = require('./notifyCatalog');
+            await publishAfterCommit(pool, WORKFLOW_EVENTS.REPORT_SUBMITTED, {
+                entityId: maBC, actor: user, target: ADMIN_TARGET
+            });
+        } catch (error) {
+            console.error(error);
+        }
+        try {
             const telegramNotify = require('./telegramNotify');
             telegramNotify.notifySafely(() => telegramNotify.notifyDepartmentReportSubmitted(pool, maBC));
         } catch (error) {
@@ -437,6 +446,15 @@ const feedbackDepartmentReport = async (pool, user, maBC, note) => {
         content: text
     });
     notifyInboxChanged({ action: 'Phản hồi báo cáo bộ phận', table: 'BaoCaoBoPhanNop', recordId: row.MaBC });
+    try {
+        const { publishAfterCommit } = require('./notifyService');
+        const { WORKFLOW_EVENTS } = require('./notifyCatalog');
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.REPORT_FEEDBACK, {
+            entityId: row.MaBC, actor: user, recipientUsers: [row.MaNV_Lap], target
+        });
+    } catch (error) {
+        console.error(error);
+    }
     return { MaBC: row.MaBC, message: `Đã gửi phản hồi tới ${row.TenNV_Lap}. Báo cáo chuyển sang Cần phản hồi.` };
 };
 

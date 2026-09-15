@@ -21,7 +21,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let inboxBackoff = 2000;
   let inboxToastTimer = 0;
   let inboxLive = false;
+  let inboxSocketFallback = false;
+  let inboxSocketLifecycle = null;
   let inboxFollowUp = 0;
+  let inboxFilter = 'unread';
+  let inboxReadBusy = false;
   const announcedInboxIds = new Set();
   let closeInboxPanel = () => {};
 
@@ -402,6 +406,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!response.ok) throw new Error(data.message || t('error.load'));
     return data;
   };
+  const apiPost = async path => {
+    const response = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await response.json();
+    if (response.status === 401) {
+      localStorage.removeItem('fly_token');
+      localStorage.removeItem('fly_user');
+      window.location.href = '../login/login.html';
+      throw new Error(t('error.session'));
+    }
+    if (!response.ok) throw new Error(data.message || t('error.load'));
+    return data;
+  };
 
   const formatToday = () => new Intl.DateTimeFormat('vi-VN', {
     weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: HANOI_TIME_ZONE
@@ -504,7 +523,8 @@ document.addEventListener('DOMContentLoaded', () => {
     user,
     apiBase: API_BASE,
     showToast: window.showToast,
-    navigate: nextTarget => goToPage(nextTarget)
+    navigate: nextTarget => goToPage(nextTarget),
+    refreshInbox: () => window.FLY_REFRESH_INBOX?.()
   });
   const setNavBadge = (target, count) => {
     const nav = pageNavItems.find(item => item.dataset.target === target);
@@ -519,34 +539,70 @@ document.addEventListener('DOMContentLoaded', () => {
     badge.textContent = String(count).padStart(2, '0');
     badge.style.display = count ? '' : (badge.id ? '' : 'none');
   };
+  const visibleInboxItems = () => {
+    if (inboxFilter === 'unread') return inboxItems.filter(item => !item.read);
+    if (inboxFilter === 'read') return inboxItems.filter(item => item.read);
+    return inboxItems;
+  };
+  const inboxEmptyCopy = () => {
+    if (inboxFilter === 'unread') return t('notify.unreadEmpty');
+    if (inboxFilter === 'read') return t('notify.readEmpty');
+    return t('notify.empty');
+  };
   const renderInboxPanel = () => {
     const list = document.getElementById('notificationList');
     const hint = document.getElementById('notificationHint');
     const heading = document.getElementById('notificationHeading');
     if (!list) return;
+    const unreadItems = inboxItems.filter(item => !item.read);
+    const visibleItems = visibleInboxItems();
     if (hint) hint.textContent = window._flyInboxHint || t('notify.hint');
-    if (heading) heading.textContent = inboxItems.length ? t('notify.waiting', { n: inboxItems.length }) : t('notify.none');
-    list.innerHTML = inboxItems.length
-      ? inboxItems.map(item => `<li><button class="notification-item ${escapeHtml(item.tone || 'info')}" type="button" data-inbox-target="${escapeHtml(item.target)}"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span>${item.at ? `<time>${fmtInboxTime(item.at)}</time>` : ''}</button></li>`).join('')
-      : `<li class="notification-empty">${t('notify.empty')}</li>`;
+    if (heading) {
+      heading.textContent = unreadItems.length
+        ? t('notify.waiting', { n: unreadItems.length })
+        : (inboxItems.length ? t('notify.allRead') : t('notify.none'));
+    }
+    const unreadCountEl = document.getElementById('notificationUnreadCount');
+    if (unreadCountEl) unreadCountEl.textContent = unreadItems.length > 99 ? '99+' : String(unreadItems.length);
+    const readAll = document.getElementById('notificationReadAll');
+    if (readAll) readAll.disabled = !unreadItems.length || inboxReadBusy;
+    document.querySelectorAll('[data-notification-filter]').forEach(button => {
+      const active = button.dataset.notificationFilter === inboxFilter;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    list.innerHTML = visibleItems.length
+      ? visibleItems.map(item => {
+        const id = escapeHtml(item.id);
+        const readControl = item.read
+          ? `<span class="notification-read-state">${t('notify.read')}</span>`
+          : `<button class="notification-mark-read" type="button" data-notification-read="${id}">${t('notify.markRead')}</button>`;
+        return `<li class="notification-entry${item.read ? ' is-read' : ''}"><button class="notification-item ${escapeHtml(item.tone || 'info')}" type="button" data-inbox-id="${id}" data-inbox-target="${escapeHtml(item.target)}"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span>${item.at ? `<time>${fmtInboxTime(item.at)}</time>` : ''}</button>${readControl}</li>`;
+      }).join('')
+      : `<li class="notification-empty">${inboxEmptyCopy()}</li>`;
   };
   const applyInbox = (data, { announce = false } = {}) => {
-    const items = data.items || [];
+    const localSeen = readSeen();
+    const items = (data.items || []).map(item => ({
+      ...item,
+      read: typeof item.read === 'boolean' ? item.read : false
+    }));
     const previous = new Set(inboxItems.map(item => item.id));
-    const seen = readSeen();
-    const fresh = items.filter(item => !previous.has(item.id) && !seen.has(item.id) && !announcedInboxIds.has(item.id) && inboxStamp);
+    const fresh = items.filter(item => !item.read && !previous.has(item.id) && !localSeen.has(item.id) && !announcedInboxIds.has(item.id) && inboxStamp);
     inboxItems = items;
-    inboxStamp = data.stamp || items.map(item => item.id).join('|');
+    inboxStamp = data.stamp || items.map(item => `${item.id}:${item.read ? 1 : 0}`).join('|');
     window._flyInboxHint = data.hint;
-    pendingTotal = Number(data.urgent || items.filter(item => item.tone === 'urgent').length);
-    const unread = items.filter(item => !seen.has(item.id)).length;
+    pendingTotal = Number(data.urgent ?? items.filter(item => !item.read && item.tone === 'urgent').length);
+    const unread = Number.isFinite(Number(data.unreadCount ?? data.unread))
+      ? Number(data.unreadCount ?? data.unread)
+      : items.filter(item => !item.read).length;
+    writeSeen(new Set([...localSeen, ...items.filter(item => item.read).map(item => item.id)]));
     const countEl = document.getElementById('notificationCount');
     const dot = document.getElementById('notificationDot');
     const bell = document.getElementById('notificationButton');
-    const count = items.length;
     if (countEl) {
-      countEl.textContent = count > 99 ? '99+' : String(count);
-      countEl.classList.toggle('visible', count > 0);
+      countEl.textContent = unread > 99 ? '99+' : String(unread);
+      countEl.classList.toggle('visible', unread > 0);
     }
     dot?.classList.toggle('visible', unread > 0);
     bell?.classList.toggle('has-unread', unread > 0);
@@ -586,6 +642,51 @@ document.addEventListener('DOMContentLoaded', () => {
       if (shouldReload && !workspaceBusy() && !heavyPages.has(currentTarget)) refreshCurrentPage();
     }
   };
+  const applyReadStateLocally = ids => {
+    const selected = new Set((ids || []).map(String));
+    const next = inboxItems.map(item => selected.has(String(item.id)) ? { ...item, read: true } : item);
+    writeSeen(new Set([...readSeen(), ...selected]));
+    applyInbox({
+      items: next,
+      stamp: next.map(item => `${item.id}:${item.read ? 1 : 0}`).join('|'),
+      hint: window._flyInboxHint,
+      unread: next.filter(item => !item.read).length,
+      unreadCount: next.filter(item => !item.read).length
+    });
+  };
+  const markInboxItemRead = async id => {
+    const key = String(id || '');
+    if (!key || inboxReadBusy || inboxItems.find(item => String(item.id) === key)?.read) return;
+    inboxReadBusy = true;
+    applyReadStateLocally([key]);
+    try {
+      await apiPost(`/notifications/${encodeURIComponent(key)}/read`);
+    } catch (error) {
+      window.showToast(error.message, 'error');
+      await loadInbox({ announce: false });
+    } finally {
+      inboxReadBusy = false;
+      renderInboxPanel();
+    }
+  };
+  const markAllInboxRead = async () => {
+    const unreadIds = inboxItems.filter(item => !item.read).map(item => item.id);
+    if (!unreadIds.length || inboxReadBusy) return;
+    inboxReadBusy = true;
+    applyReadStateLocally(unreadIds);
+    renderInboxPanel();
+    try {
+      const result = await apiPost('/notifications/read-all');
+      inboxFilter = 'unread';
+      window.showToast(result.message, 'success');
+    } catch (error) {
+      window.showToast(error.message, 'error');
+      await loadInbox({ announce: false });
+    } finally {
+      inboxReadBusy = false;
+      renderInboxPanel();
+    }
+  };
   const refreshCurrentPage = async () => {
     if (!currentNav) return;
     const target = currentNav.dataset.target;
@@ -609,6 +710,7 @@ document.addEventListener('DOMContentLoaded', () => {
     clearTimeout(inboxFollowUp);
     inboxFollowUp = setTimeout(() => loadInbox({ announce }), 650);
   };
+  window.FLY_REFRESH_INBOX = () => refreshInboxSoon({ announce: false });
   const stopInboxPoll = () => {
     if (inboxTimer) {
       clearInterval(inboxTimer);
@@ -626,7 +728,7 @@ document.addEventListener('DOMContentLoaded', () => {
       clearTimeout(inboxReadyWatch);
       inboxReadyWatch = 0;
     }
-    stopInboxPoll();
+    if (!inboxSocketFallback) stopInboxPoll();
   };
   const scheduleInboxReconnect = () => {
     inboxLive = false;
@@ -1021,6 +1123,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   const logout = () => {
+    inboxSocketLifecycle?.disconnect?.();
     localStorage.removeItem('fly_token');
     localStorage.removeItem('fly_user');
     window.location.href = '../login/login.html';
@@ -1145,13 +1248,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (inboxBackdrop) inboxBackdrop.hidden = false;
     document.body.classList.add('inbox-open');
     notificationButton.setAttribute('aria-expanded', 'true');
-    writeSeen(new Set([...readSeen(), ...inboxItems.map(item => item.id)]));
-    document.getElementById('notificationDot').classList.remove('visible');
-    notificationButton.classList.remove('has-unread');
-    const countEl = document.getElementById('notificationCount');
-    const count = inboxItems.length;
-    countEl.textContent = count > 99 ? '99+' : String(count);
-    countEl.classList.toggle('visible', count > 0);
   };
   document.getElementById('uiReloadButton')?.addEventListener('click', event => {
     event.preventDefault();
@@ -1190,10 +1286,23 @@ document.addEventListener('DOMContentLoaded', () => {
     closeInboxPanel();
   });
   inboxBackdrop?.addEventListener('click', closeInboxPanel);
-  notificationPanel.addEventListener('click', event => {
+  notificationPanel.addEventListener('click', async event => {
     event.stopPropagation();
+    const filter = event.target.closest('[data-notification-filter]');
+    if (filter) {
+      const next = filter.dataset.notificationFilter;
+      inboxFilter = next === 'all' || next === 'read' ? next : 'unread';
+      renderInboxPanel();
+      return;
+    }
+    const readButton = event.target.closest('[data-notification-read]');
+    if (readButton) {
+      await markInboxItemRead(readButton.dataset.notificationRead);
+      return;
+    }
     const button = event.target.closest('[data-inbox-target]');
     if (!button) return;
+    await markInboxItemRead(button.dataset.inboxId);
     closeInboxPanel();
     let target = button.dataset.inboxTarget;
     const title = button.querySelector('strong')?.textContent || '';
@@ -1205,6 +1314,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (target === 'manager-workforce' && /chấm công/i.test(title)) target = 'manager-workforce-approve';
     const nav = pageNavItems.find(item => item.dataset.target === target);
     if (nav) openPage(nav);
+  });
+  document.getElementById('notificationReadAll')?.addEventListener('click', event => {
+    event.stopPropagation();
+    markAllInboxRead();
   });
   document.addEventListener('click', event => {
     if (notificationPanel.hidden) return;
@@ -1336,6 +1449,38 @@ document.addEventListener('DOMContentLoaded', () => {
     if (document.visibilityState === 'visible') loadInbox({ announce: true });
   });
   window.addEventListener('focus', () => loadInbox({ announce: true }));
+  inboxSocketLifecycle = window.FLY_NOTIFY_SOCKET?.connect({
+    apiBase: API_BASE,
+    token,
+    onInboxRefresh: () => refreshInboxSoon({ announce: true }),
+    onConnect: () => {
+      inboxSocketFallback = false;
+      stopInboxPoll();
+      loadInbox({ announce: false });
+    },
+    onReconnect: () => {
+      inboxSocketFallback = false;
+      stopInboxPoll();
+      refreshInboxSoon({ announce: true });
+    },
+    onReadUpdated: payload => {
+      if (payload?.all) {
+        applyReadStateLocally(inboxItems.filter(item => !item.read).map(item => item.id));
+        inboxFilter = 'unread';
+      } else if (Array.isArray(payload?.ids) && payload.ids.length) {
+        applyReadStateLocally(payload.ids);
+      }
+      loadInbox({ announce: false });
+    },
+    onFallback: () => {
+      inboxSocketFallback = true;
+      startInboxPoll();
+    }
+  }) || null;
+  window.addEventListener('pagehide', () => {
+    closeInboxStream();
+    inboxSocketLifecycle?.disconnect?.();
+  }, { once: true });
   loadInbox();
   connectInboxStream();
   if (!inboxLive) startInboxPoll();

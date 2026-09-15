@@ -58,7 +58,7 @@ const loadAdminDashboard = async (pool) => {
                 FROM SanPham sp LEFT JOIN TonKho tk ON tk.MaSP=sp.MaSP
                 WHERE sp.TrangThai=N'Đang bán'
                 GROUP BY sp.MaSP,sp.TenSP,sp.DonViTinh,sp.TonKhoToiThieu
-                HAVING ISNULL(SUM(tk.SLTon),0) <= sp.TonKhoToiThieu
+                HAVING ISNULL(SUM(tk.SLTon),0) < sp.TonKhoToiThieu
                 ORDER BY ISNULL(SUM(tk.SLTon),0) ASC
             `).catch(() => ({ recordset: [] }))
         ]);

@@ -272,6 +272,8 @@
                 <button class="btn btn-secondary" type="button" onclick="clearLogFilters()">Xóa lọc</button>
                 <button class="btn btn-secondary" id="auditReload" type="button"><svg aria-hidden="true"><use href="#i-refresh"/></svg> Tải lại</button>
                 <button class="btn btn-secondary" type="button" onclick="exportAuditCsv()">Xuất CSV</button>
+                <button class="btn btn-secondary" type="button" onclick="exportAuditExcel()">Xuất Excel</button>
+                <button class="btn btn-secondary" type="button" onclick="printAuditReport()">Xem bản in / PDF</button>
               </div>
             </div>
             <div class="filter-actions audit-filters">
@@ -306,7 +308,7 @@
           </div>
         </article>
       </section>
-      <script src="../admin/audit-log.js?v=audit-rs-4"></script>`,
+      <script src="../admin/audit-log.js?v=report-export-2"></script>`,
 
     'backup.html': `
       <section class="admin-module">

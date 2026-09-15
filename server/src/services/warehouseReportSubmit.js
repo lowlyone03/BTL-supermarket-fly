@@ -141,6 +141,15 @@ const submitWarehouseReport = async (pool, user, report, note = '') => {
         }
         notifyInboxChanged({ action: 'Gửi báo cáo kho', table: 'BaoCaoKhoNop', recordId: maBC });
         try {
+            const { publishAfterCommit } = require('./notifyService');
+            const { WORKFLOW_EVENTS } = require('./notifyCatalog');
+            await publishAfterCommit(pool, WORKFLOW_EVENTS.REPORT_SUBMITTED, {
+                entityId: maBC, actor: user, target: 'admin-warehouse-reports'
+            });
+        } catch (error) {
+            console.error(error);
+        }
+        try {
             const telegramNotify = require('./telegramNotify');
             telegramNotify.notifySafely(() => telegramNotify.notifyWarehouseReportSubmitted(pool, maBC));
         } catch (error) {

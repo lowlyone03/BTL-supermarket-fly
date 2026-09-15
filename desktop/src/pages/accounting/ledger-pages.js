@@ -1753,6 +1753,8 @@
         ${extraToolbar}
         <div class="lg-actions">
           <button type="button" class="lg-btn lg-btn-primary" id="rpLoad">Lập báo cáo</button>
+          <button type="button" class="lg-btn lg-btn-ghost" id="rpCsv">Xuất CSV</button>
+          <button type="button" class="lg-btn lg-btn-ghost" id="rpExcel">Xuất Excel</button>
           ${printLib()?.buttonHtml('rpPrint', 'In báo cáo tháng') || ''}
         </div>
       </div>
@@ -1765,6 +1767,18 @@
       }
       return printConfig;
     });
+    const exportReport = format => {
+      if (!printConfig) {
+        context.showToast('Chưa có số liệu để xuất. Bấm Lập báo cáo trước.', 'error');
+        return;
+      }
+      const exporter = window.FLY_DEPARTMENT_EXPORT;
+      const meta = { period: { periodType: 'month', period: root.querySelector('#rpMonth').value, label: printConfig.status }, preparedBy: context.user?.TenNV, staffId: context.user?.MaNV };
+      if (format === 'xlsx') exporter?.downloadConfigExcel?.(printConfig, meta);
+      else exporter?.downloadConfigCsv?.(printConfig, meta);
+    };
+    root.querySelector('#rpCsv')?.addEventListener('click', () => exportReport('csv'));
+    root.querySelector('#rpExcel')?.addEventListener('click', () => exportReport('xlsx'));
     const load = async () => {
       root.querySelector('#rpOut').innerHTML = loadingBox('Đang lập báo cáo...');
       const packed = unwrapReport(await loadFn(root.querySelector('#rpMonth').value));
@@ -1854,6 +1868,8 @@
         <label class="lg-field"><span>Kỳ</span><input type="month" id="rpMonth" data-keep-native value="${monthNow()}"></label>
         <div class="lg-actions">
           <button type="button" class="lg-btn lg-btn-primary" id="rpLoad">${tx('common.view')}</button>
+          <button type="button" class="lg-btn lg-btn-ghost" id="rpCsv">Xuất CSV</button>
+          <button type="button" class="lg-btn lg-btn-ghost" id="rpExcel">Xuất Excel</button>
           ${printLib()?.buttonHtml('rpPrint') || ''}
         </div>
       </div>
@@ -1866,6 +1882,17 @@
       }
       return printConfig;
     });
+    const exportLedger = format => {
+      if (!printConfig) {
+        context.showToast('Chưa có sổ cái để xuất. Bấm Xem trước.', 'error');
+        return;
+      }
+      const meta = { period: { periodType: 'month', period: root.querySelector('#rpMonth').value, label: printConfig.status }, preparedBy: context.user?.TenNV, staffId: context.user?.MaNV };
+      if (format === 'xlsx') window.FLY_DEPARTMENT_EXPORT?.downloadConfigExcel?.(printConfig, meta);
+      else window.FLY_DEPARTMENT_EXPORT?.downloadConfigCsv?.(printConfig, meta);
+    };
+    root.querySelector('#rpCsv')?.addEventListener('click', () => exportLedger('csv'));
+    root.querySelector('#rpExcel')?.addEventListener('click', () => exportLedger('xlsx'));
     const load = async () => {
       const maTK = root.querySelector('#glTK').value.trim();
       const period = root.querySelector('#rpMonth').value;

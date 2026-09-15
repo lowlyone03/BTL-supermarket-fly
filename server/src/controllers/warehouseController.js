@@ -1,6 +1,9 @@
 const { sql, poolPromise } = require('../config/db');
 const { isRestockAccepted, looksUnsellable } = require('../services/financialRules');
 const { logAudit } = require('../services/auditLog');
+const { WORKFLOW_EVENTS } = require('../services/notifyCatalog');
+const { publishAfterCommit } = require('../services/notifyService');
+const { mucTonSql, lowOnlyPredicateSql, classifyMucTon, STOCK_STATUS } = require('../services/stockLevel');
 
 const editableStatuses = new Set(['Nháp', 'Yêu cầu bổ sung']);
 
@@ -18,8 +21,8 @@ const normalizeLines = lines => {
     });
 };
 
-const writeAudit = (request, user, action, recordId, content) =>
-    logAudit(request, { user, action, table: 'DeNghiMuaHang', recordId, content, uc: 'UC16' });
+const writeAudit = (request, user, action, recordId, content, options = {}) =>
+    logAudit(request, { user, action, table: 'DeNghiMuaHang', recordId, content, uc: 'UC16', ...options });
 
 const getWarehouse = async pool => {
     const result = await pool.request().query(`SELECT TOP 1 MaKho, TenKho, DiaChi
@@ -28,20 +31,16 @@ const getWarehouse = async pool => {
     return result.recordset[0];
 };
 
+const neverImportedSql = `NOT EXISTS (
+               SELECT 1 FROM GiaoDichKho gd
+               WHERE gd.MaKho = @MaKho AND gd.MaSP = sp.MaSP AND gd.LoaiGD = N'Nhập'
+             )`;
+
 const inventoryQuery = `
     SELECT sp.MaSP, sp.TenSP, sp.MaVach, sp.DonViTinh, sp.DuongDanAnh, dm.TenDM,
            sp.TonKhoToiThieu, ISNULL(tk.SLTon, 0) AS SLTon,
            ISNULL(tk.SLDatMua, 0) AS SLDatMua, tk.NgayCapNhat,
-           CASE
-             WHEN NOT EXISTS (
-               SELECT 1 FROM GiaoDichKho gd
-               WHERE gd.MaKho = @MaKho AND gd.MaSP = sp.MaSP AND gd.LoaiGD = N'Nhập'
-             ) THEN N'Chưa nhập lần đầu'
-             WHEN ISNULL(tk.SLTon, 0) <= 0 THEN N'Hết hàng'
-             WHEN ISNULL(tk.SLTon, 0) <= sp.TonKhoToiThieu THEN N'Cần bổ sung'
-             WHEN ISNULL(tk.SLTon, 0) <= CEILING(sp.TonKhoToiThieu * 1.5) THEN N'Sắp chạm định mức'
-             ELSE N'Đủ hàng'
-           END AS MucTon,
+           ${mucTonSql('tk.SLTon', 'sp.TonKhoToiThieu', { neverImportedPredicate: neverImportedSql })} AS MucTon,
            CASE WHEN ISNULL(tk.SLTon, 0) < sp.TonKhoToiThieu
                 THEN sp.TonKhoToiThieu - ISNULL(tk.SLTon, 0) ELSE 0 END AS ThieuSoVoiDinhMuc
     FROM SanPham sp
@@ -49,8 +48,8 @@ const inventoryQuery = `
     LEFT JOIN TonKho tk ON tk.MaSP = sp.MaSP AND tk.MaKho = @MaKho
     WHERE sp.TrangThai = N'Đang bán'
       AND (@TuKhoa = N'' OR sp.MaSP LIKE @Mau COLLATE Latin1_General_100_CI_AI OR sp.TenSP LIKE @Mau COLLATE Latin1_General_100_CI_AI OR sp.MaVach LIKE @Mau COLLATE Latin1_General_100_CI_AI OR dm.TenDM LIKE @Mau COLLATE Latin1_General_100_CI_AI)
-      AND (@CanBoSung = 0 OR ISNULL(tk.SLTon, 0) <= sp.TonKhoToiThieu)
-    ORDER BY CASE WHEN ISNULL(tk.SLTon, 0) <= sp.TonKhoToiThieu THEN 0 ELSE 1 END,
+      AND (@CanBoSung = 0 OR ${lowOnlyPredicateSql('tk.SLTon', 'sp.TonKhoToiThieu', { neverImportedPredicate: neverImportedSql })})
+    ORDER BY CASE WHEN ISNULL(tk.SLTon, 0) < sp.TonKhoToiThieu THEN 0 ELSE 1 END,
              ThieuSoVoiDinhMuc DESC, sp.TenSP`;
 
 const loadInventory = async (pool, user, { search = '', lowOnly = false } = {}) => {
@@ -62,7 +61,15 @@ const loadInventory = async (pool, user, { search = '', lowOnly = false } = {}) 
             .input('Mau', sql.NVarChar, `%${keyword}%`)
             .input('CanBoSung', sql.Bit, lowOnly ? 1 : 0)
             .query(inventoryQuery);
-        return { warehouse, items: result.recordset };
+        const items = result.recordset.map(row => ({
+            ...row,
+            MucTon: classifyMucTon({
+                SLTon: row.SLTon,
+                TonKhoToiThieu: row.TonKhoToiThieu,
+                neverImported: row.MucTon === STOCK_STATUS.NEVER_IMPORTED
+            })
+        }));
+        return { warehouse, items };
 };
 
 const getInventory = async (req, res) => {
@@ -83,7 +90,7 @@ const loadWarehouseDashboard = async (pool, user) => {
         const [summary, lowStock, requests, logs] = await Promise.all([
             pool.request().input('MaKho', sql.VarChar, warehouse.MaKho).query(`
                 SELECT COUNT(sp.MaSP) AS TongMatHang,
-                       SUM(CASE WHEN ISNULL(tk.SLTon,0) <= sp.TonKhoToiThieu THEN 1 ELSE 0 END) AS CanBoSung,
+                       SUM(CASE WHEN ISNULL(tk.SLTon,0) < sp.TonKhoToiThieu THEN 1 ELSE 0 END) AS CanBoSung,
                        SUM(CASE WHEN ISNULL(tk.SLTon,0)=0 AND ISNULL(gd.DaNhap,0)=1 THEN 1 ELSE 0 END) AS HetHang,
                        SUM(CASE WHEN ISNULL(gd.DaNhap,0)=0 THEN 1 ELSE 0 END) AS ChuaNhapLanDau,
                        SUM(ISNULL(tk.SLDatMua,0)) AS DangDatMua
@@ -105,7 +112,7 @@ const loadWarehouseDashboard = async (pool, user) => {
                        WHEN ISNULL(tk.SLTon,0)=0 THEN N'Hết hàng'
                        ELSE N'Cần bổ sung' END AS MucTon
                 FROM SanPham sp LEFT JOIN TonKho tk ON tk.MaSP=sp.MaSP AND tk.MaKho=@MaKho
-                WHERE sp.TrangThai=N'Đang bán' AND ISNULL(tk.SLTon,0) <= sp.TonKhoToiThieu
+                WHERE sp.TrangThai=N'Đang bán' AND ISNULL(tk.SLTon,0) < sp.TonKhoToiThieu
                 ORDER BY (sp.TonKhoToiThieu-ISNULL(tk.SLTon,0)) DESC, sp.TenSP`),
             pool.request().input('MaNV', sql.VarChar, user.MaNV).query(`
                 SELECT TOP 5 dn.MaDN, dn.NgayLap, dn.NgayGui, dn.TrangThai, dn.LyDo,
@@ -298,12 +305,19 @@ const submitRequest = async (req, res) => {
             .input('MaDN', sql.VarChar, req.params.id)
             .input('MaNV', sql.VarChar, req.user.MaNV)
             .query(`UPDATE DeNghiMuaHang SET TrangThai=N'Đã gửi',NgayGui=GETDATE(),MaNV_TiepNhan=NULL
-                    OUTPUT inserted.MaDN
+                    OUTPUT inserted.MaDN,deleted.TrangThai TrangThaiCu
                     WHERE MaDN=@MaDN AND MaNV_Lap=@MaNV AND TrangThai IN (N'Nháp',N'Yêu cầu bổ sung')
                       AND EXISTS (SELECT 1 FROM ChiTietDeNghi WHERE MaDN=@MaDN)`);
         if (!result.recordset.length) return res.status(409).json({ message: 'Đề nghị không còn ở trạng thái có thể gửi.' });
-        await writeAudit(pool.request(), req.user, 'Gửi đề nghị mua hàng', req.params.id, 'Chuyển đề nghị trực tiếp tới bộ phận mua hàng');
-        res.json({ message: 'Đã gửi đề nghị tới Nhân viên mua hàng.' });
+        await writeAudit(pool.request(), req.user, 'Gửi đề nghị mua hàng', req.params.id,
+            'Chuyển đề nghị trực tiếp tới bộ phận mua hàng', { deferSideEffects: true });
+        const eventKey = result.recordset[0].TrangThaiCu === 'Yêu cầu bổ sung'
+            ? WORKFLOW_EVENTS.PURCHASE_REQUEST_RESUBMITTED
+            : WORKFLOW_EVENTS.PURCHASE_REQUEST_SUBMITTED;
+        await publishAfterCommit(pool, eventKey, {
+            entityId: req.params.id, actor: req.user
+        });
+        res.json({ message: `Đã gửi Phiếu đề nghị ${req.params.id} tới Nhân viên mua hàng tiếp nhận.` });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể gửi đề nghị mua hàng.' });
@@ -336,11 +350,14 @@ const acceptPurchasingRequest = async (req, res) => {
             .input('MaNV', sql.VarChar, req.user.MaNV)
             .query(`UPDATE DeNghiMuaHang
                     SET TrangThai=N'Đang xử lý',MaNV_TiepNhan=@MaNV
-                    OUTPUT inserted.MaDN
+                    OUTPUT inserted.MaDN,inserted.MaNV_Lap
                     WHERE MaDN=@MaDN AND TrangThai=N'Đã gửi'`);
         if (!result.recordset.length) return res.status(409).json({ message: 'Đề nghị không còn ở trạng thái có thể tiếp nhận.' });
         await writeAudit(pool.request(), req.user, 'Tiếp nhận đề nghị mua hàng', req.params.id, 'Nhân viên mua hàng bắt đầu xử lý đề nghị từ kho');
-        res.json({ message: 'Đã tiếp nhận đề nghị mua hàng.' });
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.PURCHASE_REQUEST_ACCEPTED, {
+            entityId: req.params.id, actor: req.user, recipientUsers: [result.recordset[0].MaNV_Lap]
+        });
+        res.json({ message: `Đã tiếp nhận đề nghị ${req.params.id}.` });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể tiếp nhận đề nghị mua hàng.' });
@@ -374,8 +391,12 @@ const requestPurchasingChanges = async (req, res) => {
                         )
                       )`);
         if (!result.recordset.length) return res.status(409).json({ message: 'Chỉ có thể chuyển về kho khi đề nghị đang xử lý hoặc Đơn mua đang được Quản lý yêu cầu chỉnh sửa.' });
-        await writeAudit(pool.request(), req.user, 'Yêu cầu bổ sung đề nghị mua hàng', req.params.id, reason);
-        res.json({ message: 'Đã trả đề nghị cho Thủ kho bổ sung thông tin.' });
+        await writeAudit(pool.request(), req.user, 'Yêu cầu bổ sung đề nghị mua hàng', req.params.id,
+            reason, { deferSideEffects: true });
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.PURCHASE_REQUEST_CHANGES, {
+            entityId: req.params.id, actor: req.user, recipientUsers: [result.recordset[0].MaNV_Lap]
+        });
+        res.json({ message: `Đã trả Phiếu đề nghị ${req.params.id} cho Thủ kho bổ sung và gửi lại.` });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể yêu cầu bổ sung đề nghị.' });

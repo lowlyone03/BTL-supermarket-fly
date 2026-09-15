@@ -903,7 +903,8 @@ const logAudit = async (source, opts = {}) => {
     const {
         user, req, action, table, recordId, content,
         uc = null, result = 'Thành công', severity = null,
-        before = undefined, after = undefined, ip = null
+        before = undefined, after = undefined, ip = null,
+        deferSideEffects = false
     } = options;
     const hanhDong = String(action || '').trim().slice(0, 250);
     if (!hanhDong) return;
@@ -954,19 +955,21 @@ const logAudit = async (source, opts = {}) => {
     const colSql = ['MaTK', 'HanhDong', 'BangLienQuan', 'MaBanGhi', 'NoiDung', 'ThoiGian', ...extraCols].join(',');
     const valSql = ['@LogMaTK', '@LogHanhDong', '@LogBang', '@LogMaBanGhi', '@LogNoiDung', 'GETDATE()', ...extraVals].join(',');
     await request.query(`INSERT INTO NhatKy (${colSql}) VALUES (${valSql})`);
-    try {
-        require('./notificationHub').notifyInboxChanged({ action: hanhDong, table, recordId: record });
-    } catch { /* chuông trực tiếp không được thì client tự tải lại */ }
-    try {
-        const telegramNotify = require('./telegramNotify');
-        const payload = {
-            action: hanhDong, table, recordId: record, user, content: noiDung, result
-        };
-        setImmediate(() => {
-            Promise.resolve(telegramNotify.onAudit(payload))
-                .catch(error => console.error('Telegram:', error.message));
-        });
-    } catch { /* bot lỗi không được làm hỏng nghiệp vụ */ }
+    if (!deferSideEffects) {
+        try {
+            require('./notificationHub').notifyInboxChanged({ action: hanhDong, table, recordId: record });
+        } catch { /* chuông trực tiếp không được thì client tự tải lại */ }
+        try {
+            const telegramNotify = require('./telegramNotify');
+            const payload = {
+                action: hanhDong, table, recordId: record, user, content: noiDung, result
+            };
+            setImmediate(() => {
+                Promise.resolve(telegramNotify.onAudit(payload))
+                    .catch(error => console.error('Telegram:', error.message));
+            });
+        } catch { /* bot lỗi không được làm hỏng nghiệp vụ */ }
+    }
 };
 
 const logAuditSafe = async (...args) => {

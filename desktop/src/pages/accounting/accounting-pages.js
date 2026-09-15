@@ -158,12 +158,6 @@
       await onDone?.();
     } catch (error) { context.showToast(error.message, 'error'); }
   };
-  const downloadCsv = (filename, rows) => {
-    const content = `\uFEFF${rows.map(row => row.map(csvCell).join(',')).join('\r\n')}`;
-    const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
   const hangDiDauText = row => {
     if (row.HangDiDau) return row.HangDiDau;
     const restock = Number(row.SLNhapLai || 0);
@@ -174,29 +168,6 @@
     if (scrap) parts.push(`Loại bỏ / vứt ${scrap} — không cộng tồn (đã trừ lúc bán)`);
     if (pending) parts.push(`Chưa xử lý kho ${pending}`);
     return parts.join(' · ') || '—';
-  };
-  const returnCsvRows = data => {
-    const summary = data?.summary || {};
-    const tickets = data?.tickets || [];
-    const products = data?.products || [];
-    return [
-      [],
-      ['ĐỔI TRẢ KHÁCH HÀNG'],
-      ['Số phiếu', summary.SoPhieu || 0],
-      ['Hoàn tiền / Đổi hàng', `${summary.SoHoanTien || 0} / ${summary.SoDoiHang || 0}`],
-      ['Tiền đã hoàn', summary.TienHoan || 0],
-      ['Chờ Thủ kho kiểm', summary.ChoKiemTra || 0],
-      ['Chờ Quản lý duyệt', summary.ChoDuyet || 0],
-      ['Chờ thu ngân xác nhận', summary.ChoThuNganXacNhan || 0],
-      ['Nhập lại kho bán (phiếu)', summary.NhapLaiKho || 0],
-      ['Loại bỏ / vứt (phiếu)', summary.KhongNhapLai || 0],
-      [],
-      ['Phiếu', 'Hóa đơn', 'Khách', 'Hình thức', 'Lý do', 'Tiền hoàn', 'Trạng thái', 'Trách nhiệm', 'Hàng đi đâu', 'Thu ngân lập', 'Thủ kho', 'Quản lý'],
-      ...tickets.map(row => [row.MaDT, row.MaHD, row.TenKH || 'Khách vãng lai', row.HinhThucXuLy, row.LyDo, row.SoTienHoan, row.TrangThai, row.BuocCanXuLy, hangDiDauText(row), row.NguoiLap, row.NguoiKiemTra, row.NguoiDuyet]),
-      [],
-      ['Sản phẩm', 'Mã SP', 'SL trả', 'Nhập lại kho', 'Loại bỏ / vứt', 'Hàng đi đâu', 'Lý do'],
-      ...products.map(row => [row.TenSP, row.MaSP, row.SLTra, row.SLNhapLai || 0, row.SLLoaiBo || row.SLKhongNhapLai || 0, hangDiDauText(row), row.LyDoMau])
-    ];
   };
   const payrollPeriodLabel = value => {
     const [year, month] = String(value || '').split('-');
@@ -239,6 +210,12 @@
       clearTimeout(timer);
       outerSignal?.removeEventListener?.('abort', onOuter);
     }
+  };
+  const afterAccountingMutation = async (context, { close, onDone, message, toastType = 'success' } = {}) => {
+    try { if (message) context.showToast(message, toastType); } catch { /* toast must not block close/reload */ }
+    try { close?.(); } catch { /* still reload the list */ }
+    try { await onDone?.(); } catch (error) { context.showToast?.(error.message, 'error'); }
+    try { await context.refreshInbox?.(); } catch { /* việc mới is best-effort */ }
   };
   const phrase = (text) => window.FLY_I18N?.phrase?.(text) || text;
   const heading = (kicker, title, subtitle, action = '') => `<header class="warehouse-heading"><div><p class="warehouse-kicker">${esc(phrase(kicker))}</p><h1>${esc(phrase(title))}</h1><p>${esc(phrase(subtitle))}</p></div>${action}</header>`;
@@ -941,13 +918,17 @@
           SoTien: kind === 'SoTien' ? Number(overlay.querySelector('#voucherAmt').value) : undefined
         };
         if (!payload.NoiDung) return context.showToast('Vui lòng nhập nội dung chi.', 'error');
-        event.currentTarget.disabled = true;
+        const button = event.currentTarget;
+        button.disabled = true;
         try {
           const result = await api(context, resubmit ? `/accounting/payment-vouchers/${debt.MaPhieu}/resubmit` : `/accounting/payables/${debt.MaCNPTra}/payment-voucher`, {
             method: 'POST', body: JSON.stringify(payload)
           });
-          context.showToast(result.message, 'success'); close(); await onDone();
-        } catch (error) { context.showToast(error.message, 'error'); event.currentTarget.disabled = false; }
+          await afterAccountingMutation(context, { close, onDone, message: result.message });
+        } catch (error) {
+          context.showToast(error.message, 'error');
+          if (button.isConnected) button.disabled = false;
+        }
       });
     } catch (error) { context.showToast(error.message, 'error'); }
   };
@@ -977,15 +958,19 @@
         GhiChu: overlay.querySelector('#bulkVoucherNote').value.trim()
       };
       if (!payload.NoiDung) return context.showToast('Vui lòng nhập nội dung chi.', 'error');
-      event.currentTarget.disabled = true;
+      const button = event.currentTarget;
+      button.disabled = true;
       try {
         const result = await api(context, '/accounting/payment-vouchers/bulk', {
           method: 'POST', body: JSON.stringify(payload)
         });
-        context.showToast(result.message, result.errors?.length ? 'error' : 'success');
-        close();
-        await onDone();
-      } catch (error) { context.showToast(error.message, 'error'); event.currentTarget.disabled = false; }
+        await afterAccountingMutation(context, {
+          close, onDone, message: result.message, toastType: result.errors?.length ? 'error' : 'success'
+        });
+      } catch (error) {
+        context.showToast(error.message, 'error');
+        if (button.isConnected) button.disabled = false;
+      }
     });
   };
 
@@ -1007,20 +992,29 @@
       };
       resultSelect.addEventListener('change', sync); sync();
       overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
+      overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
       overlay.querySelector('.submit-payment-result').addEventListener('click', async event => {
-        const success = resultSelect.value === 'success';
-        const bankCode = overlay.querySelector('#paymentBankCode').value.trim();
-        const note = overlay.querySelector('#paymentNote').value.trim();
-        if (success && debt.PhuongThuc === 'Chuyển khoản' && !bankCode) return context.showToast('Vui lòng nhập mã giao dịch ngân hàng.', 'error');
-        if (!success && !note) return context.showToast('Thanh toán thất bại phải ghi nguyên nhân.', 'error');
-        if (success && !window.confirm(`Xác nhận đã thanh toán thành công ${money(debt.SoTienPhieuChi)}? Công nợ sẽ chuyển sang Đã tất toán.`)) return;
-        event.currentTarget.disabled = true;
+        const button = event.currentTarget;
         try {
-          const result = await api(context, `/accounting/payment-vouchers/${debt.MaPhieu}/pay`, {
-            method: 'POST', body: JSON.stringify({ ThanhCong: success, MaGiaoDichNganHang: bankCode, GhiChuThanhToan: note })
-          });
-          context.showToast(result.message, success ? 'success' : 'error'); close(); await onDone();
-        } catch (error) { context.showToast(error.message, 'error'); event.currentTarget.disabled = false; }
+          const success = resultSelect.value === 'success';
+          const bankCode = overlay.querySelector('#paymentBankCode').value.trim();
+          const note = overlay.querySelector('#paymentNote').value.trim();
+          if (success && debt.PhuongThuc === 'Chuyển khoản' && !bankCode) return context.showToast('Vui lòng nhập mã giao dịch ngân hàng.', 'error');
+          if (!success && !note) return context.showToast('Thanh toán thất bại phải ghi nguyên nhân.', 'error');
+          if (success && !window.confirm(`Xác nhận đã thanh toán thành công ${money(debt.SoTienPhieuChi)}? Công nợ sẽ chuyển sang Đã tất toán.`)) return;
+          button.disabled = true;
+          try {
+            const result = await api(context, `/accounting/payment-vouchers/${debt.MaPhieu}/pay`, {
+              method: 'POST', body: JSON.stringify({ ThanhCong: success, MaGiaoDichNganHang: bankCode, GhiChuThanhToan: note })
+            });
+            await afterAccountingMutation(context, {
+              close, onDone, message: result.message, toastType: success ? 'success' : 'error'
+            });
+          } catch (error) {
+            context.showToast(error.message, 'error');
+            if (button.isConnected) button.disabled = false;
+          }
+        } catch (error) { context.showToast(error.message, 'error'); }
       });
     } catch (error) { context.showToast(error.message, 'error'); }
   };
@@ -1414,12 +1408,13 @@
     let activeTab = 'pnl';
     let reportSeq = 0;
     let reportAbort = null;
-    const extraButtons = '<button class="warehouse-secondary" id="printStoreMonth" type="button">In báo cáo tháng</button><button class="warehouse-secondary" id="exportReportCsv" hidden disabled>Xuất CSV</button><button class="warehouse-secondary" id="printFinancialReport" hidden disabled>Xem bản in / PDF</button>';
+    const extraButtons = '<button class="warehouse-secondary" id="exportReportCsv" disabled>Xuất CSV</button><button class="warehouse-secondary" id="exportStoreExcel" disabled>Xuất Excel</button><button class="warehouse-secondary" id="printStoreMonth" type="button">Xem bản in / PDF</button><button class="warehouse-secondary" id="printFinancialReport" hidden disabled>Xem bản in / PDF</button>';
     root.innerHTML = `${heading(t('report.kicker'), t('report.title'), t('report.lead'))}${window.FLY_STORE_PNL?.nativeToolbar(reportDefaults(), extraButtons) || periodFilterCard(extraButtons)}<div id="financialReportBody">${reportIdleHtml}</div>`;
     const selectedPeriod = bindPeriodUi(root, () => { load(); });
     const syncTabButtons = () => {
       root.querySelectorAll('[data-store-tab]').forEach(button => button.classList.toggle('active', button.dataset.storeTab === activeTab));
-      root.querySelectorAll('#exportReportCsv, #printFinancialReport').forEach(button => { button.hidden = activeTab === 'pnl'; });
+      const opsPrint = root.querySelector('#printFinancialReport');
+      if (opsPrint) opsPrint.hidden = activeTab === 'pnl';
       const monthBtn = root.querySelector('#printStoreMonth');
       if (monthBtn) monthBtn.hidden = activeTab !== 'pnl';
     };
@@ -1472,8 +1467,10 @@
         else if (activeTab === 'pnl') renderPnl();
         const printBtn = root.querySelector('#printFinancialReport');
         const exportBtn = root.querySelector('#exportReportCsv');
+        const excelBtn = root.querySelector('#exportStoreExcel');
         if (printBtn) printBtn.disabled = false;
         if (exportBtn) exportBtn.disabled = false;
+        if (excelBtn) excelBtn.disabled = false;
       } catch (error) {
         if (error?.name === 'AbortError' || seq !== reportSeq) return;
         context.showToast(error.message, 'error');
@@ -1536,8 +1533,10 @@
         } catch (error) { console.warn(error); }
         const printBtn = root.querySelector('#printFinancialReport');
         const exportBtn = root.querySelector('#exportReportCsv');
+        const excelBtn = root.querySelector('#exportStoreExcel');
         if (printBtn) printBtn.disabled = false;
         if (exportBtn) exportBtn.disabled = false;
+        if (excelBtn) excelBtn.disabled = false;
     };
     root.querySelector('#printStoreMonth')?.addEventListener('click', () => {
       if (!currentPnl) {
@@ -1567,9 +1566,22 @@
       });
     });
     root.querySelector('#exportReportCsv').addEventListener('click', () => {
-      if (!currentReport) return;
-      const rows = [['BÁO CÁO HOẠT ĐỘNG CỬA HÀNG', currentReport.period.label], ['Doanh thu thuần', currentReport.sales.DoanhThuThuan], ['Lợi nhuận gộp', currentReport.sales.LoiNhuanGop], ['Phiếu thu thực nộp', currentReport.finance.PhieuThuThucNop], ['Phiếu chi', currentReport.finance.TongPhieuChi], [], ['Ngày', 'Số hóa đơn', 'Doanh thu thuần', 'Lãi gộp'], ...currentReport.daily.map(row => [fmtDate(row.Ngay), row.SoHoaDon, row.DoanhThuThuan, row.LoiNhuanGop]), ...returnCsvRows(currentReport.doiTra)];
-      downloadCsv(`hoat-dong-cua-hang-${currentReport.period.period}.csv`, rows);
+      const report = activeTab === 'pnl' ? currentPnl : currentReport;
+      if (!report) return;
+      window.FLY_DEPARTMENT_EXPORT?.downloadCsv?.(activeTab === 'pnl' ? 'STORE_PNL' : 'STORE_OPS', report, {
+        preparedBy: context.user?.TenNV,
+        staffId: context.user?.MaNV,
+        status: 'Báo cáo quản trị'
+      });
+    });
+    root.querySelector('#exportStoreExcel')?.addEventListener('click', () => {
+      const report = activeTab === 'pnl' ? currentPnl : currentReport;
+      if (!report) return;
+      window.FLY_DEPARTMENT_EXPORT?.downloadExcel?.(activeTab === 'pnl' ? 'STORE_PNL' : 'STORE_OPS', report, {
+        preparedBy: context.user?.TenNV,
+        staffId: context.user?.MaNV,
+        status: 'Báo cáo quản trị'
+      });
     });
   };
 
@@ -1697,8 +1709,11 @@
     });
     root.querySelector('#exportReportCsv').addEventListener('click', () => {
       if (!currentReport) return;
-      const rows = [['BÁO CÁO', currentReport.period.label], ['Chỉ tiêu', 'Giá trị'], ['Doanh thu hóa đơn', currentReport.sales.DoanhThuHoaDon], ['Tiền hoàn', currentReport.sales.TienHoan], ['Doanh thu thuần', currentReport.sales.DoanhThuThuan], ['Giá vốn hóa đơn', currentReport.sales.GiaVonHoaDon], ['Giá vốn hàng trả nhập lại', currentReport.sales.GiaVonHangTraNhapLai], ['Giá vốn hàng giao đổi', currentReport.sales.GiaVonHangGiaoDoi], ['Giá vốn thuần', currentReport.sales.GiaVonHangBanThuan], ['Lợi nhuận gộp', currentReport.sales.LoiNhuanGop], [], ['Ngày', 'Số hóa đơn', 'Doanh thu hóa đơn', 'Tiền hoàn', 'Doanh thu thuần', 'Giá vốn thuần', 'Lợi nhuận gộp'], ...currentReport.daily.map(row => [fmtDate(row.Ngay), row.SoHoaDon, row.DoanhThuHoaDon, row.TienHoan, row.DoanhThuThuan, row.GiaVonHangBanThuan, row.LoiNhuanGop]), ...returnCsvRows(currentReport.doiTra)];
-      downloadCsv(`bao-cao-${currentReport.period.period}.csv`, rows);
+      window.FLY_DEPARTMENT_EXPORT?.downloadCsv?.('KT_NOI_BO', currentReport, {
+        preparedBy: context.user?.TenNV,
+        staffId: context.user?.MaNV,
+        number: currentReport.submittedNumber
+      });
     });
     root.querySelector('#exportRoleReportExcel')?.addEventListener('click', () => {
       if (!currentReport) return;
@@ -1889,13 +1904,19 @@
       const lateNote = overlay.querySelector('#payrollLateNote').value.trim();
       if (success && method === 'Chuyển khoản' && !bankCode) return context.showToast('Vui lòng nhập mã giao dịch ngân hàng.', 'error');
       if (!success && !note) return context.showToast('Chi thất bại phải ghi nguyên nhân.', 'error');
-      event.currentTarget.disabled = true;
+      const button = event.currentTarget;
+      button.disabled = true;
       try {
         const result = await api(context, `/accounting/payroll-vouchers/${maPhieu}/pay`, {
           method: 'POST', body: JSON.stringify({ ThanhCong: success, MaGiaoDichNganHang: bankCode, GhiChuThanhToan: note, GhiChuTreHan: lateNote })
         });
-        context.showToast(result.message, success ? 'success' : 'error'); close(); await onDone();
-      } catch (error) { context.showToast(error.message, 'error'); event.currentTarget.disabled = false; }
+        await afterAccountingMutation(context, {
+          close, onDone, message: result.message, toastType: success ? 'success' : 'error'
+        });
+      } catch (error) {
+        context.showToast(error.message, 'error');
+        if (button.isConnected) button.disabled = false;
+      }
     });
   };
 

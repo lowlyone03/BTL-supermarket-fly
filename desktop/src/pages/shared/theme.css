@@ -501,11 +501,13 @@ html[data-theme="soft"] .activity-status-badge.fail {
 html[data-theme="dark"] .notification-panel,
 html[data-theme="dark"] .notification-item,
 html[data-theme="dark"] .notification-hint,
+html[data-theme="dark"] .notification-tools,
 html[data-theme="dark"] .profile-menu,
 html[data-theme="dark"] .profile-button:hover,
 html[data-theme="soft"] .notification-panel,
 html[data-theme="soft"] .notification-item,
 html[data-theme="soft"] .notification-hint,
+html[data-theme="soft"] .notification-tools,
 html[data-theme="soft"] .profile-menu,
 html[data-theme="soft"] .profile-button:hover {
   background: var(--surface) !important;
@@ -523,6 +525,23 @@ html[data-theme="dark"] .notification-item time,
 html[data-theme="soft"] .notification-item span,
 html[data-theme="soft"] .notification-item time {
   color: var(--muted);
+}
+
+html[data-theme="dark"] .notification-filters,
+html[data-theme="soft"] .notification-filters {
+  background: var(--hover-bg);
+}
+
+html[data-theme="dark"] .notification-read-all,
+html[data-theme="soft"] .notification-read-all {
+  color: var(--text);
+  background: var(--hover-bg);
+}
+
+html[data-theme="dark"] .notification-filters button.active,
+html[data-theme="soft"] .notification-filters button.active {
+  color: var(--text);
+  background: var(--surface);
 }
 
 html[data-theme="dark"] .chat-shell,

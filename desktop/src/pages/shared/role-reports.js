@@ -122,13 +122,6 @@
   const ui = () => window.FLY_UI || { kpiGrid: items => '', bars: () => '', person: (name, sub) => `${name}${sub ? `<small>${sub}</small>` : ''}` };
   const chartUi = () => window.FLY_CHARTS || { card: () => '', line: () => '', columns: () => '', horizontal: () => '', donut: () => '', compact: qty, money };
   const reportActionButtons = '<button class="warehouse-secondary" id="exportRoleReportCsv" disabled>Xuất CSV</button><button class="warehouse-secondary" id="printRoleReport" disabled>Xem bản in / PDF</button>';
-  const csvCell = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
-  const downloadCsv = (filename, rows) => {
-    const content = `\uFEFF${rows.map(row => row.map(csvCell).join(',')).join('\r\n')}`;
-    const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
   const hangDiDauText = row => {
     if (row.HangDiDau) return row.HangDiDau;
     const restock = Number(row.SLNhapLai || 0);
@@ -139,29 +132,6 @@
     if (scrap) parts.push(`Loại bỏ / vứt ${scrap} — không cộng tồn (đã trừ lúc bán)`);
     if (pending) parts.push(`Chưa xử lý kho ${pending}`);
     return parts.join(' · ') || '—';
-  };
-  const returnCsvRows = data => {
-    const summary = data?.summary || {};
-    const tickets = data?.tickets || [];
-    const products = data?.products || [];
-    return [
-      [],
-      ['ĐỔI TRẢ KHÁCH HÀNG'],
-      ['Số phiếu', summary.SoPhieu || 0],
-      ['Hoàn tiền / Đổi hàng', `${summary.SoHoanTien || 0} / ${summary.SoDoiHang || 0}`],
-      ['Tiền đã hoàn', summary.TienHoan || 0],
-      ['Chờ Thủ kho kiểm', summary.ChoKiemTra || 0],
-      ['Chờ Quản lý duyệt', summary.ChoDuyet || 0],
-      ['Chờ thu ngân xác nhận', summary.ChoThuNganXacNhan || 0],
-      ['Nhập lại kho bán (phiếu)', summary.NhapLaiKho || 0],
-      ['Loại bỏ / vứt (phiếu)', summary.KhongNhapLai || 0],
-      [],
-      ['Phiếu', 'Hóa đơn', 'Khách', 'Hình thức', 'Lý do', 'Tiền hoàn', 'Trạng thái', 'Trách nhiệm', 'Hàng đi đâu', 'Thu ngân lập', 'Thủ kho', 'Quản lý'],
-      ...tickets.map(row => [row.MaDT, row.MaHD, row.TenKH || 'Khách vãng lai', row.HinhThucXuLy, row.LyDo, row.SoTienHoan, row.TrangThai, row.BuocCanXuLy, hangDiDauText(row), row.NguoiLap, row.NguoiKiemTra, row.NguoiDuyet]),
-      [],
-      ['Sản phẩm', 'Mã SP', 'SL trả', 'Nhập lại kho', 'Loại bỏ / vứt', 'Hàng đi đâu', 'Lý do'],
-      ...products.map(row => [row.TenSP, row.MaSP, row.SLTra, row.SLNhapLai || 0, row.SLLoaiBo || row.SLKhongNhapLai || 0, hangDiDauText(row), row.LyDoMau])
-    ];
   };
   const enableReportActions = root => root.querySelectorAll('#exportRoleReportCsv, #printRoleReport').forEach(button => { button.disabled = false; });
   const periodCard = (extraButtons = reportActionButtons) => {
@@ -820,8 +790,11 @@
     });
     root.querySelector('#exportRoleReportCsv')?.addEventListener('click', () => {
       if (!currentReport) return;
-      const s = currentReport.sales || {}; const m = currentReport.methods || {};
-      downloadCsv(`bao-cao-thu-ngan-${currentReport.period.period}.csv`, [['BÁO CÁO CA VÀ BÁN HÀNG CÁ NHÂN', currentReport.period.label], ['Hóa đơn', s.SoHoaDon], ['Doanh thu hóa đơn', s.DoanhThuHoaDon], ['Tiền hoàn', s.TienHoan], ['Tiền mặt', m.TienMat], ['QR', m.QR], ['Thẻ', m.The], ['Chuyển khoản', m.ChuyenKhoan], [], ['Mã ca', 'Mở ca', 'Đóng ca', 'Hóa đơn', 'Doanh thu', 'Đổi trả', 'Tiền hoàn', 'Trạng thái'],       ...(currentReport.shifts || []).map(row => [row.MaCa, fmtDateTime(row.ThoiGianBatDau), fmtDateTime(row.ThoiGianKetThuc), row.SoHoaDon, row.DoanhThu, row.SoDoiTra, row.TienHoan, row.TrangThai]), ...returnCsvRows(currentReport.doiTra)]);
+      window.FLY_DEPARTMENT_EXPORT?.downloadCsv?.('TN_BAN_HANG', currentReport, {
+        preparedBy: context.user?.TenNV,
+        staffId: context.user?.MaNV,
+        number: currentReport.submittedNumber
+      });
     });
     await loadReport();
   };
@@ -911,8 +884,11 @@
     });
     root.querySelector('#exportRoleReportCsv')?.addEventListener('click', () => {
       if (!currentReport) return;
-      const s = currentReport.summary || {};
-      downloadCsv(`bao-cao-mua-hang-${currentReport.period.period}.csv`, [['BÁO CÁO ĐƠN MUA VÀ GIAO HÀNG', currentReport.period.label], ['Đơn mua hợp lệ', s.SoDonMua], ['Giá trị đơn mua', s.GiaTriDonMua], ['Phiếu nhập', s.SoPhieuNhap], ['Giá trị nhập', s.GiaTriNhap], ['Số lượng còn thiếu', s.SLConThieu], [], ['Mã NCC', 'Nhà cung cấp', 'Số đơn', 'Giá trị'],       ...(currentReport.suppliers || []).map(row => [row.MaNCC, row.TenNCC, row.SoDon, row.GiaTri]), ...returnCsvRows(currentReport.doiTra)]);
+      window.FLY_DEPARTMENT_EXPORT?.downloadCsv?.('MH_DON_MUA', currentReport, {
+        preparedBy: context.user?.TenNV,
+        staffId: context.user?.MaNV,
+        number: currentReport.submittedNumber
+      });
     });
     await loadReport();
   };

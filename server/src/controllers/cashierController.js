@@ -4,6 +4,8 @@ const { calculateGrossProfit, RESTOCK_ACCEPTED_SQL, expectedDrawerCash, cashHand
 const { ensureReturnRefundSchema } = require('../services/returnRefundSchema');
 const { validateClosingCash, validateCloseShiftConfirm, validateCheckOutConfirm } = require('../services/fieldValidators');
 const { logAudit } = require('../services/auditLog');
+const { WORKFLOW_EVENTS } = require('../services/notifyCatalog');
+const { publishAfterCommit } = require('../services/notifyService');
 const { snapshotDuty, assertCashierDuty, assertOwnerCloseShift, CashierDutyError, GRACE_AFTER_MINUTES, isBoostDuty, isOfficeShift } = require('../services/cashierDuty');
 const { loadUnfinishedReturns, loadLeftoverReturns, healParkedReturns, handoverApprovedReturns, handoverAuditMessage, claimLeftoverReturnsForShift, describeReturnHandover, ensureReturnHandoverSchema } = require('../services/returnHandover');
 const { reopenShift: reopenClosedShift, ShiftReopenError } = require('../services/shiftReopen');
@@ -175,14 +177,23 @@ const checkOut = async (req, res) => {
         const result = await pool.request().input('MaNV', sql.VarChar, req.user.MaNV).query(`
             UPDATE cc SET ThoiGianRa=GETDATE(),TrangThai=N'Chờ duyệt',
                 PhutVeSom=CASE WHEN GETDATE()<l.KetThucDuKien THEN DATEDIFF(minute,GETDATE(),l.KetThucDuKien) ELSE 0 END
+            OUTPUT inserted.MaChamCong
             FROM ChamCong cc JOIN LichLamViec l ON l.MaLich=cc.MaLich
             WHERE l.MaNV=@MaNV AND cc.ThoiGianVao IS NOT NULL AND cc.ThoiGianRa IS NULL`);
         if (!result.rowsAffected[0]) return res.status(400).json({ message: 'Không có lượt chấm công đang mở.' });
+        for (const attendance of result.recordset || []) {
+            await publishAfterCommit(pool, WORKFLOW_EVENTS.ATTENDANCE_SUBMITTED, {
+                entityId: String(attendance.MaChamCong), actor: req.user
+            });
+        }
         try {
             const telegramNotify = require('../services/telegramNotify');
             telegramNotify.notifySafely(() => telegramNotify.notifyAttendancePending({ MaNV: req.user.MaNV }));
         } catch { /* Telegram lỗi không làm fail chấm công */ }
-        res.json({ message: 'Đã chấm công ra. Thời gian làm việc đang chờ Quản lý duyệt.' });
+        const attendanceId = result.recordset?.[0]?.MaChamCong;
+        res.json({
+            message: `Đã chấm công ra${attendanceId ? ` (mã ${attendanceId})` : ''}. Lượt công đã được chuyển tới Quản lý phê duyệt.`
+        });
     } catch (error) {
         if (error instanceof CashierDutyError) return failDuty(res, error);
         console.error(error);
@@ -531,7 +542,8 @@ const closeShift = async (req, res) => {
             await logAudit(transaction, {
                 user: req.user, req, action: 'Bàn giao đổi trả', table: 'PhieuDoiTra',
                 recordId: ticket.MaDT, uc: 'UC26', severity: 'Quan trọng',
-                content: handoverAuditMessage(maCa, 'ca sau cùng quầy')
+                content: handoverAuditMessage(maCa, 'ca sau cùng quầy'),
+                deferSideEffects: true
             });
         }
         const tienThucNop = cashHandoverExcludingOpening(TienCuoiCa, summary.TienDauCa);
@@ -555,10 +567,19 @@ const closeShift = async (req, res) => {
         await logAudit(transaction, {
             user: req.user, req, action: 'Đóng ca bán hàng', table: 'CaLamViec', recordId: maCa, uc: 'UC22',
             severity: 'Quan trọng',
-            content: `Đóng ca; hệ thống ${Number(summary.TienMatHeThong).toLocaleString('vi-VN')}đ; thực nộp ${Number(tienThucNop).toLocaleString('vi-VN')}đ; lệch ${Number(tienThucNop - summary.TienMatHeThong).toLocaleString('vi-VN')}đ`
+            content: `Đóng ca; hệ thống ${Number(summary.TienMatHeThong).toLocaleString('vi-VN')}đ; thực nộp ${Number(tienThucNop).toLocaleString('vi-VN')}đ; lệch ${Number(tienThucNop - summary.TienMatHeThong).toLocaleString('vi-VN')}đ`,
+            deferSideEffects: true
         });
-        await closeOpenAttendance(transaction, maCa);
+        const closedAttendance = await closeOpenAttendance(transaction, maCa);
         await transaction.commit();
+        await publishAfterCommit(await poolPromise, WORKFLOW_EVENTS.SHIFT_CLOSED, {
+            entityId: maCa, actor: req.user
+        });
+        for (const attendance of closedAttendance.recordset || []) {
+            await publishAfterCommit(await poolPromise, WORKFLOW_EVENTS.ATTENDANCE_SUBMITTED, {
+                entityId: String(attendance.MaChamCong), actor: req.user
+            });
+        }
         try {
             const telegramNotify = require('../services/telegramNotify');
             telegramNotify.notifySafely(() => telegramNotify.notifyShiftClosed({

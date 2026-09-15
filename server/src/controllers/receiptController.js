@@ -1,5 +1,7 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
+const { WORKFLOW_EVENTS } = require('../services/notifyCatalog');
+const { publishAfterCommit } = require('../services/notifyService');
 
 const clean = (value, max, fallback = null) => String(value ?? '').trim().slice(0, max) || fallback;
 
@@ -79,7 +81,10 @@ const markShipmentArrived = async (req, res) => {
         if (!result.recordset.length) return res.status(409).json({ message: 'Chuyến hàng không còn ở trạng thái đang giao hoặc đã được ghi nhận đến kho.' });
         await writeAudit(pool.request(), req.user, 'Ghi nhận xe hàng đến kho', req.params.id,
             `Xe giao Đơn mua ${result.recordset[0].MaPO} đã đến; hàng chưa được kiểm nhận và chưa tăng tồn kho`, 'ThongBaoGiaoHang');
-        res.json({ message: 'Đã ghi nhận xe hàng đến kho. Bây giờ Thủ kho có thể mở kiểm nhận; tồn kho chưa thay đổi.' });
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.DELIVERY_ARRIVED, {
+            entityId: req.params.id, poId: result.recordset[0].MaPO, actor: req.user
+        });
+        res.json({ message: `Đã ghi nhận chuyến ${req.params.id} của đơn ${result.recordset[0].MaPO} đến kho.` });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Không thể ghi nhận chuyến hàng đến kho.' });
@@ -234,12 +239,12 @@ const confirmReceipt = async (req, res) => {
     try {
         await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
         const header = await new sql.Request(transaction).input('MaPN', sql.VarChar, req.params.id).query(`
-            SELECT pn.MaPN,pn.MaPO,pn.MaTBGH,pn.MaKho,pn.TrangThai,po.MaDN
+            SELECT pn.MaPN,pn.MaPO,pn.MaTBGH,pn.MaKho,pn.TrangThai,po.MaDN,po.MaNV_Lap
             FROM PhieuNhap pn WITH (UPDLOCK) JOIN DonMuaHang po WITH (UPDLOCK) ON po.MaPO=pn.MaPO
             WHERE pn.MaPN=@MaPN`);
         if (!header.recordset.length) throw new Error('Không tìm thấy Phiếu nhập.');
         if (header.recordset[0].TrangThai !== 'Nháp') throw new Error('Phiếu nhập đã được xác nhận hoặc không còn hợp lệ.');
-        const { MaPN, MaPO, MaTBGH, MaKho, MaDN } = header.recordset[0];
+        const { MaPN, MaPO, MaTBGH, MaKho, MaDN, MaNV_Lap } = header.recordset[0];
         const lines = await new sql.Request(transaction).input('MaPN', sql.VarChar, MaPN).query(`
             SELECT ct.* FROM ChiTietPhieuNhap ct WHERE ct.MaPN=@MaPN`);
         for (let index = 0; index < lines.recordset.length; index += 1) {
@@ -304,7 +309,10 @@ const confirmReceipt = async (req, res) => {
         const { postReceiptUnmatched } = require('../services/accountingHooks');
         await postReceiptUnmatched(transaction, { maPN: MaPN });
         await transaction.commit();
-        res.json({ message: 'Đã xác nhận nhập kho. Tồn kho chỉ tăng theo số lượng đạt yêu cầu.', TrangThaiDonMua: poStatus });
+        await publishAfterCommit(await poolPromise, WORKFLOW_EVENTS.RECEIPT_CONFIRMED, {
+            entityId: MaPN, poId: MaPO, actor: req.user, recipientUsers: [MaNV_Lap].filter(Boolean)
+        });
+        res.json({ message: `Đã xác nhận nhập ${MaPN} cho đơn ${MaPO}. Tồn kho chỉ tăng theo số lượng đạt yêu cầu.`, TrangThaiDonMua: poStatus });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);

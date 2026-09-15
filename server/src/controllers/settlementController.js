@@ -1,6 +1,8 @@
 const { sql, poolPromise } = require('../config/db');
 const { logAudit } = require('../services/auditLog');
 const { ensurePhieuThuSchema } = require('../services/phieuThuSchema');
+const { WORKFLOW_EVENTS } = require('../services/notifyCatalog');
+const { publishAfterCommit } = require('../services/notifyService');
 
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
 
@@ -206,6 +208,14 @@ const confirmReceipt = async (req, res) => {
             ngay: receipt.recordset[0].NgayLap
         });
         await transaction.commit();
+        const shiftOwner = await poolPromise.then(pool => new sql.Request(pool)
+            .input('MaCa', sql.VarChar, receipt.recordset[0].MaCa)
+            .query('SELECT MaNV FROM CaLamViec WHERE MaCa=@MaCa'))
+            .then(result => result.recordset[0]?.MaNV)
+            .catch(() => null);
+        await publishAfterCommit(await poolPromise, WORKFLOW_EVENTS.SHIFT_RECEIPT_CONFIRMED, {
+            entityId: maPT, actor: req.user, recipientUsers: [shiftOwner].filter(Boolean)
+        });
         res.json({ message: `Đã xác nhận Phiếu thu ${maPT}.` });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});

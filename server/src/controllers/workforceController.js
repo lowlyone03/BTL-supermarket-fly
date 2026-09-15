@@ -8,6 +8,8 @@ const { splitDayNightMinutes } = require('../services/timeService');
 const { closeOpenAttendance } = require('../services/attendanceSync');
 const { logAudit } = require('../services/auditLog');
 const { PENDING_CHAM_CONG_PREDICATE } = require('../services/inboxService');
+const { WORKFLOW_EVENTS } = require('../services/notifyCatalog');
+const { publishAfterCommit } = require('../services/notifyService');
 
 const clean = (value, max = 120) => String(value ?? '').trim().slice(0, max);
 const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
@@ -432,6 +434,14 @@ const publishSchedules = async (req, res) => {
                 ? `Công bố lại ${stamped} lượt điều chỉnh ngoại lệ (${from}–${to})`
                 : `Công bố ${stamped} lượt làm việc (${from}–${to})`
         });
+        const staff = await pool.request().input('From', sql.Date, from).input('To', sql.Date, to).query(`
+            SELECT DISTINCT MaNV FROM LichLamViec
+            WHERE NgayLam BETWEEN @From AND @To AND TrangThai=N'Đã công bố'`);
+        await publishAfterCommit(pool, WORKFLOW_EVENTS.SCHEDULE_PUBLISHED, {
+            entityId: `${from}_${to}`,
+            actor: req.user,
+            recipientUsers: (staff.recordset || []).map(row => row.MaNV)
+        });
         res.json({ message, stamped, publishedCount, draftCount });
     } catch (error) { console.error(error); res.status(400).json({ message: error.message }); }
 };
@@ -586,13 +596,17 @@ const approveAttendance = async (req, res) => {
         await logAudit(transaction, {
             user: req.user, req, action: 'Duyệt chấm công', table: 'ChamCong', recordId: String(id), uc: 'UC32',
             severity: 'Quan trọng',
-            content: `Duyệt ${approvedMinutes}/${actualMinutes} phút thực tế cho ${row.MaNV}; ${includeOvertime ? `có ${approvedOvertime} phút tăng ca tính lương` : 'không tính tăng ca'}`
+            content: `Duyệt ${approvedMinutes}/${actualMinutes} phút thực tế cho ${row.MaNV}; ${includeOvertime ? `có ${approvedOvertime} phút tăng ca tính lương` : 'không tính tăng ca'}`,
+            deferSideEffects: true
         });
         await transaction.commit();
+        await publishAfterCommit(await poolPromise, WORKFLOW_EVENTS.ATTENDANCE_APPROVED, {
+            entityId: String(id), actor: req.user, recipientUsers: [row.MaNV]
+        });
         res.json({
             message: includeOvertime
-                ? `Đã duyệt ${approvedMinutes} phút, gồm ${approvedOvertime} phút tăng ca tính lương.`
-                : `Đã duyệt ca với ${approvedMinutes} phút tính lương; ${overtimeActual} phút sau ca không tính lương.`,
+                ? `Đã duyệt chấm công ${id} cho ${row.MaNV}: ${approvedMinutes} phút, gồm ${approvedOvertime} phút tăng ca tính lương.`
+                : `Đã duyệt chấm công ${id} cho ${row.MaNV}: ${approvedMinutes} phút tính lương; ${overtimeActual} phút sau ca không tính lương.`,
             SoPhutThucTe: actualMinutes,
             SoPhutDuocDuyet: approvedMinutes,
             SoPhutTangCaDuocTinh: approvedOvertime,

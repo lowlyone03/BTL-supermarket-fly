@@ -108,13 +108,23 @@ const {
     startTelegramCompanion,
     installParentDeathHooks
 } = require('./services/telegramCompanionProcess');
+const { attachSocketServer } = require('./services/socketServer');
 installParentDeathHooks();
 
+const httpServers = [];
 const startHttp = (host, onListening) => {
-    const server = app.listen({ port: Number(PORT), host, exclusive: true }, onListening);
+    const server = app.listen({ port: Number(PORT), host, exclusive: true }, () => {
+        attachSocketServer(server);
+        onListening();
+    });
+    httpServers.push(server);
     server.on('error', (error) => {
         if (error.code === 'EADDRINUSE') {
-            term.err(`Cổng ${PORT} đang bị chiếm. Đóng process cũ rồi chạy lại npm start.`);
+            if (host === '::1' && httpServers.some(item => item !== server && item.listening)) {
+                term.info(`IPv6  [::1]:${PORT} đã được listener khác giữ; API IPv4/LAN vẫn chạy.`);
+            } else {
+                term.err(`Không listen ${host}:${PORT} vì cổng đang bị chiếm.`);
+            }
             return;
         }
         term.err(`Không listen ${host}:${PORT}: ${error.message}`);
@@ -123,7 +133,7 @@ const startHttp = (host, onListening) => {
 };
 
 // 0.0.0.0 = IPv4 (LAN + 127.0.0.1). ::1 = Electron/Chromium gọi localhost.
-startHttp(HOST, () => {
+const primaryHttpServer = startHttp(HOST, () => {
     const lan = listLanIPv4();
     const rows = [
         { label: 'API', value: `http://localhost:${PORT}` }
@@ -165,6 +175,8 @@ startHttp(HOST, () => {
             await ensurePreferenceSchema(pool);
             const { ensureLoyaltyApplySchema } = require('./services/loyaltyApply');
             await ensureLoyaltyApplySchema(pool);
+            const { ensureNotifySchema } = require('./services/notifySchema');
+            await ensureNotifySchema(pool);
         } catch (error) {
             console.error('Không thể bổ sung schema thông báo / bàn giao / Telegram:', error.message);
         }
@@ -177,8 +189,12 @@ startHttp(HOST, () => {
         term.err(`Telegram: ${error.message}`);
     }
 });
+let loopbackHttpServer = null;
 if (HOST !== '::1' && HOST !== '::') {
-    startHttp('::1', () => {
+    loopbackHttpServer = startHttp('::1', () => {
         term.info(`IPv6  http://[::1]:${PORT}`);
     });
 }
+
+void primaryHttpServer;
+void loopbackHttpServer;
