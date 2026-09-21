@@ -44,8 +44,8 @@ const getEffectivePreferences = async (connection, maTK) => {
     const store = await readStoreDefaults(connection);
     const own = maTK != null ? await readAccountPrefs(connection, maTK) : { ngonNgu: null, giaoDien: null };
     return {
-        ngonNgu: own.ngonNgu || store.ngonNgu,
-        giaoDien: own.giaoDien || store.giaoDien,
+        ngonNgu: own.ngonNgu || 'vi',
+        giaoDien: own.giaoDien || 'light',
         daChonNgonNgu: Boolean(own.ngonNgu),
         daChonGiaoDien: Boolean(own.giaoDien),
         macDinhCuaHang: store

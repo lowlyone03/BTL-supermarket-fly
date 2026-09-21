@@ -7,7 +7,7 @@
     <script>
       (function () {
         try {
-          var prefs = JSON.parse(localStorage.getItem('fly_pref_last') || localStorage.getItem('fly_pref_guest') || '{}');
+          var prefs = JSON.parse(localStorage.getItem('fly_pref_guest') || '{}');
           if (prefs.giaoDien) document.documentElement.setAttribute('data-theme', prefs.giaoDien);
           if (prefs.ngonNgu) {
             document.documentElement.setAttribute('data-lang', prefs.ngonNgu);
@@ -156,14 +156,14 @@
     </main>
 
     <div class="auth-toast" id="authToast" role="status" aria-live="polite"></div>
-    <script src="../../i18n/vi.js"></script>
-    <script src="../../i18n/en.js"></script>
-    <script src="../../i18n/zh.js"></script>
+    <script src="../../i18n/vi.js?v=pref-staff-1"></script>
+    <script src="../../i18n/en.js?v=pref-staff-1"></script>
+    <script src="../../i18n/zh.js?v=pref-staff-1"></script>
     <script src="../../i18n/ops.js"></script>
     <script src="../../i18n/i18n.js"></script>
-    <script src="../../i18n/appearance.js"></script>
+    <script src="../../i18n/appearance.js?v=pref-staff-1"></script>
     <script src="../shared/escape-key.js"></script>
     <script src="../shared/api-config.js"></script>
-    <script src="login.js"></script>
+    <script src="login.js?v=pref-staff-1"></script>
   </body>
 </html>

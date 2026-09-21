@@ -352,11 +352,19 @@
   const openShiftModal = (context, onDone) => {
     const overlay = document.createElement('div');
     overlay.className = 'warehouse-modal-backdrop';
-    overlay.innerHTML = `<div class="warehouse-modal warehouse-confirm-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">CA BÁN HÀNG CÁ NHÂN</p><h2>Mở ca làm việc</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="cashier-opening-rule"><svg><use href="#i-lock"/></svg><div><strong>Chấm công vào trước, rồi mới mở ca</strong><p>Chỉ thu ngân ca chính 8 giờ được mở quầy. Tăng cường 4 giờ không mở ca POS.</p></div></div><div class="warehouse-field"><label>Tiền mặt đầu ca *</label><div class="cashier-money-input"><input id="openingCash" type="number" min="0" step="1000" value="1000000"><span>đ</span></div></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-primary confirm-open">Xác nhận mở ca</button></div></div>`;
+    overlay.innerHTML = `<div class="warehouse-modal warehouse-confirm-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">CA BÁN HÀNG CÁ NHÂN</p><h2>Mở ca làm việc</h2></div><button class="warehouse-icon-button close">×</button></div><div class="warehouse-modal-body"><div class="cashier-opening-rule"><svg><use href="#i-lock"/></svg><div><strong>Chấm công vào trước, rồi mới mở ca</strong><p>Chỉ thu ngân ca chính 8 giờ được mở quầy. Tăng cường 4 giờ không mở ca POS.</p></div></div><div id="maintOpenWarn" class="return-workflow-hint" hidden><svg><use href="#i-warning"/></svg><div><strong>Hệ thống đang bảo trì</strong><p>Mở ca không bị chặn tự động. Bán hàng có thể lỗi 503 với nhân viên khác.</p><label class="backup-check"><input type="checkbox" id="maintOpenAck"> Tôi đã hiểu.</label></div></div><div class="warehouse-field"><label>Tiền mặt đầu ca *</label><div class="cashier-money-input"><input id="openingCash" type="number" min="0" step="1000" value="1000000"><span>đ</span></div></div></div><div class="warehouse-modal-actions"><button class="warehouse-secondary close">Hủy</button><button class="warehouse-primary confirm-open">Xác nhận mở ca</button></div></div>`;
     document.body.appendChild(overlay);
+    fetch(`${window.FLY_API_BASE || 'http://localhost:3000/api'}/health`).then((r) => r.json()).then((data) => {
+      const box = overlay.querySelector('#maintOpenWarn');
+      if (box && data?.maintenance?.enabled) box.hidden = false;
+    }).catch(() => {});
     const close = () => overlay.remove();
     overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
     overlay.querySelector('.confirm-open').addEventListener('click', async () => {
+      const warn = overlay.querySelector('#maintOpenWarn');
+      if (warn && !warn.hidden && !overlay.querySelector('#maintOpenAck')?.checked) {
+        return context.showToast('Hãy xác nhận đã hiểu hệ thống đang bảo trì.', 'error');
+      }
       const cash = window.FLY_FIELDS
         ? window.FLY_FIELDS.validateRequiredNonNegativeNumber(overlay.querySelector('#openingCash').value, 'Tiền mặt đầu ca')
         : { ok: Number.isFinite(Number(overlay.querySelector('#openingCash').value)) && Number(overlay.querySelector('#openingCash').value) >= 0, value: Number(overlay.querySelector('#openingCash').value), message: 'Tiền mặt đầu ca phải là số không âm.' };

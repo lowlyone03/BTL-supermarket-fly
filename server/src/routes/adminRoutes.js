@@ -13,8 +13,33 @@ const reportController = require('../controllers/reportController');
 const backupController = require('../controllers/backupController');
 const { verifyToken, requireRole, requirePermission, requireAnyPermission } = require('../middlewares/authMiddleware');
 const { uploadProductImage } = require('../middlewares/productImageUpload');
+const multer = require('multer');
+const os = require('node:os');
 
 const router = express.Router();
+
+const restoreUpload = multer({
+    storage: multer.diskStorage({
+        destination: (_req, _file, cb) => cb(null, os.tmpdir()),
+        filename: (_req, _file, cb) => {
+            cb(null, `fly-restore-${Date.now()}.bak`);
+        }
+    }),
+    limits: { fileSize: 1024 * 1024 * 1024, files: 1 },
+    fileFilter: (_req, file, cb) => {
+        if (!/\.bak$/i.test(file.originalname || '')) {
+            return cb(new Error('Chỉ chấp nhận file .bak.'));
+        }
+        cb(null, true);
+    }
+}).single('TepBak');
+
+const handleRestoreUpload = (req, res, next) => {
+    restoreUpload(req, res, (err) => {
+        if (err) return res.status(400).json({ message: err.message || 'Không nhận được file .bak.' });
+        next();
+    });
+};
 
 router.use(verifyToken);
 router.use(requireRole('Quản lý'));
@@ -88,7 +113,10 @@ router.get('/workforce/payroll-preview', requirePermission('UC32'), workforceCon
 router.post('/backup', requirePermission('UC03'), backupController.createBackup);
 router.get('/backups', requirePermission('UC03'), backupController.listBackups);
 router.get('/backups/:fileName', requirePermission('UC03'), backupController.downloadBackup);
-router.get('/security-logs', requirePermission('UC03'), backupController.getSecurityLogs);
+router.post('/backups/:fileName/restore', requirePermission('UC03'), backupController.restoreStoredBackup);
+router.post('/restore', requirePermission('UC03'), handleRestoreUpload, backupController.restoreUploadedBackup);
+router.get('/maintenance', requirePermission('UC03'), backupController.getMaintenance);
+router.put('/maintenance', requirePermission('UC03'), backupController.putMaintenance);
 
 const telegramBotController = require('../controllers/telegramBotController');
 router.get('/telegram/bindings', requirePermission('UC02'), telegramBotController.listBindings);

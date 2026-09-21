@@ -45,9 +45,28 @@ const saveBackupFile = async (event, payload = {}) => {
   return { canceled: false, filePath: result.filePath };
 };
 
+const pickBackupFile = async (event) => {
+  const parent = BrowserWindow.fromWebContents(event.sender);
+  const result = await dialog.showOpenDialog(parent || undefined, {
+    title: 'Chọn file backup .bak',
+    properties: ['openFile'],
+    filters: [
+      { name: 'SQL Server backup', extensions: ['bak'] },
+      { name: 'Tất cả các file', extensions: ['*'] },
+    ],
+  });
+  if (result.canceled || !result.filePaths?.[0]) {
+    return { canceled: true };
+  }
+  const filePath = result.filePaths[0];
+  return { canceled: false, filePath, fileName: path.basename(filePath) };
+};
+
 const registerSaveBackupFileHandler = () => {
   ipcMain.removeHandler('save-backup-file');
   ipcMain.handle('save-backup-file', saveBackupFile);
+  ipcMain.removeHandler('pick-backup-file');
+  ipcMain.handle('pick-backup-file', pickBackupFile);
 };
 
 const safePdfName = value => {

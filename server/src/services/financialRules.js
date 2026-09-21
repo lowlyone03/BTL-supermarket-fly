@@ -374,6 +374,47 @@ const calculateGrossProfit = values => {
 
 const createDifference = (code, scope, message, values = {}) => ({ code, scope, message, ...values });
 
+const productLabel = (MaSP, hd, pn) => {
+    const name = hd?.TenSP || pn?.TenSP;
+    return name ? `${MaSP} · ${name}` : MaSP;
+};
+
+const priceDirection = (invoicePrice, otherPrice) => (
+    number(invoicePrice) > number(otherPrice) ? 'cao hơn' : 'thấp hơn'
+);
+
+const describeThreeWayAlerts = (differences = [], totals = {}) => {
+    const alerts = [];
+    const seen = new Set();
+    const push = text => {
+        const value = String(text || '').trim();
+        if (!value || seen.has(value)) return;
+        seen.add(value);
+        alerts.push(value);
+    };
+    for (const item of differences) {
+        if (item.code === 'QUANTITY_MISMATCH') {
+            push(`Phiếu nhập chỉ ghi nhận ${item.referenceValue} sản phẩm nhưng Nhà cung cấp xuất hóa đơn ${item.invoiceValue} sản phẩm.`);
+        } else if (item.code === 'ORDER_INVOICE_PRICE_MISMATCH') {
+            const delta = roundMoney(Math.abs(number(item.invoiceValue) - number(item.orderValue)));
+            push(`Đơn giá trên hóa đơn ${priceDirection(item.invoiceValue, item.orderValue)} Đơn mua hàng ${delta.toLocaleString('vi-VN')} đồng/sản phẩm.`);
+        } else if (item.code === 'RECEIPT_INVOICE_PRICE_MISMATCH') {
+            const delta = roundMoney(Math.abs(number(item.invoiceValue) - number(item.receiptValue)));
+            push(`Đơn giá trên hóa đơn ${priceDirection(item.invoiceValue, item.receiptValue)} Phiếu nhập ${delta.toLocaleString('vi-VN')} đồng/sản phẩm.`);
+        } else if (item.code === 'RECEIPT_INVOICE_HEADER_MISMATCH') {
+            const delta = roundMoney(number(item.invoiceValue) - number(item.expectedValue));
+            push(`Chênh lệch dự kiến: ${Math.abs(delta).toLocaleString('vi-VN')} đồng chưa bao gồm thuế.`);
+        } else if (item.message) {
+            push(item.message);
+        }
+    }
+    if (!alerts.length && totals && !moneyMatches(totals.HoaDonTienHang, totals.PhieuNhapTruocThue)) {
+        const delta = roundMoney(number(totals.HoaDonTienHang) - number(totals.PhieuNhapTruocThue));
+        push(`Chênh lệch dự kiến ${formatVndPlain(Math.abs(delta))} chưa thuế`);
+    }
+    return alerts;
+};
+
 const evaluateThreeWayMatch = ({ invoice, invoiceLines = [], receipt, receiptLines = [] }) => {
     const differences = [];
     const rows = [];
@@ -384,9 +425,10 @@ const evaluateThreeWayMatch = ({ invoice, invoiceLines = [], receipt, receiptLin
     for (const MaSP of productIds) {
         const hd = invoiceMap.get(MaSP);
         const pn = referenceMap.get(MaSP);
+        const label = productLabel(MaSP, hd, pn);
         const rowDifferences = [];
-        if (!hd) rowDifferences.push(createDifference('MISSING_INVOICE_PRODUCT', 'product', `${MaSP}: đã nhận nhưng thiếu trên hóa đơn`));
-        if (!pn) rowDifferences.push(createDifference('MISSING_RECEIPT_PRODUCT', 'product', `${MaSP}: không có trong Phiếu nhập`));
+        if (!hd) rowDifferences.push(createDifference('MISSING_INVOICE_PRODUCT', 'product', `${label}: đã nhận nhưng thiếu trên hóa đơn`, { label, MaSP }));
+        if (!pn) rowDifferences.push(createDifference('MISSING_RECEIPT_PRODUCT', 'product', `${label}: không có trong Phiếu nhập`, { label, MaSP }));
 
         const invoiceQuantity = number(hd?.SoLuong);
         const receiptQuantity = number(pn?.SoLuongChapNhan);
@@ -400,38 +442,49 @@ const evaluateThreeWayMatch = ({ invoice, invoiceLines = [], receipt, receiptLin
         const invoiceTax = number(hd?.TienThue);
 
         if (hd && pn && invoiceQuantity !== receiptQuantity) {
-            rowDifferences.push(createDifference('QUANTITY_MISMATCH', 'quantity', `${MaSP}: hóa đơn ${invoiceQuantity}, thực nhận ${receiptQuantity}`, {
-                invoiceValue: invoiceQuantity, referenceValue: receiptQuantity
-            }));
+            rowDifferences.push(createDifference(
+                'QUANTITY_MISMATCH',
+                'quantity',
+                `Phiếu nhập chỉ ghi nhận ${receiptQuantity} sản phẩm nhưng Nhà cung cấp xuất hóa đơn ${invoiceQuantity} sản phẩm.`,
+                { invoiceValue: invoiceQuantity, referenceValue: receiptQuantity, label, MaSP }
+            ));
         }
         if (hd && pn && !moneyMatches(orderPrice, receiptPrice)) {
-            rowDifferences.push(createDifference('ORDER_RECEIPT_PRICE_MISMATCH', 'price', `${MaSP}: đơn giá Phiếu nhập khác Đơn mua`, {
-                orderValue: orderPrice, receiptValue: receiptPrice
+            rowDifferences.push(createDifference('ORDER_RECEIPT_PRICE_MISMATCH', 'price', `${label}: đơn giá Phiếu nhập khác Đơn mua`, {
+                orderValue: orderPrice, receiptValue: receiptPrice, label, MaSP
             }));
         }
         if (hd && pn && !moneyMatches(invoicePrice, orderPrice)) {
-            rowDifferences.push(createDifference('ORDER_INVOICE_PRICE_MISMATCH', 'price', `${MaSP}: đơn giá hóa đơn khác Đơn mua`, {
-                orderValue: orderPrice, invoiceValue: invoicePrice
-            }));
+            const delta = roundMoney(Math.abs(invoicePrice - orderPrice));
+            rowDifferences.push(createDifference(
+                'ORDER_INVOICE_PRICE_MISMATCH',
+                'price',
+                `Đơn giá trên hóa đơn ${priceDirection(invoicePrice, orderPrice)} Đơn mua hàng ${delta.toLocaleString('vi-VN')} đồng/sản phẩm.`,
+                { orderValue: orderPrice, invoiceValue: invoicePrice, label, MaSP }
+            ));
         }
         if (hd && pn && !moneyMatches(invoicePrice, receiptPrice)) {
-            rowDifferences.push(createDifference('RECEIPT_INVOICE_PRICE_MISMATCH', 'price', `${MaSP}: đơn giá hóa đơn khác Phiếu nhập`, {
-                receiptValue: receiptPrice, invoiceValue: invoicePrice
-            }));
+            const delta = roundMoney(Math.abs(invoicePrice - receiptPrice));
+            rowDifferences.push(createDifference(
+                'RECEIPT_INVOICE_PRICE_MISMATCH',
+                'price',
+                `Đơn giá trên hóa đơn ${priceDirection(invoicePrice, receiptPrice)} Phiếu nhập ${delta.toLocaleString('vi-VN')} đồng/sản phẩm.`,
+                { receiptValue: receiptPrice, invoiceValue: invoicePrice, label, MaSP }
+            ));
         }
         if (hd && !moneyMatches(invoiceLineAmount, expectedLineAmount)) {
-            rowDifferences.push(createDifference('INVOICE_LINE_TOTAL_MISMATCH', 'total', `${MaSP}: tiền hàng trên hóa đơn không bằng số lượng × đơn giá`, {
-                invoiceValue: invoiceLineAmount, expectedValue: expectedLineAmount
+            rowDifferences.push(createDifference('INVOICE_LINE_TOTAL_MISMATCH', 'total', `${label}: tiền hàng trên hóa đơn không bằng số lượng × đơn giá`, {
+                invoiceValue: invoiceLineAmount, expectedValue: expectedLineAmount, label, MaSP
             }));
         }
         if (hd && pn && !moneyMatches(invoiceLineAmount, receiptLineAmount)) {
-            rowDifferences.push(createDifference('RECEIPT_INVOICE_TOTAL_MISMATCH', 'total', `${MaSP}: tiền hàng hóa đơn khác Phiếu nhập`, {
-                receiptValue: receiptLineAmount, invoiceValue: invoiceLineAmount
+            rowDifferences.push(createDifference('RECEIPT_INVOICE_TOTAL_MISMATCH', 'total', `${label}: tiền hàng hóa đơn khác Phiếu nhập`, {
+                receiptValue: receiptLineAmount, invoiceValue: invoiceLineAmount, label, MaSP
             }));
         }
         if (hd && !moneyMatches(invoiceTax, expectedTax)) {
-            rowDifferences.push(createDifference('LINE_TAX_MISMATCH', 'tax', `${MaSP}: tiền thuế không đúng theo thuế suất ${number(hd.ThueSuat)}%`, {
-                invoiceValue: invoiceTax, expectedValue: expectedTax
+            rowDifferences.push(createDifference('LINE_TAX_MISMATCH', 'tax', `${label}: tiền thuế không đúng theo thuế suất ${number(hd.ThueSuat)}%`, {
+                invoiceValue: invoiceTax, expectedValue: expectedTax, label, MaSP
             }));
         }
 
@@ -466,6 +519,7 @@ const evaluateThreeWayMatch = ({ invoice, invoiceLines = [], receipt, receiptLin
     const orderValueForReceivedQuantity = roundMoney(receiptLines.reduce((sum, line) => (
         sum + number(line.SoLuongChapNhan) * number(line.DonGiaDonMua)
     ), 0));
+    const goodsDelta = roundMoney(number(invoice?.TongTienHang) - receiptGoods);
 
     const headerChecks = [
         ['INVOICE_GOODS_HEADER_MISMATCH', 'total', 'Tổng tiền hàng hóa đơn không bằng tổng các dòng', invoice?.TongTienHang, calculatedGoods],
@@ -473,7 +527,7 @@ const evaluateThreeWayMatch = ({ invoice, invoiceLines = [], receipt, receiptLin
         ['INVOICE_GRAND_TOTAL_MISMATCH', 'total', 'Tổng cộng hóa đơn không bằng tiền hàng cộng tiền thuế', invoice?.TongCong, calculatedTotal],
         ['RECEIPT_HEADER_TOTAL_MISMATCH', 'total', 'Tổng Phiếu nhập không bằng tổng các dòng thực nhận', receipt?.TongTien, receiptGoods],
         ['ORDER_RECEIPT_TOTAL_MISMATCH', 'total', 'Giá trị thực nhận theo Phiếu nhập khác giá trị theo đơn giá Đơn mua', receiptGoods, orderValueForReceivedQuantity],
-        ['RECEIPT_INVOICE_HEADER_MISMATCH', 'total', 'Tổng tiền hàng hóa đơn khác Tổng Phiếu nhập trước thuế', invoice?.TongTienHang, receiptGoods]
+        ['RECEIPT_INVOICE_HEADER_MISMATCH', 'total', `Chênh lệch dự kiến: ${Math.abs(goodsDelta).toLocaleString('vi-VN')} đồng chưa bao gồm thuế.`, invoice?.TongTienHang, receiptGoods]
     ];
     for (const [code, scope, message, actual, expected] of headerChecks) {
         if (!moneyMatches(actual, expected)) {
@@ -481,21 +535,25 @@ const evaluateThreeWayMatch = ({ invoice, invoiceLines = [], receipt, receiptLin
         }
     }
 
+    const totals = {
+        DonMuaTheoLuongNhan: orderValueForReceivedQuantity,
+        PhieuNhapTruocThue: receiptGoods,
+        HoaDonTienHang: number(invoice?.TongTienHang),
+        HoaDonTienThue: number(invoice?.TienThue),
+        HoaDonTongCong: number(invoice?.TongCong),
+        TienHangTinhLai: calculatedGoods,
+        TienThueTinhLai: calculatedTax,
+        TongCongTinhLai: calculatedTotal,
+        ChenLechChuaThue: goodsDelta
+    };
+
     return {
         matched: differences.length === 0,
         differences,
         differenceMessages: differences.map(item => item.message),
+        alerts: describeThreeWayAlerts(differences, totals),
         rows,
-        totals: {
-            DonMuaTheoLuongNhan: orderValueForReceivedQuantity,
-            PhieuNhapTruocThue: receiptGoods,
-            HoaDonTienHang: number(invoice?.TongTienHang),
-            HoaDonTienThue: number(invoice?.TienThue),
-            HoaDonTongCong: number(invoice?.TongCong),
-            TienHangTinhLai: calculatedGoods,
-            TienThueTinhLai: calculatedTax,
-            TongCongTinhLai: calculatedTotal
-        }
+        totals
     };
 };
 
@@ -559,5 +617,6 @@ module.exports = {
     decideAbortCheckout,
     cashHandoverExcludingOpening,
     calculateGrossProfit,
-    evaluateThreeWayMatch
+    evaluateThreeWayMatch,
+    describeThreeWayAlerts
 };

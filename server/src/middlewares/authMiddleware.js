@@ -1,8 +1,9 @@
 const jwt = require('jsonwebtoken');
-const { sql, poolPromise } = require('../config/db');
+const { poolPromise } = require('../config/db');
 const { permissionSqlFilter, ensureEmployeePermissionSchema } = require('../services/effectivePermissions');
 
-// Middleware xác thực Token (Để dùng cho các API sau này)
+const JWT_SECRET = process.env.JWT_SECRET || 'supermarket_fly_secret_123';
+
 const tokenFromRequest = req => {
     const authHeader = req.headers['authorization'];
     const bearer = authHeader && authHeader.split(' ')[1];
@@ -18,18 +19,15 @@ const verifyToken = (req, res, next) => {
         return res.status(401).json({ message: 'Vui lòng đăng nhập!' });
     }
 
-    const secretKey = process.env.JWT_SECRET || 'supermarket_fly_secret_123';
-    
-    jwt.verify(token, secretKey, (err, decoded) => {
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
         if (err) {
             return res.status(401).json({ message: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!' });
         }
-        req.user = decoded; // Lưu thông tin giải mã vào req để API phía sau dùng
+        req.user = decoded;
         next();
     });
 };
 
-// Middleware kiểm tra quyền (Ví dụ: requireRole('Quản lý'))
 const requireRole = (roleName) => {
     return (req, res, next) => {
         if (!req.user || req.user.TenVaiTro !== roleName) {
@@ -39,8 +37,6 @@ const requireRole = (roleName) => {
     };
 };
 
-// Quyền được lấy trực tiếp từ CSDL để thay đổi phân quyền có hiệu lực ở API,
-// không chỉ ẩn/hiện nút trên giao diện.
 const requireAnyPermission = (permissionCodes) => {
     const codes = (Array.isArray(permissionCodes) ? permissionCodes : [permissionCodes])
         .map(code => String(code || '').trim())

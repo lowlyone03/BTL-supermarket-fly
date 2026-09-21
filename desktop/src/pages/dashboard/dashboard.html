@@ -17,7 +17,8 @@
           : (user.MaNV ? 'staff' : '');
         if (kind) document.documentElement.setAttribute('data-fly-role', kind);
         var key = user && user.MaNV ? 'fly_pref_' + user.MaNV : 'fly_pref_guest';
-        var prefs = JSON.parse(localStorage.getItem(key) || localStorage.getItem('fly_pref_last') || '{}');
+        var raw = localStorage.getItem(key);
+        var prefs = raw ? JSON.parse(raw) : {};
         if (prefs.giaoDien) document.documentElement.setAttribute('data-theme', prefs.giaoDien);
         if (prefs.ngonNgu) {
           document.documentElement.setAttribute('data-lang', prefs.ngonNgu);
@@ -30,8 +31,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="dashboard.css?v=inbox-read-1">
-  <link rel="stylesheet" href="../admin/admin.css?v=perm-ui-7">
-  <link rel="stylesheet" href="../warehouse/warehouse.css?v=fly-dialog-1">
+  <link rel="stylesheet" href="../admin/admin.css?v=backup-tab-2">
+  <link rel="stylesheet" href="../warehouse/warehouse.css?v=search-2">
   <link rel="stylesheet" href="../workforce/workforce.css?v=approve-fix-2">
   <link rel="stylesheet" href="../cashier/cashier.css?v=loy-apply-1">
   <link rel="stylesheet" href="../shared/locale-ui.css?v=vi-date-4">
@@ -91,7 +92,15 @@
     <symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3h8l5 5v13H7z"/><path d="M15 3v5h5M10 13h7M10 17h5"/></symbol>
   </svg>
 
+  <div id="maintenanceOverlay" class="fly-maint-overlay" hidden>
+    <div>
+      <p data-i18n="maint.title">HỆ THỐNG ĐANG BẢO TRÌ</p>
+      <h1 id="maintenanceOverlayReason" data-i18n="maint.reason">Quản lý đang bảo trì hệ thống. Vui lòng thử lại sau.</h1>
+    </div>
+  </div>
+
   <div class="app-shell">
+    <div id="maintenanceBanner" class="fly-maint-banner" hidden data-i18n="maint.banner">Đang bảo trì. Nhân viên khác không vào được API (trừ IPN thanh toán).</div>
     <aside class="sidebar">
       <div class="brand-block">
         <svg class="brand-mark"><use href="#i-leaf"/></svg>
@@ -198,7 +207,7 @@
           <div class="nav-group-title" data-i18n="nav.control">KIỂM SOÁT</div>
           <a href="#" class="nav-item" data-target="../admin/permissions.html"><svg><use href="#i-shield"/></svg><span data-i18n="nav.permissions">Phân quyền chức năng</span></a>
           <a href="#" class="nav-item" data-target="../admin/audit-log.html"><svg><use href="#i-log"/></svg><span data-i18n="nav.audit">Nhật ký hệ thống</span></a>
-          <a href="#" class="nav-item" data-target="../admin/backup.html"><svg><use href="#i-shield"/></svg><span data-i18n="nav.backup">Sao lưu &amp; bảo mật</span></a>
+          <a href="#" class="nav-item" data-target="../admin/backup.html"><svg><use href="#i-shield"/></svg><span data-i18n="nav.backup">Sao lưu &amp; bảo trì</span></a>
           <a href="#" class="nav-item" id="managerAppearanceNav" data-target="manager-appearance"><svg><use href="#i-settings"/></svg><span data-i18n="nav.appearance">Giao diện hệ thống</span></a>
           <a href="#" class="nav-item" id="btnChangePassword"><svg><use href="#i-settings"/></svg><span data-i18n="nav.password">Đổi mật khẩu</span></a>
         </div>
@@ -316,7 +325,7 @@
       <div class="modal-header"><div><p class="module-kicker" data-i18n="pwd.kicker">BẢO MẬT TÀI KHOẢN</p><h3 data-i18n="pwd.title">Đổi mật khẩu</h3></div><button type="button" class="close-btn" id="closePwdModal">×</button></div>
       <div class="modal-body"><form id="pwdForm" novalidate>
         <div class="form-group"><label data-i18n="pwd.old">Mật khẩu hiện tại</label><input type="password" id="oldPwd" required><small class="field-error" id="oldPwdError"></small></div>
-        <div class="form-group"><label data-i18n="pwd.new">Mật khẩu mới</label><input type="password" id="newPwd" required><small class="field-help" data-i18n="pwd.help">Tối thiểu 3 ký tự, khớp mật khẩu khởi tạo hiện có.</small><small class="field-error" id="newPwdError"></small></div>
+        <div class="form-group"><label data-i18n="pwd.new">Mật khẩu mới</label><input type="password" id="newPwd" required><small class="field-help" data-i18n="pwd.help">Tối thiểu 8 ký tự, có cả chữ và số. Không dùng mật khẩu khởi tạo 123.</small><small class="field-error" id="newPwdError"></small></div>
         <div class="form-group"><label data-i18n="pwd.confirm">Xác nhận mật khẩu mới</label><input type="password" id="confirmPwd" required><small class="field-error" id="confirmPwdError"></small></div>
         <div class="modal-footer"><button type="button" class="btn btn-secondary" id="cancelPwdModal" data-i18n="common.cancel">Hủy</button><button type="submit" class="btn btn-primary" data-i18n="pwd.submit">Cập nhật mật khẩu</button></div>
       </form></div>
@@ -467,16 +476,16 @@
     </div>
   </aside>
 
-  <script src="../../i18n/vi.js?v=inbox-read-1"></script>
-  <script src="../../i18n/en.js?v=inbox-read-1"></script>
-  <script src="../../i18n/zh.js?v=inbox-read-1"></script>
+  <script src="../../i18n/vi.js?v=pref-staff-1"></script>
+  <script src="../../i18n/en.js?v=pref-staff-1"></script>
+  <script src="../../i18n/zh.js?v=pref-staff-1"></script>
   <script src="../../i18n/ops.js?v=i18n-approve-1"></script>
   <script src="../../i18n/i18n.js?v=i18n-assist-10"></script>
-  <script src="../../i18n/appearance.js"></script>
+  <script src="../../i18n/appearance.js?v=pref-staff-1"></script>
   <script src="../shared/escape-key.js"></script>
   <script src="../shared/fly-dialog.js?v=fly-dialog-1"></script>
   <script src="../shared/api-config.js"></script>
-  <script src="../shared/field-validators.js?v=close-confirm-1"></script>
+  <script src="../shared/field-validators.js?v=pwd-policy-8"></script>
   <script src="../shared/employee-profile.js?v=emp-date-1"></script>
   <script src="../shared/locale-ui.js?v=date-vn-2"></script>
   <script src="../shared/search-tools.js?v=pos-product-search-1"></script>
@@ -487,7 +496,7 @@
   <script src="../shared/warehouse-export.js?v=wh-report-5"></script>
   <script src="../shared/warehouse-xlsx.js?v=wh-report-5"></script>
   <script src="../shared/warehouse-report-ui.js?v=dept-ui-2"></script>
-  <script src="../admin/admin-page-templates.js?v=perm-ui-7"></script>
+  <script src="../admin/admin-page-templates.js?v=backup-tab-2"></script>
   <script src="../warehouse/warehouse-pages.js?v=stock-gap-5"></script>
   <script src="../warehouse/supplier-pages.js?v=giahan-1"></script>
   <script src="../warehouse/purchase-order-pages.js?v=pay-result-1"></script>
@@ -509,7 +518,7 @@
   <script src="../shared/department-ledger-submit.js?v=dept-report-2"></script>
   <script src="../admin/appearance-pages.js?v=theme-i18n-1"></script>
   <script src="notify-socket.js?v=inbox-read-1"></script>
-  <script src="dashboard.js?v=pay-result-1"></script>
+  <script src="dashboard.js?v=pref-staff-1"></script>
   <script src="chat-panel.js?v=chat-one-3"></script>
   <script src="assistant-panel.js?v=assist-ui-11"></script>
 </body>

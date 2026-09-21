@@ -195,7 +195,11 @@
       const response = await fetch(`${context.apiBase}${path}`, {
         ...rest,
         signal: controller.signal,
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.token}`, ...(options.headers || {}) }
+        headers: {
+          Authorization: `Bearer ${context.token}`,
+          'Content-Type': 'application/json',
+          ...(options.headers || {})
+        }
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.message || 'Không thể xử lý yêu cầu.');
@@ -358,7 +362,9 @@
       { label: 'Tiền thuế hóa đơn', value: preview.totals.HoaDonTienThue, format: 'money' },
       { label: 'Tổng cộng hóa đơn', value: preview.totals.HoaDonTongCong, format: 'money' }
     ],
-    note: preview.differences.length ? preview.differences.join('; ') : 'Sản phẩm, số lượng, đơn giá, thuế và tổng tiền đều khớp theo quy tắc đối chiếu.',
+    note: (preview.alerts || preview.differences || []).length
+      ? (preview.alerts || preview.differences).join('; ')
+      : 'Sản phẩm, số lượng, đơn giá, thuế và tổng tiền đều khớp theo quy tắc đối chiếu.',
     signatures: ['Nhân viên mua hàng', 'Thủ kho', 'Kế toán đối chiếu']
   });
 
@@ -646,20 +652,54 @@
   const lineMarkup = lines => `<div class="accounting-invoice-line heading"><span>MẶT HÀNG</span><span>THAM CHIẾU</span><span>SL HÓA ĐƠN</span><span>GIÁ THAM CHIẾU</span><span>GIÁ HÓA ĐƠN</span><span>THUẾ (%)</span><span>THÀNH TIỀN</span></div>${lines.map(line => {
     const quantity = Number(line.SoLuongChapNhan ?? line.SoLuong);
     const price = Number(line.DonGiaNhap ?? line.DonGiaDonMua ?? line.DonGia);
-    return `<div class="accounting-invoice-line" data-product="${esc(line.MaSP)}"><div><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)}</small></div><span>${quantity}</span><input class="invoice-qty" type="number" min="1" value="${quantity}"><span>${money(price)}</span><input class="invoice-price" type="number" min="0" step="100" value="${price}"><input class="invoice-tax" type="number" min="0" max="100" step="1" value="8"><strong class="invoice-total"></strong></div>`;
+    return `<div class="accounting-invoice-line" data-product="${esc(line.MaSP)}" data-ref-qty="${quantity}" data-ref-price="${price}"><div><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)} · ${esc(line.DonViTinh)}</small></div><span class="invoice-ref-qty">${quantity}</span><input class="invoice-qty" type="number" min="1" value="${quantity}"><span>${money(price)}</span><input class="invoice-price" type="number" min="0" step="100" value="${price}"><input class="invoice-tax" type="number" min="0" max="100" step="1" value="8"><strong class="invoice-total"></strong></div>`;
   }).join('')}`;
 
-  const bindLineTotals = overlay => {
-    const calculate = row => {
-      const quantity = Number(row.querySelector('.invoice-qty').value || 0);
+  const matchAlertsHtml = (alerts, matched, totals) => {
+    if (matched) {
+      return `<div class="accounting-reconcile-result matched"><strong>Ba chứng từ đang khớp</strong><p>Số lượng, đơn giá và tiền hàng hóa đơn trùng Đơn mua / Phiếu nhập.</p></div>`;
+    }
+    const items = (alerts || []).map(item => `<li>${esc(item)}</li>`).join('');
+    const extra = totals && Number.isFinite(Number(totals.ChenLechChuaThue)) && Number(totals.ChenLechChuaThue)
+      ? `<p>Chênh lệch dự kiến ${esc(money(Math.abs(Number(totals.ChenLechChuaThue))))} chưa thuế.</p>`
+      : '';
+    return `<div class="accounting-reconcile-result different"><strong>Hóa đơn đang lệch chứng từ kho</strong><ul>${items || '<li>Có chênh lệch số lượng hoặc đơn giá.</li>'}</ul>${extra}</div>`;
+  };
+
+  const liveInvoiceCompare = overlay => {
+    const box = overlay.querySelector('#invoiceLiveMatch');
+    if (!box) return;
+    const alerts = [];
+    let goodsInvoice = 0;
+    let goodsRef = 0;
+    overlay.querySelectorAll('.accounting-invoice-line[data-product]').forEach(row => {
+      const qty = Number(row.querySelector('.invoice-qty').value || 0);
       const price = Number(row.querySelector('.invoice-price').value || 0);
       const tax = Number(row.querySelector('.invoice-tax').value || 0);
-      row.querySelector('.invoice-total').textContent = money(quantity * price * (1 + tax / 100));
-    };
-    overlay.querySelectorAll('.accounting-invoice-line[data-product]').forEach(row => {
-      row.querySelectorAll('input').forEach(input => input.addEventListener('input', () => calculate(row)));
-      calculate(row);
+      const refQty = Number(row.dataset.refQty || 0);
+      const refPrice = Number(row.dataset.refPrice || 0);
+      goodsInvoice += qty * price;
+      goodsRef += refQty * refPrice;
+      const mismatch = qty !== refQty || Math.abs(price - refPrice) > 0.01;
+      row.classList.toggle('is-mismatch', mismatch);
+      if (qty !== refQty) alerts.push(`Phiếu nhập chỉ ghi nhận ${refQty} sản phẩm nhưng Nhà cung cấp xuất hóa đơn ${qty} sản phẩm.`);
+      if (Math.abs(price - refPrice) > 0.01) {
+        const delta = Math.abs(price - refPrice);
+        alerts.push(`Đơn giá trên hóa đơn ${price > refPrice ? 'cao hơn' : 'thấp hơn'} Đơn mua hàng ${delta.toLocaleString('vi-VN')} đồng/sản phẩm.`);
+      }
+      row.querySelector('.invoice-total').textContent = money(qty * price * (1 + tax / 100));
     });
+    const gap = Math.round(goodsInvoice - goodsRef);
+    if (Math.abs(gap) > 0) alerts.push(`Chênh lệch dự kiến: ${Math.abs(gap).toLocaleString('vi-VN')} đồng chưa bao gồm thuế.`);
+    box.innerHTML = matchAlertsHtml(alerts, !alerts.length, { ChenLechChuaThue: gap });
+  };
+
+  const bindLineTotals = overlay => {
+    const refresh = () => liveInvoiceCompare(overlay);
+    overlay.querySelectorAll('.accounting-invoice-line[data-product]').forEach(row => {
+      row.querySelectorAll('input').forEach(input => input.addEventListener('input', refresh));
+    });
+    refresh();
   };
 
   const createInvoiceModal = async (context, onDone) => {
@@ -751,7 +791,7 @@
           const data = await api(context, mode === 'receipt' ? `/accounting/receipt-files/${id}` : `/accounting/purchase-order-files/${id}`);
           const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
           setHeading('Nhập số hóa đơn Nhà cung cấp', `${mode === 'receipt' ? data.file.MaPN : data.file.MaPO} · ${data.file.TenNCC}`);
-          body.innerHTML = `<div class="warehouse-detail-grid"><div><span>HỒ SƠ THAM CHIẾU</span><strong>${esc(mode === 'receipt' ? data.file.MaPN : data.file.MaPO)}</strong><small>${esc(data.file.TenNCC)}</small></div><div><span>ĐƠN MUA</span><strong>${esc(data.file.MaPO)}</strong></div><div><span>ĐIỀU KHOẢN</span><strong>${data.file.SoNgayThanhToan} ngày</strong></div><div><span>GIÁ TRỊ THAM CHIẾU</span><strong>${money(data.file.TongTien)}</strong></div></div><div class="warehouse-form-grid accounting-invoice-header"><div class="warehouse-field"><label>Số hóa đơn Nhà cung cấp *</label><input id="supplierInvoiceNo" maxlength="50" placeholder="Ví dụ: 00001234"></div><div class="warehouse-field"><label>Ngày hóa đơn *</label>${window.FLY_VI_DATE.dateField('invoiceDate', today)}</div></div><div class="receipt-rule"><svg><use href="#i-approve"></use></svg><span>Nút “Lưu hóa đơn” chỉ tiếp nhận chứng từ. Công nợ chỉ ghi nhận sau khi Kế toán đối chiếu Đơn mua – Phiếu nhập – Hóa đơn. Không trừ tồn kho.</span></div><div id="invoiceLines" class="warehouse-receipt-lines">${lineMarkup(data.lines)}</div>`;
+          body.innerHTML = `<div class="warehouse-detail-grid"><div><span>HỒ SƠ THAM CHIẾU</span><strong>${esc(mode === 'receipt' ? data.file.MaPN : data.file.MaPO)}</strong><small>${esc(data.file.TenNCC)}</small></div><div><span>ĐƠN MUA</span><strong>${esc(data.file.MaPO)}</strong></div><div><span>MST NCC</span><strong>${esc(data.file.MaSoThue || '—')}</strong></div><div><span>GIÁ TRỊ THAM CHIẾU</span><strong>${money(data.file.TongTien)}</strong></div></div><div class="warehouse-form-grid accounting-invoice-header"><div class="warehouse-field"><label>Số hóa đơn Nhà cung cấp *</label><input id="supplierInvoiceNo" maxlength="50" placeholder="Ví dụ: 00001234"></div><div class="warehouse-field"><label>Ngày hóa đơn *</label>${window.FLY_VI_DATE.dateField('invoiceDate', today)}</div></div><div class="receipt-rule"><svg><use href="#i-approve"></use></svg><span>Nút “Lưu hóa đơn” chỉ tiếp nhận chứng từ. Công nợ chỉ ghi nhận sau khi Kế toán đối chiếu Đơn mua – Phiếu nhập – Hóa đơn. Không trừ tồn kho.</span></div><div id="invoiceLines" class="warehouse-receipt-lines">${lineMarkup(data.lines)}</div><div id="invoiceLiveMatch"></div>`;
           actions.innerHTML = '<button class="warehouse-secondary back-detail" type="button">Quay lại chi tiết</button><button class="warehouse-primary save-invoice" type="button">Lưu hồ sơ hóa đơn</button>';
           bindLineTotals(overlay);
           actions.querySelector('.back-detail').addEventListener('click', () => renderDetail(mode, id));
@@ -815,7 +855,7 @@
         const preview = await api(context, `/accounting/purchase-invoices/${invoice.MaHDMH}/reconciliation-preview?MaPN=${encodeURIComponent(MaPN)}`);
         currentPreview = preview;
         const matched = !preview.differences.length;
-        overlay.querySelector('#reconciliationPreview').innerHTML = `<div class="accounting-document-strip"><article><span>ĐƠN MUA</span><strong>${esc(preview.purchaseOrder.MaPO)}</strong><small>Toàn đơn ${money(preview.purchaseOrder.TongTien)}</small></article><article><span>PHIẾU NHẬP</span><strong>${esc(preview.receipt.MaPN)}</strong><small>Trước thuế ${money(preview.totals.PhieuNhapTruocThue)}</small></article><article><span>HÓA ĐƠN NHÀ CUNG CẤP</span><strong>${esc(preview.invoice.SoHoaDon)}</strong><small>Tổng cộng ${money(preview.invoice.TongCong)}</small></article></div><div class="warehouse-table-wrap accounting-reconcile-table"><table class="warehouse-table"><thead><tr><th>MẶT HÀNG</th><th>SL ĐẶT / NHẬN / HĐ</th><th>GIÁ ĐƠN MUA</th><th>GIÁ PHIẾU NHẬP</th><th>GIÁ HÓA ĐƠN</th><th>THUẾ HĐ</th><th>TIỀN HÀNG HĐ</th><th>KẾT QUẢ</th></tr></thead><tbody>${preview.rows.map(row => `<tr><td><strong>${esc(row.TenSP)}</strong><small>${esc(row.MaSP)} · ${esc(row.DonViTinh)}</small></td><td class="num">${row.SoLuongDat} / ${row.SoLuongThucNhan} / ${row.SoLuongHoaDon}</td><td class="num">${money(row.DonGiaDonMua)}</td><td class="num">${money(row.DonGiaPhieuNhap)}</td><td class="num">${money(row.DonGiaHoaDon)}</td><td class="num"><strong>${row.ThueSuat}%</strong><small>${money(row.TienThueHoaDon)} / tính lại ${money(row.TienThueTinhLai)}</small></td><td class="num">${money(row.TienHangHoaDon)}</td><td><span class="status-pill ${row.KetQua === 'Khớp' ? 'ok' : 'cancelled'}">${esc(row.KetQua)}</span><small>SL ${esc(row.KetQuaSoLuong)} · Giá ${esc(row.KetQuaDonGia)} · Thuế ${esc(row.KetQuaThue)} · Tổng ${esc(row.KetQuaTongTien)}</small></td></tr>`).join('')}</tbody></table></div><div class="accounting-reconcile-totals"><div><span>TIỀN HÀNG PHIẾU NHẬP</span><strong>${money(preview.totals.PhieuNhapTruocThue)}</strong></div><div><span>TIỀN HÀNG HÓA ĐƠN</span><strong>${money(preview.totals.HoaDonTienHang)}</strong></div><div><span>THUẾ HÓA ĐƠN</span><strong>${money(preview.totals.HoaDonTienThue)}</strong><small>Tính lại ${money(preview.totals.TienThueTinhLai)}</small></div><div><span>TỔNG CỘNG HÓA ĐƠN</span><strong>${money(preview.totals.HoaDonTongCong)}</strong><small>Tính lại ${money(preview.totals.TongCongTinhLai)}</small></div></div><div class="accounting-reconcile-result ${matched ? 'matched' : 'different'}"><strong>${matched ? 'Ba chứng từ, thuế và tổng tiền đều khớp' : 'Hồ sơ đang có chênh lệch'}</strong><p>${matched ? 'Kế toán kiểm tra lại lần cuối rồi bấm xác nhận. Chỉ thao tác xác nhận này mới phát sinh công nợ phải trả.' : esc(preview.differences.join('; '))}</p></div>`;
+        overlay.querySelector('#reconciliationPreview').innerHTML = `<div class="accounting-document-strip"><article><span>ĐƠN MUA</span><strong>${esc(preview.purchaseOrder.MaPO)}</strong><small>Toàn đơn ${money(preview.purchaseOrder.TongTien)}</small></article><article><span>PHIẾU NHẬP</span><strong>${esc(preview.receipt.MaPN)}</strong><small>Trước thuế ${money(preview.totals.PhieuNhapTruocThue)}</small></article><article><span>HÓA ĐƠN NHÀ CUNG CẤP</span><strong>${esc(preview.invoice.SoHoaDon)}</strong><small>Tổng cộng ${money(preview.invoice.TongCong)}</small></article></div><div class="warehouse-table-wrap accounting-reconcile-table"><table class="warehouse-table"><thead><tr><th>MẶT HÀNG</th><th>SL ĐẶT / NHẬN / HĐ</th><th>GIÁ ĐƠN MUA</th><th>GIÁ PHIẾU NHẬP</th><th>GIÁ HÓA ĐƠN</th><th>THUẾ HĐ</th><th>TIỀN HÀNG HĐ</th><th>KẾT QUẢ</th></tr></thead><tbody>${preview.rows.map(row => `<tr class="${row.KetQua === 'Khớp' ? '' : 'is-mismatch'}"><td><strong>${esc(row.TenSP)}</strong><small>${esc(row.MaSP)} · ${esc(row.DonViTinh)}</small></td><td class="num">${row.SoLuongDat} / ${row.SoLuongThucNhan} / ${row.SoLuongHoaDon}</td><td class="num">${money(row.DonGiaDonMua)}</td><td class="num">${money(row.DonGiaPhieuNhap)}</td><td class="num">${money(row.DonGiaHoaDon)}</td><td class="num"><strong>${row.ThueSuat}%</strong><small>${money(row.TienThueHoaDon)} / tính lại ${money(row.TienThueTinhLai)}</small></td><td class="num">${money(row.TienHangHoaDon)}</td><td><span class="status-pill ${row.KetQua === 'Khớp' ? 'ok' : 'cancelled'}">${esc(row.KetQua)}</span><small>SL ${esc(row.KetQuaSoLuong)} · Giá ${esc(row.KetQuaDonGia)} · Thuế ${esc(row.KetQuaThue)} · Tổng ${esc(row.KetQuaTongTien)}</small></td></tr>`).join('')}</tbody></table></div><div class="accounting-reconcile-totals"><div><span>TIỀN HÀNG PHIẾU NHẬP</span><strong>${money(preview.totals.PhieuNhapTruocThue)}</strong></div><div><span>TIỀN HÀNG HÓA ĐƠN</span><strong>${money(preview.totals.HoaDonTienHang)}</strong></div><div><span>THUẾ HÓA ĐƠN</span><strong>${money(preview.totals.HoaDonTienThue)}</strong><small>Tính lại ${money(preview.totals.TienThueTinhLai)}</small></div><div><span>TỔNG CỘNG HÓA ĐƠN</span><strong>${money(preview.totals.HoaDonTongCong)}</strong><small>Tính lại ${money(preview.totals.TongCongTinhLai)}</small></div></div>${matchAlertsHtml(preview.alerts || preview.differences, matched, preview.totals)}${matched ? '<p class="receipt-rule">Kế toán kiểm tra lại lần cuối rồi bấm xác nhận. Chỉ thao tác xác nhận này mới phát sinh công nợ phải trả.</p>' : ''}`;
         const button = overlay.querySelector('.reconcile');
         button.disabled = !matched;
         button.dataset.ready = matched ? 'true' : 'false';
@@ -850,7 +890,7 @@
         root.querySelector('#invoiceBody').innerHTML = items.length ? items.map(item => `<tr><td><strong>${esc(item.SoHoaDon)}</strong><small>${esc(item.MaHDMH)}</small></td><td><strong>${esc(item.TenNCC)}</strong><small>${esc(item.MaNCC)}</small></td><td><strong>${esc(item.MaPO || '—')}</strong><small>${item.MaPN ? `Nhập ${esc(item.MaPN)}` : 'Chờ Phiếu nhập'}</small></td><td>${fmtDate(item.NgayHoaDon)}</td><td class="num"><strong>${money(item.TongCong)}</strong><small>Thuế ${money(item.TienThue)}</small></td><td><span class="status-pill ${matchClass(item.TrangThaiDoiChieu)}">${esc(item.TrangThaiDoiChieu)}</span></td><td>${item.MaCNPTra ? `<strong>${esc(item.MaCNPTra)}</strong><small>Hạn ${fmtDate(item.HanThanhToan)}</small>` : '<span class="status-pill cancelled">Chưa phát sinh</span>'}</td><td><div class="warehouse-row-actions"><button data-invoice="${esc(item.MaHDMH)}">Chi tiết</button>${item.TrangThaiDoiChieu !== 'Đã khớp' ? `<button class="send" data-reconcile="${esc(item.MaHDMH)}">Đối chiếu</button>` : ''}</div></td></tr>`).join('') : `<tr><td colspan="8" class="warehouse-empty">${esc(window.FLY_SEARCH?.emptyMessage?.(search, 'hóa đơn mua hàng', 'Chưa có hóa đơn mua hàng phù hợp.') || 'Chưa có hóa đơn mua hàng phù hợp.')}</td></tr>`;
       } catch (error) { context.showToast(error.message, 'error'); }
     };
-    root.innerHTML = `${heading('KẾ TOÁN / MUA HÀNG', 'Đối chiếu hóa đơn Nhà cung cấp', 'Bấm Tiếp nhận hóa đơn để mở danh sách Phiếu nhập/Đơn mua chờ. Xem chi tiết rồi mới lưu số hóa đơn. Công nợ chỉ ghi sau đối chiếu ba bên.', '<button class="warehouse-primary" id="newInvoice"><svg><use href="#i-plus"></use></svg>Tiếp nhận hóa đơn</button>')}<div class="accounting-flow"><span>Đơn mua đã duyệt</span><i>→</i><span>Phiếu nhập đã xác nhận</span><i>→</i><span>Hóa đơn Nhà cung cấp</span><i>→</i><strong>Kế toán xác nhận đối chiếu</strong><i>→</i><strong>Công nợ phải trả</strong></div><article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"></use></svg><input id="invoiceSearch" placeholder="Tìm số hóa đơn, Đơn mua hoặc Nhà cung cấp..." value="${esc(window.FLY_SEARCH?.takePendingQuery?.('accounting-invoices') || '')}"></label><div class="warehouse-toolbar-actions"><select id="invoiceMatch"><option value="">Tất cả kết quả</option><option>Chờ Phiếu nhập</option><option>Chờ đối chiếu</option><option>Đã khớp</option><option>Chênh lệch</option></select><button class="warehouse-icon-button" id="refreshInvoices"><svg><use href="#i-refresh"></use></svg></button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HÓA ĐƠN</th><th>NHÀ CUNG CẤP</th><th>HỒ SƠ NGUỒN</th><th>NGÀY HÓA ĐƠN</th><th>TỔNG CỘNG</th><th>ĐỐI CHIẾU</th><th>CÔNG NỢ</th><th>THAO TÁC</th></tr></thead><tbody id="invoiceBody"></tbody></table></div></article>`;
+    root.innerHTML = `${heading('KẾ TOÁN / MUA HÀNG', 'Đối chiếu hóa đơn Nhà cung cấp', 'Tiếp nhận hóa đơn giấy của Nhà cung cấp, đối chiếu Đơn mua – Phiếu nhập – Hóa đơn, rồi mới ghi nhận công nợ.', '<button class="warehouse-primary" id="newInvoice"><svg><use href="#i-plus"></use></svg>Tiếp nhận hóa đơn</button>')}<div class="accounting-flow"><span>Đơn mua đã duyệt</span><i>→</i><span>Phiếu nhập đã xác nhận</span><i>→</i><span>Hóa đơn Nhà cung cấp</span><i>→</i><strong>Kế toán xác nhận đối chiếu</strong><i>→</i><strong>Công nợ phải trả</strong></div><article class="warehouse-table-card"><div class="warehouse-toolbar"><label class="warehouse-search"><svg><use href="#i-search"></use></svg><input id="invoiceSearch" placeholder="Tìm số hóa đơn, Đơn mua hoặc Nhà cung cấp..." value="${esc(window.FLY_SEARCH?.takePendingQuery?.('accounting-invoices') || '')}"></label><div class="warehouse-toolbar-actions"><select id="invoiceMatch"><option value="">Tất cả kết quả</option><option>Chờ Phiếu nhập</option><option>Chờ đối chiếu</option><option>Đã khớp</option><option>Chênh lệch</option></select><button class="warehouse-icon-button" id="refreshInvoices"><svg><use href="#i-refresh"></use></svg></button></div></div><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>HÓA ĐƠN</th><th>NHÀ CUNG CẤP</th><th>HỒ SƠ NGUỒN</th><th>NGÀY HÓA ĐƠN</th><th>TỔNG CỘNG</th><th>ĐỐI CHIẾU</th><th>CÔNG NỢ</th><th>THAO TÁC</th></tr></thead><tbody id="invoiceBody"></tbody></table></div></article>`;
     let timer;
     root.querySelector('#invoiceSearch').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250); });
     root.querySelector('#invoiceMatch').addEventListener('change', load);

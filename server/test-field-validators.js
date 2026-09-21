@@ -6,7 +6,7 @@ const {
     validateUsername, validateNewPassword, validateEmployeeCode, validateRequiredCode,
     validateRequiredVnTaxId, validateOptionalVnTaxId, validateOptionalBhxh, validateOptionalBankAccount,
     validateOptionalMaritalStatus, validateOptionalCccd, validateOptionalGender, validateOptionalBarcode, validatePositiveInteger,
-    validateRequiredNonNegativeInteger, validateRequiredNonNegativeNumber, validateClosingCash, validateCloseShiftConfirm, validateCheckOutConfirm, validateOptionalDate, validateOptionalPastDate,
+    validateRequiredNonNegativeInteger, validateRequiredNonNegativeNumber, validateClosingCash, validateCloseShiftConfirm, validateCheckOutConfirm, validateRestoreConfirm, validateOptionalDate, validateOptionalPastDate,
     validateRequiredText, validateRequiredCccd, validateRequiredVnPhone, validateEmployeeProfileFields
 } = require('./src/services/fieldValidators');
 
@@ -68,11 +68,14 @@ test('Tên đăng nhập theo rule tài khoản: 3–50, không khoảng trắng
     assert.equal(validateUsername('ThuNgan!').ok, false);
 });
 
-test('Mật khẩu mới tối thiểu 3 ký tự, không trống', () => {
+test('Mật khẩu mới tối thiểu 8 ký tự, có chữ và số, không dùng 123', () => {
     assert.equal(validateNewPassword('').ok, false);
     assert.equal(validateNewPassword('  ').ok, false);
     assert.equal(validateNewPassword('12').ok, false);
-    assert.equal(validateNewPassword('123').ok, true);
+    assert.equal(validateNewPassword('123').ok, false);
+    assert.equal(validateNewPassword('abcdefgh').ok, false);
+    assert.equal(validateNewPassword('12345678').ok, false);
+    assert.equal(validateNewPassword('Fly2026a').ok, true);
 });
 
 test('Mã nhân viên / mã hồ sơ / MST / mã vạch', () => {
@@ -103,6 +106,9 @@ test('Xác nhận đóng ca / chấm công ra phải gõ đúng cụm từ', () 
     assert.equal(validateCloseShiftConfirm('DONG CA').ok, true);
     assert.equal(validateCloseShiftConfirm('đóng ca').ok, true);
     assert.equal(validateCloseShiftConfirm('').ok, false);
+    assert.equal(validateRestoreConfirm('KHOI PHUC').ok, true);
+    assert.equal(validateRestoreConfirm('khôi phục').ok, true);
+    assert.equal(validateRestoreConfirm('').ok, false);
     assert.equal(validateCheckOutConfirm('RA CA').ok, true);
     assert.equal(validateCheckOutConfirm('ok').ok, false);
 });

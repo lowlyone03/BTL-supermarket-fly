@@ -137,6 +137,26 @@ const ACTION_META = {
         giaiThich: 'Nhân viên tự đổi mật khẩu. Nhật ký không lưu mật khẩu.',
         mucDo: 'Cảnh báo', nhom: 'he-thong', target: '../admin/accounts.html'
     },
+    'Tạo backup database': {
+        viecLam: 'Tạo bản sao lưu CSDL',
+        giaiThich: 'Tạo file .bak SQL Server. Không đổi dữ liệu đang chạy. Thất bại thì báo lỗi, không ghi JSON giả.',
+        mucDo: 'Quan trọng', nhom: 'he-thong', target: '../admin/backup.html'
+    },
+    'Khôi phục database': {
+        viecLam: 'Khôi phục CSDL từ file .bak',
+        giaiThich: 'Thay toàn bộ dữ liệu hiện tại bằng bản sao lưu. Chỉ Quản lý, cần gõ KHOI PHUC và mật khẩu.',
+        mucDo: 'Quan trọng', nhom: 'he-thong', target: '../admin/backup.html'
+    },
+    'Bật chế độ bảo trì': {
+        viecLam: 'Bật chế độ bảo trì',
+        giaiThich: 'Chặn nhân viên vào API (503). Quản lý và IPN cổng thanh toán vẫn chạy. Không đóng ca, không hủy hóa đơn dở.',
+        mucDo: 'Cảnh báo', nhom: 'he-thong', target: '../admin/backup.html'
+    },
+    'Tắt chế độ bảo trì': {
+        viecLam: 'Tắt chế độ bảo trì',
+        giaiThich: 'Gỡ cờ bảo trì trên file. Nhân viên đăng nhập và dùng hệ thống bình thường.',
+        mucDo: 'Thông tin', nhom: 'he-thong', target: '../admin/backup.html'
+    },
     'Hoàn thành hóa đơn': {
         viecLam: 'Hoàn thành hóa đơn bán hàng',
         giaiThich: 'Khách đã trả đủ tiền. Hệ thống trừ tồn kho và ghi doanh thu ca. Đây là số liệu bán hàng chính thức.',
@@ -1063,7 +1083,7 @@ const listAuditLogs = async (query = {}) => {
                             : kind === 'quy-luong'
                                 ? `AND (nk.BangLienQuan IN (N'QuyLuongKy',N'LichSuChiLuong',N'PhieuChiLuong') OR nk.HanhDong LIKE N'%quỹ lương%' OR nk.HanhDong LIKE N'%Chi lương%' OR nk.HanhDong LIKE N'%Phiếu chi lương%')`
                             : kind === 'he-thong'
-                                ? `AND nk.BangLienQuan IN (N'TaiKhoan',N'NhanVien',N'VaiTro_ChucNang')`
+                                ? `AND (nk.BangLienQuan IN (N'TaiKhoan',N'NhanVien',N'VaiTro_ChucNang') OR nk.HanhDong LIKE N'%backup%' OR nk.HanhDong LIKE N'%mật khẩu%' OR nk.HanhDong LIKE N'%bảo trì%')`
                                 : kind === 'so-cai'
                                     ? `AND (nk.BangLienQuan IN (N'KyKeToan',N'SoDuDauKy',N'ChiPhiVanHanh',N'ButToan',N'TaiSanCoDinh',N'TaiKhoanNganHang',N'SaoKeNganHang',N'TaiKhoanKeToan',N'ChoGhiSo') OR nk.HanhDong LIKE N'%kỳ kế toán%' OR nk.HanhDong LIKE N'%bút toán%' OR nk.HanhDong LIKE N'%chi phí%' OR nk.HanhDong LIKE N'%TSCĐ%' OR nk.HanhDong LIKE N'%sao kê%')`
                                 : '';

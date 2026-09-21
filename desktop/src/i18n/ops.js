@@ -130,7 +130,7 @@
     'po.addSup': 'Thêm Nhà cung cấp',
     'acct.invKicker': 'KẾ TOÁN / MUA HÀNG',
     'acct.invTitle': 'Đối chiếu hóa đơn Nhà cung cấp',
-    'acct.invLead': 'Bấm Tiếp nhận hóa đơn để mở danh sách Phiếu nhập/Đơn mua chờ. Xem chi tiết rồi mới lưu số hóa đơn. Công nợ chỉ ghi sau đối chiếu ba bên.',
+    'acct.invLead': 'Tải XML/PDF/ảnh hóa đơn để AI điền form, hoặc nhập tay như cũ. Công nợ chỉ ghi sau khi đối chiếu Đơn mua – Phiếu nhập – Hóa đơn.',
     'acct.newInv': 'Tiếp nhận hóa đơn',
     'acct.payKicker': 'KẾ TOÁN / CÔNG NỢ',
     'acct.payTitle': 'Công nợ và Phiếu chi Nhà cung cấp',

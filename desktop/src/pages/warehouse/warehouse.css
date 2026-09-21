@@ -645,6 +645,12 @@ html[data-theme="soft"] .shipment-rule span { color: var(--muted, #5e796c); }
 .accounting-reconcile-result p { margin:5px 0 0; font-size:12px; line-height:1.55; }
 .accounting-reconcile-result.matched { color:#216b50; border:1px solid #c8e3d6; background:#edf8f2; }
 .accounting-reconcile-result.different { color:#a34934; border:1px solid #efcabc; background:#fff2ed; }
+.accounting-reconcile-result ul { margin:8px 0 0; padding-left:18px; }
+.accounting-reconcile-result li { margin:4px 0; line-height:1.45; }
+.accounting-invoice-line.is-mismatch { background:#fff4f0; box-shadow:inset 3px 0 0 #d96a4f; }
+.accounting-reconcile-table tr.is-mismatch td { background:#fff4f0; }
+html[data-theme="dark"] .accounting-invoice-line.is-mismatch,
+html[data-theme="dark"] .accounting-reconcile-table tr.is-mismatch td { background: rgba(217, 106, 79, .16); }
 .financial-report-filter { margin-bottom:18px; }
 .report-period-fields { display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; }
 .report-period-fields label { display:flex; min-width:130px; flex-direction:column; gap:6px; }

@@ -24,6 +24,8 @@ const listLanIPv4 = () => {
 // Middleware
 app.use(cors());
 app.use(express.json());
+const { maintenanceGuard } = require('./middlewares/maintenanceMiddleware');
+app.use(maintenanceGuard);
 const { ensureSeedProductImages } = require('./services/productImageSeed');
 ensureSeedProductImages();
 
@@ -79,7 +81,18 @@ app.use('/api/payments/gateway', paymentGatewayRoutes);
 app.get('/api/health', (req, res) => {
     let telegram = 'off';
     try { telegram = require('./services/telegramNotify').getTelegramStatus(); } catch { telegram = 'off'; }
-    res.json({ status: 'ok', message: 'Backend Supermarket Fly đang chạy!', telegram });
+    let maintenance = { enabled: false, reason: '' };
+    try { maintenance = require('./services/maintenanceService').readMaintenance(); } catch { /* ignore */ }
+    res.json({
+        status: 'ok',
+        message: 'Backend Supermarket Fly đang chạy!',
+        telegram,
+        maintenance: {
+            enabled: Boolean(maintenance.enabled),
+            reason: maintenance.reason || '',
+            overlay: Boolean(maintenance.enabled)
+        }
+    });
 });
 
 // API Kiểm tra kết nối Database

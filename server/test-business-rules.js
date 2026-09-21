@@ -201,6 +201,46 @@ test('UC27 chặn công nợ khi thiếu sản phẩm trên hóa đơn', () => {
     assert.ok(result.differences.some(item => item.code === 'MISSING_INVOICE_PRODUCT'));
 });
 
+test('UC27 cảnh báo lệch kiểu phiếu nhập 95 / hóa đơn 100 và đơn giá cao hơn ĐMH', () => {
+    const input = matchedInput();
+    input.invoiceLines[0].SoLuong = 100;
+    input.invoiceLines[0].DonGia = 101_000;
+    input.invoiceLines[0].ThanhTien = 10_100_000;
+    input.invoiceLines[0].TienThue = 808_000;
+    input.invoice.TongTienHang = 10_100_000;
+    input.invoice.TienThue = 808_000;
+    input.invoice.TongCong = 10_908_000;
+    input.receiptLines[0].SoLuongChapNhan = 95;
+    input.receiptLines[0].ThanhTienPhieuNhap = 9_500_000;
+    input.receipt.TongTien = 9_500_000;
+    const result = evaluateThreeWayMatch(input);
+    assert.equal(result.matched, false);
+    assert.ok(result.alerts.some(item => /Phiếu nhập chỉ ghi nhận 95 sản phẩm nhưng Nhà cung cấp xuất hóa đơn 100 sản phẩm/.test(item)));
+    assert.ok(result.alerts.some(item => /Đơn giá trên hóa đơn cao hơn Đơn mua hàng/.test(item)));
+    assert.ok(result.alerts.some(item => /Chênh lệch dự kiến/.test(item)));
+});
+
+test('UC27 diễn giải lệch Sữa tươi: SL 95/100 và đơn giá +1.000đ', () => {
+    const input = {
+        invoice: { TongTienHang: 2_900_000, TienThue: 232_000, TongCong: 3_132_000 },
+        invoiceLines: [{
+            MaSP: 'SUA001', TenSP: 'Sữa tươi tiệt trùng Vinamilk không đường 1 L', DonViTinh: 'Hộp',
+            SoLuong: 100, DonGia: 29_000, ThanhTien: 2_900_000, ThueSuat: 8, TienThue: 232_000
+        }],
+        receipt: { TongTien: 2_660_000 },
+        receiptLines: [{
+            MaSP: 'SUA001', TenSP: 'Sữa tươi tiệt trùng Vinamilk không đường 1 L', DonViTinh: 'Hộp',
+            SoLuongDat: 100, SoLuongChapNhan: 95, DonGiaDonMua: 28_000, DonGiaNhap: 28_000,
+            ThanhTienPhieuNhap: 2_660_000
+        }]
+    };
+    const result = evaluateThreeWayMatch(input);
+    assert.equal(result.matched, false);
+    assert.ok(result.differenceMessages.some(item => /Phiếu nhập chỉ ghi nhận 95 sản phẩm nhưng Nhà cung cấp xuất hóa đơn 100 sản phẩm/.test(item)));
+    assert.ok(result.differenceMessages.some(item => /Đơn giá trên hóa đơn cao hơn Đơn mua hàng 1.000 đồng\/sản phẩm/.test(item)));
+    assert.ok(result.differenceMessages.some(item => /Chênh lệch dự kiến: 240.000 đồng chưa bao gồm thuế/.test(item)));
+});
+
 test('UC27 chặn công nợ khi tổng tiền thuế header lệch tổng dòng', () => {
     const input = matchedInput();
     input.invoice.TienThue = 20_000;

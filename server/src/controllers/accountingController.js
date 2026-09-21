@@ -41,7 +41,7 @@ const normalizeLines = inputLines => {
 const loadReceiptReference = async (transaction, MaPN, lock = false) => {
     const lockHint = lock ? 'WITH (UPDLOCK,HOLDLOCK)' : '';
     const header = await new sql.Request(transaction).input('MaPN', sql.VarChar, MaPN).query(`
-        SELECT pn.MaPN,pn.MaPO,pn.MaNCC,ncc.TenNCC,pn.NgayXacNhan,pn.TongTien,
+        SELECT pn.MaPN,pn.MaPO,pn.MaNCC,ncc.TenNCC,ncc.MaSoThue,pn.NgayXacNhan,pn.TongTien,
                po.TongTien AS TongTienDonMua,po.SoNgayThanhToan,po.DieuKhoanThanhToan
         FROM PhieuNhap pn ${lockHint}
         JOIN DonMuaHang po ON po.MaPO=pn.MaPO
@@ -141,7 +141,7 @@ const getPurchaseOrderFile = async (req, res) => {
     try {
         const pool = await poolPromise;
         const header = await pool.request().input('MaPO', sql.VarChar, req.params.id).query(`
-            SELECT po.MaPO,po.MaNCC,ncc.TenNCC,po.SoNgayThanhToan,po.DieuKhoanThanhToan,po.TrangThai,
+            SELECT po.MaPO,po.MaNCC,ncc.TenNCC,ncc.MaSoThue,po.SoNgayThanhToan,po.DieuKhoanThanhToan,po.TrangThai,
                    po.TongTien,po.NgayLap,po.NgayGiaoDuKien
             FROM DonMuaHang po JOIN NhaCungCap ncc ON ncc.MaNCC=po.MaNCC
             WHERE po.MaPO=@MaPO AND po.TrangThai NOT IN (N'Nháp',N'Chờ duyệt',N'Yêu cầu chỉnh sửa',N'Từ chối')`);
@@ -321,7 +321,9 @@ const reconcileInvoice = async (req, res) => {
             ThanhTien: Number(line.ThanhTien || 0)
         }));
         const matchResult = evaluateThreeWayMatch({ invoice, invoiceLines, receipt: reference.header, receiptLines: reference.lines });
-        const differences = matchResult.differenceMessages;
+        const differences = (matchResult.alerts && matchResult.alerts.length)
+            ? matchResult.alerts
+            : matchResult.differenceMessages;
         const matched = matchResult.matched;
         await new sql.Request(transaction)
             .input('MaHD', sql.VarChar, MaHDMH).input('MaPN', sql.VarChar, MaPN)
@@ -356,7 +358,7 @@ const reconcileInvoice = async (req, res) => {
                 ? `Đối chiếu ${MaHDMH} thành công. Công nợ phải trả đã được ghi nhận.`
                 : `Hóa đơn ${MaHDMH} còn chênh lệch, chưa phát sinh công nợ.`,
             MaHDMH, MaCNPTra, TrangThaiDoiChieu: matched ? 'Đã khớp' : 'Chênh lệch',
-            differences, differenceDetails: matchResult.differences, totals: matchResult.totals
+            differences, differenceDetails: matchResult.differences, alerts: matchResult.alerts, totals: matchResult.totals
         });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
@@ -408,6 +410,7 @@ const previewReconciliation = async (req, res) => {
             rows: matchResult.rows,
             totals: matchResult.totals,
             differences: matchResult.differenceMessages,
+            alerts: matchResult.alerts || matchResult.differenceMessages,
             differenceDetails: matchResult.differences,
             result: matchResult.matched ? 'Đủ điều kiện ghi nhận công nợ' : 'Chênh lệch'
         });

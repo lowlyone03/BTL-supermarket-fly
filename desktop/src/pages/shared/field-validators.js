@@ -127,11 +127,20 @@
     return { ok: true, value: username };
   };
 
+  const PASSWORD_MIN_LENGTH = 8;
+  const PASSWORD_POLICY_HINT = 'Tối thiểu 8 ký tự, có cả chữ và số. Không dùng mật khẩu khởi tạo 123.';
+
   const validateNewPassword = (value) => {
     const password = String(value ?? '');
     if (!password.trim()) return { ok: false, message: 'Vui lòng nhập mật khẩu mới.' };
-    if (password.length < 3) return { ok: false, message: 'Mật khẩu mới phải có ít nhất 3 ký tự.' };
+    if (password.length < PASSWORD_MIN_LENGTH) {
+      return { ok: false, message: `Mật khẩu mới phải có ít nhất ${PASSWORD_MIN_LENGTH} ký tự.` };
+    }
     if (password.length > 72) return { ok: false, message: 'Mật khẩu không quá 72 ký tự.' };
+    if (password === '123') return { ok: false, message: 'Không dùng mật khẩu khởi tạo 123.' };
+    if (!/[A-Za-zÀ-ỹ]/.test(password) || !/\d/.test(password)) {
+      return { ok: false, message: 'Mật khẩu phải gồm cả chữ và số.' };
+    }
     return { ok: true, value: password };
   };
 
@@ -264,6 +273,8 @@
 
   const validateCloseShiftConfirm = (value) => validateTypedConfirm(value, CLOSE_SHIFT_CONFIRM_PHRASE, 'đóng ca');
   const validateCheckOutConfirm = (value) => validateTypedConfirm(value, CHECK_OUT_CONFIRM_PHRASE, 'chấm công ra');
+  const RESTORE_CONFIRM_PHRASE = 'KHOI PHUC';
+  const validateRestoreConfirm = (value) => validateTypedConfirm(value, RESTORE_CONFIRM_PHRASE, 'khôi phục CSDL');
 
   const validateRequiredNonNegativeInteger = (value, label) => {
     const base = validateRequiredNonNegativeNumber(value, label);
@@ -558,11 +569,11 @@
     trim, normalizeVnPhone, formatVnPhone, phoneSearchDigits,
     validateOptionalEmail, validateOptionalVnPhone,
     validateRequiredName, validateOptionalName, validateRequiredText,
-    validateUsername, validateNewPassword, validateEmployeeCode, validateRequiredCode,
+    validateUsername, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT, validateNewPassword, validateEmployeeCode, validateRequiredCode,
     validateRequiredVnTaxId, validateOptionalVnTaxId, validateOptionalBhxh, validateOptionalBankAccount,
     validateOptionalMaritalStatus, validateOptionalCccd, validateOptionalGender, validateOptionalBarcode,
-    CASH_AMOUNT_LIMIT, CLOSE_SHIFT_CONFIRM_PHRASE, CHECK_OUT_CONFIRM_PHRASE,
-    normalizeConfirmPhrase, validateTypedConfirm, validateCloseShiftConfirm, validateCheckOutConfirm,
+    CASH_AMOUNT_LIMIT, CLOSE_SHIFT_CONFIRM_PHRASE, CHECK_OUT_CONFIRM_PHRASE, RESTORE_CONFIRM_PHRASE,
+    normalizeConfirmPhrase, validateTypedConfirm, validateCloseShiftConfirm, validateCheckOutConfirm, validateRestoreConfirm,
     validateRequiredNonNegativeNumber, validateClosingCash,
     validateRequiredNonNegativeInteger, validatePositiveInteger,
     validateOptionalDate, validateOptionalPastDate,

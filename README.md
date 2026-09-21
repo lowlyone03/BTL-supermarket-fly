@@ -956,7 +956,7 @@ Thư mục `server/migrations/`, chạy lần lượt bởi `npm run setup:next`
 | Hạng mục | Trạng thái |
 | --- | --- |
 | VNPay / PayOS / MoMo chạy thật | Stub — cổng đang dùng = **ZaloPay sandbox** |
-| OCR hóa đơn NCC | Chưa code |
+| OCR hóa đơn NCC | Chưa |
 | E-receipt token (QR xem HĐ trên điện thoại) | Chưa — in PDF nội bộ đã có |
 | Webcam barcode trên POS | Chưa — gõ tay + USB HID |
 | Smart replenishment (TB bán 7 ngày) | Mới cảnh báo tồn min |

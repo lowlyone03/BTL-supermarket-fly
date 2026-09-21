@@ -12,7 +12,6 @@ const {
     roleChangeVerdict,
     ensureFounderAccountSchema
 } = require('../services/founderAccount');
-
 // Lấy danh sách tài khoản
 const getAccounts = async (req, res) => {
     try {

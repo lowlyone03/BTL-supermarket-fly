@@ -151,14 +151,19 @@ document.addEventListener('DOMContentLoaded', () => {
         signal: controller.signal
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Không thể đăng nhập. Vui lòng kiểm tra lại thông tin.');
+      if (!response.ok) throw new Error(data.reason || data.message || 'Không thể đăng nhập. Vui lòng kiểm tra lại thông tin.');
 
       if (remember.checked) localStorage.setItem('fly_remembered_username', usernameValue);
       else localStorage.removeItem('fly_remembered_username');
 
       localStorage.setItem('fly_token', data.token);
       localStorage.setItem('fly_user', JSON.stringify(data.user));
-      if (data.preferences) window.FLY_APPEARANCE?.writeLocal(data.user.MaNV, data.preferences);
+      if (data.preferences) {
+        const prefs = window.FLY_APPEARANCE.fromServer
+          ? window.FLY_APPEARANCE.fromServer(data.preferences)
+          : { ngonNgu: 'vi', giaoDien: 'light' };
+        window.FLY_APPEARANCE.writeLocal(data.user.MaNV, prefs);
+      }
       window.location.href = '../dashboard/dashboard.html';
     } catch (error) {
       const isTimeout = error?.name === 'AbortError';

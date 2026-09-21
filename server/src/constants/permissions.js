@@ -1,7 +1,7 @@
 const FUNCTION_CATALOG = [
     { MaChucNang: 'UC01', TenChucNang: 'Đăng nhập và sử dụng tài khoản', Nhom: 'Hệ thống' },
     { MaChucNang: 'UC02', TenChucNang: 'Quản lý tài khoản và phân quyền', Nhom: 'Hệ thống' },
-    { MaChucNang: 'UC03', TenChucNang: 'Xem nhật ký hệ thống', Nhom: 'Hệ thống' },
+    { MaChucNang: 'UC03', TenChucNang: 'Nhật ký hệ thống', Nhom: 'Hệ thống' },
     { MaChucNang: 'UC04', TenChucNang: 'Quản lý nhân viên, sản phẩm, khuyến mãi', Nhom: 'Dữ liệu chung' },
     { MaChucNang: 'UC05', TenChucNang: 'Phê duyệt Đơn mua hàng', Nhom: 'Mua hàng' },
     { MaChucNang: 'UC06', TenChucNang: 'Phê duyệt Phiếu xuất kho thủ công', Nhom: 'Kho' },
@@ -51,7 +51,7 @@ const ROLE_PERMISSION_CODES = {
     'nhân viên mua hàng': ['UC01', 'UC11', 'UC12', 'UC13', 'UC14', 'UC31'],
     'thủ kho': ['UC01', 'UC15', 'UC16', 'UC17', 'UC18', 'UC19', 'UC20', 'UC21', 'UC31'],
     'thu ngân': ['UC01', 'UC22', 'UC23', 'UC24', 'UC25', 'UC26', 'UC31'],
-    'kế toán': ['UC01', 'UC27', 'UC28', 'UC29', 'UC31', 'UC33', 'UC34', 'UC35', 'UC36', 'UC37', 'UC38', 'UC39', 'UC40', 'UC41', 'UC42', 'UC43']
+    'kế toán': ['UC01', 'UC03', 'UC27', 'UC28', 'UC29', 'UC31', 'UC33', 'UC34', 'UC35', 'UC36', 'UC37', 'UC38', 'UC39', 'UC40', 'UC41', 'UC42', 'UC43']
 };
 
 module.exports = {

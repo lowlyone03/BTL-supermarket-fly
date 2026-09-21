@@ -1,30 +1,44 @@
 (() => {
   const i18n = () => window.FLY_I18N;
   const LAST_KEY = 'fly_pref_last';
+  const APP_DEFAULT = { ngonNgu: 'vi', giaoDien: 'light' };
 
   const storageKey = (maNV) => (maNV ? `fly_pref_${maNV}` : 'fly_pref_guest');
 
+  const sanitize = (prefs = {}) => ({
+    ngonNgu: i18n()?.normalizeLang(prefs.ngonNgu) || APP_DEFAULT.ngonNgu,
+    giaoDien: i18n()?.normalizeTheme(prefs.giaoDien) || APP_DEFAULT.giaoDien
+  });
+
+  const fromServer = (prefs = {}) => {
+    if (!prefs || typeof prefs !== 'object' || prefs.code === 'MAINTENANCE') {
+      return { ...APP_DEFAULT };
+    }
+    const pack = sanitize(prefs);
+    return {
+      ngonNgu: prefs.daChonNgonNgu ? pack.ngonNgu : APP_DEFAULT.ngonNgu,
+      giaoDien: prefs.daChonGiaoDien ? pack.giaoDien : APP_DEFAULT.giaoDien
+    };
+  };
+
   const readLocal = (maNV) => {
     try {
-      const raw = localStorage.getItem(storageKey(maNV)) || localStorage.getItem(LAST_KEY) || '{}';
-      const parsed = JSON.parse(raw);
-      return {
-        ngonNgu: i18n()?.normalizeLang(parsed.ngonNgu) || 'vi',
-        giaoDien: i18n()?.normalizeTheme(parsed.giaoDien) || 'light'
-      };
+      const ownRaw = localStorage.getItem(storageKey(maNV));
+      const parsed = JSON.parse(ownRaw || '{}');
+      if (!parsed || typeof parsed !== 'object' || (!parsed.ngonNgu && !parsed.giaoDien)) {
+        return { ...APP_DEFAULT };
+      }
+      return sanitize(parsed);
     } catch {
-      return { ngonNgu: 'vi', giaoDien: 'light' };
+      return { ...APP_DEFAULT };
     }
   };
 
   const writeLocal = (maNV, prefs) => {
-    const pack = {
-      ngonNgu: i18n()?.normalizeLang(prefs.ngonNgu) || 'vi',
-      giaoDien: i18n()?.normalizeTheme(prefs.giaoDien) || 'light'
-    };
+    const pack = sanitize(prefs);
     try {
       localStorage.setItem(storageKey(maNV), JSON.stringify(pack));
-      localStorage.setItem(LAST_KEY, JSON.stringify(pack));
+      if (!maNV) localStorage.setItem(LAST_KEY, JSON.stringify(pack));
     } catch { /* ignore quota */ }
     return pack;
   };
@@ -102,7 +116,7 @@
       onApplied?.(current);
       try {
         const saved = await saveMine(apiBase, token, current);
-        writeLocal(maNV, saved);
+        writeLocal(maNV, fromServer(saved));
       } catch (error) {
         toast(error.message, 'error');
       }
@@ -159,6 +173,7 @@
     storageKey,
     readLocal,
     writeLocal,
+    fromServer,
     bootFromStorage,
     applyPrefs,
     syncButtons,
@@ -166,12 +181,16 @@
     saveMine,
     saveStore,
     bindUi,
-    fillStoreDefaults
+    fillStoreDefaults,
+    APP_DEFAULT
   };
 
   try {
+    const token = localStorage.getItem('fly_token');
     let maNV = '';
-    try { maNV = JSON.parse(localStorage.getItem('fly_user') || '{}').MaNV || ''; } catch { maNV = ''; }
+    if (token) {
+      try { maNV = JSON.parse(localStorage.getItem('fly_user') || '{}').MaNV || ''; } catch { maNV = ''; }
+    }
     bootFromStorage(maNV);
   } catch { /* keep default light/vi */ }
 })();

@@ -295,7 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
     '../admin/promotions.html': ['UC04'],
     '../admin/permissions.html': ['UC02'],
     '../admin/audit-log.html': ['UC03'],
-    '../admin/backup.html': ['UC02']
+    '../admin/backup.html': ['UC03']
   };
   const hideOrphanNavTitles = (parent) => {
     if (!parent) return;
@@ -334,6 +334,10 @@ document.addEventListener('DOMContentLoaded', () => {
         item.style.display = 'none';
       }
     });
+    if (!isManager) {
+      const backupNav = document.querySelector('.nav-item[data-target="../admin/backup.html"]');
+      if (backupNav) backupNav.style.display = 'none';
+    }
     if (!isManager && (can(['UC02']) || can(['UC03']) || can(['UC04']))) {
       const system = document.getElementById('navGroupSystem');
       if (system) system.style.display = 'block';
@@ -365,6 +369,40 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('#sidebarNav .nav-group').forEach(hideOrphanNavTitles);
   };
   applySidebarByPermission();
+  let lastMaintenance = { enabled: false, reason: '' };
+  const applyMaintenanceUi = (state) => {
+    const maint = state && typeof state === 'object' && !Array.isArray(state)
+      ? (state.maintenance && typeof state.maintenance === 'object' ? state.maintenance : state)
+      : {};
+    lastMaintenance = {
+      enabled: maint.enabled === true || maint.enabled === 1,
+      reason: String(maint.reason || '').trim()
+    };
+    const overlay = document.getElementById('maintenanceOverlay');
+    const banner = document.getElementById('maintenanceBanner');
+    const enabled = lastMaintenance.enabled;
+    if (overlay) {
+      overlay.hidden = !(enabled && !isManager);
+      const reason = document.getElementById('maintenanceOverlayReason');
+      if (reason) reason.textContent = lastMaintenance.reason || t('maint.reason');
+      const title = overlay.querySelector('[data-i18n="maint.title"]');
+      if (title) title.textContent = t('maint.title');
+    }
+    if (banner) {
+      banner.hidden = !(enabled && isManager);
+      banner.textContent = lastMaintenance.reason
+        ? t('maint.bannerReason', { reason: lastMaintenance.reason })
+        : t('maint.banner');
+    }
+  };
+  const pollMaintenance = () => {
+    fetch(`${API_BASE}/health`)
+      .then((response) => response.json())
+      .then((data) => applyMaintenanceUi(data && data.maintenance))
+      .catch(() => {});
+  };
+  pollMaintenance();
+  setInterval(pollMaintenance, 15000);
   fetch(`${API_BASE}/auth/session`, { headers: { Authorization: `Bearer ${token}` } })
     .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
     .then(({ ok, data }) => {
@@ -1423,17 +1461,21 @@ document.addEventListener('DOMContentLoaded', () => {
       paintSearchPlaceholder();
       window.FLY_I18N?.applyDom(document);
       window.FLY_I18N?.applyPhrases(document);
+      applyMaintenanceUi(lastMaintenance);
       if (currentNav?.dataset.target === 'home') {
         if (isManager) loadOverview();
       } else if (currentNav) refreshCurrentPage();
     }
   });
   window.FLY_APPEARANCE.fetchMine(API_BASE, token).then((prefs) => {
+    if (prefs?.code === 'MAINTENANCE') return;
     const before = window.FLY_I18N?.getLang();
-    window.FLY_APPEARANCE.applyPrefs(prefs, user.MaNV);
+    const personal = window.FLY_APPEARANCE.fromServer?.(prefs) || { ngonNgu: 'vi', giaoDien: 'light' };
+    window.FLY_APPEARANCE.applyPrefs(personal, user.MaNV);
     window.FLY_I18N?.applyDom(document);
     paintIdentity();
     paintSearchPlaceholder();
+    applyMaintenanceUi(lastMaintenance);
     window.FLY_APPEARANCE.syncButtons(document);
     if (isManager && prefs.macDinhCuaHang) window.FLY_APPEARANCE.fillStoreDefaults(prefs.macDinhCuaHang);
     if (before && before !== window.FLY_I18N?.getLang()) {

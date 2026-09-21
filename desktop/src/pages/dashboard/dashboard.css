@@ -479,6 +479,30 @@ html[data-fly-role="manager"] #submitWarehouseReport {
 .inbox-toast strong { color: #24382f; font-size: 13px; line-height: 1.35; }
 .inbox-toast span:last-child { color: #66786e; font-size: 12px; line-height: 1.4; }
 
+.fly-maint-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  background: #1c241f;
+  color: #f4f7f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 32px;
+}
+.fly-maint-overlay[hidden],
+.fly-maint-banner[hidden] { display: none !important; }
+.fly-maint-overlay p { letter-spacing: .12em; font-size: 12px; font-weight: 800; color: #d4e3d8; }
+.fly-maint-overlay h1 { font-size: 22px; margin: 8px 0 0; }
+.fly-maint-banner {
+  background: #f5e6a8;
+  color: #5c4a12;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 @media (max-width: 1200px) {
   .content-area { padding: 14px 10px; }
   .stat-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }

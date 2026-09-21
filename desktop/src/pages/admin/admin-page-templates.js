@@ -311,52 +311,168 @@
       <script src="../admin/audit-log.js?v=report-export-2"></script>`,
 
     'backup.html': `
-      <section class="admin-module">
+      <section class="admin-module backup-module">
         <header class="module-heading">
           <div>
-            <p class="module-kicker">KIỂM SOÁT / BẢO MẬT</p>
-            <h1>Sao lưu &amp; bảo mật</h1>
-            <p>Tạo bản sao lưu cơ sở dữ liệu, theo dõi lịch sử backup và giám sát các sự kiện bảo mật hệ thống.</p>
-          </div>
-          <div class="heading-actions">
-            <button class="btn btn-primary" id="btnCreateBackup"><svg aria-hidden="true"><use href="#i-shield"/></svg> Tạo backup ngay</button>
+            <p class="module-kicker">KIỂM SOÁT</p>
+            <h1>Sao lưu &amp; bảo trì</h1>
+            <p>Sao lưu CSDL thành file .bak, khôi phục có xác nhận, và bật/tắt chế độ bảo trì khi cần dừng nghiệp vụ.</p>
           </div>
         </header>
 
-        <div class="module-stat-grid compact-stats">
-          <article class="mini-stat"><span>TỔNG BẢN SAO LƯU</span><strong id="backupTotalCount">0</strong><small>File backup đã tạo</small></article>
-          <article class="mini-stat"><span>LẦN BACKUP GẦN NHẤT</span><strong id="backupLastTime">—</strong><small id="backupLastFile">Chưa có backup</small></article>
-          <article class="mini-stat warning"><span>SỰ KIỆN BẢO MẬT HÔM NAY</span><strong id="securityEventCount">0</strong><small>Đăng nhập, đổi MK, khóa TK</small></article>
+        <div class="backup-tabs" role="tablist" aria-label="Sao lưu và bảo trì">
+          <button type="button" class="backup-tab is-active" role="tab" aria-selected="true" data-backup-tab="sao-luu">
+            <svg aria-hidden="true"><use href="#i-shield"/></svg> Sao lưu
+          </button>
+          <button type="button" class="backup-tab" role="tab" aria-selected="false" data-backup-tab="khoi-phuc">
+            <svg aria-hidden="true"><use href="#i-refresh"/></svg> Khôi phục
+          </button>
+          <button type="button" class="backup-tab" role="tab" aria-selected="false" data-backup-tab="bao-tri">
+            <svg aria-hidden="true"><use href="#i-settings"/></svg> Bảo trì
+          </button>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
-          <article class="surface-card data-surface">
-            <div class="table-toolbar"><label class="filter-search" style="flex:1"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="backupSearch" placeholder="Tìm file backup..."></label></div>
-            <div class="table-container" style="max-height:420px">
-              <table><thead><tr><th>Tên file</th><th>Kích thước</th><th>Thời gian tạo</th><th class="align-right">Thao tác</th></tr></thead>
-              <tbody id="backupTableBody"><tr><td colspan="4" class="empty-state">Đang tải...</td></tr></tbody></table>
+        <div class="backup-panel is-active" data-backup-panel="sao-luu" role="tabpanel">
+          <div class="module-stat-grid backup-stats">
+            <article class="backup-stat">
+              <div class="backup-stat-icon green"><svg aria-hidden="true"><use href="#i-shield"/></svg></div>
+              <div class="backup-stat-body"><span>Tổng bản sao lưu</span><strong id="backupTotalCount">0</strong><small>File .bak trên máy chủ</small></div>
+            </article>
+            <article class="backup-stat">
+              <div class="backup-stat-icon teal"><svg aria-hidden="true"><use href="#i-clock"/></svg></div>
+              <div class="backup-stat-body"><span>Lần backup gần nhất</span><strong id="backupLastTime">—</strong><small id="backupLastFile">Chưa có backup</small></div>
+            </article>
+            <article class="backup-stat" id="backupStatusCard">
+              <div class="backup-stat-icon amber"><svg aria-hidden="true"><use href="#i-alert"/></svg></div>
+              <div class="backup-stat-body"><span>Trạng thái</span><strong id="backupStatusLevel">—</strong><small id="backupStatusText">Đang tải...</small></div>
+            </article>
+          </div>
+          <div class="backup-path-note">
+            <div class="backup-path-icon" aria-hidden="true"><svg><use href="#i-box"/></svg></div>
+            <div>
+              <strong>Thư mục trên máy chủ</strong>
+              <span>Máy chủ: <code id="backupServerPath">server/backups</code>. Có thể chép sang <code id="backupProjectPath">TaiLieu_Du_An/05_Backup/Database_Backups</code> nếu thư mục tồn tại. BACKUP DATABASE thất bại thì báo lỗi — không ghi JSON giả.</span>
             </div>
-          </article>
-
+          </div>
           <article class="surface-card data-surface">
-            <div class="table-toolbar"><strong style="font-size:12px;color:#46564e">Nhật ký bảo mật gần đây</strong></div>
-            <div class="table-container" style="max-height:420px">
-              <table><thead><tr><th>Thời gian</th><th>Người</th><th>Sự kiện</th></tr></thead>
-              <tbody id="securityLogBody"><tr><td colspan="3" class="empty-state">Đang tải...</td></tr></tbody></table>
+            <div class="table-toolbar backup-toolbar">
+              <label class="filter-search backup-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="backupSearch" placeholder="Tìm tên file backup..."></label>
+              <button class="btn btn-primary backup-cta" id="btnCreateBackup" type="button"><svg aria-hidden="true"><use href="#i-shield"/></svg> Tạo backup ngay</button>
+            </div>
+            <div class="table-container backup-table-wrap">
+              <table class="backup-table">
+                <thead><tr><th>Tên file</th><th>Loại</th><th>Kích thước</th><th>Thời gian</th><th class="align-right">Thao tác</th></tr></thead>
+                <tbody id="backupTableBody"><tr><td colspan="5" class="empty-state">Đang tải...</td></tr></tbody>
+              </table>
             </div>
           </article>
         </div>
 
-        <div class="category-rule-note" style="margin-top:18px">
-          <strong>Hướng dẫn cấu hình backup đầy đủ</strong>
-          <span>Backup SQL Server yêu cầu quyền BACKUP DATABASE. Nếu ứng dụng không có quyền, hệ thống sẽ lưu metadata thay thế. Để backup đầy đủ:<br>
-          1. Mở SQL Server Management Studio → Security → Logins → chọn login của ứng dụng<br>
-          2. Cấp quyền: <code>ALTER ROLE db_backupoperator ADD MEMBER [tên_login]</code><br>
-          3. Đảm bảo thư mục <code>server/backups/</code> có quyền ghi<br>
-          4. Hoặc lập lịch backup tự động bằng SQL Server Agent Job</span>
+        <div class="backup-panel" data-backup-panel="khoi-phuc" role="tabpanel" hidden>
+          <div class="backup-warn">
+            <div class="backup-warn-icon" aria-hidden="true"><svg><use href="#i-warning"/></svg></div>
+            <div>
+              <strong>Khôi phục thay toàn bộ dữ liệu đang chạy</strong>
+              <span>Chỉ file .bak. Cần gõ <b>KHOI PHUC</b>, tick xác nhận và mật khẩu Quản lý. Nên sao lưu trước. File JSON metadata không khôi phục được.</span>
+            </div>
+          </div>
+          <div class="backup-restore-toolbar">
+            <p class="backup-restore-hint">Chọn bản .bak trên máy chủ bên dưới, hoặc lấy file từ máy này.</p>
+            <div class="heading-actions backup-heading-actions">
+              <button class="btn btn-secondary" type="button" id="btnRestoreFromFile"><svg aria-hidden="true"><use href="#i-box"/></svg> Chọn file .bak trên máy</button>
+            </div>
+          </div>
+          <article class="surface-card data-surface">
+            <div class="table-container backup-table-wrap">
+              <table class="backup-table">
+                <thead><tr><th>File trên máy chủ</th><th>Kích thước</th><th>Thời gian</th><th class="align-right">Thao tác</th></tr></thead>
+                <tbody id="restoreTableBody"><tr><td colspan="4" class="empty-state">Đang tải...</td></tr></tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+
+        <div class="backup-panel" data-backup-panel="bao-tri" role="tabpanel" hidden>
+          <div class="maint-banner" id="maintStatusBanner" hidden>
+            <svg aria-hidden="true"><use href="#i-alert"/></svg>
+            <div>
+              <strong>Đang bật chế độ bảo trì</strong>
+              <span id="maintBannerReason">Nhân viên bị chặn thao tác nghiệp vụ cho đến khi tắt.</span>
+            </div>
+          </div>
+          <article class="surface-card maint-card">
+            <div class="maint-toggle-row">
+              <div class="maint-toggle-copy">
+                <small>CHẾ ĐỘ BẢO TRÌ</small>
+                <h3>Tạm dừng nghiệp vụ trên hệ thống</h3>
+                <p>Bật khi nâng cấp hoặc sửa máy chủ. Nhớ bấm Lưu để áp dụng.</p>
+              </div>
+              <label class="maint-toggle">
+                <input type="checkbox" id="maintEnabled">
+                <span class="maint-toggle-track" aria-hidden="true"></span>
+                <span class="maint-toggle-state" id="maintToggleState">Đang tắt</span>
+              </label>
+            </div>
+            <div class="form-group maint-reason">
+              <label for="maintReason">Lý do (hiện trên banner / overlay)</label>
+              <input type="text" id="maintReason" maxlength="300" placeholder="Ví dụ: bảo trì máy chủ 22:00–23:00">
+            </div>
+            <p id="maintOpenShiftNote" class="backup-restore-file maint-shift-note">Đang kiểm tra ca mở...</p>
+            <label class="backup-check maint-ack" id="maintOpenAckWrap" hidden><input type="checkbox" id="maintOpenAck"> Tôi hiểu ca đang mở và hóa đơn dở không bị đóng/hủy tự động.</label>
+            <div class="maint-check-head">
+              <small>CHECKLIST NÂNG CẤP</small>
+              <h4>Việc nên làm trước khi bảo trì</h4>
+            </div>
+            <ul id="maintChecklist" class="maint-checklist"></ul>
+            <div class="heading-actions maint-actions">
+              <button type="button" class="btn btn-primary" id="btnSaveMaintenance">Lưu chế độ bảo trì</button>
+            </div>
+          </article>
         </div>
       </section>
-      <script src="../admin/backup.js?v=search-3"></script>`,
+
+      <div class="modal-backdrop" id="restoreModal" style="display:none">
+        <div class="modal backup-restore-modal">
+          <div class="modal-header">
+            <div><p class="module-kicker">CẢNH BÁO DỮ LIỆU</p><h3>Khôi phục CSDL</h3></div>
+            <button type="button" class="close-btn" id="closeRestoreModal">×</button>
+          </div>
+          <div class="modal-body">
+            <form id="restoreForm" novalidate>
+              <div class="backup-warn">
+                <div class="backup-warn-icon" aria-hidden="true"><svg><use href="#i-warning"/></svg></div>
+                <div>
+                  <strong>Thao tác này thay toàn bộ dữ liệu đang chạy</strong>
+                  <span>Không hoàn tác được. Chỉ dùng khi chắc chắn đúng file .bak.</span>
+                </div>
+              </div>
+              <p class="backup-restore-file" id="restoreFileLabel">Chưa chọn file</p>
+              <div class="form-group">
+                <label class="backup-check backup-check-card"><input type="checkbox" id="restoreAck"> Tôi hiểu dữ liệu hiện tại sẽ bị thay thế.</label>
+              </div>
+              <div class="form-group">
+                <label class="backup-check backup-check-card"><input type="checkbox" id="restoreBackupFirst" checked> Sao lưu CSDL hiện tại trước khi khôi phục</label>
+              </div>
+              <div class="form-group">
+                <label for="restorePhrase">Gõ KHOI PHUC để xác nhận</label>
+                <input type="text" id="restorePhrase" class="backup-phrase" autocomplete="off" placeholder="KHOI PHUC">
+                <small class="emp-field-error" id="restorePhrase_err"></small>
+              </div>
+              <div class="form-group">
+                <label for="restorePassword">Mật khẩu Quản lý</label>
+                <input type="password" id="restorePassword" autocomplete="current-password">
+                <small class="emp-field-error" id="restorePassword_err"></small>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancelRestoreModal">Hủy</button>
+                <button type="submit" class="btn btn-danger" id="confirmRestoreBtn">Khôi phục ngay</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      <input type="file" id="restoreFileInput" accept=".bak" hidden>
+      <script src="../admin/backup.js?v=backup-tab-2"></script>`,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = templates;
