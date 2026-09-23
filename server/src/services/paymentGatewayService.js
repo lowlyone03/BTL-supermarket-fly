@@ -578,7 +578,6 @@ const handleIpn = async (payload, req) => {
             const { publishAfterCommit } = require('./notifyService');
             await publishAfterCommit(await poolPromise, WORKFLOW_EVENTS.QR_RESULT, {
                 entityId: payment.MaHD,
-                actor: { MaNV: GATEWAY_ACTOR, TenNV: 'Cổng thanh toán' },
                 recipientUsers: [payment.MaNV]
             });
         } catch (notifyError) {

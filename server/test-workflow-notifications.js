@@ -148,6 +148,39 @@ const testNoSensitivePayloadLeakage = () => {
     assert.match(attendance.detail, /55/);
 };
 
+const testQrResultPersistsNullActor = async () => {
+    const cashier = 'NV_THU';
+    const context = {
+        entityId: 'HD_QR',
+        recipientUsers: [cashier]
+    };
+    const built = buildWorkflowNotification(WORKFLOW_EVENTS.QR_RESULT, context);
+    assert.equal(built.actorMaNV, null);
+    assert.equal(built.detail, 'Cổng thanh toán đã cập nhật kết quả cho hóa đơn HD_QR.');
+    assert.doesNotMatch(JSON.stringify(built), /zalopay-gateway/);
+
+    const persisted = [];
+    const published = await publishWorkflowNotification({}, WORKFLOW_EVENTS.QR_RESULT, context, {
+        accountLoader: async () => [{ MaNV: cashier, MaVaiTro: 5, TenVaiTro: 'Thu ngân' }],
+        permissionLoader: async () => [],
+        persist: async (_connection, notification, recipients) => {
+            persisted.push({ actorMaNV: notification.actorMaNV, recipients: [...recipients] });
+            return { created: true, duplicate: false, eventId: 9 };
+        },
+        notify: () => {}
+    });
+    assert.equal(persisted.length, 1);
+    assert.equal(persisted[0].actorMaNV, null);
+    assert.deepEqual(persisted[0].recipients, [cashier]);
+    assert.deepEqual(published.recipients, [cashier]);
+    assert.equal(published.skipped, undefined);
+
+    const gateway = read('src/services/paymentGatewayService.js');
+    assert.match(gateway, /WORKFLOW_EVENTS\.QR_RESULT,\s*\{[^}]*recipientUsers:\s*\[payment\.MaNV\]/);
+    assert.doesNotMatch(gateway, /MaNV:\s*GATEWAY_ACTOR/);
+    assert.match(gateway, /TenDangNhap:\s*row\.TenDangNhap\s*\|\|\s*GATEWAY_ACTOR/);
+};
+
 const testCommitOrderingAndActorResponses = () => {
     const transactionCases = [
         ['src/controllers/purchaseOrderController.js', 'PURCHASE_ORDER_SUBMITTED'],
@@ -188,6 +221,7 @@ const testCommitOrderingAndActorResponses = () => {
     testSixWorkflowCatalogs();
     await testRecipientResolutionAndOverrides();
     await testPublishDedupeAndTargeting();
+    await testQrResultPersistsNullActor();
     testNoSensitivePayloadLeakage();
     testCommitOrderingAndActorResponses();
     console.log('Workflow notification tests passed.');
