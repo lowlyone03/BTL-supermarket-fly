@@ -1,0 +1,10 @@
+{
+  "name": "Supermarket Fly",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "api-server",
+      "command": "cd server && node src/app.js"
+    }
+  ]
+}
