@@ -182,6 +182,11 @@ const ACTION_META = {
         giaiThich: 'Khách thôi mua khi HĐ còn Nháp (có thể đã thu TM / QR đang chờ). Query ZaloPay lần cuối. QR chưa thành công: trả lại TM, void thanh toán, HĐ Đã hủy — không phiếu trả, không doanh thu. QR đã đủ: không hủy, hoàn thành HĐ, chuyển Trả hàng.',
         mucDo: 'Cảnh báo', nhom: 'tien-ton'
     },
+    'Gửi email hóa đơn': {
+        viecLam: 'Gửi email hóa đơn cho khách',
+        giaiThich: 'Thu ngân gửi bản hóa đơn đã hoàn thành tới email khách trên hóa đơn qua Gmail SMTP. Không đổi tiền, tồn kho hay trạng thái hóa đơn.',
+        mucDo: 'Thông tin', nhom: 'tien-ton'
+    },
     'Thu tiền hóa đơn': {
         viecLam: 'Thu tiền hóa đơn',
         giaiThich: 'Ghi nhận một lần khách trả tiền. Hóa đơn chỉ hoàn thành khi đã thu đủ.',

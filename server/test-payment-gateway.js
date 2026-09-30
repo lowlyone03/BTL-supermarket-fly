@@ -173,6 +173,63 @@ const run = async () => {
         assert.equal(zalopay.classifyQueryCode(99), 'pending');
     });
 
+    await test('Query return_code 2 tạm thời ([System] lỗi / is_processing) → pending, không Thất bại', () => {
+        assert.equal(zalopay.classifyQueryResult({
+            return_code: 2,
+            return_message: '[System] Hệ thống đang có lỗi, vui lòng thử lại sau ít phút.'
+        }), 'pending');
+        assert.equal(zalopay.classifyQueryResult({
+            return_code: 2, return_message: 'Giao dịch thất bại', is_processing: true
+        }), 'pending');
+        assert.equal(zalopay.classifyQueryResult({
+            return_code: 2, return_message: 'Giao dịch thất bại', sub_return_code: -101,
+            sub_return_message: 'Đơn hàng không tồn tại'
+        }), 'failure');
+        assert.equal(zalopay.classifyQueryResult({
+            return_code: 3, return_message: 'Giao dịch chưa được thực hiện', is_processing: true
+        }), 'pending');
+        assert.equal(zalopay.classifyQueryResult({ return_code: 1, is_processing: false }), 'success');
+    });
+
+    await test('queryPayment mock: [System] lỗi → pending (poll giữ Chờ)', async () => {
+        await withFixtureEnv(async () => {
+            const prev = global.fetch;
+            global.fetch = async () => ({
+                status: 200,
+                text: async () => JSON.stringify({
+                    return_code: 2,
+                    return_message: '[System] Hệ thống đang có lỗi, vui lòng thử lại sau ít phút.'
+                })
+            });
+            try {
+                const queried = await zalopay.queryPayment('260930_TT2609300001abcd');
+                assert.equal(queried.classification, 'pending');
+            } finally {
+                global.fetch = prev;
+            }
+        });
+    });
+
+    await test('Thành công muộn trên dòng Thất bại: HĐ Nháp còn đủ số → revive; đã đủ tiền → needs_refund', () => {
+        const base = {
+            invoiceStatus: 'Nháp',
+            paymentStatus: 'Thất bại',
+            paymentTransId: null,
+            paymentAmount: 765000,
+            gatewayAmount: 765000,
+            total: 765000,
+            paid: 0
+        };
+        assert.equal(gateway.decideLateSuccessAction(base), 'revive');
+        assert.equal(gateway.decideLateSuccessAction({ ...base, total: 1000000, paid: 235000 }), 'revive');
+        assert.equal(gateway.decideLateSuccessAction({ ...base, paid: 765000 }), 'needs_refund');
+        assert.equal(gateway.decideLateSuccessAction({ ...base, paid: 300000 }), 'needs_refund');
+        assert.equal(gateway.decideLateSuccessAction({ ...base, gatewayAmount: 76500 }), 'ignore');
+        assert.equal(gateway.decideLateSuccessAction({ ...base, invoiceStatus: 'Đã hủy' }), 'ignore');
+        assert.equal(gateway.decideLateSuccessAction({ ...base, paymentStatus: 'Thành công' }), 'ignore');
+        assert.equal(gateway.decideLateSuccessAction({ ...base, paymentTransId: '1' }), 'ignore');
+    });
+
     await test('Callback chữ ký đúng / sai / thiếu zp_trans_id / type !== 1 ignore', () => {
         withFixtureEnv(() => {
             const payload = signedCallback();

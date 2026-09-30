@@ -18,6 +18,7 @@
     "test:telegram": "node --check src/config/loadEnv.js && node --check src/services/telegramClock.js && node --check src/services/telegramMessages.js && node --check src/services/telegramNotify.js && node --check src/services/telegramApprove.js && node --check src/services/telegramDocuments.js && node --check src/services/telegramVoucherImage.js && node --check src/services/telegramSchema.js && node --check src/services/inboxService.js && node --check src/controllers/telegramBotController.js && node --check src/telegramCompanion.js && node --check src/services/telegramCompanionProcess.js && node --check src/services/telegramAsk.js && node --check src/services/assistantPrintPdf.js && node --check src/routes/telegramRoutes.js && node test-telegram-companion.js && node test-telegram-ask.js",
     "test:next": "npm test",
     "test:business": "node test-business-rules.js",
+    "test:invoice-email": "node --check src/services/mailService.js && node --check src/controllers/salesController.js && node --check src/routes/cashierRoutes.js && node --check ../desktop/src/pages/cashier/cashier-pages.js && node test-invoice-email.js && node --check src/services/invoiceAutoEmail.js && node test-invoice-auto-email.js",
     "test:print-report": "node test-print-report.js",
     "test:report-export": "node test-warehouse-report-export.js && node test-polished-report-export.js && node test-department-report.js",
     "test:socket-notify": "node --check src/app.js && node --check src/services/socketServer.js && node --check src/services/notifySchema.js && node --check src/services/notifyService.js && node --check src/services/notifyCatalog.js && node --check src/services/notificationHub.js && node --check src/services/notificationReadService.js && node --check src/services/inboxService.js && node --check src/controllers/notificationController.js && node --check src/routes/notificationRoutes.js && node --check ../desktop/src/pages/dashboard/notify-socket.js && node --check ../desktop/src/pages/dashboard/dashboard.js && node test-socket-notify-foundation.js && node test-notification-read.js && node test-inbox-content.js",
@@ -51,6 +52,7 @@
     "msnodesqlv8": "^5.2.3",
     "mssql": "^12.7.0",
     "multer": "^2.3.0",
+    "nodemailer": "^10.0.13",
     "qrcode": "^1.5.4",
     "sharp": "^0.34.5",
     "socket.io": "^4.8.3"

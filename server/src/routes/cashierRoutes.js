@@ -30,6 +30,8 @@ router.post('/invoices/quote', requirePermission('UC24'), sales.quoteInvoice);
 router.get('/invoices', requirePermission('UC24'), sales.listInvoices);
 router.post('/invoices', requirePermission('UC24'), sales.createInvoice);
 router.get('/invoices/:id', requirePermission('UC24'), sales.getInvoice);
+router.post('/invoices/:id/email', requirePermission('UC24'), sales.emailInvoice);
+router.get('/invoices/:id/email-status', requirePermission('UC24'), sales.invoiceEmailStatus);
 router.post('/invoices/:id/cancel', requirePermission('UC24'), sales.cancelInvoice);
 router.post('/invoices/:id/cancel-payment', requirePermission('UC24'), sales.cancelPayment);
 router.post('/invoices/:id/payments/qr', requirePermission('UC25'), gateway.createQr);

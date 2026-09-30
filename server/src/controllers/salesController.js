@@ -1,6 +1,8 @@
 const { sql, poolPromise } = require('../config/db');
 const { INVOICE_RETURN_APPLY, INVOICE_RETURN_COLUMNS } = require('../services/invoiceReturnSql');
-const { logAudit } = require('../services/auditLog');
+const { logAudit, logAuditSafe } = require('../services/auditLog');
+const { MailError, resolveInvoiceRecipient, sendInvoiceEmail } = require('../services/mailService');
+const { scheduleInvoiceEmailAfterCommit, waitInvoiceEmail, getInvoiceEmailStatus } = require('../services/invoiceAutoEmail');
 const { assertCashierDuty, CashierDutyError } = require('../services/cashierDuty');
 const { validateRequiredName, validateRequiredVnPhone, validateOptionalEmail, validateOptionalDate, validateOptionalNote, phoneSearchDigits } = require('../services/fieldValidators');
 const { invoiceListMatchSql, invoiceViewSql, resolveInvoiceListScope } = require('../services/invoiceSearch');
@@ -189,7 +191,7 @@ const listInvoices = async (req, res) => {
             .input('Search', sql.NVarChar, `%${search}%`)
             .input('TrangThai', sql.NVarChar, status).query(`
             SELECT TOP 80 hd.MaHD,hd.NgayLap,hd.TongTienHang,hd.TienGiamGia,hd.TienDiemQuyDoi,
-                   hd.TongThanhToan,hd.TrangThai,hd.MaKH,hd.MaNV,kh.TenKH,kh.SDT,ca.MaCa,nv.TenNV,
+                   hd.TongThanhToan,hd.TrangThai,hd.MaKH,hd.MaNV,kh.TenKH,kh.SDT,kh.Email AS EmailKH,ca.MaCa,nv.TenNV,
                    ${INVOICE_RETURN_COLUMNS}
             FROM HoaDon hd
             JOIN CaLamViec ca ON ca.MaCa=hd.MaCa
@@ -417,7 +419,7 @@ const getInvoice = async (req, res) => {
         const pool = await poolPromise;
         const header = await pool.request().input('MaHD', sql.VarChar, clean(req.params.id, 20))
             .input('MaNV', sql.VarChar, req.user.MaNV).query(`
-            SELECT hd.*,kh.TenKH,kh.SDT,nv.TenNV,ca.MaQuay,
+            SELECT hd.*,kh.TenKH,kh.SDT,kh.Email AS EmailKH,nv.TenNV,ca.MaQuay,
                    ${INVOICE_RETURN_COLUMNS}
             FROM HoaDon hd JOIN NhanVien nv ON nv.MaNV=hd.MaNV
             JOIN CaLamViec ca ON ca.MaCa=hd.MaCa
@@ -460,6 +462,57 @@ const getInvoice = async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ message: 'Không thể tải hóa đơn.' });
+    }
+};
+
+/** Gửi hóa đơn đã hoàn thành tới email khách trên hóa đơn. Chỉ đọc dữ liệu; lỗi SMTP không đổi hóa đơn. */
+const emailInvoice = async (req, res) => {
+    const maHD = clean(req.params.id, 20);
+    let recipient = null;
+    try {
+        const pool = await poolPromise;
+        const header = await pool.request().input('MaHD', sql.VarChar, maHD)
+            .input('MaNV', sql.VarChar, req.user.MaNV).query(`
+            SELECT hd.MaHD,hd.MaKH,hd.MaNV,hd.MaCa,hd.NgayLap,hd.TrangThai,hd.TongTienHang,hd.TienGiamGia,
+                   hd.TienDiemQuyDoi,hd.TongThanhToan,hd.DiemCong,kh.TenKH,kh.SDT,kh.Email AS EmailKH,
+                   nv.TenNV,ca.MaQuay
+            FROM HoaDon hd
+            LEFT JOIN KhachHang kh ON kh.MaKH=hd.MaKH
+            LEFT JOIN NhanVien nv ON nv.MaNV=hd.MaNV
+            LEFT JOIN CaLamViec ca ON ca.MaCa=hd.MaCa
+            WHERE hd.MaHD=@MaHD AND ${invoiceViewSql}`);
+        const invoice = header.recordset[0];
+        recipient = resolveInvoiceRecipient(invoice);
+        const [lines, payments] = await Promise.all([
+            pool.request().input('MaHD', sql.VarChar, maHD).query(`
+                SELECT ct.MaSP,sp.TenSP,sp.DonViTinh,ct.SoLuong,ct.DonGia,ct.GiamGia,ct.ThanhTien
+                FROM ChiTietHoaDon ct JOIN SanPham sp ON sp.MaSP=ct.MaSP
+                WHERE ct.MaHD=@MaHD ORDER BY sp.TenSP`),
+            pool.request().input('MaHD', sql.VarChar, maHD).query(`
+                SELECT PhuongThuc,NguonXacNhan,MaGiaoDich,SoTien,NgayTT,NgayXacNhan
+                FROM ThanhToan WHERE MaHD=@MaHD AND TrangThai=N'Thành công' ORDER BY NgayTT`)
+        ]);
+        const sent = await sendInvoiceEmail({
+            invoice, lines: lines.recordset, payments: payments.recordset, to: recipient
+        });
+        await logAuditSafe({
+            user: req.user, req, action: 'Gửi email hóa đơn', table: 'HoaDon', recordId: maHD, uc: 'UC24',
+            content: `Gửi hóa đơn tới ${sent.to}.`
+        });
+        res.json({ message: `Đã gửi hóa đơn ${maHD} tới ${sent.to}.`, MaHD: maHD, to: sent.to });
+    } catch (error) {
+        if (error instanceof MailError) {
+            if (error.code === 'SMTP_SEND_FAILED') {
+                await logAuditSafe({
+                    user: req.user, req, action: 'Gửi email hóa đơn', table: 'HoaDon', recordId: maHD, uc: 'UC24',
+                    result: 'Thất bại', severity: 'Cảnh báo',
+                    content: `Không gửi được tới ${recipient}: ${error.message}`
+                });
+            }
+            return res.status(error.status).json({ message: error.message, code: error.code });
+        }
+        console.error(error);
+        res.status(500).json({ message: 'Không thể gửi email hóa đơn.' });
     }
 };
 
@@ -631,7 +684,13 @@ const completeInvoiceInternal = async (transaction, {
         after: { MaHD: invoice.MaHD, TongThanhToan: invoice.TongThanhToan, TrangThai: 'Hoàn thành' }
     });
     await postSaleJournals(transaction, { maHD: invoice.MaHD, maNV: stockMaNV, user: actor });
-    return { alreadyCompleted: false, completed: true, MaHD: invoice.MaHD, DiemCong: diemCong };
+    const result = { alreadyCompleted: false, completed: true, MaHD: invoice.MaHD, DiemCong: diemCong };
+    // Không enumerable: các caller spread `...result` vào JSON (IPN/Query) không được mang theo Promise.
+    Object.defineProperty(result, 'invoiceEmail', {
+        value: scheduleInvoiceEmailAfterCommit(transaction, { maHD: invoice.MaHD, user: actor, req }),
+        enumerable: false
+    });
+    return result;
 };
 
 const completeInvoice = async (req, res) => {
@@ -650,7 +709,8 @@ const completeInvoice = async (req, res) => {
             return res.json({ message: 'Hóa đơn đã hoàn thành trước đó.', MaHD: result.MaHD, alreadyCompleted: true });
         }
         await transaction.commit();
-        res.json({ message: `Hóa đơn ${result.MaHD} đã hoàn thành.`, MaHD: result.MaHD, DiemCong: result.DiemCong });
+        const email = await waitInvoiceEmail(result.invoiceEmail);
+        res.json({ message: `Hóa đơn ${result.MaHD} đã hoàn thành.`, MaHD: result.MaHD, DiemCong: result.DiemCong, ...email });
     } catch (error) {
         if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
         console.error(error);
@@ -658,10 +718,14 @@ const completeInvoice = async (req, res) => {
     }
 };
 
+const invoiceEmailStatus = (req, res) => {
+    res.json(getInvoiceEmailStatus(clean(req.params.id, 20)) || { emailSent: false, emailUnknown: true });
+};
+
 module.exports = {
     getCatalog, listCustomers, saveCustomer, updateCustomer, listInvoices, quoteInvoice,
-    createInvoice, getInvoice, cancelInvoice, cancelPayment: cancelInvoice,
-    addPayment, completeInvoice, completeInvoiceInternal,
+    createInvoice, getInvoice, emailInvoice, cancelInvoice, cancelPayment: cancelInvoice,
+    addPayment, completeInvoice, completeInvoiceInternal, invoiceEmailStatus,
     generateId, getActiveShift, findPendingQr, findPendingMomoQr, assertAddPaymentAllowed,
     invoiceListMatchSql, resolveInvoiceListScope
 };

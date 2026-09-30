@@ -79,6 +79,22 @@ const decideGatewayAction = ({
     return 'ignore';
 };
 
+/** Dòng ZaloPay đã bị đánh Thất bại nhưng Query ZaloPay sau đó báo thành công (có zp_trans_id).
+ *  Chỉ ghi lại Thành công khi HĐ còn Nháp và số còn phải thu vẫn chứa đủ dòng này — không thu dư. */
+const decideLateSuccessAction = ({
+    invoiceStatus,
+    paymentStatus,
+    paymentTransId,
+    paymentAmount,
+    gatewayAmount,
+    total,
+    paid
+}) => {
+    if (invoiceStatus !== 'Nháp' || paymentStatus !== 'Thất bại' || paymentTransId) return 'ignore';
+    if (!compareVnd(gatewayAmount, paymentAmount)) return 'ignore';
+    return remainingOf(total, paid) >= Math.round(Number(paymentAmount)) ? 'revive' : 'needs_refund';
+};
+
 const assertAddPaymentAllowed = (pending, { status, method } = {}) => {
     if (status === WAITING_STATUS) {
         throw gatewayError('Chờ xác nhận chỉ được tạo từ cổng thanh toán ZaloPay.', 400);
@@ -619,6 +635,117 @@ const getPaymentStatus = async ({ maHD, maTT, maNV }) => {
     };
 };
 
+const LATE_SUCCESS_WINDOW_MINUTES = 24 * 60;
+const LATE_CHECK_INTERVAL_MS = 15000;
+const lateCheckAt = new Map();
+
+const findLateSuccessCandidates = async (connection, maHD, exceptMaTT = null) => {
+    const result = await new sql.Request(connection)
+        .input('MaHD', sql.VarChar, maHD)
+        .input('ExceptMaTT', sql.VarChar, exceptMaTT || '')
+        .query(`
+            SELECT TOP 3 tt.MaTT, tt.SoTien, tt.MaThamChieuCong
+            FROM ThanhToan tt
+            JOIN HoaDon hd ON hd.MaHD=tt.MaHD
+            WHERE tt.MaHD=@MaHD AND hd.TrangThai=N'Nháp' AND tt.PhuongThuc=N'QR' AND tt.NguonXacNhan=N'ZaloPay'
+              AND tt.TrangThai=N'Thất bại' AND tt.MaGiaoDich IS NULL AND tt.MaThamChieuCong IS NOT NULL
+              AND tt.NgayTT >= DATEADD(MINUTE, -${LATE_SUCCESS_WINDOW_MINUTES}, GETDATE())
+              AND tt.MaTT<>@ExceptMaTT
+            ORDER BY tt.NgayTT DESC`);
+    return result.recordset;
+};
+
+const reviveLateSuccess = async ({ pool, maHD, candidate, queried, pendingMaTT, req }) => {
+    const transaction = new sql.Transaction(pool);
+    try {
+        await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        const payment = await loadPaymentOnInvoice(transaction, maHD, candidate.MaTT);
+        const pending = await findPendingQr(transaction, maHD);
+        if (!payment || (pending && pending.MaTT !== pendingMaTT)) {
+            await transaction.rollback();
+            return null;
+        }
+        const totals = await paymentTotals(transaction, maHD);
+        const action = decideLateSuccessAction({
+            invoiceStatus: payment.HoaDonTrangThai,
+            paymentStatus: payment.TrangThai,
+            paymentTransId: payment.MaGiaoDich,
+            paymentAmount: payment.SoTien,
+            gatewayAmount: queried.amount,
+            total: payment.TongThanhToan,
+            paid: totals.paid
+        });
+        if (action !== 'revive') {
+            await transaction.rollback();
+            if (action === 'needs_refund') {
+                console.error('ZaloPay thành công muộn trên dòng Thất bại — HĐ đã đủ tiền, cần hoàn ZaloPay', payment.MaTT, queried.transId);
+            }
+            return null;
+        }
+        if (pending) {
+            await markPaymentFailed(transaction, pending.MaTT, `Void — ${payment.MaTT} ZaloPay đã thành công trước`);
+        }
+        try {
+            await new sql.Request(transaction)
+                .input('MaTT', sql.VarChar, payment.MaTT)
+                .input('MaGiaoDich', sql.VarChar, String(queried.transId).slice(0, 50))
+                .query(`
+                    UPDATE ThanhToan
+                    SET TrangThai=N'Thành công', NgayXacNhan=GETDATE(), MaGiaoDich=@MaGiaoDich
+                    WHERE MaTT=@MaTT AND TrangThai=N'Thất bại' AND MaGiaoDich IS NULL`);
+        } catch (error) {
+            if (String(error.message || '').includes('UX_ThanhToan_MaGiaoDich')) {
+                await transaction.rollback();
+                console.error('ZaloPay transId trùng MaGiaoDich', queried.transId);
+                return null;
+            }
+            throw error;
+        }
+        await logAudit(transaction, {
+            user: await actorForNv(transaction, payment.MaNV),
+            req, action: 'Thu tiền hóa đơn', table: 'HoaDon', recordId: maHD, uc: 'UC25',
+            result: 'Thành công', severity: 'Quan trọng',
+            content: `Query xác nhận muộn MaGD ${queried.transId} cho ${payment.MaTT} (trước đó Thất bại).${pending ? ` Void ${pending.MaTT}.` : ''}`
+        });
+        const invoice = {
+            MaHD: payment.MaHD,
+            MaNV: payment.MaNV,
+            TongThanhToan: payment.TongThanhToan,
+            TrangThai: payment.HoaDonTrangThai
+        };
+        const completed = await completeIfReady(transaction, invoice, req, 'query');
+        await transaction.commit();
+        return { action: 'late_success', lateSuccessMaTT: payment.MaTT, voidedMaTT: pending?.MaTT || null, ...completed };
+    } catch (error) {
+        if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
+        throw error;
+    }
+};
+
+/** IPN/Query thành công đến sau khi dòng đã Thất bại bị bỏ qua (decideGatewayAction → ignore).
+ *  Poll dòng QR đang Chờ / Query lại dòng Thất bại sẽ hỏi lại ZaloPay để không mất tiền khách đã trả. */
+const reconcileLateSuccess = async ({ pool, maHD, prov, req, pendingMaTT = null, throttle = true }) => {
+    if (throttle) {
+        const now = Date.now();
+        if (now - (lateCheckAt.get(maHD) || 0) < LATE_CHECK_INTERVAL_MS) return null;
+        if (lateCheckAt.size > 500) lateCheckAt.clear();
+        lateCheckAt.set(maHD, now);
+    }
+    const candidates = await findLateSuccessCandidates(pool, maHD, pendingMaTT);
+    for (const candidate of candidates) {
+        let queried;
+        try {
+            queried = await prov.queryPayment(candidate.MaThamChieuCong);
+        } catch {
+            continue;
+        }
+        if (queried.classification !== 'success' || queried.transId === undefined || queried.transId === null) continue;
+        const revived = await reviveLateSuccess({ pool, maHD, candidate, queried, pendingMaTT, req });
+        if (revived) return revived;
+    }
+    return null;
+};
+
 const queryOrResolve = async ({ maHD, maTT, user, req, failIfFinal = false, provider }) => {
     const sales = require('../controllers/salesController');
     const prov = provider || getProvider();
@@ -673,9 +800,18 @@ const queryOrResolve = async ({ maHD, maTT, user, req, failIfFinal = false, prov
         if (queried.classification === 'success' && (queried.transId === undefined || queried.transId === null)) {
             throw gatewayError('Query ZaloPay thiếu zp_trans_id. Giữ Chờ.', 409);
         }
+        if (queried.classification !== 'success') {
+            const late = await reconcileLateSuccess({
+                pool, maHD, prov, req, pendingMaTT: maTT, throttle: queried.classification !== 'failure'
+            });
+            if (late) return { MaTT: maTT, TrangThai: 'Thất bại', ...late };
+        }
         if (failIfFinal && (queried.classification === 'pending' || queried.classification === 'authorized')) {
             throw gatewayError('ZaloPay vẫn đang chờ. Giữ Chờ — Query lại. Không đánh Thất bại. Không tạo mã mới.', 409);
         }
+    } else if (current.TrangThai === 'Thất bại') {
+        const late = await reconcileLateSuccess({ pool, maHD, prov, req, throttle: false });
+        if (late) return { MaTT: maTT, TrangThai: 'Thành công', ...late };
     }
 
     const transaction = new sql.Transaction(pool);
@@ -726,6 +862,7 @@ module.exports = {
     remainingOf,
     shouldRetryComplete,
     decideGatewayAction,
+    decideLateSuccessAction,
     decideCancelledInvoiceAction,
     assertAddPaymentAllowed,
     findPendingQr,

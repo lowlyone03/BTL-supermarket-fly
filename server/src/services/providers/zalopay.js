@@ -48,6 +48,18 @@ const classifyQueryCode = (code) => {
     return 'pending';
 };
 
+// Sandbox trả return_code 2 kèm "[System] Hệ thống đang có lỗi..." khi khách đang trả — chưa phải thất bại cuối.
+const TRANSIENT_QUERY_MESSAGE = /\[system\]|hệ thống đang có lỗi|thử lại|try again|system error|time ?out/i;
+
+const classifyQueryResult = (data = {}) => {
+    const classification = classifyQueryCode(data.return_code);
+    if (classification !== 'failure') return classification;
+    if (data.is_processing === true) return 'pending';
+    const text = `${data.return_message || ''} ${data.sub_return_message || ''}`;
+    if (TRANSIENT_QUERY_MESSAGE.test(text)) return 'pending';
+    return 'failure';
+};
+
 const parseReturnCode = (data) => {
     if (!data || typeof data !== 'object' || data.return_code === undefined || data.return_code === null || data.return_code === '') {
         return { ok: false, code: null };
@@ -256,7 +268,7 @@ const queryPayment = async (orderId) => {
             clearFailure: false, status: 503
         });
     }
-    const classification = classifyQueryCode(parsed.code);
+    const classification = classifyQueryResult(posted.data);
     const transId = posted.data.zp_trans_id;
     return {
         resultCode: parsed.code,
@@ -426,6 +438,7 @@ module.exports = {
     rawRefund,
     rawQueryRefund,
     classifyQueryCode,
+    classifyQueryResult,
     classifyCreateResponse,
     parseReturnCode,
     chooseQrPayload,

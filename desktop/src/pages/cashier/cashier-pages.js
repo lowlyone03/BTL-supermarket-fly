@@ -206,6 +206,38 @@
       signatures: ['Thu ngân', 'Khách hàng']
     });
   };
+  const canEmailInvoice = inv => Boolean(inv && inv.TrangThai === 'Hoàn thành' && inv.MaKH && String(inv.EmailKH || '').trim());
+  const emailInvoiceButton = inv => canEmailInvoice(inv)
+    ? `<button type="button" class="warehouse-secondary" data-email-invoice="${esc(inv.MaHD)}" title="Gửi tới ${esc(inv.EmailKH)}">Gửi email</button>`
+    : '';
+  const sendInvoiceEmail = async (context, maHD, button) => {
+    const label = button?.textContent;
+    if (button) { button.disabled = true; button.textContent = 'Đang gửi...'; }
+    try {
+      const result = await api(context, `/cashier/invoices/${encodeURIComponent(maHD)}/email`, { method: 'POST', body: '{}' });
+      context.showToast(result.message || 'Đã gửi email hóa đơn.', 'success');
+    } catch (error) {
+      context.showToast(error.message, 'error');
+    } finally {
+      if (button) { button.disabled = false; button.textContent = label; }
+    }
+  };
+  const announceAutoEmail = (context, invoice, hint) => {
+    if (!invoice?.MaHD || !invoice.MaKH || !String(invoice.EmailKH || '').trim()) return;
+    const show = status => {
+      if (status?.emailSent) { context.showToast(`Đã gửi hóa đơn tới ${status.emailTo}.`, 'success'); return true; }
+      if (status?.emailError) { context.showToast('Chưa gửi được email, hóa đơn vẫn đã thanh toán.', 'error'); return true; }
+      return Boolean(status?.emailSkipped);
+    };
+    let tries = 0;
+    const poll = async () => {
+      tries += 1;
+      const status = await api(context, `/cashier/invoices/${encodeURIComponent(invoice.MaHD)}/email-status`).catch(() => null);
+      if (show(status) || tries >= 12 || (status?.emailUnknown && tries >= 3)) return;
+      setTimeout(poll, 2000);
+    };
+    setTimeout(() => { if (!show(hint)) poll(); }, 1800);
+  };
   const printableReturns = detail => (detail.returns || []).filter(item => !['Đã hủy', 'Từ chối'].includes(item.TrangThai));
   const chooseSaleDocument = detail => new Promise(resolve => {
     const tickets = printableReturns(detail);
@@ -280,7 +312,7 @@
     const returns = detail.returns || [];
     const overlay = document.createElement('div');
     overlay.className = 'warehouse-modal-backdrop';
-    overlay.innerHTML = `<div class="warehouse-modal receipt-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">HÓA ĐƠN GỐC LÚC BÁN</p><h2>${esc(inv.MaHD)}</h2></div><button type="button" class="warehouse-icon-button close" aria-label="Đóng">×</button></div><div class="warehouse-modal-body">${view ? `<p class="cashier-invoice-reprint-note"><strong>Hóa đơn gốc không bị thay.</strong> ${esc(inv.MaHD)} vẫn ${esc(inv.TrangThai)}, tổng lúc bán ${money(inv.TongThanhToan)}. Nhãn ${esc(view.label)} và tiền hoàn nằm trên phiếu đổi trả in riêng.</p>` : ''}<div class="return-source-card"><div><span>KHÁCH</span><strong>${esc(inv.TenKH || 'Khách vãng lai')}</strong><small>${esc(inv.SDT || 'Không SĐT')}</small></div><div><span>NGÀY BÁN</span><strong>${formatDateVN(inv.NgayLap)}</strong></div><div><span>TỔNG LÚC BÁN</span><strong>${money(inv.TongThanhToan)}</strong></div><div><span>ĐỔI TRẢ SAU BÁN</span><strong>${view ? esc(view.label) : 'Không'}</strong>${view && view.refunded ? `<small>Đã hoàn ${money(view.refunded)} · còn ${money(view.remaining)}</small>` : ''}</div></div><p class="warehouse-kicker">DÒNG HÀNG LÚC THANH TOÁN</p><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>SẢN PHẨM</th><th>SL BÁN</th><th>ĐƠN GIÁ</th><th>THÀNH TIỀN</th></tr></thead><tbody>${(detail.lines || []).map(line => `<tr><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)}</small></td><td class="num">${line.SoLuong}</td><td class="num">${money(line.DonGia)}</td><td class="num">${money(line.ThanhTien)}</td></tr>`).join('')}</tbody></table></div>${returns.length ? `<div class="cashier-invoice-detail-returns"><p class="warehouse-kicker">PHIẾU ĐỔI TRẢ — IN RIÊNG, KHÔNG THAY HÓA ĐƠN GỐC</p><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU</th><th>HÌNH THỨC</th><th>SỐ TIỀN HOÀN</th><th>TRẠNG THÁI</th><th></th></tr></thead><tbody>${returns.map(ticket => `<tr><td><strong>${esc(ticket.MaDT)}</strong><small>${fmtTime(ticket.NgayLap)}</small></td><td>${esc(ticket.HinhThucXuLy)}</td><td class="num">${money(ticket.SoTienHoan)}</td><td><span class="status-pill ${statusClass(ticket.TrangThai)}">${esc(ticket.TrangThai)}</span></td><td><button type="button" class="warehouse-secondary" data-print-return="${esc(ticket.MaDT)}">In phiếu</button></td></tr>`).join('')}</tbody></table></div></div>` : ''}</div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Đóng</button>${inv.TrangThai === 'Hoàn thành' ? `<button type="button" class="warehouse-primary" data-print-original>In / lưu PDF</button><button type="button" class="warehouse-secondary" data-open-returns="${esc(inv.MaHD)}">Mở đổi trả</button>` : ''}</div></div>`;
+    overlay.innerHTML = `<div class="warehouse-modal receipt-modal"><div class="warehouse-modal-heading"><div><p class="warehouse-kicker">HÓA ĐƠN GỐC LÚC BÁN</p><h2>${esc(inv.MaHD)}</h2></div><button type="button" class="warehouse-icon-button close" aria-label="Đóng">×</button></div><div class="warehouse-modal-body">${view ? `<p class="cashier-invoice-reprint-note"><strong>Hóa đơn gốc không bị thay.</strong> ${esc(inv.MaHD)} vẫn ${esc(inv.TrangThai)}, tổng lúc bán ${money(inv.TongThanhToan)}. Nhãn ${esc(view.label)} và tiền hoàn nằm trên phiếu đổi trả in riêng.</p>` : ''}<div class="return-source-card"><div><span>KHÁCH</span><strong>${esc(inv.TenKH || 'Khách vãng lai')}</strong><small>${esc(inv.SDT || 'Không SĐT')}</small></div><div><span>NGÀY BÁN</span><strong>${formatDateVN(inv.NgayLap)}</strong></div><div><span>TỔNG LÚC BÁN</span><strong>${money(inv.TongThanhToan)}</strong></div><div><span>ĐỔI TRẢ SAU BÁN</span><strong>${view ? esc(view.label) : 'Không'}</strong>${view && view.refunded ? `<small>Đã hoàn ${money(view.refunded)} · còn ${money(view.remaining)}</small>` : ''}</div></div><p class="warehouse-kicker">DÒNG HÀNG LÚC THANH TOÁN</p><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>SẢN PHẨM</th><th>SL BÁN</th><th>ĐƠN GIÁ</th><th>THÀNH TIỀN</th></tr></thead><tbody>${(detail.lines || []).map(line => `<tr><td><strong>${esc(line.TenSP)}</strong><small>${esc(line.MaSP)}</small></td><td class="num">${line.SoLuong}</td><td class="num">${money(line.DonGia)}</td><td class="num">${money(line.ThanhTien)}</td></tr>`).join('')}</tbody></table></div>${returns.length ? `<div class="cashier-invoice-detail-returns"><p class="warehouse-kicker">PHIẾU ĐỔI TRẢ — IN RIÊNG, KHÔNG THAY HÓA ĐƠN GỐC</p><div class="warehouse-table-wrap"><table class="warehouse-table"><thead><tr><th>PHIẾU</th><th>HÌNH THỨC</th><th>SỐ TIỀN HOÀN</th><th>TRẠNG THÁI</th><th></th></tr></thead><tbody>${returns.map(ticket => `<tr><td><strong>${esc(ticket.MaDT)}</strong><small>${fmtTime(ticket.NgayLap)}</small></td><td>${esc(ticket.HinhThucXuLy)}</td><td class="num">${money(ticket.SoTienHoan)}</td><td><span class="status-pill ${statusClass(ticket.TrangThai)}">${esc(ticket.TrangThai)}</span></td><td><button type="button" class="warehouse-secondary" data-print-return="${esc(ticket.MaDT)}">In phiếu</button></td></tr>`).join('')}</tbody></table></div></div>` : ''}</div><div class="warehouse-modal-actions"><button type="button" class="warehouse-secondary close">Đóng</button>${inv.TrangThai === 'Hoàn thành' ? `<button type="button" class="warehouse-primary" data-print-original>In / lưu PDF</button>${readOnly ? '' : emailInvoiceButton(inv)}<button type="button" class="warehouse-secondary" data-open-returns="${esc(inv.MaHD)}">Mở đổi trả</button>` : ''}</div></div>`;
     document.body.appendChild(overlay);
     const close = () => overlay.remove();
     overlay.querySelectorAll('.close').forEach(button => button.addEventListener('click', close));
@@ -301,6 +333,9 @@
         try { printReturnTicket(await api(context, `/cashier/returns/${button.dataset.printReturn}`)); }
         catch (error) { context.showToast(error.message, 'error'); }
       }));
+      overlay.querySelector('[data-email-invoice]')?.addEventListener('click', event => {
+        sendInvoiceEmail(context, inv.MaHD, event.currentTarget);
+      });
       overlay.querySelector('[data-open-returns]')?.addEventListener('click', () => {
         sessionStorage.setItem('fly_return_invoice', inv.MaHD);
         close();
@@ -855,7 +890,7 @@
       };
       const successPaid = payments => Math.round((payments || []).filter(item => item.TrangThai === 'Thành công').reduce((sum, item) => sum + Number(item.SoTien || 0), 0));
       const pendingQr = payments => (payments || []).find(item => item.PhuongThuc === 'QR' && item.TrangThai === 'Chờ xác nhận');
-      const finishSale = async (detail) => {
+      const finishSale = async (detail, completion = null) => {
         if (saleDone || !detail?.invoice) return;
         saleDone = true;
         stopPoll();
@@ -876,6 +911,7 @@
           }
         }
         context.showToast(`Thanh toán thành công · ${detail.invoice.MaHD}`, 'success');
+        announceAutoEmail(context, detail.invoice, completion);
         await new Promise(resolve => setTimeout(resolve, 1600));
         printInvoice(detail);
         cart = new Map(); customer = null; maKM = ''; diemSuDung = 0; quote = null; draftId = null; loaiCS = null; loyaltyOffer = null;
@@ -953,6 +989,7 @@
         } else if (momoRow && !state.waiting) {
           const last = (detail.payments || []).find(item => item.MaTT === momoRow.MaTT);
           if (last?.TrangThai === 'Thất bại') {
+            overlay.querySelector('#momoQr').hidden = true;
             overlay.querySelector('#momoStatus').textContent = 'ZaloPay thất bại / hết hạn đã xác minh. Chuyển Tiền mặt.';
             context.showToast('Không thanh toán được ZaloPay — chuyển Tiền mặt.', 'error');
           }
@@ -970,8 +1007,8 @@
           if (detail?.invoice.TrangThai === 'Hoàn thành') return true;
           const remain = Math.max(0, Math.round(Number(detail.invoice.TongThanhToan) - successPaid(detail.payments)));
           if (remain === 0 && !pendingQr(detail.payments)) {
-            await api(context, `/cashier/invoices/${invoiceId}/complete`, { method: 'POST' });
-            await finishSale(await api(context, `/cashier/invoices/${invoiceId}`));
+            const completion = await api(context, `/cashier/invoices/${invoiceId}/complete`, { method: 'POST' });
+            await finishSale(await api(context, `/cashier/invoices/${invoiceId}`), completion);
             return true;
           }
           return true;
@@ -1082,8 +1119,8 @@
             return;
           }
           if (remain === 0 && !pendingQr(afterCash.payments)) {
-            await api(context, `/cashier/invoices/${invoiceId}/complete`, { method: 'POST' });
-            await finishSale(await api(context, `/cashier/invoices/${invoiceId}`));
+            const completion = await api(context, `/cashier/invoices/${invoiceId}/complete`, { method: 'POST' });
+            await finishSale(await api(context, `/cashier/invoices/${invoiceId}`), completion);
           }
         } catch (error) {
           const keepWaiting = /Query lại|Giữ Chờ|chưa rõ/i.test(error.message || '');
@@ -1137,6 +1174,13 @@
           const detail = await refresh();
           const waiting = pendingQr(detail.payments || []);
           if (waiting) startPoll(waiting.MaTT);
+          else if (detail.invoice.TrangThai === 'Nháp') {
+            const failedQr = (detail.payments || []).find(item => item.PhuongThuc === 'QR' && item.NguonXacNhan === 'ZaloPay' && item.TrangThai === 'Thất bại' && !item.MaGiaoDich);
+            if (failedQr) {
+              const queried = await api(context, `/cashier/invoices/${invoiceId}/payments/${failedQr.MaTT}/query`, { method: 'POST' }).catch(() => null);
+              if (queried) await applyGatewayStatus(queried);
+            }
+          }
         } catch (error) { context.showToast(error.message, 'error'); }
       } else {
         paint({ invoice: { TongThanhToan: payable }, payments: [] });
@@ -1229,7 +1273,7 @@
           const view = invoiceReturnView(item);
           const ownDraft = item.TrangThai === 'Nháp' && (!item.MaNV || item.MaNV === context.user?.MaNV);
           const actions = item.TrangThai === 'Hoàn thành'
-            ? `<button type="button" class="warehouse-secondary" data-detail="${esc(item.MaHD)}">Chi tiết</button><button type="button" class="warehouse-secondary" data-print="${esc(item.MaHD)}">${view ? 'In / lưu PDF' : 'In hóa đơn gốc'}</button>`
+            ? `<button type="button" class="warehouse-secondary" data-detail="${esc(item.MaHD)}">Chi tiết</button><button type="button" class="warehouse-secondary" data-print="${esc(item.MaHD)}">${view ? 'In / lưu PDF' : 'In hóa đơn gốc'}</button>${emailInvoiceButton(item)}`
             : ownDraft
               ? `<button type="button" class="warehouse-primary" data-continue="${esc(item.MaHD)}">Tiếp tục thanh toán</button><button type="button" class="warehouse-danger" data-cancel="${esc(item.MaHD)}">Hủy thanh toán</button>`
               : `<button type="button" class="warehouse-secondary" data-detail="${esc(item.MaHD)}">Chi tiết</button>`;
@@ -1256,6 +1300,11 @@
         const printBtn = event.target.closest('[data-print]');
         if (printBtn) {
           try { await printSaleDocument(context, await api(context, `/cashier/invoices/${printBtn.dataset.print}`)); } catch (error) { context.showToast(error.message, 'error'); }
+          return;
+        }
+        const emailBtn = event.target.closest('[data-email-invoice]');
+        if (emailBtn) {
+          if (!emailBtn.disabled) await sendInvoiceEmail(context, emailBtn.dataset.emailInvoice, emailBtn);
           return;
         }
         const cancelBtn = event.target.closest('[data-cancel]');
