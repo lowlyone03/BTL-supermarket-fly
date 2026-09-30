@@ -650,6 +650,7 @@ document.addEventListener('DOMContentLoaded', () => {
       countEl.classList.add('pulse');
     }
     const byTarget = items.reduce((map, item) => {
+      if (item.open === false && item.read) return map;
       map[item.target] = (map[item.target] || 0) + 1;
       return map;
     }, {});

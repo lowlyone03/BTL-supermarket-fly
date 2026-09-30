@@ -4,6 +4,7 @@ const { vietnamCalendar } = require('./reportingPeriod');
 const { listInboxForEmployee } = require('./storeProfitLoss');
 const { ensureReturnHandoverSchema } = require('./returnHandover');
 const { derivedInboxKey, parseInboxIdentity } = require('./notificationReadService');
+const { REPORT_ENTITY, reportIdOf, isReportTarget } = require('./reportInboxRead');
 
 const roleOf = user => String(user?.TenVaiTro || '').trim();
 const roleKey = user => roleOf(user).toLocaleLowerCase('vi-VN');
@@ -20,7 +21,7 @@ const safeRows = async (fn, fallback = []) => {
 };
 
 const row = (id, target, title, detail, at, tone = 'info') => ({
-    id, target, title, detail: detail || '', at: at || null, tone
+    id, target, title, detail: detail || '', at: at || null, tone, open: true
 });
 
 const many = (recordset, map) => (recordset || []).map(map).filter(item => item?.id);
@@ -117,6 +118,83 @@ const mergeInboxItems = (primary, secondary) => {
     return out;
 };
 
+const CLOSE_ON_UPDATE_TARGETS = Object.freeze([
+    'manager-purchase-approvals', 'manager-workforce-approve', 'manager-payables',
+    'admin-warehouse-reports', 'admin-department-reports'
+]);
+
+let departmentSchemaReady = null;
+const ensureDepartmentReportTable = pool => {
+    if (!departmentSchemaReady) {
+        departmentSchemaReady = require('./departmentReportSubmit').ensureDepartmentReportSchema(pool)
+            .catch(error => {
+                departmentSchemaReady = null;
+                throw error;
+            });
+    }
+    return departmentSchemaReady;
+};
+
+const idsJson = ids => JSON.stringify([...new Set(ids.map(value => String(value || '').trim()).filter(Boolean))]);
+
+const loadClosedRecipients = async (pool, maNV, candidates) => {
+    if (!candidates.length) return new Set();
+    try {
+        await ensureDepartmentReportTable(pool);
+        const result = await pool.request()
+            .input('MaNV', sql.VarChar, maNV)
+            .input('Ids', sql.NVarChar, idsJson(candidates))
+            .query(`
+            SELECT n.MaNhan
+            FROM dbo.ThongBaoNguoiNhan n
+            JOIN dbo.ThongBaoSuKien e ON e.MaSuKien=n.MaSuKien
+            WHERE n.MaNV=@MaNV AND n.DaDoc=0
+              AND CONVERT(varchar(30), n.MaNhan) IN (SELECT [value] FROM OPENJSON(@Ids))
+              AND (
+                EXISTS (SELECT 1 FROM dbo.ThongBaoSuKien later
+                        WHERE later.EntityType=e.EntityType AND later.EntityId=e.EntityId
+                          AND later.MaSuKien>e.MaSuKien)
+                OR (e.EntityType='DonMuaHang' AND NOT EXISTS (
+                    SELECT 1 FROM DonMuaHang x WHERE x.MaPO=e.EntityId AND x.TrangThai=N'Chờ duyệt'))
+                OR (e.EntityType='PhieuXuat' AND NOT EXISTS (
+                    SELECT 1 FROM PhieuXuat x WHERE x.MaPX=e.EntityId AND x.TrangThai=N'Chờ duyệt'))
+                OR (e.EntityType='KiemKe' AND NOT EXISTS (
+                    SELECT 1 FROM KiemKe x WHERE x.MaKK=e.EntityId AND x.TrangThai=N'Chờ duyệt điều chỉnh'))
+                OR (e.EntityType='PhieuDoiTra' AND NOT EXISTS (
+                    SELECT 1 FROM PhieuDoiTra x WHERE x.MaDT=e.EntityId AND x.TrangThai IN (N'Chờ duyệt', N'Chờ xử lý hoàn tiền')))
+                OR (e.EntityType='PhieuChi' AND NOT EXISTS (
+                    SELECT 1 FROM PhieuChi x WHERE x.MaPhieu=e.EntityId AND x.TrangThai=N'Chờ duyệt'))
+                OR (e.EntityType='PhieuChiLuong' AND NOT EXISTS (
+                    SELECT 1 FROM PhieuChiLuong x WHERE x.MaPhieu=e.EntityId AND x.TrangThai=N'Chờ duyệt'))
+                OR (e.EntityType='ChamCong' AND NOT EXISTS (
+                    SELECT 1 FROM ChamCong x WHERE CONVERT(varchar(30), x.MaChamCong)=e.EntityId AND x.TrangThai=N'Chờ duyệt'))
+                OR (e.EntityType='BaoCaoNop' AND EXISTS (
+                    SELECT 1 FROM BaoCaoBoPhanNop x WHERE x.MaBC=e.EntityId AND x.TrangThai<>N'Đã gửi'))
+              )`);
+        return new Set((result.recordset || []).map(row => String(row.MaNhan)));
+    } catch (error) {
+        console.error(error);
+        return new Set();
+    }
+};
+
+const loadProcessedReports = async (pool, reportIds) => {
+    if (!reportIds.length) return new Set();
+    try {
+        await ensureDepartmentReportTable(pool);
+        const result = await pool.request()
+            .input('Ids', sql.NVarChar, idsJson(reportIds))
+            .query(`
+            SELECT MaBC FROM BaoCaoBoPhanNop
+            WHERE TrangThai<>N'Đã gửi'
+              AND MaBC IN (SELECT [value] FROM OPENJSON(@Ids))`);
+        return new Set((result.recordset || []).map(row => String(row.MaBC)));
+    } catch (error) {
+        console.error(error);
+        return new Set();
+    }
+};
+
 const listPersistedWorkflowItems = async (pool, user) => {
     const maNV = user?.MaNV;
     if (!maNV) return [];
@@ -129,23 +207,27 @@ const listPersistedWorkflowItems = async (pool, user) => {
             JOIN dbo.ThongBaoSuKien e ON e.MaSuKien=n.MaSuKien
             WHERE n.MaNV=@MaNV AND n.DaAn=0
             ORDER BY e.NgayTao DESC`);
-        return (result.recordset || [])
-            .filter(row => !SKIP_PERSISTED_EVENTS.has(String(row.EventKey || '')))
-            .map(row => {
-                const derived = derivedInboxKey(row.EntityType, row.EntityId);
-                return {
-                    id: derived || `nhan:${row.MaNhan}`,
-                    target: row.Target || '',
-                    title: row.Title,
-                    detail: row.Detail || '',
-                    at: row.EventAt,
-                    tone: row.Tone === 'warning' || row.Tone === 'urgent' ? 'urgent' : 'info',
-                    read: Boolean(row.DaDoc),
-                    maNhan: row.MaNhan,
-                    entityType: row.EntityType,
-                    entityId: row.EntityId
-                };
-            });
+        const rows = (result.recordset || [])
+            .filter(row => !SKIP_PERSISTED_EVENTS.has(String(row.EventKey || '')));
+        const closed = await loadClosedRecipients(pool, maNV, rows
+            .filter(row => !row.DaDoc && CLOSE_ON_UPDATE_TARGETS.includes(String(row.Target || '')))
+            .map(row => row.MaNhan));
+        return rows.map(row => {
+            const derived = derivedInboxKey(row.EntityType, row.EntityId);
+            return {
+                id: derived || `nhan:${row.MaNhan}`,
+                target: row.Target || '',
+                title: row.Title,
+                detail: row.Detail || '',
+                at: row.EventAt,
+                tone: row.Tone === 'warning' || row.Tone === 'urgent' ? 'urgent' : 'info',
+                read: Boolean(row.DaDoc) || closed.has(String(row.MaNhan)),
+                open: false,
+                maNhan: row.MaNhan,
+                entityType: row.EntityType,
+                entityId: row.EntityId
+            };
+        });
     } catch (error) {
         console.error(error);
         return [];
@@ -170,14 +252,19 @@ const listForRole = async (pool, user) => {
         const notices = await listInboxForEmployee(pool, maNV);
         items.push(...many(notices, r => {
             if (/kiểm kê/i.test(r.TieuDe || '') && /từ chối|đếm lại/i.test(r.TieuDe || '')) return null;
-            return row(
-                `pnl:${r.MaTB}`,
-                r.DichDen || (isRole(user, 'Quản lý') ? 'manager-reports' : ''),
-                r.TieuDe,
-                r.NoiDung,
-                r.NgayGui,
-                noticeTone(r.MucDo, r.TieuDe)
-            );
+            const notice = {
+                ...row(
+                    `pnl:${r.MaTB}`,
+                    r.DichDen || (isRole(user, 'Quản lý') ? 'manager-reports' : ''),
+                    r.TieuDe,
+                    r.NoiDung,
+                    r.NgayGui,
+                    noticeTone(r.MucDo, r.TieuDe)
+                ),
+                open: false
+            };
+            const maBC = isReportTarget(r.DichDen) ? reportIdOf(r.TieuDe, r.NoiDung) : '';
+            return maBC ? { ...notice, entityType: REPORT_ENTITY, entityId: maBC } : notice;
         }));
     } catch { /* bảng thông báo chưa có thì bỏ qua */ }
 
@@ -526,7 +613,16 @@ const listForRole = async (pool, user) => {
     }
 
     const persisted = await listPersistedWorkflowItems(pool, user);
-    const merged = mergeInboxItems(items, persisted);
+    const combined = mergeInboxItems(items, persisted);
+    const submittedReport = item => item.entityType === REPORT_ENTITY && isReportTarget(item.target);
+    const processedReports = await loadProcessedReports(pool, combined
+        .filter(item => submittedReport(item) && !item.read)
+        .map(item => item.entityId));
+    const merged = processedReports.size
+        ? combined.map(item => (submittedReport(item) && processedReports.has(String(item.entityId))
+            ? { ...item, read: true }
+            : item))
+        : combined;
     merged.sort((a, b) => {
         const rank = { urgent: 0, info: 1, wait: 2 };
         const diff = (rank[a.tone] ?? 3) - (rank[b.tone] ?? 3);

@@ -6,6 +6,7 @@ const storeProfitLoss = require('../services/storeProfitLoss');
 const { mergeWrittenOffLines, summarizeWrittenOffLines } = require('../services/writtenOffGoods');
 const warehouseReportSubmit = require('../services/warehouseReportSubmit');
 const departmentReportSubmit = require('../services/departmentReportSubmit');
+const { markSubmittedReportViewed } = require('../services/reportInboxRead');
 const { compareKpis, KIND_META } = require('../services/departmentReportSnapshot');
 
 const bindPeriod = (pool, period) => pool.request()
@@ -1083,6 +1084,7 @@ const getAdminWarehouseReport = async (req, res) => {
     try {
         const pool = await poolPromise;
         const data = await warehouseReportSubmit.getWarehouseReportSubmission(pool, req.params.id);
+        await markSubmittedReportViewed(pool, req.user, data.header?.MaBC);
         res.json(data);
     } catch (error) {
         console.error(error);
@@ -1181,6 +1183,7 @@ const getAdminDepartmentReport = async (req, res) => {
             markViewedBy: isManager ? req.user.MaNV : null
         });
         if (!isManager) departmentReportSubmit.assertCanRead(req.user, data.header);
+        else await markSubmittedReportViewed(pool, req.user, data.header?.MaBC);
         res.json(data);
     } catch (error) {
         console.error(error);

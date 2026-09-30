@@ -294,13 +294,15 @@ const sameEmployee = (left, right) => String(left || '').trim().toUpperCase() ==
 const resolveOwnedNotification = async (connection, maNV, rawId, inboxItems = [], dependencies = {}) => {
     const identity = parseInboxIdentity(rawId);
     if (!identity.key) return { error: 400, message: 'Thông báo không hợp lệ.' };
-    const inInbox = (inboxItems || []).some(item => normalizeNotificationKey(item?.id) === identity.key);
-    if (inInbox) {
+    const inboxItem = (inboxItems || []).find(item => normalizeNotificationKey(item?.id) === identity.key);
+    if (inboxItem) {
+        const linked = !identity.entityType && inboxItem.entityType && inboxItem.entityId;
         return {
             key: identity.key,
             source: 'inbox',
-            entityType: identity.entityType,
-            entityId: identity.entityId
+            entityType: linked ? inboxItem.entityType : identity.entityType,
+            entityId: linked ? inboxItem.entityId : identity.entityId,
+            derivedKey: linked ? derivedInboxKey(inboxItem.entityType, inboxItem.entityId) : undefined
         };
     }
     if (identity.maNhan) {
@@ -341,6 +343,7 @@ module.exports = {
     derivedInboxKey,
     loadReadKeys,
     loadRecipientById,
+    persistReadKeys,
     markRead,
     markAllRead,
     resolveOwnedNotification,

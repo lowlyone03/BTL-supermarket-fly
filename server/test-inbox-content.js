@@ -29,6 +29,7 @@ const stub = (relative, exports) => {
 };
 
 delete require.cache[resolveSrc('./src/services/inboxService.js')];
+const extraNotices = [];
 stub('./src/services/storeProfitLoss.js', {
     listInboxForEmployee: async (_pool, maNV) => [{
         MaTB: 77,
@@ -38,7 +39,7 @@ stub('./src/services/storeProfitLoss.js', {
         NgayGui: new Date('2026-09-15T10:00:00Z'),
         DichDen: '',
         MaNV_Nhan: maNV
-    }]
+    }, ...extraNotices]
 });
 stub('./src/services/notifySchema.js', { ensureNotifySchema: async () => {} });
 stub('./src/services/payrollSchema.js', { ensurePayrollSchema: async () => {} });
@@ -90,7 +91,15 @@ const persistedRows = extra => [{
     EventAt: new Date('2026-09-15T11:00:00Z')
 }, ...extra];
 
-const operationalPool = extraPersist => fakePool([
+const operationalPool = (extraPersist, { closed = [], processedReports = [] } = {}) => fakePool([
+    {
+        match: sql => sql.includes('ThongBaoNguoiNhan') && sql.includes('OPENJSON(@Ids)'),
+        rows: closed.map(MaNhan => ({ MaNhan }))
+    },
+    {
+        match: sql => sql.includes('FROM BaoCaoBoPhanNop') && sql.includes('OPENJSON(@Ids)'),
+        rows: processedReports.map(MaBC => ({ MaBC }))
+    },
     {
         match: sql => sql.includes('ThongBaoNguoiNhan'),
         rows: persistedRows(extraPersist || [])
@@ -190,6 +199,71 @@ const testAdminInboxHasApprovalTasks = async () => {
     assert.ok(items.some(item => item.id === 'pnl:77'));
 };
 
+const navBadge = (items, target) => items
+    .filter(item => item.target === target && !(item.open === false && item.read)).length;
+
+const testProcessedApprovalsAndViewedReportsLeaveBadge = async () => {
+    extraNotices.push({
+        MaTB: 78,
+        TieuDe: 'Báo cáo Thủ kho Tháng 09/2026 · BCK20260909001',
+        NoiDung: 'Lê Đức Long đã gửi BCK20260909001.',
+        MucDo: 'Thông tin',
+        NgayGui: new Date('2026-09-09T04:51:00Z'),
+        DichDen: 'admin-warehouse-reports'
+    }, {
+        MaTB: 79,
+        TieuDe: 'Báo cáo đơn mua và giao hàng Tháng 09/2026 · BCM20260910001',
+        NoiDung: 'Mua hàng đã gửi BCM20260910001.',
+        MucDo: 'Thông tin',
+        NgayGui: new Date('2026-09-10T04:51:00Z'),
+        DichDen: 'admin-department-reports'
+    });
+    try {
+        const approvedPo = {
+            MaNhan: 700, DaDoc: 0, EventKey: 'purchase-order.submitted',
+            EntityType: 'DonMuaHang', EntityId: 'PO20260915088',
+            Title: 'Đơn mua PO20260915088 chờ phê duyệt', Detail: '', Tone: 'info',
+            Target: 'manager-purchase-approvals', EventAt: new Date('2026-09-15T06:00:00Z')
+        };
+        const reportEvent = {
+            MaNhan: 701, DaDoc: 0, EventKey: 'report.submitted',
+            EntityType: 'BaoCaoNop', EntityId: 'BCK20260909001',
+            Title: 'Báo cáo BCK20260909001 đã nộp', Detail: '', Tone: 'info',
+            Target: 'admin-warehouse-reports', EventAt: new Date('2026-09-09T04:51:00Z')
+        };
+        const manager = { MaNV: 'NV_QL01', TenVaiTro: 'Quản lý' };
+        const items = await listForRole(operationalPool([approvedPo, reportEvent], {
+            closed: [700],
+            processedReports: ['BCM20260910001']
+        }), manager);
+
+        const approved = items.find(item => item.id === 'po:PO20260915088');
+        assert.equal(approved.read, true, 'approved PO notification must close');
+        assert.equal(approved.open, false);
+        const pending = items.find(item => item.id === 'po:PO20260915010');
+        assert.equal(pending.open, true, 'live Chờ duyệt row stays open work');
+        assert.equal(navBadge(items, 'manager-purchase-approvals'), 1);
+
+        const warehouseReport = items.filter(item => item.target === 'admin-warehouse-reports');
+        assert.deepEqual(idsOf(warehouseReport), ['pnl:78'], 'one report = one inbox item');
+        assert.equal(warehouseReport[0].entityType, 'BaoCaoNop');
+        assert.equal(warehouseReport[0].entityId, 'BCK20260909001');
+        assert.equal(navBadge(items, 'admin-warehouse-reports'), 1, 'unviewed report still counts');
+        const viewed = decorateWithReadState(items, new Set(['pnl:78', 'bc:BCK20260909001']));
+        assert.equal(navBadge(viewed, 'admin-warehouse-reports'), 0, 'viewed report leaves badge');
+
+        const deptReport = items.find(item => item.id === 'pnl:79');
+        assert.equal(deptReport.read, true, 'department report already Đã xem closes');
+        assert.equal(navBadge(items, 'admin-department-reports'), 0);
+
+        const keeper = await listForRole(operationalPool(), { MaNV: 'NV_TK01', TenVaiTro: 'Thủ kho' });
+        const delivery = decorateWithReadState(keeper, new Set(['gh:GH20260915001']));
+        assert.equal(navBadge(delivery, 'warehouse-receiving'), 1, 'read Đang giao shipment still counts');
+    } finally {
+        extraNotices.length = 0;
+    }
+};
+
 const testReadAllDoesNotDeleteHistory = async () => {
     const items = await listForRole(operationalPool(), {
         MaNV: 'NV_MH01',
@@ -246,6 +320,7 @@ const testCatalogAndPublishSites = () => {
     await testPurchasingInboxHasWarehouseRequestAndReport();
     await testWarehouseInboxHasSentDelivery();
     await testAdminInboxHasApprovalTasks();
+    await testProcessedApprovalsAndViewedReportsLeaveBadge();
     await testReadAllDoesNotDeleteHistory();
     await testPersistedListSkipsQr();
     testCatalogAndPublishSites();

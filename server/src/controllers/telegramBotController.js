@@ -957,10 +957,29 @@ const cmdReportPick = async (pool, user, which, lang = 'vi') => {
     return cmdReports(pool, user, lang);
 };
 
+const REPORT_DOC_KINDS = new Set(['bck', 'dept', 'bcm', 'bckt', 'bctn']);
+
+const markReportDocViewed = async (pool, user, kind, id) => {
+    if (!REPORT_DOC_KINDS.has(String(kind || '').toLowerCase()) || !isManagerRole(user?.TenVaiTro)) return;
+    const reportInbox = require('../services/reportInboxRead');
+    const maBC = reportInbox.reportIdOf(id);
+    if (!maBC) return;
+    if (!/^BCK\d/.test(maBC)) {
+        try {
+            await require('../services/departmentReportSubmit')
+                .getDepartmentReportSubmission(pool, maBC, { markViewedBy: user.MaNV });
+        } catch (error) {
+            console.error('Telegram xem báo cáo bộ phận:', error.message);
+        }
+    }
+    await reportInbox.markSubmittedReportViewed(pool, user, maBC);
+};
+
 const cmdDocs = async (pool, user, arg, lang = 'vi') => {
     const parsed = teleDocs.parseDocsArg(arg);
     if (parsed) {
         const pack = await teleDocs.loadDocumentPack(pool, parsed.kind, parsed.id, lang);
+        await markReportDocViewed(pool, user, parsed.kind, parsed.id);
         return {
             text: pack.messages[0]?.text || t(lang, 'docsMissing'),
             documents: pack.messages
@@ -1351,6 +1370,7 @@ const handleDecisionCallback = async (chatId, parsed, user, pool, lang, query = 
         const pack = await teleDocs.loadDocumentPack(pool, parsed.kind, parsed.id, lang);
         const count = await sendDocumentPack(chatId, pack.messages, withQuiet('docs'));
         if (!count) await reply(chatId, t(lang, 'docsMissing'), withQuiet('docs'));
+        else await markReportDocViewed(pool, user, parsed.kind, parsed.id);
         return { ok: true, command: 'docs', kind: parsed.kind, id: parsed.id, count };
     }
     if (parsed.action === 'dt') {

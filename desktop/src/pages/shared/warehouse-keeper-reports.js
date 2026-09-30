@@ -78,6 +78,7 @@
         root.querySelectorAll('[data-warehouse-report]').forEach(button => {
           button.classList.toggle('is-active', button.dataset.warehouseReport === id);
         });
+        context.refreshInbox?.();
       } catch (error) {
         current = null;
         detail.innerHTML = `<div class="welcome-card"><h2>Không mở được báo cáo</h2><p>${esc(error.message)}</p></div>`;

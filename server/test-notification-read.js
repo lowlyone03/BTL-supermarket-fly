@@ -165,6 +165,40 @@ const testOwnedInboxItemAndRecipient = async () => {
     assert.equal(ownedRow.derivedKey, 'po:PO12');
 };
 
+const testReportNoticeLinksToReportEntity = async () => {
+    const inbox = [{ id: 'pnl:78', title: 'Báo cáo Thủ kho', entityType: 'BaoCaoNop', entityId: 'BCK20260909001' }];
+    const owned = await readService.resolveOwnedNotification({}, 'NV_A', 'pnl:78', inbox, deps());
+    assert.equal(owned.entityType, 'BaoCaoNop');
+    assert.equal(owned.entityId, 'BCK20260909001');
+    assert.equal(owned.derivedKey, 'bc:BCK20260909001');
+};
+
+const testViewingReportMarksOnlyViewer = async () => {
+    const { markReportViewed, markSubmittedReportViewed } = require('./src/services/reportInboxRead');
+    const connection = createFakeConnection(entry => (/FROM ThongBaoCuaHang/.test(entry.text)
+        ? { recordset: [{ MaTB: 78 }, { MaTB: 81 }] }
+        : { recordset: [] }));
+    const ids = await markReportViewed(connection, 'NV_A', 'BCK20260909001', deps());
+    assert.deepEqual(ids, ['bc:BCK20260909001', 'pnl:78', 'pnl:81']);
+    const lookup = connection.statements[0];
+    assert.equal(lookup.inputs.MaNV, 'NV_A');
+    assert.equal(lookup.inputs.MaBC, '%BCK20260909001%');
+    const savedKeys = connection.statements
+        .filter(entry => /INSERT dbo\.ThongBaoDaDoc/.test(entry.text))
+        .flatMap(entry => JSON.parse(entry.inputs.KeysJson));
+    assert.deepEqual(savedKeys.sort(), ['bc:BCK20260909001', 'pnl:78', 'pnl:81']);
+    const update = connection.statements.find(entry => /UPDATE n/.test(entry.text));
+    assert.equal(update.inputs.EntityType, 'BaoCaoNop');
+    assert.equal(update.inputs.EntityId, 'BCK20260909001');
+    assert.ok(connection.statements.every(entry => entry.inputs.MaNV === undefined || entry.inputs.MaNV === 'NV_A'));
+
+    const emitted = [];
+    const skipped = await markSubmittedReportViewed(createFakeConnection(), { MaNV: 'NV_TK', TenVaiTro: 'Thủ kho' },
+        'BCK20260909001', deps({ emitReadUpdated: (...args) => emitted.push(args) }));
+    assert.deepEqual(skipped, []);
+    assert.equal(emitted.length, 0);
+};
+
 const loadController = extras => {
     const originals = [];
     const stub = (relative, exports) => {
@@ -311,6 +345,7 @@ const testUiContract = () => {
     assert.match(openInbox[0], /renderInboxPanel/);
     assert.doesNotMatch(openInbox[0], /markAllInboxRead|markInboxItemRead/);
     assert.match(js, /notify\.markRead/);
+    assert.match(js, /if \(item\.open === false && item\.read\) return map;/);
     assert.match(css, /notification-read-all/);
     assert.match(routes, /verifyToken/);
     assert.match(routes, /\/unread-count/);
@@ -324,6 +359,8 @@ const testUiContract = () => {
     testHistoryStillListableAfterReadAll();
     await testUnauthorizedRecipientIsForbidden();
     await testOwnedInboxItemAndRecipient();
+    await testReportNoticeLinksToReportEntity();
+    await testViewingReportMarksOnlyViewer();
     await testControllerReadAndUnreadCount();
     await testControllerRejectsForeignId();
     testSocketReadUpdatedIsUserScoped();
