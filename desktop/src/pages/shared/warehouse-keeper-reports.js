@@ -15,6 +15,7 @@
 
   const initAdminWarehouseReports = async (root, context) => {
     let current = null;
+    let items = [];
     root.innerHTML = `<header class="warehouse-heading"><div>
         <p class="warehouse-kicker">QUẢN LÝ / BÁO CÁO THỦ KHO</p>
         <h1>Báo cáo Thủ kho đã gửi</h1>
@@ -75,9 +76,9 @@
         </article>`;
         wh().mountSnapshot?.(detail, data.report || {}, context, { banner, scopeExtra: ' Bản đã khóa theo thời điểm Thủ kho gửi.' });
         actions?.enable?.();
-        root.querySelectorAll('[data-warehouse-report]').forEach(button => {
-          button.classList.toggle('is-active', button.dataset.warehouseReport === id);
-        });
+        const listed = items.find(item => item.MaBC === header.MaBC);
+        if (listed && header.TrangThai) listed.TrangThai = header.TrangThai;
+        renderList(items, id);
         context.refreshInbox?.();
       } catch (error) {
         current = null;
@@ -88,7 +89,7 @@
 
     try {
       const list = await api(context, '/admin/reports/warehouse-submissions');
-      const items = list.items || [];
+      items = list.items || [];
       renderList(items);
       const wanted = sessionStorage.getItem('fly_open_warehouse_report') || items[0]?.MaBC;
       sessionStorage.removeItem('fly_open_warehouse_report');

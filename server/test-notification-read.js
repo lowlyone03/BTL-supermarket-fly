@@ -199,6 +199,50 @@ const testViewingReportMarksOnlyViewer = async () => {
     assert.equal(emitted.length, 0);
 };
 
+const testManagerViewMarksWarehouseReportSeen = async () => {
+    const originals = [];
+    const stub = (relative, exports) => {
+        const filePath = require.resolve(relative);
+        originals.push([filePath, require.cache[filePath]]);
+        require.cache[filePath] = { id: filePath, filename: filePath, loaded: true, exports };
+    };
+    stub('./src/config/db', { sql: SQL, poolPromise: Promise.resolve({}) });
+    stub('./src/services/notificationHub', { notifyInboxChanged() {} });
+    stub('./src/services/auditLog', { logAudit: async () => {} });
+    const servicePath = require.resolve('./src/services/warehouseReportSubmit');
+    originals.push([servicePath, require.cache[servicePath]]);
+    delete require.cache[servicePath];
+    try {
+        const service = require('./src/services/warehouseReportSubmit');
+        const rowFor = status => ({ MaBC: 'BCK20260909001', TrangThai: status, NoiDung: '{}' });
+        const poolWith = status => createFakeConnection(entry => {
+            if (/SELECT \* FROM BaoCaoKhoNop/.test(entry.text)) return { recordset: [rowFor(status)] };
+            if (/SET TrangThai=N'Đã xem'/.test(entry.text)) return { rowsAffected: [status === 'Đã gửi' ? 1 : 0] };
+            return { recordset: [] };
+        });
+
+        const pool = poolWith('Đã gửi');
+        const seen = await service.getWarehouseReportSubmission(pool, 'BCK20260909001', { markViewedBy: 'NV_QL' });
+        assert.equal(seen.header.TrangThai, 'Đã xem');
+        assert.equal(seen.header.MaNV_Xem, 'NV_QL');
+        const update = pool.statements.find(entry => /SET TrangThai=N'Đã xem'/.test(entry.text));
+        assert.match(update.text, /AND TrangThai=N'Đã gửi'/);
+        assert.equal(update.inputs.MaNV, 'NV_QL');
+
+        const keeperPool = poolWith('Đã gửi');
+        const keeper = await service.getWarehouseReportSubmission(keeperPool, 'BCK20260909001');
+        assert.equal(keeper.header.TrangThai, 'Đã gửi');
+        assert.ok(!keeperPool.statements.some(entry => /SET TrangThai=N'Đã xem'/.test(entry.text)));
+
+        const approvedPool = poolWith('Đã duyệt');
+        const approved = await service.getWarehouseReportSubmission(approvedPool, 'BCK20260909001', { markViewedBy: 'NV_QL' });
+        assert.equal(approved.header.TrangThai, 'Đã duyệt');
+        assert.ok(!approvedPool.statements.some(entry => /SET TrangThai=N'Đã xem'/.test(entry.text)));
+    } finally {
+        restoreCache(originals);
+    }
+};
+
 const loadController = extras => {
     const originals = [];
     const stub = (relative, exports) => {
@@ -361,6 +405,7 @@ const testUiContract = () => {
     await testOwnedInboxItemAndRecipient();
     await testReportNoticeLinksToReportEntity();
     await testViewingReportMarksOnlyViewer();
+    await testManagerViewMarksWarehouseReportSeen();
     await testControllerReadAndUnreadCount();
     await testControllerRejectsForeignId();
     testSocketReadUpdatedIsUserScoped();

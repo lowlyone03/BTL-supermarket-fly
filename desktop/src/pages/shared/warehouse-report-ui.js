@@ -381,6 +381,7 @@
         <span class="report-submit-kind">Thủ kho</span>
         <span class="report-submit-period">${esc(periodLabelOf(item))}</span>
         <small>${esc(item.TenNV_Lap || '')}${item.TenNV_Lap ? ' · ' : ''}${esc(fmtDateTime(item.NgayNop))}</small>
+        ${item.TrangThai === 'Đã xem' && item.NgayXem ? `<small class="report-submit-seen">${esc(item.TenNV_Xem || 'Quản lý')} đã xem · ${esc(fmtDateTime(item.NgayXem))}</small>` : ''}
         ${mode === 'keeper' ? `<button type="button" class="report-submit-withdraw" data-withdraw-report="${esc(item.MaBC)}">Thu hồi bản này</button>` : ''}
       </${tag}>`).join('')}</div>
     </article>`;

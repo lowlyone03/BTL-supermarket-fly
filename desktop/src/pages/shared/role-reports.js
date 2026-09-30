@@ -667,6 +667,7 @@
         }
         if (actions?.enable) actions.enable();
         else enableReportActions(root);
+        await refreshSubmissions();
         paintSubmitStrip();
       } catch (error) {
         context.showToast(error.message, 'error');

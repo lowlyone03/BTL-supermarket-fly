@@ -26,6 +26,10 @@ const ensureWarehouseReportSubmitSchema = async (pool) => {
             CREATE INDEX IX_BaoCaoKhoNop_Ky ON dbo.BaoCaoKhoNop (LoaiKy, GiaTriKy, NgayNop DESC);
             CREATE INDEX IX_BaoCaoKhoNop_NV ON dbo.BaoCaoKhoNop (MaNV_Lap, NgayNop DESC);
         END
+        IF COL_LENGTH(N'dbo.BaoCaoKhoNop', N'NgayXem') IS NULL
+            ALTER TABLE dbo.BaoCaoKhoNop ADD NgayXem DATETIME NULL;
+        IF COL_LENGTH(N'dbo.BaoCaoKhoNop', N'MaNV_Xem') IS NULL
+            ALTER TABLE dbo.BaoCaoKhoNop ADD MaNV_Xem VARCHAR(20) NULL;
         UPDATE dbo.BaoCaoKhoNop
         SET NhanKy = N'Tháng ' + RIGHT(GiaTriKy, 2) + N'/' + LEFT(GiaTriKy, 4)
         WHERE LoaiKy IN (N'month', N'tháng', N'Tháng')
@@ -106,7 +110,8 @@ const submitWarehouseReport = async (pool, user, report, note = '') => {
                 .input('NoiDung', sql.NVarChar, payload)
                 .query(`UPDATE BaoCaoKhoNop
                         SET NhanKy=@NhanKy, TuNgay=@TuNgay, DenNgay=@DenNgay, TenNV_Lap=@TenNV,
-                            NgayNop=GETDATE(), GhiChu=@GhiChu, NoiDung=@NoiDung, TrangThai=N'Đã gửi'
+                            NgayNop=GETDATE(), GhiChu=@GhiChu, NoiDung=@NoiDung, TrangThai=N'Đã gửi',
+                            NgayXem=NULL, MaNV_Xem=NULL
                         WHERE MaBC=@MaBC`);
         } else {
             maBC = await nextId(transaction);
@@ -175,12 +180,30 @@ const listWarehouseReports = async (pool, { mine = null, top = 40 } = {}) => {
         .input('Top', sql.Int, Math.min(Math.max(Number(top) || 40, 1), 100))
         .input('MaNV', sql.VarChar, mine || null)
         .query(`
-            SELECT TOP (@Top) MaBC, LoaiKy, GiaTriKy, TuNgay, DenNgay, NhanKy,
-                   MaNV_Lap, TenNV_Lap, NgayNop, TrangThai, GhiChu
-            FROM BaoCaoKhoNop
-            WHERE (@MaNV IS NULL OR MaNV_Lap=@MaNV)
-            ORDER BY NgayNop DESC`);
+            SELECT TOP (@Top) bc.MaBC, bc.LoaiKy, bc.GiaTriKy, bc.TuNgay, bc.DenNgay, bc.NhanKy,
+                   bc.MaNV_Lap, bc.TenNV_Lap, bc.NgayNop, bc.TrangThai, bc.GhiChu,
+                   bc.NgayXem, bc.MaNV_Xem, nvx.TenNV AS TenNV_Xem
+            FROM BaoCaoKhoNop bc
+            LEFT JOIN NhanVien nvx ON nvx.MaNV=bc.MaNV_Xem
+            WHERE (@MaNV IS NULL OR bc.MaNV_Lap=@MaNV)
+            ORDER BY bc.NgayNop DESC`);
     return result.recordset;
+};
+
+const markWarehouseReportViewed = async (pool, maBC, maNV) => {
+    const id = String(maBC || '').trim();
+    const viewer = String(maNV || '').trim();
+    if (!id || !viewer) return false;
+    await ensureWarehouseReportSubmitSchema(pool);
+    const result = await pool.request()
+        .input('MaBC', sql.VarChar, id)
+        .input('MaNV', sql.VarChar, viewer)
+        .query(`UPDATE BaoCaoKhoNop
+                SET TrangThai=N'Đã xem', NgayXem=GETDATE(), MaNV_Xem=@MaNV
+                WHERE MaBC=@MaBC AND TrangThai=N'Đã gửi'`);
+    const changed = Number(result.rowsAffected?.[0] || 0) > 0;
+    if (changed) notifyInboxChanged({ action: 'Xem báo cáo kho', table: 'BaoCaoKhoNop', recordId: id });
+    return changed;
 };
 
 const withdrawWarehouseReport = async (pool, user, maBC) => {
@@ -213,12 +236,17 @@ const withdrawWarehouseReport = async (pool, user, maBC) => {
     return { MaBC: id, message: `Đã thu hồi ${id}. Quản lý không còn thấy bản này.` };
 };
 
-const getWarehouseReportSubmission = async (pool, id) => {
+const getWarehouseReportSubmission = async (pool, id, { markViewedBy = null } = {}) => {
     await ensureWarehouseReportSubmitSchema(pool);
     const result = await pool.request().input('MaBC', sql.VarChar, id)
         .query(`SELECT * FROM BaoCaoKhoNop WHERE MaBC=@MaBC`);
     const row = result.recordset[0];
     if (!row) throw new Error('Không tìm thấy báo cáo kho đã gửi.');
+    if (markViewedBy && row.TrangThai === 'Đã gửi' && await markWarehouseReportViewed(pool, row.MaBC, markViewedBy)) {
+        row.TrangThai = 'Đã xem';
+        row.NgayXem = new Date();
+        row.MaNV_Xem = markViewedBy;
+    }
     let snapshot = {};
     try { snapshot = JSON.parse(row.NoiDung || '{}'); } catch { snapshot = {}; }
     const { NoiDung, ...header } = row;
@@ -231,5 +259,6 @@ module.exports = {
     submitWarehouseReport,
     withdrawWarehouseReport,
     listWarehouseReports,
+    markWarehouseReportViewed,
     getWarehouseReportSubmission
 };

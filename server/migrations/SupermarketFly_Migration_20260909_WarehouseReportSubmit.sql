@@ -24,3 +24,9 @@ BEGIN
     CREATE INDEX IX_BaoCaoKhoNop_NV ON dbo.BaoCaoKhoNop (MaNV_Lap, NgayNop DESC);
 END
 GO
+
+IF COL_LENGTH(N'dbo.BaoCaoKhoNop', N'NgayXem') IS NULL
+    ALTER TABLE dbo.BaoCaoKhoNop ADD NgayXem DATETIME NULL;
+IF COL_LENGTH(N'dbo.BaoCaoKhoNop', N'MaNV_Xem') IS NULL
+    ALTER TABLE dbo.BaoCaoKhoNop ADD MaNV_Xem VARCHAR(20) NULL;
+GO

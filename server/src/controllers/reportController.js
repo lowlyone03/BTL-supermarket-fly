@@ -1083,7 +1083,9 @@ const listAdminWarehouseReports = async (req, res) => {
 const getAdminWarehouseReport = async (req, res) => {
     try {
         const pool = await poolPromise;
-        const data = await warehouseReportSubmit.getWarehouseReportSubmission(pool, req.params.id);
+        const data = await warehouseReportSubmit.getWarehouseReportSubmission(pool, req.params.id, {
+            markViewedBy: req.user.TenVaiTro === 'Quản lý' ? req.user.MaNV : null
+        });
         await markSubmittedReportViewed(pool, req.user, data.header?.MaBC);
         res.json(data);
     } catch (error) {

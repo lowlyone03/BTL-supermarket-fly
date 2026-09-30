@@ -964,7 +964,13 @@ const markReportDocViewed = async (pool, user, kind, id) => {
     const reportInbox = require('../services/reportInboxRead');
     const maBC = reportInbox.reportIdOf(id);
     if (!maBC) return;
-    if (!/^BCK\d/.test(maBC)) {
+    if (/^BCK\d/.test(maBC)) {
+        try {
+            await require('../services/warehouseReportSubmit').markWarehouseReportViewed(pool, maBC, user.MaNV);
+        } catch (error) {
+            console.error('Telegram xem báo cáo kho:', error.message);
+        }
+    } else {
         try {
             await require('../services/departmentReportSubmit')
                 .getDepartmentReportSubmission(pool, maBC, { markViewedBy: user.MaNV });
