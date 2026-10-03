@@ -113,8 +113,19 @@
       const rightLabel = useDual ? `<text class="fly-chart-axis-right" x="${width - right + 12}" y="${py + 5}" text-anchor="start">${esc(axisFormatter(rightValue))}</text>` : '';
       return `<line x1="${left}" y1="${py}" x2="${width - right}" y2="${py}"/><text x="${left - 12}" y="${py + 5}" text-anchor="end">${esc(axisFormatter(value))}</text>${rightLabel}`;
     }).join('');
-    const labelStep = labels.length <= 10 ? 1 : Math.max(1, Math.ceil(labels.length / 7));
-    const xLabels = labels.map((label, index) => (index % labelStep === 0 || index === labels.length - 1) ? `<text x="${x(index)}" y="${height - 16}" text-anchor="middle">${esc(label)}</text>` : '').join('');
+    const labelStep = labels.length <= 6 ? 1 : Math.max(1, Math.ceil(labels.length / 5));
+    const isDense = labels.length > 6;
+    const xLabels = labels.map((label, index) => {
+      if (!(index % labelStep === 0 || index === labels.length - 1)) return '';
+      let displayLabel = String(label);
+      if (isDense) {
+        const parts = displayLabel.split('/');
+        if (parts.length >= 3) {
+          displayLabel = `${parts[0]}/${parts[1]}`;
+        }
+      }
+      return `<text x="${x(index)}" y="${height - 16}" text-anchor="middle">${esc(displayLabel)}</text>`;
+    }).join('');
     const seriesCount = cleanSeries.length;
     const markerShift = seriesIndex => (useDual || emphasis || seriesCount <= 1 ? 0 : (seriesIndex - (seriesCount - 1) / 2) * 11);
     const hitWidth = Math.max(18, labels.length > 1 ? plotWidth / (labels.length - 1) : plotWidth);
