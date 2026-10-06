@@ -344,7 +344,8 @@ const resubmitVoucher = async (req, res) => {
 };
 
 const payVoucher = async (req, res) => {
-    const transaction = new sql.Transaction(await poolPromise);
+    const pool = await poolPromise;
+    const transaction = new sql.Transaction(pool);
     try {
         const MaPhieu = clean(req.params.id, 20);
         if (typeof req.body.ThanhCong !== 'boolean') throw new Error('Phải ghi nhận rõ kết quả thanh toán thành công hoặc thất bại.');

@@ -1041,7 +1041,7 @@
           const note = overlay.querySelector('#paymentNote').value.trim();
           if (success && debt.PhuongThuc === 'Chuyển khoản' && !bankCode) return context.showToast('Vui lòng nhập mã giao dịch ngân hàng.', 'error');
           if (!success && !note) return context.showToast('Thanh toán thất bại phải ghi nguyên nhân.', 'error');
-          if (success && !window.confirm(`Xác nhận đã thanh toán thành công ${money(debt.SoTienPhieuChi)}? Công nợ sẽ chuyển sang Đã tất toán.`)) return;
+          // if (success && !window.confirm(`Xác nhận đã thanh toán thành công ${money(debt.SoTienPhieuChi)}? Công nợ sẽ chuyển sang Đã tất toán.`)) return;
           button.disabled = true;
           try {
             const result = await api(context, `/accounting/payment-vouchers/${debt.MaPhieu}/pay`, {
@@ -1101,7 +1101,7 @@
         const settled = Number(item.SoTienConLai) <= 0;
         const rowClass = settled ? '' : daysLeft < 0 ? 'overdue-row' : daysLeft <= 3 ? 'due-soon-row' : '';
         const daysBadgeClass = Number(item.QuaHan45) ? 'overdue' : daysLeft < 0 ? 'overdue' : daysLeft === 0 ? 'due-today' : daysLeft <= 5 ? 'due-soon' : 'safe';
-        const daysText = item.TrangThaiGiaHan === 'DaGiaHan' && item.HanMoiGiaHan
+        const daysText = settled ? '' : item.TrangThaiGiaHan === 'DaGiaHan' && item.HanMoiGiaHan
           ? `Đã gia hạn đến ${fmtDate(item.HanMoiGiaHan)}`
           : extensionOpen(latestExtension(item))
             ? (extStatusLabel(item.TrangThaiGiaHan, item.HanMoiGiaHan) || 'Đã nhờ mua hàng')
@@ -1110,7 +1110,7 @@
         const check = eligible
           ? `<input type="checkbox" class="payable-select" value="${esc(item.MaCNPTra)}" ${selectedIds.has(item.MaCNPTra) ? 'checked' : ''} aria-label="Chọn ${esc(item.MaCNPTra)}">`
           : '';
-        return `<tr class="${rowClass}" data-debt="${esc(item.MaCNPTra)}" tabindex="0" role="button" aria-label="Mở hồ sơ công nợ ${esc(item.MaCNPTra)}"><td class="payable-check-col">${check}</td><td>${docChip('cn', item.MaCNPTra, item.MaCNPTra)}<small>Phát sinh <span class="payable-origin-date">${fmtDate(item.NgayPhatSinh)}</span></small></td><td><strong>${esc(item.TenNCC)}</strong><small>${esc(item.MaNCC)}</small></td><td><div class="doc-chip-set">${docChip('invoice', item.MaHDMH, `HĐ ${item.SoHoaDon}`)}<small>${docChip('po', item.MaPO, item.MaPO)} · ${docChip('pn', item.MaPN, item.MaPN || '—')}</small></div></td><td><strong class="payable-due-date ${tone}">${fmtDate(item.HanThanhToan)}</strong><small><span class="days-badge ${daysBadgeClass}">${daysText}</span></small></td><td class="num"><strong>${money(item.SoTienConLai)}</strong><small>Gốc ${money(item.SoTienNo)} · ${pctPaid(item)}%</small></td><td>${item.MaPhieu ? `${docChip('pc', item.MaPhieu, item.MaPhieu)}<small>${esc(item.PhuongThuc)}</small><span class="status-pill ${voucherClass(item.TrangThaiPhieuChi)}">${esc(item.TrangThaiPhieuChi)}</span>` : '<span class="status-pill draft">Chưa lập Phiếu chi</span>'}</td><td>${action}</td></tr>`;
+        return `<tr class="${rowClass}" data-debt="${esc(item.MaCNPTra)}" tabindex="0" role="button" aria-label="Mở hồ sơ công nợ ${esc(item.MaCNPTra)}"><td class="payable-check-col">${check}</td><td>${docChip('cn', item.MaCNPTra, item.MaCNPTra)}<small>Phát sinh <span class="payable-origin-date">${fmtDate(item.NgayPhatSinh)}</span></small></td><td><strong>${esc(item.TenNCC)}</strong><small>${esc(item.MaNCC)}</small></td><td><div class="doc-chip-set">${docChip('invoice', item.MaHDMH, `HĐ ${item.SoHoaDon}`)}<small>${docChip('po', item.MaPO, item.MaPO)} · ${docChip('pn', item.MaPN, item.MaPN || '—')}</small></div></td><td><strong class="payable-due-date ${tone}">${fmtDate(item.HanThanhToan)}</strong>${daysText ? `<small><span class="days-badge ${daysBadgeClass}">${daysText}</span></small>` : ''}</td><td class="num"><strong>${money(item.SoTienConLai)}</strong><small>Gốc ${money(item.SoTienNo)} · ${pctPaid(item)}%</small></td><td>${item.MaPhieu ? `${docChip('pc', item.MaPhieu, item.MaPhieu)}<small>${esc(item.PhuongThuc)}</small><span class="status-pill ${voucherClass(item.TrangThaiPhieuChi)}">${esc(item.TrangThaiPhieuChi)}</span>` : '<span class="status-pill draft">Chưa lập Phiếu chi</span>'}</td><td>${action}</td></tr>`;
       }).join('') : `<tr><td colspan="8" class="warehouse-empty">${esc(window.FLY_SEARCH?.emptyMessage?.(root.querySelector('#accountingPayableSearch')?.value, 'công nợ', 'Chưa có công nợ phù hợp.') || 'Chưa có công nợ phù hợp.')}</td></tr>`;
       syncBulkBar();
     };
